@@ -280,13 +280,146 @@ export function projectProviderHealthOntoSnapshot(input: {
   };
 }
 
+export function projectCreatedWorktreeOntoSnapshot(input: {
+  snapshot: StationSnapshot;
+  project: ProviderProjectConfig;
+  worktree: WorktreeObservation;
+  projectedAt: string;
+}): { snapshot: StationSnapshot; row?: WorktreeRow } {
+  if (
+    input.worktree.state !== "exists" ||
+    input.worktree.projectId !== input.project.id ||
+    input.snapshot.rows.some((row) => row.id === input.worktree.id)
+  ) {
+    return { snapshot: input.snapshot };
+  }
+
+  const row = buildWorktreeRow({
+    project: input.project,
+    worktree: input.worktree,
+    title: input.worktree.branch,
+  });
+  const rows = [...input.snapshot.rows, row].sort(compareRows);
+  const projectRows = rows.filter((candidate) => candidate.projectId === input.project.id);
+  const projectSessions = input.snapshot.sessions.filter(
+    (session) => session.projectId === input.project.id,
+  );
+
+  return {
+    row,
+    snapshot: {
+      ...input.snapshot,
+      generatedAt: input.projectedAt,
+      rows,
+      projects: input.snapshot.projects.map((project) =>
+        project.id === input.project.id
+          ? { ...project, counts: countsForSnapshot(projectRows, projectSessions) }
+          : project,
+      ),
+      counts: {
+        projects: input.snapshot.projects.length,
+        ...countsForSnapshot(rows, input.snapshot.sessions),
+      },
+    },
+  };
+}
+
+export function projectPreparedExternalLaunchOntoSnapshot(input: {
+  snapshot: StationSnapshot;
+  project: ProviderProjectConfig;
+  worktree: WorktreeObservation;
+  terminalTarget: TerminalTargetObservation;
+  session: ObserverSessionMetadata;
+  harnessCapabilities: Record<string, HarnessCapabilities>;
+  terminalCapabilities?: {
+    canFocusTarget?: boolean;
+    canCloseTarget?: boolean;
+  };
+  projectedAt: string;
+}): { snapshot: StationSnapshot; row?: WorktreeRow; session?: SessionView; created?: boolean } {
+  const currentRow = input.snapshot.rows.find((row) => row.id === input.worktree.id);
+  if (
+    currentRow === undefined ||
+    currentRow.projectId !== input.project.id ||
+    input.worktree.state !== "exists" ||
+    input.worktree.projectId !== input.project.id ||
+    input.session.lifecycle !== "open" ||
+    input.session.projectId !== input.project.id ||
+    input.session.worktreeId !== input.worktree.id ||
+    input.session.harness === undefined ||
+    input.terminalTarget.sessionId !== input.session.id ||
+    input.terminalTarget.worktreeId !== input.worktree.id ||
+    (input.terminalTarget.projectId !== undefined &&
+      input.terminalTarget.projectId !== input.project.id) ||
+    (input.terminalTarget.state !== "open" && input.terminalTarget.state !== "detached")
+  ) {
+    return { snapshot: input.snapshot };
+  }
+
+  const row: WorktreeRow = {
+    ...currentRow,
+    terminal: terminalAttachment(input.terminalTarget, undefined, input.terminalCapabilities),
+  };
+  const session = buildStationSession({
+    project: input.project,
+    worktree: input.worktree,
+    title: input.session.title ?? currentRow.title,
+    terminal: input.terminalTarget,
+    harnessCapabilities: input.harnessCapabilities,
+    sessionMetadataById: new Map([[input.session.id, input.session]]),
+    retainedSession: input.session,
+    ...(input.terminalCapabilities === undefined
+      ? {}
+      : { terminalCapabilities: input.terminalCapabilities }),
+  });
+  if (session === undefined) {
+    return { snapshot: input.snapshot };
+  }
+
+  const created = !input.snapshot.sessions.some((candidate) => candidate.id === session.id);
+  const rows = input.snapshot.rows
+    .map((candidate) => (candidate.id === row.id ? row : candidate))
+    .sort(compareRows);
+  const sessions = created
+    ? [...input.snapshot.sessions, session]
+    : input.snapshot.sessions.map((candidate) =>
+        candidate.id === session.id ? session : candidate,
+      );
+  const projectRows = rows.filter((candidate) => candidate.projectId === input.project.id);
+  const projectSessions = sessions.filter((candidate) => candidate.projectId === input.project.id);
+
+  return {
+    created,
+    row,
+    session,
+    snapshot: {
+      ...input.snapshot,
+      generatedAt: input.projectedAt,
+      rows,
+      sessions,
+      projects: input.snapshot.projects.map((project) =>
+        project.id === input.project.id
+          ? { ...project, counts: countsForSnapshot(projectRows, projectSessions) }
+          : project,
+      ),
+      counts: {
+        projects: input.snapshot.projects.length,
+        ...countsForSnapshot(rows, sessions),
+      },
+    },
+  };
+}
+
 type BuildWorktreeRowInput = {
   project: ProviderProjectConfig;
   worktree: WorktreeObservation;
   title: string;
   terminal?: TerminalTargetObservation;
   harnessRun?: HarnessRunObservation;
-  terminalCapabilities?: Record<string, boolean>;
+  terminalCapabilities?: {
+    canFocusTarget?: boolean;
+    canCloseTarget?: boolean;
+  };
 };
 
 function buildWorktreeRow(input: BuildWorktreeRowInput): WorktreeRow {
@@ -412,7 +545,12 @@ function recoveryActionForRow(input: {
 function terminalAttachment(
   terminal: TerminalTargetObservation,
   harnessRun: HarnessRunObservation | undefined,
-  capabilities?: Record<string, boolean> | undefined,
+  capabilities?:
+    | {
+        canFocusTarget?: boolean;
+        canCloseTarget?: boolean;
+      }
+    | undefined,
 ): TerminalAttachment {
   const attachment: TerminalAttachment = {
     provider: terminal.provider,
@@ -473,7 +611,10 @@ type BuildSessionInput = {
   harnessCapabilities: Record<string, HarnessCapabilities>;
   sessionMetadataById: ReadonlyMap<string, ObserverSessionMetadata>;
   retainedSession?: ObserverSessionMetadata;
-  terminalCapabilities?: Record<string, boolean>;
+  terminalCapabilities?: {
+    canFocusTarget?: boolean;
+    canCloseTarget?: boolean;
+  };
 };
 
 function buildSessions(input: BuildSessionInput): SessionView[] {

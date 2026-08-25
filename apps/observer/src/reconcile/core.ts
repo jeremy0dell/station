@@ -6,6 +6,8 @@ import type {
   SessionGroupView,
   StationEvent,
   StationSnapshot,
+  TerminalTargetObservation,
+  WorktreeObservation,
   WorktreeRow,
 } from "@station/contracts";
 import { ProviderProjectConfigSchema } from "@station/contracts";
@@ -30,7 +32,12 @@ import {
 import type { PersistedSessionTurnReadiness } from "../persistence/types.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
-import { projectProviderHealthOntoSnapshot } from "./graph.js";
+import {
+  type ObserverSessionMetadata,
+  projectCreatedWorktreeOntoSnapshot,
+  projectPreparedExternalLaunchOntoSnapshot,
+  projectProviderHealthOntoSnapshot,
+} from "./graph.js";
 import type { ProviderReadOptions } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import { runReconcileOnce } from "./run.js";
@@ -56,6 +63,14 @@ export type ObserverCore = {
     projectId: string,
     mutate: (snapshot: StationSnapshot) => Promise<SessionGroupView[]>,
   ): Promise<StationSnapshot>;
+  commitCreatedWorktreeObservation(
+    worktree: WorktreeObservation,
+  ): Promise<StationEvent | undefined>;
+  commitPreparedExternalLaunch(input: {
+    worktree: WorktreeObservation;
+    terminalTarget: TerminalTargetObservation;
+    session: ObserverSessionMetadata;
+  }): Promise<StationEvent[]>;
   commitProviderHealthProbe(health: ProviderHealth): Promise<StationEvent | undefined>;
   projectHarnessEventStatus(report: HarnessEventReport): Promise<StatusProjectionResult>;
   clearTurnReadiness(input: { sessionId: string; token: string }): StationEvent | undefined;
@@ -164,6 +179,82 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
           sessionGroups,
         };
         return snapshot;
+      }),
+    commitCreatedWorktreeObservation: (worktree) =>
+      enqueueSnapshotWrite(async (): Promise<StationEvent | undefined> => {
+        const project = projects.find((candidate) => candidate.id === worktree.projectId);
+        if (project === undefined) {
+          return undefined;
+        }
+        const projection = projectCreatedWorktreeOntoSnapshot({
+          snapshot,
+          project,
+          worktree,
+          projectedAt: toIsoTimestamp(clock.now()),
+        });
+        if (projection.row === undefined) {
+          return undefined;
+        }
+        snapshot = projection.snapshot;
+        return { type: "worktree.added", row: projection.row };
+      }),
+    commitPreparedExternalLaunch: (launch) =>
+      enqueueSnapshotWrite(async (): Promise<StationEvent[]> => {
+        const project = projects.find((candidate) => candidate.id === launch.worktree.projectId);
+        if (project === undefined) {
+          return [];
+        }
+        const harnessCapabilities = Object.fromEntries(
+          [...input.providers.harnesses.values()].map((provider) => [
+            provider.id,
+            provider.capabilities(),
+          ]),
+        );
+        const terminalCapabilities = input.providers.terminals
+          .get(launch.terminalTarget.provider)
+          ?.capabilities();
+        const projection = projectPreparedExternalLaunchOntoSnapshot({
+          snapshot,
+          project,
+          worktree: launch.worktree,
+          terminalTarget: launch.terminalTarget,
+          session: launch.session,
+          harnessCapabilities,
+          ...(terminalCapabilities === undefined ? {} : { terminalCapabilities }),
+          projectedAt: toIsoTimestamp(clock.now()),
+        });
+        if (projection.row?.terminal === undefined || projection.session === undefined) {
+          return [];
+        }
+        const groups =
+          input.persistence === undefined
+            ? snapshot.sessionGroups
+            : await input.persistence.listSessionGroups();
+        snapshot = {
+          ...projection.snapshot,
+          sessionGroups: projectSessionGroups({
+            groups,
+            projects,
+            sessions: projection.snapshot.sessions,
+          }),
+        };
+        const events: StationEvent[] = [
+          {
+            type: "worktree.updated",
+            worktreeId: projection.row.id,
+            patch: { terminal: projection.row.terminal },
+          },
+        ];
+        events.push(
+          projection.created === true
+            ? { type: "session.created", session: projection.session }
+            : {
+                type: "session.updated",
+                sessionId: projection.session.id,
+                patch: projection.session,
+              },
+        );
+        return events;
       }),
     commitProviderHealthProbe: (health) =>
       enqueueSnapshotWrite(async (): Promise<StationEvent | undefined> => {

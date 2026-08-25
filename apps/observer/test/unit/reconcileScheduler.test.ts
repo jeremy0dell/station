@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createReconcileScheduler } from "../../src/runtime/reconcileScheduler";
 
 describe("reconcile scheduler", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("coalesces a burst of hook reconcile requests", async () => {
     const reasons: string[] = [];
     const scheduler = createReconcileScheduler({
@@ -140,6 +144,63 @@ describe("reconcile scheduler", () => {
       "hook:opencode:message.part.delta",
       "hook:opencode:message.part.delta",
     ]);
+  });
+
+  it("advances an ordinary pending flush for interactive work", async () => {
+    vi.useFakeTimers();
+    const reasons: string[] = [];
+    const scheduler = createReconcileScheduler({
+      debounceMs: 100,
+      interactiveDebounceMs: 25,
+      reconcile: async (reason) => {
+        reasons.push(reason);
+      },
+    });
+
+    scheduler.request("hook:codex:Stop");
+    await vi.advanceTimersByTimeAsync(10);
+    scheduler.requestInteractive("agent.prepareExternalLaunch");
+    await vi.advanceTimersByTimeAsync(24);
+    expect(reasons).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await drainMicrotasks();
+
+    expect(reasons).toEqual(["scheduled:batch(2)"]);
+  });
+
+  it("uses the interactive delay for work queued behind a running reconcile", async () => {
+    vi.useFakeTimers();
+    const reasons: string[] = [];
+    const firstReconcile = deferred<void>();
+    const firstStarted = deferred<void>();
+    const scheduler = createReconcileScheduler({
+      debounceMs: 100,
+      backlogDebounceMs: 1000,
+      interactiveDebounceMs: 25,
+      reconcile: async (reason) => {
+        reasons.push(reason);
+        if (reasons.length === 1) {
+          firstStarted.resolve();
+          await firstReconcile.promise;
+        }
+      },
+    });
+
+    scheduler.requestInteractive("agent.prepareExternalLaunch:first");
+    await vi.advanceTimersByTimeAsync(25);
+    await firstStarted.promise;
+    scheduler.request("hook:codex:Stop");
+    scheduler.requestInteractive("agent.prepareExternalLaunch:second");
+    firstReconcile.resolve();
+    await drainMicrotasks();
+    await vi.advanceTimersByTimeAsync(24);
+    expect(reasons).toEqual(["agent.prepareExternalLaunch:first"]);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await drainMicrotasks();
+
+    expect(reasons).toEqual(["agent.prepareExternalLaunch:first", "scheduled:batch(2)"]);
   });
 });
 
