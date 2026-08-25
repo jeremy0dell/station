@@ -828,6 +828,80 @@ describe("provider hook ingress command", () => {
     });
   });
 
+  it("delivers Codex auto-review evidence from the matching transcript turn", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const transcriptPath = join(fixture.root, "codex-rollout.jsonl");
+    await writeFile(
+      transcriptPath,
+      `${JSON.stringify({
+        type: "turn_context",
+        payload: {
+          turn_id: "turn_1",
+          approval_policy: "on-request",
+          approvals_reviewer: "auto_review",
+        },
+      })}\n`,
+      "utf8",
+    );
+    let observedEvent: ProviderHookEvent | undefined;
+    const payload = {
+      ...codexPayload(),
+      hook_event_name: "PermissionRequest",
+      transcript_path: transcriptPath,
+    };
+    Reflect.deleteProperty(payload, "tool_use_id");
+
+    const receipt = await runProviderIngressCommand(
+      [
+        "--socket",
+        fixture.socketPath,
+        "--state-dir",
+        fixture.stateDir,
+        "--config",
+        configPath,
+        "codex",
+      ],
+      { stdin: JSON.stringify(payload), env: stationEnv() },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => "hook_codex_auto_review",
+        clientFactory: () => {
+          const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
+            observedEvent = event;
+            return {
+              schemaVersion: "0.11.0",
+              hookId: event.hookId ?? "hook_codex_auto_review",
+              provider: event.provider,
+              event: event.event,
+              accepted: true,
+              status: "ingested",
+              receivedAt: event.receivedAt,
+              reconciled: false,
+            };
+          };
+          return {
+            health: async () => healthyObserver(fixture),
+            ingestProviderHookEvent: ingest,
+            ingestHookEvent: ingest,
+          } as never;
+        },
+      },
+    );
+
+    expect(receipt.status).toBe("ingested");
+    expect(observedEvent).toMatchObject({
+      event: "PermissionRequest",
+      payload: {
+        station_codex_permission_reviewer_evidence: {
+          status: "resolved",
+          source: "transcript_turn_context",
+          reviewer: "auto_review",
+        },
+      },
+    });
+  });
+
   it("keeps malformed JSON rejected and visible at the CLI boundary", async () => {
     const fixture = await createTempState();
 

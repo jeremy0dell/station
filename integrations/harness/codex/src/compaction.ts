@@ -45,7 +45,12 @@ function fieldNamesForEvent(eventName: string): string[] {
     return fields;
   }
   if (eventName === "PermissionRequest") {
-    fields.push(...turnFieldNames, "tool_name", "tool_input");
+    fields.push(
+      ...turnFieldNames,
+      "tool_name",
+      "tool_input",
+      "station_codex_permission_reviewer_evidence",
+    );
     return fields;
   }
   if (eventName === "PostToolUse") {

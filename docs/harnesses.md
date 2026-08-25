@@ -56,7 +56,7 @@ Events (`integrations/harness/codex/src/ingressRules.ts`): `SessionStart`, `User
 
 Hooks: a dedicated `station` profile (`station.config.toml`) under `~/.codex` calls `station-codex-hook.sh`. Setup can prove that Station's current profile and script artifacts are prepared, but Codex may still require review of the current definition through `/hooks`. Setup does not bypass trust, inspect private trust state, or force `[features] hooks = true`, so preparation is not proof that Codex executed the hook.
 
-Coverage: full. `PermissionRequest` drives **needs attention**, a completed `Stop` drives **idle**, and `stop_hook_active` keeps **working**. Codex has no session-end hook, so **exited** is inferred from process state.
+Coverage: full. `PermissionRequest` drives **working** when a bounded, matching Codex transcript `turn_context` proves `auto_review`; explicit user review or unavailable compatibility evidence drives **needs attention**. A completed `Stop` drives **idle**, and `stop_hook_active` keeps **working**. Codex has no session-end hook, so **exited** is inferred from process state.
 
 ### Cursor (Full)
 

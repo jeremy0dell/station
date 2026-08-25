@@ -1,4 +1,5 @@
 import type {
+  ProjectId,
   ProviderProjectConfig,
   SafeError,
   SessionGroupView,
@@ -14,12 +15,15 @@ export type SessionGroupProjection = {
 /**
  * USE CASE
  *
- * Repairs durable Group membership and parentage against canonical state, then projects configured Groups with reason-specific diagnostics.
+ * Repairs durable Group identity and parentage against canonical state, prunes absent membership
+ * only for explicitly authoritative projects, then projects configured Groups with reason-specific
+ * diagnostics.
  */
 export async function reconcileSessionGroups(input: {
   store?: SessionGroupStore | undefined;
   projects: readonly ProviderProjectConfig[];
   sessions: readonly SessionView[];
+  absenceAuthorityProjectIds: readonly ProjectId[];
   updatedAt: string;
 }): Promise<SessionGroupProjection> {
   if (input.store === undefined) {
@@ -28,6 +32,7 @@ export async function reconcileSessionGroups(input: {
 
   const repaired = await input.store.repairSessionGroups({
     sessions: input.sessions.map((session) => ({ id: session.id, projectId: session.projectId })),
+    absenceAuthorityProjectIds: [...input.absenceAuthorityProjectIds],
     updatedAt: input.updatedAt,
   });
   const groups = repaired.groups;

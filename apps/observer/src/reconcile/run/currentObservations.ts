@@ -22,6 +22,7 @@ import {
 } from "../observationCorrelation.js";
 import {
   type ProviderReadOptions,
+  type ProviderReadOutcome,
   readHarnessObservations,
   readRepositoryProviderHealth,
   readTerminalTargetObservations,
@@ -40,10 +41,12 @@ export type CurrentReconcileObservations = {
   harnessRuns: HarnessRunObservation[];
   harnessCapabilities: Record<string, HarnessCapabilities>;
   worktreesForSnapshot: WorktreeObservation[];
+  providerReadOutcomes: ProviderReadOutcome[];
 };
 
 /**
- * Reads and overlays current reconcile observations, preserving provider-read concurrency and phase order.
+ * Reads and overlays current reconcile observations, preserving provider-read concurrency, phase
+ * order, and the completeness evidence later used to authorize destructive Group repair.
  */
 export async function readCurrentReconcileObservations(input: {
   providers: ProviderRegistry;
@@ -133,5 +136,10 @@ export async function readCurrentReconcileObservations(input: {
     harnessRuns,
     harnessCapabilities: harnessResult.harnessCapabilities,
     worktreesForSnapshot,
+    providerReadOutcomes: [
+      ...worktreeResult.outcomes,
+      ...terminalResult.outcomes,
+      ...harnessResult.outcomes,
+    ],
   };
 }
