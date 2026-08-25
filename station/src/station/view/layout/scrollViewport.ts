@@ -1,4 +1,4 @@
-import type { BaseRenderable, Renderable, ScrollBoxRenderable } from "@opentui/core";
+import { Renderable, type BaseRenderable, type ScrollBoxRenderable } from "@opentui/core";
 import type { DashboardVisibleRowsSource } from "@station/dashboard-core/runtime";
 import type { DashboardRowId } from "@station/dashboard-core/selectors";
 
@@ -20,7 +20,8 @@ export function intersectingSemanticItems<ItemId extends string>(
 
 /**
  * Resolves a viewport against top-to-bottom, non-overlapping semantic boxes.
- * Binary search keeps ordinary scroll synchronization proportional to visible content.
+ * With constant-time geometry lookup, steady-state work is logarithmic in all items plus the
+ * intersecting boxes. The controller below maintains that lookup at the renderer boundary.
  */
 export function intersectingOrderedSemanticItems<ItemId extends string>(
   viewport: { readonly top: number; readonly bottom: number },
@@ -97,7 +98,9 @@ export type ScrollViewportController<ItemId extends string> = {
 
 /**
  * Owns the unavoidable translation between semantic identities and OpenTUI cell geometry.
- * Callers can scroll/follow identities but cannot make feature decisions from coordinates.
+ * A destruction-aware renderable index makes steady-state geometry lookup constant-time; semantic
+ * node replacement rebuilds that index with one render-tree traversal. Callers can scroll/follow
+ * identities but cannot make feature decisions from coordinates.
  */
 export function createScrollViewportController<
   ItemId extends string,
@@ -109,28 +112,95 @@ export function createScrollViewportController<
   let followedId: ItemId | undefined;
   let followAlignment: "start" | "end" | undefined;
   let reflowQueued = false;
+  let itemIndexDirty = true;
+  const itemById = new Map<ItemId, Renderable>();
+  const indexedItems = new Set<Renderable>();
   const listeners = new Set<() => void>();
 
-  const geometryFor = (id: ItemId): SemanticItemGeometry<ItemId> | undefined => {
-    const item = viewport?.content.findDescendantById(semanticItemRenderableId(id));
-    return item === undefined ? undefined : geometry(id, item);
+  const scheduleReflow = (): void => {
+    if (reflowQueued) return;
+    reflowQueued = true;
+    queueMicrotask(() => {
+      reflowQueued = false;
+      reflow();
+    });
   };
-  const synchronize = (): void => {
-    if (viewport === undefined || viewport.viewport.height <= 0) return;
-    const next = intersectingOrderedSemanticItems(
-      {
-        top: viewport.viewport.y,
-        bottom: viewport.viewport.y + viewport.viewport.height,
-      },
-      orderedIds,
-      geometryFor,
+  const markItemIndexDirty = (): void => {
+    itemIndexDirty = true;
+    scheduleReflow();
+  };
+  const clearItemIndex = (): void => {
+    for (const item of indexedItems) item.off("destroyed", markItemIndexDirty);
+    indexedItems.clear();
+    itemById.clear();
+  };
+  const rebuildItemIndex = (): void => {
+    clearItemIndex();
+    const content = viewport?.content;
+    if (content === undefined) {
+      itemIndexDirty = true;
+      return;
+    }
+    const itemIdByRenderableId = new Map(
+      orderedIds.map((id) => [semanticItemRenderableId(id), id] as const),
     );
+    const pending: BaseRenderable[] = [content];
+    while (pending.length > 0 && itemById.size < itemIdByRenderableId.size) {
+      const parent = pending.pop();
+      if (parent === undefined) break;
+      for (const child of parent.getChildren()) {
+        if (child instanceof Renderable) {
+          const itemId = itemIdByRenderableId.get(child.id);
+          if (itemId !== undefined && !itemById.has(itemId)) {
+            itemById.set(itemId, child);
+            indexedItems.add(child);
+            child.on("destroyed", markItemIndexDirty);
+          }
+        }
+        pending.push(child);
+      }
+    }
+    itemIndexDirty = itemById.size !== itemIdByRenderableId.size;
+  };
+  const ensureItemIndex = (): void => {
+    if (itemIndexDirty) rebuildItemIndex();
+  };
+  const geometryFor = (id: ItemId): SemanticItemGeometry<ItemId> | undefined => {
+    const item = itemById.get(id);
+    if (item === undefined || item.isDestroyed) {
+      itemIndexDirty = true;
+      return undefined;
+    }
+    return geometry(id, item);
+  };
+  const synchronizeIndexed = (): void => {
+    if (viewport === undefined) return;
+    const next = viewport.viewport.height <= 0
+      ? []
+      : intersectingOrderedSemanticItems(
+          {
+            top: viewport.viewport.y,
+            bottom: viewport.viewport.y + viewport.viewport.height,
+          },
+          orderedIds,
+          geometryFor,
+        );
     if (sameIds(visibleIds, next)) return;
     visibleIds = next;
     for (const listener of listeners) listener();
   };
-  const revealFollowedItem = (): void => {
-    if (viewport === undefined || followedId === undefined) return;
+  const synchronize = (): void => {
+    ensureItemIndex();
+    synchronizeIndexed();
+  };
+  const revealFollowedItemIndexed = (): void => {
+    if (
+      viewport === undefined ||
+      viewport.viewport.height <= 0 ||
+      followedId === undefined
+    ) {
+      return;
+    }
     const item = geometryFor(followedId);
     if (item === undefined) return;
     const viewportTop = viewport.viewport.y;
@@ -157,16 +227,9 @@ export function createScrollViewportController<
     viewport.scrollBy(delta);
   };
   const reflow = (): void => {
-    revealFollowedItem();
-    synchronize();
-  };
-  const scheduleReflow = (): void => {
-    if (reflowQueued) return;
-    reflowQueued = true;
-    queueMicrotask(() => {
-      reflowQueued = false;
-      reflow();
-    });
+    ensureItemIndex();
+    revealFollowedItemIndexed();
+    synchronizeIndexed();
   };
 
   return {
@@ -175,6 +238,7 @@ export function createScrollViewportController<
       layoutOwner?.off("layout-changed", scheduleReflow);
       viewport = nextViewport;
       orderedIds = itemIds;
+      itemIndexDirty = true;
       layoutOwner = topmostParent(nextViewport);
       layoutOwner.on("layout-changed", scheduleReflow);
       reflow();
@@ -187,6 +251,8 @@ export function createScrollViewportController<
       viewport = undefined;
       orderedIds = [];
       followAlignment = undefined;
+      clearItemIndex();
+      itemIndexDirty = true;
       if (visibleIds === undefined) return;
       visibleIds = undefined;
       for (const listener of listeners) listener();
@@ -216,8 +282,9 @@ export function createScrollViewportController<
       if (itemId !== followedId) followAlignment = undefined;
       followedId = itemId;
       if (itemId === undefined) return;
-      revealFollowedItem();
-      synchronize();
+      ensureItemIndex();
+      revealFollowedItemIndexed();
+      synchronizeIndexed();
     },
   };
 }

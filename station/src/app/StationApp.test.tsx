@@ -60,7 +60,10 @@ describe("Station app composition", () => {
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    const frame = await waitForFrame(station, (candidate) => candidate.includes("FLEET"));
+    const frame = await waitForFrame(
+      station,
+      (candidate) => candidate.includes("FLEET") && candidate.includes("showing 5 of 10"),
+    );
 
     expect(frame).not.toContain(STATION_ICON);
     expect(frame).toMatchSnapshot();
@@ -80,7 +83,10 @@ describe("Station app composition", () => {
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    const frame = await waitForFrame(station, (candidate) => candidate.includes("FLEET"));
+    const frame = await waitForFrame(
+      station,
+      (candidate) => candidate.includes("FLEET") && candidate.includes("showing 2 of 10"),
+    );
 
     expect(frame).not.toContain(STATION_ICON);
     expect(frame).toMatchSnapshot();

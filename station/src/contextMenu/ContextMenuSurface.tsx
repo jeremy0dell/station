@@ -52,7 +52,13 @@ export function ContextMenuSurface({
     kind: "contextMenuItem" | "contextMenuItemHover",
   ): void => {
     event.stopPropagation();
-    const itemId = semanticItemIdAtPointer(surfaceRef.current, itemIds, event.x, event.y);
+    const itemId = semanticItemIdAtPointer(
+      surfaceRef.current,
+      CONTEXT_MENU_VIEWPORT_ID,
+      itemIds,
+      event.x,
+      event.y,
+    );
     if (itemId === undefined || (kind === "contextMenuItemHover" && itemId === followedItemId)) {
       return;
     }

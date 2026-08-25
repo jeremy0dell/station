@@ -52,7 +52,13 @@ export function DashboardMenuView({ menu, boundaryId, anchorRenderableId }: Dash
   const backdropMouseProps = stationMouseProps(dispatch, { kind: "sheetBackdrop" });
   const dispatchPointer = (event: MouseEvent): void => {
     event.stopPropagation();
-    const itemId = semanticItemIdAtPointer(menuRef.current, itemIds, event.x, event.y);
+    const itemId = semanticItemIdAtPointer(
+      menuRef.current,
+      DASHBOARD_MENU_VIEWPORT_ID,
+      itemIds,
+      event.x,
+      event.y,
+    );
     const item = menu.items.find((candidate) => candidate.id === itemId);
     dispatch(item?.target ?? { kind: "sheetBackdrop" }, event);
   };
@@ -78,7 +84,13 @@ export function DashboardMenuView({ menu, boundaryId, anchorRenderableId }: Dash
       {...backdropMouseProps}
       onMouseDown={dispatchPointer}
       onMouseMove={(event: MouseEvent) => {
-        const itemId = semanticItemIdAtPointer(menuRef.current, itemIds, event.x, event.y);
+        const itemId = semanticItemIdAtPointer(
+          menuRef.current,
+          DASHBOARD_MENU_VIEWPORT_ID,
+          itemIds,
+          event.x,
+          event.y,
+        );
         setHoveredItemId(hoverEnabled ? itemId : undefined);
       }}
       onMouseOut={() => setHoveredItemId(undefined)}

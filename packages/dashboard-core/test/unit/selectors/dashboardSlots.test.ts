@@ -137,6 +137,16 @@ describe("dashboard semantic slots", () => {
     expect(slots.sessionOverflow).toEqual({ above: 0, below: 0, visible: 7, total: 7 });
   });
 
+  it("keeps a measured empty viewport distinct from unmeasured visibility", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({ initialSnapshot: snapshot });
+    const slots = selectDashboardSlots(snapshot, state, state.screen, []);
+
+    expect(slots.rowChoices).toEqual([]);
+    expect(slots.displayRowChoices).toEqual([]);
+    expect(slots.sessionOverflow).toEqual({ above: 0, below: 7, visible: 0, total: 7 });
+  });
+
   it("passes through applied filter projection without fabricating layout nodes", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({

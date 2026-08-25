@@ -213,9 +213,11 @@ identity, scrolls and clips by box coordinates, treats partially intersecting an
 oversized boxes correctly, and reports only intersecting semantic IDs back to
 dashboard-core. Core uses those IDs for visible slot assignment and session
 overflow counts; it receives no coordinates, terminal height, item-height
-assumption, or scroll offset, and it never pre-slices the component tree. Ordered
-visibility lookup is logarithmic in total items plus the intersecting boxes, so
-ordinary scroll synchronization does not rescan an unbounded dashboard.
+assumption, or scroll offset, and it never pre-slices the component tree. The renderer indexes
+semantic IDs to their OpenTUI boxes with one bounded tree traversal when those boxes mount or are
+replaced. Steady-state ordered visibility lookup is logarithmic in total items plus the
+intersecting boxes, so ordinary scroll synchronization does not recursively rescan the dashboard
+for every geometry probe.
 
 Pointer targets identify one `dashboardCell`. In dashboard mode both pointer
 activation and focused Enter resolve that cell through the current visible tree

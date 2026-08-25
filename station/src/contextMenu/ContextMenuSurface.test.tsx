@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { rgbToHex } from "@opentui/core";
+import { rgbToHex, ScrollBoxRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import {
@@ -293,7 +293,78 @@ describe("ContextMenuSurface", () => {
       setup.renderer.destroy();
     }
   });
+
+  it("keeps clipped top and bottom borders inert for click and hover", async () => {
+    const items: readonly ContextMenuItem[] = Array.from({ length: 12 }, (_, index) => ({
+      id: `pane.automation.border-action-${index}`,
+      label: `Border action ${index}`,
+      action: { kind: "noop" as const },
+    }));
+    const calls: MouseTargetRef[] = [];
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <box id={TEST_BOUNDARY_ID} width={24} height="100%">
+          <ContextMenuSurface
+            items={items}
+            activeItemId="pane.automation.border-action-11"
+            anchor={{ x: 20, y: 7 }}
+            preferredWidth={18}
+            boundaryId={TEST_BOUNDARY_ID}
+            dispatchMouse={(target) => {
+              calls.push(target);
+              return true;
+            }}
+          />
+        </box>
+      </StationThemeProvider>,
+      { width: 24, height: 8 },
+    );
+    await setup.flush();
+    try {
+      const surface = setup.renderer.root.findDescendantById("station-context-menu-surface");
+      const scrollbox = setup.renderer.root.findDescendantById("station-context-menu-items");
+      if (surface === undefined || !(scrollbox instanceof ScrollBoxRenderable)) {
+        throw new Error("context menu geometry did not render");
+      }
+      const x = surface.screenX + 2;
+      const top = surface.screenY;
+      expect(rawSemanticItemAtPointer(setup, items, x, top)).toBeDefined();
+      await setup.mockMouse.moveTo(x, top);
+      await setup.mockMouse.click(x, top, MouseButtons.LEFT);
+      expect(calls).toEqual([]);
+
+      scrollbox.scrollTop = 0;
+      await setup.renderOnce();
+      const bottom = surface.screenY + surface.height - 1;
+      expect(rawSemanticItemAtPointer(setup, items, x, bottom)).toBeDefined();
+      await setup.mockMouse.moveTo(x, bottom);
+      await setup.mockMouse.click(x, bottom, MouseButtons.LEFT);
+      expect(calls).toEqual([]);
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
 });
+
+function rawSemanticItemAtPointer(
+  setup: Awaited<ReturnType<typeof testRender>>,
+  items: readonly ContextMenuItem[],
+  x: number,
+  y: number,
+): ContextMenuItem | undefined {
+  return items.find((item) => {
+    const renderable = setup.renderer.root.findDescendantById(
+      contextMenuItemRenderableId(item.id),
+    );
+    return (
+      renderable !== undefined &&
+      x >= renderable.screenX &&
+      x < renderable.screenX + renderable.width &&
+      y >= renderable.screenY &&
+      y < renderable.screenY + renderable.height
+    );
+  });
+}
 
 async function renderSurface(
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean = () => true,
