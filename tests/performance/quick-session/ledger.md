@@ -2107,3 +2107,97 @@ inconsistent active-TUI increment and heavier tail. Next compare an idle native
 TUI connection and the active Quick Session path inside the same Bun process
 against the same Observer response, eliminating the cross-runtime epoch
 ambiguity before proposing a worker, polling, or transport change.
+
+## BENCH-047-I registered diagnostic plan
+
+Governing sources are `docs/debugging.md`, `docs/architecture.md`,
+`docs/observer-architecture.md`, `docs/architecture-documentation.md`,
+`docs/configuration.md`, `tests/README.md`, the original experiment protocol,
+BENCH-045-D, and BENCH-046-P. BENCH-046 rejected its TUI-occupancy attribution:
+only eight of nineteen valid active/standalone pairs differed by at least 4ms,
+the standalone control missed its 1/2ms median/p95 prediction, and one Node/Bun
+epoch comparison was negative. The active native path nevertheless retained a
+heavier 5.858/11.959ms server-send-to-callback distribution versus the valid
+standalone control's 2.746/3.329ms, so the remaining question is whether native
+TUI activity owns a repeatable increment when both observations use the same
+TUI and Observer processes.
+
+BENCH-047 retains BENCH-045's exact temporary launch behavior and trace layers,
+twenty compiled-product repetitions, and full correctness matrix. After the
+dashboard is rendered and the runner's startup checks settle, the runner sends
+one `SIGUSR2` to the exact native TUI PID. A temporary one-shot handler issues a
+fresh `observer.health` request through the same Bun protocol/transport code,
+then writes a strict completion sentinel containing no timing data. Only after
+that idle probe completes does the runner admit and start Quick Session. The
+active comparison remains the `agent.prepareExternalLaunch` response. Idle and
+active server-send-return-to-socket-callback timestamps therefore share one TUI
+process, one Observer process, one Bun runtime implementation on both sides,
+and one comparable-clock offset. They intentionally use different validated
+response methods; BENCH-045 already bounds all active post-callback parsing at
+0.081ms p95, and BENCH-047 separately reconstructs both delivery intervals.
+
+Idle always precedes active so the control cannot inherit a created worktree,
+session, pane, or terminal. Each idle probe and active Quick attempt receives a
+separate BENCH-044 stability admission immediately before its measured request;
+all attempts are retained, and no admitted sample is filtered. The signal
+handler is one-shot, removed during Station shutdown, and enabled only by a
+strictly parsed temporary completion-path environment value. The sentinel is a
+coordination witness, not timing evidence; protocol traces remain memory-only
+and exit-only. No renderer state, response, request, retry, timeout, validation,
+focus, or launch behavior changes.
+
+Expected temporary files inherited from BENCH-046 are
+`station/src/app/dashboardCapabilities.ts`,
+`station/src/app/dashboardCapabilities.test.ts`,
+`station/src/input/runtime/managedLaunch.ts`,
+`station/src/input/runtime/managedLaunch.test.ts`,
+`station/src/input/runtime/managedLaunchAttempt.ts`,
+`station/src/input/runtime/managedLaunchPhaseDiagnostic.ts`,
+`apps/observer/src/runtime/externalLaunch.ts`,
+`apps/observer/src/runtime/externalLaunchPhaseDiagnostic.ts`,
+`packages/protocol/src/client.ts`, `packages/protocol/src/server.ts`,
+`packages/protocol/src/transport.ts`,
+`packages/protocol/src/prepareExternalLaunchPhaseDiagnostic.ts`, and
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts`.
+BENCH-047 additionally changes
+`station/src/sources/observerStationClient.ts` and adds temporary
+`station/src/sources/observerTransportDeliveryProbe.ts` plus
+`station/src/sources/observerTransportDeliveryProbe.test.ts`. Raw JSON, a
+standalone archive summary, and this ledger are the evidence artifacts. No
+package manifest, shared contract/schema, provider, connector, runtime config,
+architecture, permanent benchmark, report, or user-documentation change is
+expected.
+
+JSDoc impact is explicit: the temporary protocol client option will document
+that it arms only the single idle health response, and the transport diagnostic
+method will document its idle/active scope without granting delivery authority.
+No controlled Observer seam changes. The Station signal helper is temporary
+diagnostic composition rather than a retained application port, adapter, use
+case, policy, or composition root; it requires only a concise one-shot signal
+and completion invariant comment. No retained JSDoc change is expected because
+all instrumentation will be reverted after classification.
+
+All twenty idle and active measurements must pass their forty independent
+admissions, strict parsing, exact one-shot sentinel, process exit, and every
+BENCH-045 product predicate. Both trace scopes must occur exactly once, be
+monotonic and nonnegative across processes, remain absent before their owning
+process exits, and reconstruct their server-send-to-client-frame intervals
+within 1ms. User-facing p95 remains at most 380ms, attachment p95 at most 30ms,
+residual p95 at most 35ms, and active response-egress p95 at most 15ms. Attribute
+native TUI activity only if at least fifteen of twenty pairs show active
+pre-callback latency at least 2ms above idle and idle p95 is at least 40% below
+active p95. Prediction: idle native pre-callback latency is at most 3ms median
+and 5ms p95, at least fifteen pairs differ by 2ms, idle p95 is at least 50%
+below active p95, and idle callback-through-validation p95 is at most 0.2ms.
+Any failed condition rejects the attribution mechanically.
+
+Validation before the authoritative run will repeat Protocol, Observer, and
+Station typechecks; Protocol transport unit and client/server integration tests,
+Observer external-launch unit, focused dashboard/managed-launch tests, the new
+signal-probe unit test, Biome, `git diff --check`, the runner's skipped-mode
+compile, and one structural native idle-probe smoke whose timing is not inspected
+or admitted into the result. No production optimization is registered until
+BENCH-047 passes every trace, paired, stability, and product guard. An accepted
+result would still require attribution of the exact synchronous TUI work before
+proposing a worker or scheduler change; a rejection redirects the next
+experiment to inherent Bun/Unix-socket dispatch and Observer send timing.
