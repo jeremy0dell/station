@@ -2376,3 +2376,60 @@ registered. An accepted result would authorize a separately preregistered
 batching or scheduling candidate at the narrowest proven notification/render
 boundary; rejection redirects attribution to terminal/Host callbacks or
 process scheduling outside the recorded renderer work.
+
+## BENCH-048-P measured native renderer occupancy outcome
+
+BENCH-048 ran from frozen diagnostic commit `3973e6b49`. Its timing-blind
+structural smoke completed one native run and two independent admissions with
+exact renderer identity, exit-only persistence, 38 strictly parsed occupancy
+events across 12 matched activities, and no false safety predicate. The
+authoritative run then completed all twenty product repetitions and forty
+idle/active admissions in 186 seconds. All twenty runs were safe, all forty
+admissions passed in 41 attempts, cross-process order and trace reconstruction
+passed, no safety predicate was false, and maximum reconstruction error was
+0.000209ms. Admitted immediate-turn p95 observations had 0.068ms p95 and
+process-launch p95 observations had 3.678ms p95. One-minute load was
+11.33–18.54 on ten logical CPUs, below the registered ceiling of 20.
+
+The event and render presence predictions passed strongly. All 20 runs applied
+exactly one `worktree.updated` and one `session.created` before the active
+response callback, all 20 contained React updates, and React aggregate
+actual-duration p95 was 121.22% of active pre-callback p95 versus the registered
+50% floor. Active server-send-to-callback was 5.954/7.788ms median/p95, while
+idle was 0.030/1.046ms. All twenty active samples exceeded idle by at least 2ms,
+with a 5.926/7.280ms paired difference and 86.57% idle p95 improvement.
+
+The registered attribution nevertheless fails mechanically. Unioned outer
+renderer occupancy was 3.342/4.560ms median/p95 and explained only 58.55% of
+active pre-callback p95, below both the 80% blind prediction and 70%
+attribution floor. Only 5/20 runs explained at least 60% of their own interval,
+versus the required 15. The report therefore records `failure: null`,
+`allSafe: true`, `predictionPassed: false`, and `thresholdsPassed: false`.
+Every product guard passed: intent-to-interactive p95 was 238.699ms versus
+380ms, attachment p95 was 17.894ms versus 30ms, transport residual p95 was
+20.048ms versus 35ms, and active response-egress p95 was 7.831ms versus 15ms.
+
+No production optimization is retained. Recorded native renderer work is
+material and React updates are universal, but it does not dominate enough wall
+time to authorize batching, suppression, or scheduling changes. Post-result
+gap decomposition found 2.354/3.546ms median/p95 unoccupied time. The largest
+gaps were between subscription socket callback completion and typed runtime
+application: 1.003/1.741ms for `worktree.updated` and 0.979/2.020ms for
+`session.created`. The post-worktree-React-to-session-socket gap was
+0.364/0.961ms; after `session.created`, the active callback followed within
+0.030/0.104ms. The next registered diagnostic must distinguish asynchronous
+subscription iterator scheduling from OpenTUI post-commit activity before any
+delivery or render candidate is proposed.
+
+The archived report is
+`tests/performance/quick-session/bench-048-native-renderer-occupancy.md`; the
+raw report is
+`tests/performance/quick-session/bench-048-native-renderer-occupancy.real.json`
+(1,398,988 bytes; SHA-256
+`71c18e6c747e72a35b9193845ef9e209c0fee67cdb0729d5d1c79f08a4234080`).
+Validation passed Protocol, Client, Dashboard Core, Observer, and Station
+typechecks; 15 Protocol transport unit tests; 43 Protocol integration tests;
+49 Client tests; 49 Dashboard tests; 65 Observer external-launch unit tests;
+8 Observer integration tests; 65 focused Station tests; Biome;
+`git diff --check`; the skipped runner compile; and the structural native
+smoke.
