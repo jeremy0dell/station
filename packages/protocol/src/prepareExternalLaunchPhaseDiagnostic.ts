@@ -9,23 +9,34 @@ export const prepareExternalLaunchClientProtocolDiagnosticPhases = [
   "expectedObserverHealthStarted",
   "expectedObserverHealthCompleted",
   "prepareRequestStarted",
+  "prepareRequestConstructed",
+  "prepareRequestSent",
+  "prepareResponseFrameReceived",
+  "prepareResponseEnvelopeParsed",
   "prepareResponseCompleted",
   "boundaryTaskCompleted",
   "protocolCompleted",
 ] as const;
 
 export const prepareExternalLaunchServerProtocolDiagnosticPhases = [
+  "expectedObserverHealthRequestParsed",
+  "expectedObserverHealthResponseSent",
   "prepareRequestParsed",
   "prepareHandlerStarted",
   "prepareUseCaseDispatchStarted",
   "prepareUseCaseDispatchCompleted",
   "prepareHandlerCompleted",
+  "prepareResponseConstructed",
   "prepareResponseSent",
 ] as const;
 
 type ClientPhase = (typeof prepareExternalLaunchClientProtocolDiagnosticPhases)[number];
 type ServerPhase = (typeof prepareExternalLaunchServerProtocolDiagnosticPhases)[number];
-type DiagnosticEvent<TPhase extends string> = { phase: TPhase; atMs: number };
+type DiagnosticEvent<TPhase extends string> = {
+  phase: TPhase;
+  atMs: number;
+  epochMs: number;
+};
 
 const pathSchema = z.string().min(1);
 const clientPathResult = pathSchema.safeParse(
@@ -49,17 +60,19 @@ process.once("exit", () => {
 });
 
 /**
- * Records protocol diagnostics in memory; only the process owning nonempty
- * events writes its strict artifact during normal process exit.
+ * Records process-local duration and comparable epoch timestamps in memory;
+ * only the process owning nonempty events writes during normal process exit.
  */
 export function markPrepareExternalLaunchClientProtocolPhase(phase: ClientPhase): void {
   if (clientPath !== undefined) {
-    clientEvents.push({ phase, atMs: performance.now() });
+    const atMs = performance.now();
+    clientEvents.push({ phase, atMs, epochMs: performance.timeOrigin + atMs });
   }
 }
 
 export function markPrepareExternalLaunchServerProtocolPhase(phase: ServerPhase): void {
   if (serverPath !== undefined) {
-    serverEvents.push({ phase, atMs: performance.now() });
+    const atMs = performance.now();
+    serverEvents.push({ phase, atMs, epochMs: performance.timeOrigin + atMs });
   }
 }
