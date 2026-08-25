@@ -2261,3 +2261,118 @@ transport unit tests; 43 Protocol integration tests; 65 Observer external-launch
 tests; 61 focused Station dashboard, managed-launch, Observer-client, and probe
 tests; Biome; `git diff --check`; the skipped-mode runner compile; and the
 corrected structural native smoke.
+
+## BENCH-048-I registered native renderer occupancy plan
+
+Governing sources are `docs/debugging.md`, `docs/architecture.md`,
+`docs/observer-architecture.md`, `docs/architecture-documentation.md`,
+`docs/configuration.md`, `tests/README.md`, the original experiment protocol,
+BENCH-047-I, and BENCH-047-P. BENCH-047 found a 6.605/20.172ms
+median/p95 active server-send-to-renderer-callback interval versus
+0.042/0.486ms idle in the same Bun renderer and Observer processes. Every one
+of twenty active samples exceeded its paired idle control by at least 4.245ms.
+The Observer publishes `worktree.updated` and `session.created` before its
+`agent.prepareExternalLaunch` handler returns; the native client synchronously
+reduces each subscription event, notifies its listeners, projects the dashboard
+source, and can schedule or perform a React/OpenTUI commit while the active
+response waits on another socket. BENCH-048 asks whether that exact renderer
+work occupies the measured pre-callback interval.
+
+BENCH-048 retains BENCH-047's same-process idle control, twenty complete native
+Quick Session repetitions, idle-before-active order, separate idle and active
+admission, 49-worktree fixture, one ordinary Observer restart per repetition,
+warm preserved Host, strict renderer-child identity, exact input
+acknowledgement, complete cleanup, exit-only traces, and all existing phase
+layers. It adds one memory-only renderer-occupancy trace, emitted only when the
+native renderer exits. The active response transport arms a global diagnostic
+window immediately before request construction and closes it at entry to that
+response's socket-data callback. Repeated strict records capture:
+
+- other socket-data callback entry/exit while the active window is open;
+- client runtime event entry, reducer completion, listener completion, and hook
+  completion, including the strict Station event type;
+- dashboard source-bridge entry, source read, projection completion, and store
+  notification completion; and
+- root React Profiler updates with start, commit, callback, actual-duration, and
+  base-duration values, using a memory callback rather than the existing
+  synchronous `STATION_PROFILE` file writer.
+
+The diagnostic records observations only; it does not defer, batch, suppress,
+reorder, retry, or copy an event, state transition, listener, render, request,
+response, validation, terminal callback, or focus action. Analysis clips every
+outer competing-socket, runtime-event, and React interval to the active
+server-send-to-callback window and unions overlaps before computing explained
+time. Dashboard subphases are reported as nested attribution and never added to
+their enclosing runtime-event interval. React `actualDuration` is reported
+separately from interval-union occupancy so nested or scheduled work cannot be
+double-counted.
+
+All twenty runs must pass forty independent stability admissions. In addition
+to BENCH-044's immediate-turn p95 at most 1ms and process-launch p95 at most
+5ms, each admitted attempt requires one-minute load average at most twice the
+machine's logical CPU count; all attempts remain retained and the timeout stays
+five minutes. Every inherited safety and exact-order predicate must pass. Each
+occupancy record must strictly parse, be monotonic, have a matching entry/exit,
+remain within its active diagnostic window when classified as overlapping, and
+remain absent from disk before native-renderer exit. Both response intervals
+must still reconstruct within 1ms. User-facing p95 remains at most 380ms,
+attachment p95 at most 30ms, transport residual p95 at most 35ms, and active
+response-egress p95 at most 15ms.
+
+Attribute the active pre-callback interval to native renderer work only if at
+least fifteen of twenty runs process both exact projected launch events before
+the active response callback, at least fifteen contain a root React update
+before that callback, the p95 union of outer renderer-occupancy intervals
+explains at least 70% of active pre-callback p95, and at least fifteen paired
+runs explain at least 60% of their own active interval. Blind prediction: all
+twenty runs observe exactly one `worktree.updated` plus one `session.created`
+runtime application in that window; at least eighteen contain a React update;
+React actual-duration p95 is at least 50% of active pre-callback p95; and the
+outer occupancy union explains at least 80% of active pre-callback p95. Any
+failed trace, stability, product, attribution, or prediction condition rejects
+the hypothesis mechanically.
+
+Expected temporary files inherited from BENCH-047 are
+`station/src/app/dashboardCapabilities.ts`,
+`station/src/app/dashboardCapabilities.test.ts`,
+`station/src/input/runtime/managedLaunch.ts`,
+`station/src/input/runtime/managedLaunch.test.ts`,
+`station/src/input/runtime/managedLaunchAttempt.ts`,
+`station/src/input/runtime/managedLaunchPhaseDiagnostic.ts`,
+`apps/observer/src/runtime/externalLaunch.ts`,
+`apps/observer/src/runtime/externalLaunchPhaseDiagnostic.ts`,
+`packages/protocol/src/client.ts`, `packages/protocol/src/server.ts`,
+`packages/protocol/src/transport.ts`,
+`packages/protocol/src/prepareExternalLaunchPhaseDiagnostic.ts`,
+`station/src/sources/observerStationClient.ts`,
+`station/src/sources/observerTransportDeliveryProbe.ts`,
+`station/src/sources/observerTransportDeliveryProbe.test.ts`, and
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts`.
+BENCH-048 additionally changes `packages/client/src/observerRuntime.ts`,
+`packages/client/src/index.ts`, adds temporary
+`packages/client/src/rendererOccupancyDiagnostic.ts`, changes
+`packages/dashboard-core/src/state/runtime.ts`, and changes
+`station/src/main.tsx`. Raw JSON, an archive-only report, and this ledger are
+the evidence artifacts. No permanent contract/schema, provider, connector,
+runtime config, package manifest, architecture, report, benchmark, or user
+documentation change is expected.
+
+JSDoc impact is explicit: the temporary client diagnostic bridge documents
+that it only records an already-armed protocol window, and the temporary
+protocol arming/query/mark functions document their observation-only scope.
+One concise comment protects the invariant that the active window closes on
+callback entry before any response parsing. No backend/connector contract or
+controlled Observer seam changes. All instrumentation is reverted after
+classification, so no retained JSDoc change is expected.
+
+Validation before the authoritative run will repeat Protocol, Client,
+Dashboard Core, Observer, and Station typechecks; Protocol transport unit and
+client/server integration tests; Client runtime and snapshot-reducer tests;
+Dashboard runtime/source-bridge tests; Observer external-launch tests; focused
+native dashboard/managed-launch/probe tests; render-profiler tests; Biome;
+`git diff --check`; the skipped-mode runner compile; and one structural native
+occupancy smoke whose timing is not inspected. No production optimization is
+registered. An accepted result would authorize a separately preregistered
+batching or scheduling candidate at the narrowest proven notification/render
+boundary; rejection redirects attribution to terminal/Host callbacks or
+process scheduling outside the recorded renderer work.
