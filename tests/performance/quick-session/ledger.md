@@ -2014,3 +2014,71 @@ socket delivery from native TUI event-loop occupancy. Next compare a standalone
 compiled client, an idle native TUI connection, and the active Quick Session
 path under the same admitted Observer response before proposing worker,
 polling, or transport changes.
+
+## BENCH-046-P registered diagnostic plan
+
+Governing sources are `docs/debugging.md`, `docs/architecture.md`,
+`docs/observer-architecture.md`, `docs/architecture-documentation.md`,
+`tests/README.md`, the original experiment protocol, BENCH-044-W, and
+BENCH-045-D. BENCH-045 accepted only the boundary attribution: 99.1% of
+response-egress p95 elapsed after the Observer's socket write returned and
+before the native TUI's socket-data callback began. Source inspection confirms
+OpenTUI is configured for on-demand rendering, but BENCH-045 cannot distinguish
+Bun/Unix-socket dispatch latency from work occupying the TUI process.
+
+BENCH-046 retains BENCH-045's exact temporary launch behavior, trace layers,
+twenty admitted compiled-product repetitions, and full correctness matrix. It
+adds one paired standalone Bun socket-delivery control per repetition. A test-
+owned Unix socket server in the Vitest process returns its comparable epoch
+timestamp as a newline-delimited number; a fresh Bun client connects before
+measurement, sends one ping, records socket callback entry, validates the
+finite timestamp, and exits with strict JSON. Client process startup,
+connection, request ingress, and server work occur before the measured server-
+send-to-callback interval. Each standalone control and each product repetition
+has its own BENCH-044 stability admission. Pair order alternates by repetition
+to counterbalance drift, and no admitted result is filtered.
+
+Expected temporary files inherited from BENCH-045 are
+`station/src/app/dashboardCapabilities.ts`,
+`station/src/app/dashboardCapabilities.test.ts`,
+`station/src/input/runtime/managedLaunch.ts`,
+`station/src/input/runtime/managedLaunch.test.ts`,
+`station/src/input/runtime/managedLaunchAttempt.ts`,
+`station/src/input/runtime/managedLaunchPhaseDiagnostic.ts`,
+`apps/observer/src/runtime/externalLaunch.ts`,
+`apps/observer/src/runtime/externalLaunchPhaseDiagnostic.ts`,
+`packages/protocol/src/client.ts`, `packages/protocol/src/server.ts`,
+`packages/protocol/src/transport.ts`,
+`packages/protocol/src/prepareExternalLaunchPhaseDiagnostic.ts`, and
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts`.
+BENCH-046 changes only the runner beyond archived BENCH-045 source and writes
+its standalone client beneath the per-run temporary root. Raw JSON, a
+standalone archive summary, and this ledger are the evidence artifacts. No
+package manifest, shared contract/schema, provider, connector, configuration,
+architecture, permanent test, report, or user-documentation change is expected.
+
+JSDoc impact is explicit: no new or changed JSDoc is expected beyond inherited
+temporary BENCH-045 diagnostic contracts. No retained backend, connector, or
+protocol JSDoc change is expected because all instrumentation will be reverted
+after classification.
+
+The table row freezes the decision before diagnostic source is restored. All
+twenty standalone controls and product repetitions must pass independent
+admission, strict parsing, process exit, and every BENCH-045 product predicate.
+The standalone server and temporary roots must close cleanly. User-facing p95
+remains at most 380ms, attachment p95 at most 30ms, residual p95 at most 35ms,
+and active response-egress p95 at most 15ms. At least fifteen pairs must show
+active-TUI pre-callback latency at least 4ms slower than standalone, and the
+standalone p95 must be at least 60% below active-TUI p95. Prediction: standalone
+Bun server-send-to-callback latency is at most 1ms median and 2ms p95, is at
+least 70% below active-TUI p95, and standalone callback-to-validated-exit work
+is at most 0.2ms p95. This predicts TUI-process occupancy rather than inherent
+Bun/Unix-socket delivery; any failed condition rejects that attribution.
+
+Validation before the paired run will repeat Protocol, Observer, and Station
+typechecks; Protocol transport unit and client/server integration tests,
+Observer external-launch unit, focused temporary dashboard/managed-launch
+tests, Biome, `git diff --check`, the runner's skipped-mode compile, and a
+single strict standalone-probe smoke. No production optimization is registered
+until BENCH-046 passes every paired, stability, and product guard; an accepted
+result still requires an idle-native-TUI comparison before proposing a change.
