@@ -1,8 +1,10 @@
 import type { SessionGroupView, StationCommand } from "@station/contracts";
 import {
+  CommandRecordSchema,
   ErrorEnvelopeSchema,
   SafeErrorSchema,
   SessionGroupViewSchema,
+  StationCommandResultSchema,
   StationCommandSchema,
   StationEventSchema,
 } from "@station/contracts";
@@ -30,6 +32,7 @@ export type SqliteCommandRow = {
   trace_id: string | null;
   span_id: string | null;
   error_json: string | null;
+  result_json: string | null;
 };
 
 export type SqliteCommandErrorRow = {
@@ -111,7 +114,7 @@ export function commandFromRow(row: SqliteCommandRow): PersistedCommand {
   const command = StationCommandSchema.parse(parseJson(row.payload_json));
   const persistedCommand: PersistedCommand = {
     id: row.id,
-    type: command.type,
+    type: row.type,
     command,
     status: row.status,
     createdAt: row.created_at,
@@ -123,6 +126,10 @@ export function commandFromRow(row: SqliteCommandRow): PersistedCommand {
   if (row.error_json !== null) {
     persistedCommand.error = SafeErrorSchema.parse(parseJson(row.error_json));
   }
+  if (row.result_json !== null) {
+    persistedCommand.result = StationCommandResultSchema.parse(parseJson(row.result_json));
+  }
+  CommandRecordSchema.parse(persistedCommand);
   return persistedCommand;
 }
 

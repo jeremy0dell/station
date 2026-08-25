@@ -43,7 +43,8 @@ const DEFAULT_COMMAND_WAIT_TIMEOUT_MS = 35_000;
 /**
  * ADAPTER
  *
- * Presents one build-pinned Observer protocol endpoint as the shared client service.
+ * Presents one build-pinned Observer protocol endpoint as the shared client
+ * service and preserves durable command results loaded at terminal completion.
  */
 export function createObserverService(options: CreateObserverServiceOptions): ObserverService {
   const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;

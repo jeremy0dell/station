@@ -60,6 +60,7 @@ function spawnSourceHost(input: {
   socketPath: string;
   stateDir: string;
   buildVersion: string;
+  buildIdentity: string;
 }) {
   const child = spawn(
     process.env.STATION_BUN ?? "bun",
@@ -67,6 +68,8 @@ function spawnSourceHost(input: {
       HOST_ENTRY,
       "--build-version",
       input.buildVersion,
+      "--build-identity",
+      input.buildIdentity,
       "--socket",
       input.socketPath,
       "--state-dir",
@@ -195,7 +198,11 @@ if (SMOKE) {
       const socketPath = join(stateDir, "station-host.sock");
       const buildA = "0.0.0-warm-host-a";
       const buildB = "0.0.0-warm-host-b";
-      const hosts = [spawnSourceHost({ socketPath, stateDir, buildVersion: buildA })];
+      const buildIdentityA = "a".repeat(64);
+      const buildIdentityB = "b".repeat(64);
+      const hosts = [
+        spawnSourceHost({ socketPath, stateDir, buildVersion: buildA, buildIdentity: buildIdentityA }),
+      ];
       const clientA = createStationHostClient({
         socketPath,
         expectedBuildVersion: buildA,
@@ -262,6 +269,8 @@ if (SMOKE) {
               HOST_ENTRY,
               "--build-version",
               buildB,
+              "--build-identity",
+              buildIdentityB,
             ],
             expectedBuildVersion: buildB,
             timeoutMs: 10_000,

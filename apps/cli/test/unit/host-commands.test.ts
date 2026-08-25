@@ -38,12 +38,22 @@ describe("runHostCommand", () => {
                 return [{ ptyId: "pty-1", pid: 42, alive: true }];
               },
               recoveryInventory: async () => ({
-                buildIdentity: "older-build-identity",
+                buildIdentity: "a".repeat(64),
                 ptys: [
                   {
+                    kind: "agent",
+                    terminalTargetId: "target-1",
                     ptyId: "pty-1",
+                    ptyInstanceId: "instance-1",
+                    worktreeId: "worktree-1",
+                    projectId: "project-1",
+                    sessionId: "session-1",
+                    worktreePath: "/repo/one",
+                    harnessProvider: "codex",
                     pid: 42,
                     alive: true,
+                    cols: 80,
+                    rows: 24,
                     handoffSupport: { kind: "bridge-releasable" },
                   },
                 ],
@@ -60,7 +70,7 @@ describe("runHostCommand", () => {
         livePtyCount: 1,
         handoffEligible: true,
         compatibility: { action: "replace" },
-        buildIdentity: "older-build-identity",
+        buildIdentity: "a".repeat(64),
         ptys: [{ handoffSupport: { kind: "bridge-releasable" } }],
       });
       expect(requestedBuilds).toEqual([requestingBuild, "older-build"]);
@@ -70,7 +80,7 @@ describe("runHostCommand", () => {
     }
   });
 
-  it("falls back to protocol-v8 host.list when recovery inventory is unavailable", async () => {
+  it("fails closed without a host.list fallback when recovery inventory is unavailable", async () => {
     const fixture = await createTempState();
     const socketPath = stationHostSocketPath(fixture.config);
     const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
@@ -100,11 +110,11 @@ describe("runHostCommand", () => {
       expect(result).toMatchObject({
         action: "status",
         probe: "listening",
-        livePtyCount: 1,
-        ptys: [{ ptyId: "pty-legacy" }],
+        error: "unknown method",
       });
       expect(result).not.toHaveProperty("buildIdentity");
-      expect(list).toHaveBeenCalledOnce();
+      expect(result).not.toHaveProperty("ptys");
+      expect(list).not.toHaveBeenCalled();
     } finally {
       await server.close();
     }

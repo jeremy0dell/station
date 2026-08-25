@@ -59,8 +59,8 @@ describe("Codex hook event parsing", () => {
       {
         provider: "codex",
         eventType: "PermissionRequest",
-        statusIntents: ["needs_attention"],
-        confidences: ["high"],
+        statusIntents: ["working", "needs_attention"],
+        confidences: ["medium", "high"],
       },
       {
         provider: "codex",
@@ -182,6 +182,83 @@ describe("Codex hook event parsing", () => {
       },
     });
     expect(JSON.stringify(report.providerData)).not.toContain("rm -rf");
+  });
+
+  it("keeps auto-reviewed PermissionRequest events working after compaction", () => {
+    const compacted = compactCodexHookPayload({
+      session_id: "codex_session_123",
+      transcript_path: "/tmp/codex-rollout.jsonl",
+      cwd: "/tmp/station/web/task",
+      hook_event_name: "PermissionRequest",
+      model: "gpt-5.6-sol",
+      permission_mode: "default",
+      turn_id: "turn_1",
+      tool_name: "Bash",
+      tool_input: { command: "pnpm test:all" },
+      station_codex_permission_reviewer_evidence: {
+        status: "resolved",
+        source: "transcript_turn_context",
+        reviewer: "auto_review",
+      },
+    });
+
+    const report = reportForCodexPayload(compacted.payload);
+
+    expect(report).toMatchObject({
+      eventType: "PermissionRequest",
+      status: {
+        value: "working",
+        confidence: "medium",
+        reason: "Codex routed permission for Bash to automatic review.",
+      },
+      providerData: {
+        permissionReviewerEvidence: {
+          status: "resolved",
+          reviewer: "auto_review",
+        },
+      },
+    });
+    expect(report.status).not.toHaveProperty("attention");
+    expectStatusAllowedByCodexIngressRule("PermissionRequest", report.status);
+  });
+
+  it("keeps explicit user review and unavailable reviewer evidence as attention", () => {
+    const permissionPayload = (permissionReviewerEvidence: Record<string, string>) => ({
+      session_id: "codex_session_123",
+      transcript_path: "/tmp/codex-rollout.jsonl",
+      cwd: "/tmp/station/web/task",
+      hook_event_name: "PermissionRequest" as const,
+      model: "gpt-5.6-sol",
+      permission_mode: "default" as const,
+      turn_id: "turn_1",
+      tool_name: "Bash",
+      tool_input: { command: "pnpm test:all" },
+      station_codex_permission_reviewer_evidence: permissionReviewerEvidence,
+    });
+
+    const userReview = reportForCodexPayload(
+      permissionPayload({
+        status: "resolved",
+        source: "transcript_turn_context",
+        reviewer: "user",
+      }),
+    );
+    const unavailable = reportForCodexPayload(
+      permissionPayload({
+        status: "unavailable",
+        source: "transcript_turn_context",
+        reason: "turn_context_not_found",
+      }),
+    );
+
+    for (const report of [userReview, unavailable]) {
+      expect(report.status).toMatchObject({
+        value: "needs_attention",
+        confidence: "high",
+        attention: "tool_approval",
+      });
+      expectStatusAllowedByCodexIngressRule("PermissionRequest", report.status);
+    }
   });
 
   it("maps request_user_input tool hooks to an attention question and back", () => {

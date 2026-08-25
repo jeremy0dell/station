@@ -66,7 +66,8 @@ export type StationHostClientOptions = {
 
 /**
  * One successful attachment attempt to an exact Host PTY lifetime. Its frame
- * iterator and detach operation release only this attempt, even after replacement.
+ * iterator includes frames sent immediately after its valid acknowledgement,
+ * and detach releases only this attempt even after replacement.
  */
 export type HostAttachment = {
   ack: HostAttachAck;
@@ -100,8 +101,8 @@ export type StationHostClient = {
   spawn(params: HostSpawnParamsInput): Promise<HostSpawnResult>;
   /** Read protocol-v8 PTY lifetimes without exporting or parking them. */
   list(): Promise<HostListResult["ptys"]>;
-  /** Read immutable Host build and PTY recovery evidence without changing protocol-v8 `host.list`. */
-  recoveryInventory?(): Promise<HostRecoveryInventoryResult>;
+  /** Read identity-bound recovery evidence without compatibility preflight or changing `host.list`. */
+  recoveryInventory(): Promise<HostRecoveryInventoryResult>;
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;
   /** Attach only with an explicit role and a matching complete identity proof. */
@@ -124,6 +125,7 @@ type Pending = {
   resolve: (response: HostResponse) => void;
   reject: (error: unknown) => void;
   timer: ReturnType<typeof setTimeout>;
+  reduceResponse?: (response: HostResponse) => void;
 };
 
 type FrameSink = {
@@ -181,7 +183,12 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
           if (entry !== undefined) {
             clearTimeout(entry.timer);
             pending.delete(response.data.id);
-            entry.resolve(response.data);
+            try {
+              entry.reduceResponse?.(response.data);
+              entry.resolve(response.data);
+            } catch (error) {
+              entry.reject(error);
+            }
           }
           continue;
         }
@@ -218,7 +225,6 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       return connection;
     }
     if (connecting === undefined) {
-      clientIdentity = createClientIdentity(options, expectedBuildVersion);
       connecting = connect()
         .then((opened) => {
           if (disposed) {
@@ -250,8 +256,11 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     params: unknown,
     schema: { parse(value: unknown): TResult },
     includeClientIdentity = false,
+    reduceResponse?: (response: HostResponse) => void,
   ): Promise<TResult> {
     const active = await ensureConnection();
+    if (includeClientIdentity)
+      clientIdentity ??= createClientIdentity(options, expectedBuildVersion);
     const id = `h${nextId++}`;
     const response = await new Promise<HostResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -263,7 +272,9 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
           ),
         );
       }, timeoutMs);
-      pending.set(id, { resolve, reject, timer });
+      const entry: Pending = { resolve, reject, timer };
+      if (reduceResponse !== undefined) entry.reduceResponse = reduceResponse;
+      pending.set(id, entry);
       active.send(
         hostRequest(id, method, params, includeClientIdentity ? clientIdentity : undefined),
       );
@@ -271,7 +282,14 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     if (!response.ok) {
       throw response.error;
     }
-    return schema.parse(response.result);
+    try {
+      return schema.parse(response.result);
+    } catch (cause) {
+      throw stationHostErrorFromUnknown(cause, {
+        code: "HOST_REQUEST_FAILED",
+        message: `Station host returned malformed evidence for "${method}".`,
+      });
+    }
   }
 
   function ensureCompatible(): Promise<void> {
@@ -295,9 +313,10 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     method: string,
     params: unknown,
     schema: { parse(value: unknown): TResult },
+    reduceResponse?: (response: HostResponse) => void,
   ): Promise<TResult> {
     await ensureCompatible();
-    return rawRequest(method, params, schema, true);
+    return rawRequest(method, params, schema, true, reduceResponse);
   }
 
   function createSink(): FrameSink {
@@ -431,7 +450,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     spawn: (params) => request("host.spawn", params, HostSpawnResultSchema),
     list: async () => (await request("host.list", undefined, HostListResultSchema)).ptys,
     recoveryInventory: () =>
-      request("host.recoveryInventory", undefined, HostRecoveryInventoryResultSchema),
+      rawRequest("host.recoveryInventory", undefined, HostRecoveryInventoryResultSchema, true),
     focus: async (ptyId) => {
       await request("host.focus", { ptyId }, HostOkResultSchema);
     },
@@ -453,9 +472,30 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       };
       const { ptyId } = requestedRef;
       const sink = createSink();
+      let sinkInstalled = false;
       let ack: HostAttachAck;
       try {
-        ack = await request("host.attach", { ...requestedRef, intent }, HostAttachAckSchema);
+        ack = await request(
+          "host.attach",
+          { ...requestedRef, intent },
+          HostAttachAckSchema,
+          (response) => {
+            if (!response.ok) return;
+            const candidate = HostAttachAckSchema.safeParse(response.result);
+            if (
+              !candidate.success ||
+              !isSameHostPtyRef(requestedRef, candidate.data) ||
+              !isSameHostPtyIdentity(requestedIdentity, candidate.data)
+            ) {
+              return;
+            }
+            sinksByPty.get(ptyId)?.release();
+            if (!sink.ended) {
+              sink.register(candidate.data);
+              sinkInstalled = true;
+            }
+          },
+        );
       } catch (error) {
         sink.release();
         throw error;
@@ -477,10 +517,12 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
           "Station host acknowledged a different PTY identity than the client expected.",
         );
       }
-      // The server acknowledges before it can send frames, so routing starts only after validation.
-      sinksByPty.get(ptyId)?.release();
-      if (!sink.ended) {
-        sink.register(ack);
+      if (!sinkInstalled) {
+        sink.release();
+        throw new StationHostProviderError(
+          "HOST_ATTACHMENT_MISMATCH",
+          "Station host attachment routing was unavailable after acknowledgement.",
+        );
       }
       return {
         ack,

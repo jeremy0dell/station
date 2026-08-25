@@ -10,6 +10,8 @@ import { describe, expect, it } from "bun:test";
 const HOST_ENTRY = fileURLToPath(new URL("../hostMain.ts", import.meta.url));
 const SMOKE = process.env.STATION_PTY_SMOKE === "1";
 const BINARY_PATH = process.env.STATION_BINARY_PATH;
+const SOURCE_BUILD_IDENTITY = "a".repeat(64);
+const SUCCESSOR_BUILD_IDENTITY = "b".repeat(64);
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -68,6 +70,8 @@ function spawnSourceHost(input: {
       input.stateDir,
       "--build-version",
       input.buildVersion,
+      "--build-identity",
+      SOURCE_BUILD_IDENTITY,
     ],
     {
       detached: true,
@@ -161,6 +165,8 @@ async function handoffAcrossPackaging(input: {
     stateDir,
     "--build-version",
     input.successorBuild,
+    "--build-identity",
+    SUCCESSOR_BUILD_IDENTITY,
   ], {
     detached: true,
     stdio: ["ignore", "ignore", "ignore"],

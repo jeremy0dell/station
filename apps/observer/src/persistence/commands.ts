@@ -4,8 +4,14 @@ import type {
   ErrorEnvelope,
   SafeError,
   StationCommand,
+  StationCommandResult,
 } from "@station/contracts";
-import { ErrorEnvelopeSchema, SafeErrorSchema, StationCommandSchema } from "@station/contracts";
+import {
+  ErrorEnvelopeSchema,
+  SafeErrorSchema,
+  StationCommandResultSchema,
+  StationCommandSchema,
+} from "@station/contracts";
 import type { SqlDatabase } from "../sqlite/driver.js";
 import { stringifyJson } from "./json.js";
 import {
@@ -60,12 +66,18 @@ export function markCommandSucceeded(
   database: SqlDatabase,
   commandId: CommandId,
   finishedAt: string,
+  result?: StationCommandResult,
 ): PersistedCommand {
+  const command = readCommand(database, commandId);
+  const parsedResult = result === undefined ? undefined : StationCommandResultSchema.parse(result);
+  if (parsedResult !== undefined && parsedResult.type !== command.command.type) {
+    throw new Error(`Command result ${parsedResult.type} does not match ${command.command.type}.`);
+  }
   database
     .prepare(
-      "UPDATE commands SET status = 'succeeded', finished_at = ?, error_json = NULL WHERE id = ?",
+      "UPDATE commands SET status = 'succeeded', finished_at = ?, error_json = NULL, result_json = ? WHERE id = ?",
     )
-    .run(finishedAt, commandId);
+    .run(finishedAt, parsedResult === undefined ? null : stringifyJson(parsedResult), commandId);
   return readCommand(database, commandId);
 }
 
@@ -81,7 +93,9 @@ export function markCommandFailed(
   const safeError = SafeErrorSchema.parse(input.safeError);
   const envelope = ErrorEnvelopeSchema.parse(input.envelope);
   database
-    .prepare("UPDATE commands SET status = 'failed', finished_at = ?, error_json = ? WHERE id = ?")
+    .prepare(
+      "UPDATE commands SET status = 'failed', finished_at = ?, error_json = ?, result_json = NULL WHERE id = ?",
+    )
     .run(input.finishedAt, stringifyJson(safeError), input.commandId);
   database
     .prepare(

@@ -129,6 +129,20 @@ describe("stale Observer evidence repair", () => {
     });
   });
 
+  it("preserves pidfile evidence when the installed executable path was replaced", async () => {
+    const { deps, removeIfExact } = repairDeps({ identity });
+    deps.processEvidence.readObserverProcess = () => {
+      throw Object.assign(new Error("installed path replaced"), {
+        tag: "ObserverProcessEvidenceError",
+        code: "OBSERVER_PROCESS_INSTALLED_PATH_REPLACED",
+      });
+    };
+    await expect(repairStaleObserverEvidence(repairInput(), deps)).rejects.toMatchObject({
+      code: "OBSERVER_STALE_EVIDENCE_UNCERTAIN",
+    });
+    expect(removeIfExact).not.toHaveBeenCalled();
+  });
+
   it("fails closed when process evidence is unavailable", async () => {
     const cause = new Error("ps timed out");
     const { deps, removeIfExact } = repairDeps({

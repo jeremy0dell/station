@@ -1,8 +1,14 @@
 import {
+  HOST_PROTOCOL_VERSION,
   HostHandoffFidelitySchema,
   PtyHandoffManifestSchema,
   PtyInstanceIdSchema,
   SafeErrorSchema,
+  StationBuildIdentitySchema,
+  StationHostHandoffSupportSchema,
+  StationHostProtocolVersionSchema,
+  StationHostTerminalLifetimeSchema,
+  StationHostTerminalLifetimesSchema,
   TerminalOutputCompatibilitySchema,
   UiLifecycleDetachReasonSchema,
   UiRunContextSchema,
@@ -13,7 +19,7 @@ import { z } from "zod";
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 8;
+export { HOST_PROTOCOL_VERSION };
 
 const idSchema = z.string().min(1);
 const RIS = "\x1bc";
@@ -21,7 +27,7 @@ const RIS = "\x1bc";
 /** Wire/build identity used only for guarded Host compatibility decisions. */
 export const HostCompatibilityIdentitySchema = z
   .object({
-    protocolVersion: z.number().int(),
+    protocolVersion: StationHostProtocolVersionSchema,
     buildVersion: z.string().min(1),
   })
   .strict();
@@ -207,15 +213,7 @@ export const HostResizeParamsSchema = HostAttachmentCapabilitySchema.extend({
   rows: z.number().int(),
 }).strict();
 export const HostOkResultSchema = z.object({ ok: z.literal(true) }).strict();
-export const HostPtyHandoffSupportSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("bridge-releasable") }).strict(),
-  z
-    .object({
-      kind: z.literal("non-releasable"),
-      reason: z.enum(["no-bridge-transport", "orphan-mode-disabled", "release-unsupported"]),
-    })
-    .strict(),
-]);
+export const HostPtyHandoffSupportSchema = StationHostHandoffSupportSchema;
 export type HostPtyHandoffSupport = z.infer<typeof HostPtyHandoffSupportSchema>;
 /** Protocol-v8 live inventory entry; keep this response byte-compatible for older strict clients. */
 export const HostListEntrySchema = HostPtyWireIdentitySchema.extend({
@@ -231,15 +229,13 @@ export type HostListEntry = z.infer<typeof HostListEntrySchema>;
 export const HostListResultSchema = z.object({ ptys: z.array(HostListEntrySchema) }).strict();
 
 /** Exact read-only recovery evidence exposed separately so protocol-v8 `host.list` never changes. */
-export const HostRecoveryInventoryEntrySchema = HostListEntrySchema.extend({
-  handoffSupport: HostPtyHandoffSupportSchema,
-}).strict();
+export const HostRecoveryInventoryEntrySchema = StationHostTerminalLifetimeSchema;
 export type HostRecoveryInventoryEntry = z.infer<typeof HostRecoveryInventoryEntrySchema>;
 
 export const HostRecoveryInventoryResultSchema = z
   .object({
-    buildIdentity: idSchema,
-    ptys: z.array(HostRecoveryInventoryEntrySchema),
+    buildIdentity: StationBuildIdentitySchema,
+    ptys: StationHostTerminalLifetimesSchema,
   })
   .strict();
 export type HostRecoveryInventoryResult = z.infer<typeof HostRecoveryInventoryResultSchema>;
@@ -248,20 +244,21 @@ export const HostCloseParamsSchema = z
   .object({ ptyId: idSchema, confirm: z.literal(true) })
   .strict();
 export const HostCloseResultSchema = z.object({ closed: z.boolean() }).strict();
+/** Raw health keeps integer protocol parsing so generic compatibility can refuse non-current Hosts. */
 export const HostHealthResultSchema = z
   .object({
     ok: z.literal(true),
     protocolVersion: z.number().int(),
-    buildVersion: z.string().min(1).optional(),
+    buildVersion: z.string().min(1),
   })
   .strict();
 export type HostHealthResult = z.infer<typeof HostHealthResultSchema>;
 
-/** The only three actions allowed by the host protocol/build compatibility policy. */
+/** The current health actions allowed by the host protocol/build compatibility policy. */
 export type HostCompatibility =
   | { action: "reuse" }
   | { action: "replace"; runningBuildVersion: string }
-  | { action: "refuse"; reason: "protocol-mismatch" | "legacy-health" };
+  | { action: "refuse"; reason: "protocol-mismatch" };
 
 /**
  * POLICY
@@ -276,9 +273,6 @@ export function classifyHostCompatibility(
 ): HostCompatibility {
   if (health.protocolVersion !== HOST_PROTOCOL_VERSION) {
     return { action: "refuse", reason: "protocol-mismatch" };
-  }
-  if (health.buildVersion === undefined) {
-    return { action: "refuse", reason: "legacy-health" };
   }
   if (health.buildVersion === expectedBuildVersion) {
     return { action: "reuse" };

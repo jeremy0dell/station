@@ -3,6 +3,7 @@ import { mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CommandReceiptSchema,
+  type CommandRecord,
   CommandRecordSchema,
   ObserverStopReceiptSchema,
   StationSnapshotSchema,
@@ -39,6 +40,7 @@ describe("production Observer SQLite smoke", () => {
     const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1_000 });
     const databasePath = join(fixture.stateDir, "observer.sqlite");
     const projectId = "sqlite-smoke";
+    let durableCreate: CommandRecord | undefined;
 
     try {
       expect(
@@ -70,6 +72,17 @@ describe("production Observer SQLite smoke", () => {
           ),
         );
         expect(created.status).toBe("succeeded");
+        const createdRecord = CommandRecordSchema.parse(created.command);
+        expect(createdRecord).toMatchObject({
+          status: "succeeded",
+          result: {
+            type: "sessionGroup.create",
+            projectId,
+            groupId: expect.stringMatching(/^grp_/),
+            version: 1,
+          },
+        });
+        durableCreate ??= createdRecord;
       }
       const createdGroups = StationSnapshotSchema.parse(
         runStnJson(["--config", configPath, "snapshot", "--json"], env),
@@ -130,7 +143,7 @@ describe("production Observer SQLite smoke", () => {
         path: databasePath,
         open: true,
         status: "healthy",
-        schemaVersion: 17,
+        schemaVersion: 18,
       });
       expect((await stat(databasePath)).size).toBeGreaterThan(0);
 
@@ -141,11 +154,12 @@ describe("production Observer SQLite smoke", () => {
       ).toMatchObject({ stopped: true });
       await waitForSocketClosed(fixture.socketPath);
 
-      // command.get starts a new production process, so equality proves the record came from disk.
+      if (durableCreate === undefined) throw new Error("Expected a durable create command.");
+      // command.get starts a new production process, so equality proves the result came from disk.
       const reloaded = jsonObject(
-        runStnJson(["--config", configPath, "command", "get", receipt.commandId], env),
+        runStnJson(["--config", configPath, "command", "get", durableCreate.id], env),
       );
-      expect(CommandRecordSchema.parse(reloaded.command)).toEqual(command);
+      expect(CommandRecordSchema.parse(reloaded.command)).toEqual(durableCreate);
       expect(
         StationSnapshotSchema.parse(runStnJson(["--config", configPath, "snapshot", "--json"], env))
           .sessionGroups,
@@ -172,7 +186,7 @@ describe("production Observer SQLite smoke", () => {
         path: databasePath,
         open: true,
         status: "healthy",
-        schemaVersion: 17,
+        schemaVersion: 18,
       });
     } finally {
       await client.stop().catch(() => undefined);

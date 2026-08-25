@@ -61,6 +61,19 @@ describe("session command vertical slice", () => {
 
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
+      result: {
+        type: "session.create",
+        projectId: "web",
+        worktreeId: "wt_web_validation_order",
+        sessionId: "ses_validation_order",
+        requestedPlacement: "detached",
+        resolvedPlacement: {
+          provider: "fake-terminal",
+          targetId: "term_fake",
+          generation: "fake-generation-1",
+          presentation: "detached",
+        },
+      },
     });
     expect(validate).toHaveBeenCalledTimes(2);
     expect(validate.mock.invocationCallOrder[0]).toBeLessThan(
@@ -382,6 +395,19 @@ describe("session command vertical slice", () => {
 
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
+      result: {
+        type: "session.create",
+        projectId: "web",
+        worktreeId: "wt_web_runner_create",
+        sessionId: "ses_runner_create",
+        requestedPlacement: "detached",
+        resolvedPlacement: {
+          provider: "fake-terminal",
+          targetId: "term_fake",
+          generation: "fake-generation-1",
+          presentation: "detached",
+        },
+      },
     });
     expect(terminal.snapshot().launches).toEqual([
       expect.objectContaining({
@@ -501,6 +527,19 @@ describe("session command vertical slice", () => {
 
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
+      result: {
+        type: "session.fork",
+        projectId: "web",
+        worktreeId: "wt_web_runner_fork",
+        sessionId: "ses_runner_fork",
+        requestedPlacement: "detached",
+        resolvedPlacement: {
+          provider: "fake-terminal",
+          targetId: "term_fake",
+          generation: "fake-generation-1",
+          presentation: "detached",
+        },
+      },
     });
     await expect(fixture.persistence.getCommand(fallbackReceipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
@@ -3603,6 +3642,14 @@ describe("worktree.create command", () => {
     expect(rows[0]?.agent).toBeUndefined();
     expect(fixture.core.getSnapshot().sessions).toEqual([]);
     expect(terminal.snapshot().launches).toHaveLength(0);
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+      result: {
+        type: "worktree.create",
+        projectId: "web",
+        worktreeId: "wt_web_solo_create",
+      },
+    });
 
     expect(
       (await fixture.persistence.listEvents({ commandId: receipt.commandId })).map(
@@ -3670,6 +3717,14 @@ describe("worktree.fork command", () => {
     expect(rows.find((row) => row.branch === "feature-fork")?.agent).toBeUndefined();
     expect(fixture.core.getSnapshot().sessions).toEqual([]);
     expect(terminal.snapshot().launches).toHaveLength(0);
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+      result: {
+        type: "worktree.fork",
+        projectId: "web",
+        worktreeId: "wt_web_feature_fork",
+      },
+    });
 
     // The fork create pins base to the source branch HEAD and seeds from the source path.
     const forkCreate = worktree.snapshot().created.find((req) => req.branch === "feature-fork");

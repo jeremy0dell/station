@@ -8,6 +8,7 @@ import type {
   SessionGroupView,
   SessionRecoveryHandle,
   StationCommand,
+  StationCommandResult,
   StationEvent,
 } from "@station/contracts";
 import type {
@@ -32,6 +33,7 @@ import type {
   ProviderObservationsIngressDedupeResult,
   RecordProviderObservationInput,
   SessionGroupMemberExpectation,
+  SessionGroupRepairInput,
   SessionGroupRepairResult,
   SessionGroupStoreResult,
   SessionHarnessDerivedStateRepair,
@@ -46,7 +48,8 @@ import type {
 /**
  * DRIVEN PORT
  *
- * Preserves the durable lifecycle and diagnostic history of Observer commands.
+ * Preserves durable Observer command lifecycle, diagnostic history, and typed
+ * success results before terminal completion is observable.
  */
 export interface CommandJournal {
   recordCommandAccepted(input: {
@@ -57,7 +60,11 @@ export interface CommandJournal {
     spanId?: string;
   }): Promise<PersistedCommand>;
   markCommandStarted(commandId: CommandId, startedAt?: string): Promise<PersistedCommand>;
-  markCommandSucceeded(commandId: CommandId, finishedAt?: string): Promise<PersistedCommand>;
+  markCommandSucceeded(
+    commandId: CommandId,
+    finishedAt?: string,
+    result?: StationCommandResult,
+  ): Promise<PersistedCommand>;
   markCommandFailed(input: {
     commandId: CommandId;
     safeError: SafeError;
@@ -235,7 +242,9 @@ export interface SessionStore {
  * DRIVEN PORT
  *
  * Maintains recorded project-local Group mutation and atomic reconcile repair of definitions,
- * exclusive membership, and parentage. Fresh-session placement is owned by SessionStore.
+ * exclusive membership, and parentage. Reconcile must name the projects whose complete provider
+ * evidence authorizes absent-member pruning; identity and parent corruption repair remains
+ * unconditional. Fresh-session placement is owned by SessionStore.
  */
 export interface SessionGroupStore {
   listSessionGroups(): Promise<SessionGroupView[]>;
@@ -271,10 +280,7 @@ export interface SessionGroupStore {
     expectedVersion: number;
     updatedAt?: string;
   }): Promise<SessionGroupStoreResult>;
-  repairSessionGroups(input: {
-    sessions: Array<{ id: string; projectId: string }>;
-    updatedAt?: string;
-  }): Promise<SessionGroupRepairResult>;
+  repairSessionGroups(input: SessionGroupRepairInput): Promise<SessionGroupRepairResult>;
 }
 
 /**

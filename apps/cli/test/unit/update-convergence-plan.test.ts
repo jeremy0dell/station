@@ -126,17 +126,6 @@ describe("deriveUpdateConvergencePlan", () => {
       host: { ...differentHost([]), compatibility: "reuse" as const },
     },
     {
-      name: "missing same-display identity",
-      host: {
-        status: "inspected" as const,
-        buildVersion: artifact.version,
-        protocolVersion: 8,
-        relation: "different" as const,
-        compatibility: "reuse" as const,
-        terminals: [],
-      },
-    },
-    {
       name: "self-contradictory exact identity",
       host: { ...sameDisplayDriftHost([]), buildIdentity },
     },
@@ -255,35 +244,6 @@ describe("deriveUpdateConvergencePlan", () => {
   });
 
   it.each([
-    { name: "idle", terminals: [], terminalDispositions: [] },
-    {
-      name: "busy",
-      terminals: [terminal("non-releasable")],
-      terminalDispositions: [disposition("non-preservable", "non-resumable")],
-    },
-  ])("blocks future-target protocol refusal for an $name Host", ({
-    terminals,
-    terminalDispositions,
-  }) => {
-    const result = derive(
-      input({
-        targetRuntime: { status: "not-yet-provable" },
-        preflight: preflight({
-          installed: { version: "0.9.0", revision: "revision-0" },
-          observer: differentObserver("0.9.0"),
-          host: { ...differentHost(terminals), compatibility: "refuse" },
-          terminalDispositions,
-        }),
-      }),
-    );
-    expect(result.outcome).toBe("blocked");
-    expect(result.phases.hostConvergence).toEqual({
-      action: "blocked",
-      reason: "protocol-refused",
-    });
-  });
-
-  it.each([
     {
       name: "old-display reuse with a non-bridge terminal",
       host: {
@@ -295,17 +255,6 @@ describe("deriveUpdateConvergencePlan", () => {
     {
       name: "target-display replace",
       host: { ...sameDisplayDriftHost([]), compatibility: "replace" as const },
-      terminalDispositions: [],
-    },
-    {
-      name: "missing-display replace",
-      host: {
-        status: "inspected" as const,
-        protocolVersion: 8,
-        relation: "unknown" as const,
-        compatibility: "replace" as const,
-        terminals: [],
-      },
       terminalDispositions: [],
     },
     {
@@ -325,40 +274,6 @@ describe("deriveUpdateConvergencePlan", () => {
           observer: differentObserver("0.9.0"),
           host,
           terminalDispositions,
-        }),
-      }),
-    );
-    expect(result.outcome).toBe("blocked");
-    expect(result.phases.hostConvergence).toEqual({
-      action: "blocked",
-      reason: "evidence-contradictory",
-    });
-  });
-
-  it.each([
-    {
-      name: "default handoff",
-      handoff: { action: "preserve" as const, fidelity: "processes" as const },
-    },
-    { name: "no-handoff", handoff: { action: "leave-in-place" as const } },
-  ])("blocks target-display future evidence with missing identity and different relation under $name", ({
-    handoff,
-  }) => {
-    const result = derive(
-      input({
-        handoff,
-        targetRuntime: { status: "not-yet-provable" },
-        preflight: preflight({
-          installed: { version: "0.9.0", revision: "revision-0" },
-          observer: differentObserver("0.9.0"),
-          host: {
-            status: "inspected",
-            buildVersion: artifact.version,
-            protocolVersion: 8,
-            relation: "different",
-            compatibility: "reuse",
-            terminals: [],
-          },
         }),
       }),
     );
@@ -579,21 +494,6 @@ describe("deriveUpdateConvergencePlan", () => {
         error: safeError("HOST_UNKNOWN"),
       },
     },
-    {
-      name: "unknown Host relation",
-      host: {
-        status: "inspected" as const,
-        buildVersion: artifact.version,
-        protocolVersion: 8,
-        relation: "unknown" as const,
-        compatibility: "reuse" as const,
-        terminals: [],
-      },
-    },
-    {
-      name: "protocol-refused Host",
-      host: { ...differentHost([]), compatibility: "refuse" as const },
-    },
   ])("leaves $name intentionally incomplete when handoff is disabled", ({ host }) => {
     const result = derive(
       input({
@@ -608,29 +508,8 @@ describe("deriveUpdateConvergencePlan", () => {
 
   it.each([
     {
-      name: "missing-display replace",
-      host: {
-        status: "inspected" as const,
-        buildIdentity: incumbentBuildIdentity,
-        protocolVersion: 8,
-        relation: "different" as const,
-        compatibility: "replace" as const,
-        terminals: [],
-      },
-    },
-    {
       name: "same-display replace",
       host: { ...sameDisplayDriftHost([]), compatibility: "replace" as const },
-    },
-    {
-      name: "missing-display reuse",
-      host: {
-        status: "inspected" as const,
-        protocolVersion: 8,
-        relation: "unknown" as const,
-        compatibility: "reuse" as const,
-        terminals: [],
-      },
     },
     {
       name: "exact-matching replace",

@@ -12,6 +12,7 @@ import {
   HarnessRunObservationSchema,
   SafeErrorSchema,
   SessionRecoveryHandleSchema,
+  StationCommandResultSchema,
   StationCommandSchema,
   StationEventSchema,
   sameObservedPath,
@@ -183,12 +184,24 @@ export function createInMemoryObserverPersistence(
         return commandWithDiagnostics(draft, command);
       }),
 
-    markCommandSucceeded: (commandId, finishedAt) =>
+    markCommandSucceeded: (commandId, finishedAt, result) =>
       transaction((draft) => {
         const command = requireCommand(draft, commandId);
+        const parsedResult =
+          result === undefined ? undefined : StationCommandResultSchema.parse(result);
+        if (parsedResult !== undefined && parsedResult.type !== command.command.type) {
+          throw new Error(
+            `Command result ${parsedResult.type} does not match ${command.command.type}.`,
+          );
+        }
         command.status = "succeeded";
         command.finishedAt = finishedAt ?? now();
         delete command.error;
+        if (parsedResult === undefined) {
+          delete command.result;
+        } else {
+          command.result = parsedResult;
+        }
         return commandWithDiagnostics(draft, command);
       }),
 
@@ -200,6 +213,7 @@ export function createInMemoryObserverPersistence(
         command.status = "failed";
         command.finishedAt = input.finishedAt ?? now();
         command.error = safeError;
+        delete command.result;
         draft.commandErrors.set(envelope.id, {
           id: envelope.id,
           commandId: input.commandId,

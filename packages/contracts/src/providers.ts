@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 import { z } from "zod";
-import type { TerminalFocusOrigin } from "./commands.js";
+import type { TerminalFocusOrigin } from "./commands/terminal.js";
 import type { SafeError } from "./errors.js";
 import { SafeErrorSchema } from "./errors.js";
 import type { HarnessRunId, ProviderId, SessionId, TerminalTargetId, WorktreeId } from "./ids.js";
@@ -25,6 +25,7 @@ import { RepositoryRemoteSchema } from "./observations.js";
 import type { ProviderHookHealth, ProviderHookReconciliationResult } from "./providerHooks.js";
 import type { HarnessResumeOptions } from "./recovery.js";
 import { nonEmptyStringSchema } from "./shared.js";
+import { StationBuildIdentitySchema } from "./stationBuildIdentity.js";
 import type {
   ResolvedTerminalPlacement,
   TerminalCallerContextRequest,
@@ -193,7 +194,7 @@ export const ProviderHookArtifactOwnerSchema = z
     launcher: providerHookAbsolutePathSchema,
     runtimeKind: z.enum(["compiled", "source"]),
     version: nonEmptyStringSchema,
-    buildIdentity: z.string().regex(/^[0-9a-f]{64}$/u),
+    buildIdentity: StationBuildIdentitySchema,
   })
   .strict();
 

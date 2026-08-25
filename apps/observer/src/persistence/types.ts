@@ -6,6 +6,7 @@ import type {
   HarnessEventObservation,
   HarnessRunObservation,
   ObservedStatus,
+  ProjectId,
   ProviderHealth,
   ProviderId,
   SafeError,
@@ -14,6 +15,7 @@ import type {
   SessionId,
   SessionRecoveryHandle,
   StationCommand,
+  StationCommandResult,
   StationEvent,
   TerminalTargetObservation,
   WorktreeChangeSummary,
@@ -56,6 +58,12 @@ export type SessionGroupRepairResult = {
   repairs: SessionGroupRepairEvidence[];
 };
 
+export type SessionGroupRepairInput = {
+  sessions: Array<{ id: string; projectId: ProjectId }>;
+  absenceAuthorityProjectIds: ProjectId[];
+  updatedAt?: string;
+};
+
 export type PersistedCommandStatus = "accepted" | "started" | "succeeded" | "failed";
 
 export type ObserverIdFactory = {
@@ -77,6 +85,7 @@ export type PersistedCommand = {
   spanId?: string;
   error?: SafeError;
   diagnostics?: DiagnosticDetail[];
+  result?: StationCommandResult;
 };
 
 export type PersistedEvent = {

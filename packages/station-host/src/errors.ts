@@ -114,16 +114,9 @@ export function stationHostCompatibilityError(
       { hint },
     );
   }
-  if (compatibility.reason === "protocol-mismatch") {
-    return new StationHostProviderError(
-      "HOST_VERSION_INCOMPATIBLE",
-      `Station host protocol ${health.protocolVersion} does not match protocol ${HOST_PROTOCOL_VERSION} for Station build "${expectedBuildVersion}".`,
-      { hint },
-    );
-  }
   return new StationHostProviderError(
     "HOST_VERSION_INCOMPATIBLE",
-    `Station host did not report a build version and cannot be safely reused by Station build "${expectedBuildVersion}".`,
+    `Station host protocol ${health.protocolVersion} does not match protocol ${HOST_PROTOCOL_VERSION} for Station build "${expectedBuildVersion}".`,
     { hint },
   );
 }

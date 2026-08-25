@@ -263,6 +263,7 @@ function fakeHostClient(overrides: Partial<StationHostClient> = {}): StationHost
       pid: 99,
     }),
     list: async () => [],
+    recoveryInventory: async () => ({ buildIdentity: "a".repeat(64), ptys: [] }),
     focus: async () => undefined,
     close: async () => ({ closed: true }),
     attach: async () => {

@@ -46,7 +46,7 @@ describe("SQLite-only Observer persistence behavior", () => {
 
     const upgraded = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
     try {
-      expect(upgraded.health().schemaVersion).toBe(17);
+      expect(upgraded.health().schemaVersion).toBe(latestSchemaVersion);
       const persistence = createSqliteObserverPersistence({ sqlite: upgraded });
       await persistence.createSessionGroup({
         id: "group_durable",
@@ -71,6 +71,104 @@ describe("SQLite-only Observer persistence behavior", () => {
       ]);
     } finally {
       reopened.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves legacy result-less successes and rejects corrupted command results after v18", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-command-results-v17-"));
+    const path = join(directory, "observer.sqlite");
+    const legacyDatabase = openSqlDatabase(path);
+    try {
+      for (const migration of migrations.filter(({ version }) => version <= 17)) {
+        legacyDatabase.exec(migration.sql);
+        legacyDatabase
+          .prepare("INSERT INTO observer_migrations (version, name, applied_at) VALUES (?, ?, ?)")
+          .run(migration.version, migration.name, now);
+      }
+      legacyDatabase
+        .prepare(
+          `
+            INSERT INTO commands
+              (id, type, payload_json, status, created_at, started_at, finished_at)
+            VALUES (?, ?, ?, 'succeeded', ?, ?, ?)
+          `,
+        )
+        .run(
+          "cmd_legacy_resultless",
+          "worktree.create",
+          JSON.stringify({
+            type: "worktree.create",
+            payload: { projectId: "web", branch: "legacy-resultless" },
+          }),
+          now,
+          now,
+          now,
+        );
+      legacyDatabase
+        .prepare(
+          "INSERT OR REPLACE INTO observer_meta (key, value) VALUES ('schema_version', '17')",
+        )
+        .run();
+    } finally {
+      legacyDatabase.close();
+    }
+
+    const sqlite = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
+    try {
+      const persistence = createSqliteObserverPersistence({ sqlite });
+      expect(sqlite.health().schemaVersion).toBe(latestSchemaVersion);
+      const legacyCommand = await persistence.getCommand("cmd_legacy_resultless");
+      expect(legacyCommand).toMatchObject({
+        id: "cmd_legacy_resultless",
+        type: "worktree.create",
+        status: "succeeded",
+      });
+      expect(legacyCommand).not.toHaveProperty("result");
+
+      const expectCorruptRowIsQuarantined = async () => {
+        await expect(persistence.getCommand("cmd_legacy_resultless")).rejects.toThrow(
+          "PERSISTENCE_TRANSACTION_FAILED",
+        );
+        await expect(persistence.listCommands()).resolves.toEqual([]);
+      };
+
+      sqlite.database
+        .prepare("UPDATE commands SET status = 'failed', result_json = ? WHERE id = ?")
+        .run(
+          JSON.stringify({
+            type: "worktree.create",
+            projectId: "web",
+            worktreeId: "wt_impossible",
+          }),
+          "cmd_legacy_resultless",
+        );
+      await expectCorruptRowIsQuarantined();
+
+      sqlite.database
+        .prepare("UPDATE commands SET status = 'succeeded', result_json = ? WHERE id = ?")
+        .run(
+          JSON.stringify({
+            type: "sessionGroup.create",
+            projectId: "web",
+            groupId: "grp_unrelated",
+            version: 1,
+          }),
+          "cmd_legacy_resultless",
+        );
+      await expectCorruptRowIsQuarantined();
+
+      sqlite.database
+        .prepare("UPDATE commands SET result_json = ? WHERE id = ?")
+        .run("{malformed", "cmd_legacy_resultless");
+      await expectCorruptRowIsQuarantined();
+
+      sqlite.database
+        .prepare("UPDATE commands SET type = ?, result_json = NULL WHERE id = ?")
+        .run("terminal.focus", "cmd_legacy_resultless");
+      await expectCorruptRowIsQuarantined();
+    } finally {
+      sqlite.close();
       await rm(directory, { recursive: true, force: true });
     }
   });
@@ -525,6 +623,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         [15, "drop_recovery_breadcrumbs"],
         [16, "worktree_display_titles"],
         [17, "session_groups"],
+        [18, "command_results"],
       ]);
       await expect(persistence.listSessions()).resolves.toEqual([
         expect.objectContaining({

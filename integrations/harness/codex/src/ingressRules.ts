@@ -21,8 +21,8 @@ export const codexIngressRules = [
   {
     provider: "codex",
     eventType: "PermissionRequest",
-    statusIntents: ["needs_attention"],
-    confidences: ["high"],
+    statusIntents: ["working", "needs_attention"],
+    confidences: ["medium", "high"],
   },
   {
     provider: "codex",

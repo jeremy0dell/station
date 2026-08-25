@@ -1,5 +1,6 @@
 import type { ObserverProcessIdentity } from "@station/contracts";
 import { describe, expect, it } from "vitest";
+import { verifyCooperativeObserverProcessIdentity } from "../../src/runtime/observerCooperativeProcessIdentity.js";
 import {
   type ObserverProcessEntry,
   observerProcessEntriesMatch,
@@ -73,6 +74,33 @@ describe("Observer process identity verification", () => {
         evidence({ ...process, executablePath: "/opt/station/replacement" }),
       ),
     ).toEqual({ status: "mismatch", reason: "executable-argv-drift" });
+  });
+
+  it("reports atomic installed-path replacement without granting exact authority", () => {
+    const replaced = { ...process, executableProvenance: "installed-path-replaced" as const };
+    expect(
+      verifyCooperativeObserverProcessIdentity(
+        { source: "pidfile", identity },
+        {
+          ...evidence(process),
+          readCooperativeObserverProcess: () => replaced,
+        },
+      ),
+    ).toEqual({ status: "installed-path-replaced", process: replaced });
+    expect(
+      verifyObserverProcessIdentity(
+        { source: "pidfile", identity },
+        {
+          ...evidence(process),
+          readObserverProcess: () => {
+            throw Object.assign(new Error("replaced"), {
+              tag: "ObserverProcessEvidenceError",
+              code: "OBSERVER_PROCESS_INSTALLED_PATH_REPLACED",
+            });
+          },
+        },
+      ),
+    ).toMatchObject({ status: "unavailable" });
   });
 
   it("keeps missing or failed process evidence unavailable", () => {

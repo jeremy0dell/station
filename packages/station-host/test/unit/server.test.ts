@@ -146,7 +146,81 @@ function delay(ms: number): Promise<"timeout"> {
   return new Promise((resolve) => setTimeout(() => resolve("timeout"), ms));
 }
 
+function disposalHandlers(buildVersion: string): HostHandlers {
+  return {
+    hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion },
+    unary: {
+      "host.health": () => ({ ok: true, protocolVersion: HOST_PROTOCOL_VERSION, buildVersion }),
+      "host.list": () => ({ ptys: [] }),
+    },
+  };
+}
+
 describe("serveHostConnection", () => {
+  it("does not report a cross-build health-only client when it disposes", async () => {
+    const errors: Array<Parameters<NonNullable<HostServerLogger["onError"]>>[0]> = [];
+    const lifecycle: Array<Parameters<NonNullable<HostServerLogger["onLifecycle"]>>[0]> = [];
+    const { client: clientConnection, server } = inMemoryNdjsonConnectionPair();
+    const served = serveHostConnection(server, disposalHandlers("incumbent-build"), {
+      onError: (error) => errors.push(error),
+      onLifecycle: (event) => lifecycle.push(event),
+    });
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "requester-build",
+      connect: async () => clientConnection,
+    });
+
+    await expect(client.health()).resolves.toMatchObject({ buildVersion: "incumbent-build" });
+    client.dispose();
+    await served;
+
+    expect(errors).toEqual([]);
+    expect(lifecycle).toEqual([]);
+  });
+
+  it("does not attach a same-build health-only client when it disposes", async () => {
+    const lifecycle: Array<Parameters<NonNullable<HostServerLogger["onLifecycle"]>>[0]> = [];
+    const { client: clientConnection, server } = inMemoryNdjsonConnectionPair();
+    const served = serveHostConnection(server, disposalHandlers("test-build"), {
+      onLifecycle: (event) => lifecycle.push(event),
+    });
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConnection,
+    });
+
+    await client.health();
+    client.dispose();
+    await served;
+
+    expect(lifecycle).toEqual([]);
+  });
+
+  it("shuts down a client after an operational request binds its identity", async () => {
+    const lifecycle: Array<Parameters<NonNullable<HostServerLogger["onLifecycle"]>>[0]> = [];
+    const { client: clientConnection, server } = inMemoryNdjsonConnectionPair();
+    const served = serveHostConnection(server, disposalHandlers("test-build"), {
+      onLifecycle: (event) => lifecycle.push(event),
+    });
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConnection,
+    });
+
+    await expect(client.list()).resolves.toEqual([]);
+    client.dispose();
+    await served;
+
+    expect(lifecycle.map(({ kind }) => kind)).toEqual([
+      "host.client.attached",
+      "host.client.detached",
+    ]);
+    expect(lifecycle[1]).toMatchObject({ reason: "client_shutdown" });
+  });
+
   it("rejects operational requests without correlation identity", async () => {
     const { client, server } = inMemoryNdjsonConnectionPair();
     void serveHostConnection(server, {
@@ -228,7 +302,7 @@ describe("serveHostConnection", () => {
     client.close();
   });
 
-  it("classifies build compatibility separately from correlation changes", async () => {
+  it("requires current protocol before classifying correlation changes", async () => {
     const identity = TEST_CLIENT_IDENTITY;
     const { client, server } = inMemoryNdjsonConnectionPair();
     void serveHostConnection(server, {
@@ -262,7 +336,7 @@ describe("serveHostConnection", () => {
     expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
       id: "old-protocol",
       ok: false,
-      error: { code: "HOST_VERSION_INCOMPATIBLE" },
+      error: { code: "HOST_BAD_REQUEST" },
     });
     client.close();
   });
@@ -389,9 +463,13 @@ describe("serveHostConnection", () => {
 
   it("dispatches a registered unary method and returns its result", async () => {
     const client = wire({
-      unary: { "host.health": () => ({ ok: true, protocolVersion: 1 }) },
+      unary: { "host.health": () => ({ ok: true, protocolVersion: 1, buildVersion: "old" }) },
     });
-    await expect(client.health()).resolves.toEqual({ ok: true, protocolVersion: 1 });
+    await expect(client.health()).resolves.toEqual({
+      ok: true,
+      protocolVersion: 1,
+      buildVersion: "old",
+    });
     client.dispose();
   });
 

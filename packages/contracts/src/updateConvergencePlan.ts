@@ -2,10 +2,11 @@ import { z } from "zod";
 import { HostHandoffFidelitySchema, PtyHandoffKindSchema } from "./hostHandoff.js";
 import { ProviderIdSchema } from "./ids.js";
 import { compareCodeUnitStrings } from "./shared.js";
+import { StationBuildIdentitySchema } from "./stationBuildIdentity.js";
+import { stationHostTerminalLifetimeIdentitiesAreCanonical } from "./stationHostInspection.js";
 import { UpdateChannelIdSchema, UpdateCommandArgvSchema } from "./update.js";
 import { UpdateArtifactSchema } from "./updateArtifact.js";
 import {
-  compareUpdateReapTerminalIdentity,
   UpdateReapRecoveryPreflightSchema,
   UpdateReapTerminalDispositionSchema,
 } from "./updateRecoveryPreflight.js";
@@ -14,7 +15,7 @@ const targetRuntimeSchema = z.discriminatedUnion("status", [
   z
     .object({
       status: z.literal("known"),
-      buildIdentity: z.string().regex(/^[0-9a-f]{64}$/u),
+      buildIdentity: StationBuildIdentitySchema,
       observerSelector: z.string().regex(/^.+[+.]station\.[0-9a-f]{64}$/u),
     })
     .strict(),
@@ -218,7 +219,6 @@ const hostPhaseSchema = z.discriminatedUnion("action", [
     z.enum([
       "identity-incomplete",
       "inventory-incomplete",
-      "protocol-refused",
       "evidence-contradictory",
       "recovery-incomplete",
     ]),
@@ -282,12 +282,7 @@ export const UpdateConvergencePlanSchema = z
     if (!strictlySorted(providers))
       addOrderIssue(context, ["phases", "hookReconciliation", "providers"], "Hook decisions");
     const terminals = plan.phases.terminalConvergence.terminals;
-    if (
-      terminals.some((terminal, index) => {
-        const previous = terminals[index - 1];
-        return previous !== undefined && compareUpdateReapTerminalIdentity(previous, terminal) >= 0;
-      })
-    )
+    if (!stationHostTerminalLifetimeIdentitiesAreCanonical(terminals))
       addOrderIssue(context, ["phases", "terminalConvergence", "terminals"], "Terminal facts");
     const terminalFidelity =
       plan.phases.terminalConvergence.action === "preserve-via-handoff"

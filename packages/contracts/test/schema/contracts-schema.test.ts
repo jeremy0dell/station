@@ -6,6 +6,8 @@ import {
   AgentReportExternalExitParamsSchema,
   AgentReportExternalExitResultSchema,
   ClientFeatureFlagsSchema,
+  CommandExecutionOutcomeSchema,
+  CommandReceiptSchema,
   CommandRecordSchema,
   createClientFeatureFlagsSchema,
   createEvaluatedFeatureFlagsSchema,
@@ -52,6 +54,8 @@ import {
   RepositoryPullRequestRequestSchema,
   RepositoryRemoteSchema,
   SafeErrorSchema,
+  SessionCreateCommandResultSchema,
+  SessionGroupRepairSummarySchema,
   SessionGroupViewSchema,
   SessionMigrationJournalEntrySchema,
   SessionMigrationLockSchema,
@@ -59,6 +63,8 @@ import {
   SessionRecoveryReadinessSchema,
   SessionRescueManifestSchema,
   STATION_SCHEMA_VERSION,
+  StationBuildIdentitySchema,
+  StationCommandResultSchema,
   StationCommandSchema,
   StationCommandTypeSchema,
   StationEventSchema,
@@ -100,6 +106,12 @@ function expectFails(schema: ZodType, value: unknown, label: string) {
 }
 
 describe("contract schemas", () => {
+  it("accepts only the shared lowercase 64-hex Station build identity", () => {
+    expectParses(StationBuildIdentitySchema, "a".repeat(64), "lowercase build identity");
+    expectFails(StationBuildIdentitySchema, "A".repeat(64), "uppercase build identity");
+    expectFails(StationBuildIdentitySchema, "a".repeat(63), "short build identity");
+  });
+
   it("strictly parses provider hook artifact ownership", () => {
     const requested = {
       schemaVersion: 1,
@@ -2080,6 +2092,59 @@ describe("contract schemas", () => {
       "harness event report spool record",
     );
 
+    const sessionGroupRepair = {
+      status: "partially_scoped",
+      absenceAuthorityProjectIds: ["web"],
+      preservedProjectIds: ["api"],
+      blockers: [
+        {
+          scope: "project",
+          providerType: "worktree",
+          providerId: "worktrunk",
+          projectId: "api",
+          code: "PROVIDER_TIMEOUT",
+        },
+      ],
+    } as const;
+    expect(SessionGroupRepairSummarySchema.parse(sessionGroupRepair)).toEqual(sessionGroupRepair);
+    expectFails(
+      SessionGroupRepairSummarySchema,
+      { ...sessionGroupRepair, extra: true },
+      "Session Group repair summary with an unknown field",
+    );
+    expectFails(
+      SessionGroupRepairSummarySchema,
+      {
+        ...sessionGroupRepair,
+        blockers: [{ ...sessionGroupRepair.blockers[0], extra: true }],
+      },
+      "Session Group repair blocker with an unknown field",
+    );
+    const globalSessionGroupRepair = {
+      status: "skipped",
+      absenceAuthorityProjectIds: [],
+      preservedProjectIds: ["web", "api"],
+      blockers: [
+        {
+          scope: "global",
+          providerType: "harness",
+          providerId: "codex",
+          code: "HARNESS_DISCOVER_FAILED",
+        },
+      ],
+    } as const;
+    expect(SessionGroupRepairSummarySchema.parse(globalSessionGroupRepair)).toEqual(
+      globalSessionGroupRepair,
+    );
+    expectFails(
+      SessionGroupRepairSummarySchema,
+      {
+        ...globalSessionGroupRepair,
+        blockers: [{ ...globalSessionGroupRepair.blockers[0], extra: true }],
+      },
+      "global Session Group repair blocker with an unknown field",
+    );
+
     expectParses(
       ObserverHealthSchema,
       {
@@ -2091,6 +2156,13 @@ describe("contract schemas", () => {
         socketPath: "/tmp/station/observer.sock",
         stateDir: "/tmp/station/state",
         hookSpoolDepth: 0,
+        lastReconcile: {
+          reason: "scheduled",
+          startedAt: "2026-05-20T12:00:00.000Z",
+          finishedAt: "2026-05-20T12:00:01.000Z",
+          durationMs: 1_000,
+          sessionGroupRepair,
+        },
         harnessIngressQueue: {
           depth: 0,
           enqueued: 10,
@@ -2197,6 +2269,117 @@ describe("contract schemas", () => {
       { type: ["hook.ingested", "providerHook.ingested", "command.accepted"] },
       "event filter rejects retired hook event name in array",
     );
+  });
+
+  it("strictly correlates command receipts, results, records, and outcomes", () => {
+    const command = {
+      type: "worktree.create",
+      payload: {
+        projectId: "project_commands",
+        branch: "feature/results",
+      },
+    } as const;
+    const result = {
+      type: "worktree.create",
+      projectId: "project_commands",
+      worktreeId: "worktree_created",
+    } as const;
+    const record = {
+      id: "cmd_results",
+      type: "worktree.create",
+      command,
+      status: "succeeded",
+      createdAt: "2026-05-20T12:00:00.000Z",
+      finishedAt: "2026-05-20T12:00:01.000Z",
+      result,
+    } as const;
+    const receipt = {
+      commandId: "cmd_results",
+      accepted: true,
+      status: "accepted",
+    } as const;
+
+    expect(CommandReceiptSchema.safeParse(receipt).success).toBe(true);
+    expect(CommandReceiptSchema.safeParse({ ...receipt, accepted: false }).success).toBe(false);
+    expect(CommandRecordSchema.safeParse(record).success).toBe(true);
+    expect(CommandRecordSchema.safeParse({ ...record, type: "worktree.fork" }).success).toBe(false);
+    expect(
+      CommandRecordSchema.safeParse({
+        ...record,
+        result: { ...result, type: "worktree.fork" },
+      }).success,
+    ).toBe(false);
+    expect(CommandRecordSchema.safeParse({ ...record, status: "failed" }).success).toBe(false);
+    expect(CommandRecordSchema.safeParse({ ...record, result: undefined }).success).toBe(true);
+
+    expect(
+      CommandExecutionOutcomeSchema.safeParse({ status: "succeeded", receipt, record }).success,
+    ).toBe(true);
+    expect(
+      CommandExecutionOutcomeSchema.safeParse({
+        status: "succeeded",
+        receipt: { ...receipt, commandId: "cmd_other" },
+        record,
+      }).success,
+    ).toBe(false);
+    expect(
+      CommandExecutionOutcomeSchema.safeParse({ status: "failed", receipt, record }).success,
+    ).toBe(false);
+    expect(
+      CommandExecutionOutcomeSchema.safeParse({
+        status: "rejected",
+        receipt: {
+          commandId: "cmd_rejected",
+          accepted: false,
+          status: "rejected",
+        },
+        result,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("projects only correlated sibling or detached session placement results", () => {
+    const identity = {
+      type: "session.create",
+      projectId: "project_commands",
+      worktreeId: "worktree_created",
+      sessionId: "session_created",
+    } as const;
+    const sibling = {
+      ...identity,
+      requestedPlacement: "sibling",
+      resolvedPlacement: {
+        provider: "tmux",
+        targetId: "tmux:station:@1:%2",
+        generation: "generation-1",
+        presentation: "presented",
+      },
+    } as const;
+    expect(SessionCreateCommandResultSchema.safeParse(sibling).success).toBe(true);
+    expect(
+      SessionCreateCommandResultSchema.safeParse({
+        ...sibling,
+        resolvedPlacement: { ...sibling.resolvedPlacement, presentation: "detached" },
+      }).success,
+    ).toBe(false);
+    expect(
+      SessionCreateCommandResultSchema.safeParse({
+        ...sibling,
+        resolvedPlacement: { ...sibling.resolvedPlacement, containerId: "container-1" },
+      }).success,
+    ).toBe(false);
+    expect(
+      SessionCreateCommandResultSchema.safeParse({
+        ...sibling,
+        resolvedPlacement: { ...sibling.resolvedPlacement, presentation: "new-container" },
+      }).success,
+    ).toBe(false);
+    expect(
+      StationCommandResultSchema.safeParse({
+        ...sibling,
+        requestedPlacement: "native",
+      }).success,
+    ).toBe(false);
   });
 
   it("keeps SafeError safe while allowing rich internal ErrorEnvelope diagnostics", async () => {

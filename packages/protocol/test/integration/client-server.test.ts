@@ -2,6 +2,7 @@ import type {
   CommandRecord,
   HarnessEventReport,
   ProviderHookEvent,
+  SafeError,
   StationCommand,
   TerminalCallerContextRequest,
 } from "@station/contracts";
@@ -13,11 +14,20 @@ import {
   ProtocolRequestSchema,
   protocolSuccessResponse,
   startProtocolServer,
+  withExactObserverLifecycleSession,
 } from "@station/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createTempSocketPath } from "../../../../tests/support/sockets";
 import { createFakeObserverApi, emptySnapshot, ids, protocolTestNow } from "../support/fixtures.js";
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 describe("protocol client/server", () => {
   it("routes health, recovery, current session, snapshot, dispatch, get, reconcile, and hook ingestion over a socket", async () => {
@@ -372,6 +382,599 @@ describe("protocol client/server", () => {
       await expect(client.stop()).resolves.toMatchObject({ stopped: true });
       expect(connectionCount).toBe(1);
       expect(methods).toEqual(["observer.health", "observer.stop"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("runs exact health, recovery, revalidation, stop, and peer closure on one connection", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const baseApi = createFakeObserverApi();
+    const expectedObserverIdentity = {
+      status: "healthy" as const,
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: `0.0.0+station.${"f".repeat(64)}`,
+      socketPath,
+    };
+    const health = { ...(await baseApi.health()), ...expectedObserverIdentity };
+    const recovery = await baseApi.getSessionRecoveryAssessment();
+    const stopReceipt = await baseApi.stop();
+    const stopResponded = deferred<void>();
+    const closePeer = deferred<void>();
+    const methods: string[] = [];
+    let connectionCount = 0;
+    let stopRequests = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        for (const expectedMethod of [
+          "observer.health",
+          "session.recoveryAssessment",
+          "observer.health",
+          "observer.stop",
+        ] as const) {
+          const request = ProtocolRequestSchema.parse((await iterator.next()).value);
+          methods.push(request.method);
+          expect(request.method).toBe(expectedMethod);
+          if (request.method === "observer.health") {
+            connection.send(protocolSuccessResponse(request.id, "observer.health", health));
+          } else if (request.method === "session.recoveryAssessment") {
+            connection.send(
+              protocolSuccessResponse(request.id, "session.recoveryAssessment", recovery),
+            );
+          } else {
+            stopRequests += 1;
+            connection.send(protocolSuccessResponse(request.id, "observer.stop", stopReceipt));
+            stopResponded.resolve(undefined);
+          }
+        }
+        await closePeer.promise;
+        connection.close();
+      },
+    });
+
+    try {
+      let settled = false;
+      const lifecycle = withExactObserverLifecycleSession(
+        {
+          socketPath,
+          expectedObserverIdentity,
+          deadlineMs: Date.now() + 2_000,
+        },
+        async (session) => {
+          await session.health();
+          await session.getSessionRecoveryAssessment();
+          await session.health();
+          return session.stop();
+        },
+      );
+      void lifecycle.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await stopResponded.promise;
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      closePeer.resolve(undefined);
+      await expect(lifecycle).resolves.toEqual(stopReceipt);
+      expect(connectionCount).toBe(1);
+      expect(stopRequests).toBe(1);
+      expect(methods).toEqual([
+        "observer.health",
+        "session.recoveryAssessment",
+        "observer.health",
+        "observer.stop",
+      ]);
+    } finally {
+      closePeer.resolve(undefined);
+      await server.close();
+    }
+  });
+
+  it("snapshots the lifecycle deadline before caller-owned options can extend it", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const baseApi = createFakeObserverApi();
+    const expectedObserverIdentity = {
+      status: "healthy" as const,
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: `0.0.0+station.${"7".repeat(64)}`,
+      socketPath,
+    };
+    const health = { ...(await baseApi.health()), ...expectedObserverIdentity };
+    const stopReceipt = await baseApi.stop();
+    const connectionHandled = deferred<void>();
+    const methods: string[] = [];
+    let stopRequests = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        try {
+          const healthRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+          methods.push(healthRequest.method);
+          connection.send(protocolSuccessResponse(healthRequest.id, "observer.health", health));
+          const next = await iterator.next();
+          if (!next.done) {
+            const request = ProtocolRequestSchema.parse(next.value);
+            methods.push(request.method);
+            if (request.method === "observer.stop") {
+              stopRequests += 1;
+              connection.send(protocolSuccessResponse(request.id, "observer.stop", stopReceipt));
+              connection.close();
+            }
+          }
+        } finally {
+          connectionHandled.resolve(undefined);
+        }
+      },
+    });
+    const originalDeadlineMs = Date.now() + 2_000;
+    const options = { socketPath, expectedObserverIdentity, deadlineMs: originalDeadlineMs };
+    let nowSpy: ReturnType<typeof vi.spyOn> | undefined;
+
+    try {
+      const lifecycle = withExactObserverLifecycleSession(options, async (session) => {
+        await session.health();
+        options.deadlineMs = originalDeadlineMs + 10_000;
+        nowSpy = vi.spyOn(Date, "now").mockReturnValue(originalDeadlineMs);
+        return session.stop();
+      });
+      await expect(lifecycle).rejects.toMatchObject({ code: "PROTOCOL_REQUEST_TIMEOUT" });
+      await connectionHandled.promise;
+      expect(stopRequests).toBe(0);
+      expect(methods).toEqual(["observer.health"]);
+    } finally {
+      nowSpy?.mockRestore();
+      await server.close();
+    }
+  });
+
+  it.each([
+    ["healthy status", "status", "PROTOCOL_REQUEST_FAILED"],
+    ["startedAt", "startedAt", "OBSERVER_BUILD_MISMATCH"],
+  ] as const)("snapshots lifecycle %s before caller-owned options can mutate", async (_name, field, code) => {
+    const { socketPath } = await createTempSocketPath();
+    const baseApi = createFakeObserverApi();
+    const changedStartedAt = "2026-08-24T12:00:02.000Z";
+    const expectedObserverIdentity = {
+      status: "healthy" as const,
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: `0.0.0+station.${"8".repeat(64)}`,
+      socketPath,
+    };
+    const mutation =
+      field === "status" ? { status: "degraded" as const } : { startedAt: changedStartedAt };
+    const reportedHealth = {
+      ...(await baseApi.health()),
+      ...expectedObserverIdentity,
+      ...mutation,
+    };
+    const stopReceipt = await baseApi.stop();
+    const connectionHandled = deferred<void>();
+    const methods: string[] = [];
+    let connectionCount = 0;
+    let stopRequests = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        try {
+          const healthRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+          methods.push(healthRequest.method);
+          connection.send(
+            protocolSuccessResponse(healthRequest.id, "observer.health", reportedHealth),
+          );
+          const next = await iterator.next();
+          if (!next.done) {
+            const request = ProtocolRequestSchema.parse(next.value);
+            methods.push(request.method);
+            if (request.method === "observer.stop") {
+              stopRequests += 1;
+              connection.send(protocolSuccessResponse(request.id, "observer.stop", stopReceipt));
+              connection.close();
+            }
+          }
+        } finally {
+          connectionHandled.resolve(undefined);
+        }
+      },
+    });
+    const options = {
+      socketPath,
+      expectedObserverIdentity,
+      deadlineMs: Date.now() + 2_000,
+    };
+
+    try {
+      const lifecycle = withExactObserverLifecycleSession(options, async (session) => {
+        await session.health();
+        return session.stop();
+      });
+      Object.assign(options.expectedObserverIdentity, mutation);
+      await expect(lifecycle).rejects.toMatchObject({ code });
+      await connectionHandled.promise;
+      expect(connectionCount).toBe(1);
+      expect(stopRequests).toBe(0);
+      expect(methods).toEqual(["observer.health"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    "health",
+    "recovery",
+  ] as const)("clears exact stop authorization before a failed later %s request", async (laterRequest) => {
+    const { socketPath } = await createTempSocketPath();
+    const baseApi = createFakeObserverApi();
+    const expectedObserverIdentity = {
+      status: "healthy" as const,
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: `0.0.0+station.${"9".repeat(64)}`,
+      socketPath,
+    };
+    const health = { ...(await baseApi.health()), ...expectedObserverIdentity };
+    const stopReceipt = await baseApi.stop();
+    const connectionHandled = deferred<void>();
+    const methods: string[] = [];
+    let connectionCount = 0;
+    let stopRequests = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        try {
+          const firstHealth = ProtocolRequestSchema.parse((await iterator.next()).value);
+          methods.push(firstHealth.method);
+          connection.send(protocolSuccessResponse(firstHealth.id, "observer.health", health));
+
+          const later = ProtocolRequestSchema.parse((await iterator.next()).value);
+          methods.push(later.method);
+          if (laterRequest === "health") {
+            connection.send(
+              protocolSuccessResponse(later.id, "observer.health", {
+                ...health,
+                status: "degraded",
+              }),
+            );
+          } else {
+            connection.send({
+              schemaVersion: STATION_SCHEMA_VERSION,
+              jsonrpc: "2.0",
+              id: later.id,
+              result: {},
+            });
+          }
+
+          const next = await iterator.next();
+          if (!next.done) {
+            const request = ProtocolRequestSchema.parse(next.value);
+            methods.push(request.method);
+            if (request.method === "observer.stop") {
+              stopRequests += 1;
+              connection.send(protocolSuccessResponse(request.id, "observer.stop", stopReceipt));
+              connection.close();
+            }
+          }
+        } finally {
+          connectionHandled.resolve(undefined);
+        }
+      },
+    });
+
+    try {
+      await expect(
+        withExactObserverLifecycleSession(
+          {
+            socketPath,
+            expectedObserverIdentity,
+            deadlineMs: Date.now() + 2_000,
+          },
+          async (session) => {
+            await session.health();
+            await (laterRequest === "health"
+              ? session.health()
+              : session.getSessionRecoveryAssessment()
+            ).catch(() => undefined);
+            return session.stop();
+          },
+        ),
+      ).rejects.toMatchObject({ code: "PROTOCOL_REQUEST_FAILED" });
+      await connectionHandled.promise;
+      expect(connectionCount).toBe(1);
+      expect(stopRequests).toBe(0);
+      expect(methods).toEqual([
+        "observer.health",
+        laterRequest === "health" ? "observer.health" : "session.recoveryAssessment",
+      ]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    ["missing socket", "socket"],
+    ["changed status", "status"],
+  ] as const)("requires strict exact-session identity for %s", async (_name, mismatch) => {
+    const { socketPath } = await createTempSocketPath();
+    const baseApi = createFakeObserverApi();
+    const expectedObserverIdentity = {
+      status: "healthy" as const,
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: `0.0.0+station.${"a".repeat(64)}`,
+      socketPath,
+    };
+    const exactHealth = { ...(await baseApi.health()), ...expectedObserverIdentity };
+    const { socketPath: _ignored, ...healthWithoutSocket } = exactHealth;
+    const reportedHealth =
+      mismatch === "socket" ? healthWithoutSocket : { ...exactHealth, status: "degraded" as const };
+    let connectionCount = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const request = ProtocolRequestSchema.parse((await iterator.next()).value);
+        connection.send(protocolSuccessResponse(request.id, "observer.health", reportedHealth));
+      },
+    });
+
+    try {
+      const run = () =>
+        withExactObserverLifecycleSession(
+          {
+            socketPath,
+            expectedObserverIdentity,
+            deadlineMs: Date.now() + 2_000,
+          },
+          (session) => session.health(),
+        );
+      const first = (await run().catch((error) => error)) as SafeError;
+      expect(first).toMatchObject({ code: "PROTOCOL_REQUEST_FAILED" });
+      first.code = "MUTATED_BY_CALLER";
+      await expect(run()).rejects.toMatchObject({ code: "PROTOCOL_REQUEST_FAILED" });
+      expect(connectionCount).toBe(2);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("returns fresh exact lifecycle deadline errors", async () => {
+    const run = () =>
+      withExactObserverLifecycleSession(
+        {
+          socketPath: "/tmp/station-expired.sock",
+          expectedObserverIdentity: {
+            status: "healthy",
+            pid: 42,
+            startedAt: protocolTestNow,
+            version: `0.0.0+station.${"a".repeat(64)}`,
+            socketPath: "/tmp/station-expired.sock",
+          },
+          deadlineMs: 0,
+        },
+        (session) => session.health(),
+      );
+    const first = (await run().catch((error) => error)) as SafeError;
+    expect(first).toMatchObject({ code: "PROTOCOL_REQUEST_TIMEOUT" });
+    first.code = "MUTATED_BY_CALLER";
+    await expect(run()).rejects.toMatchObject({ code: "PROTOCOL_REQUEST_TIMEOUT" });
+  });
+
+  it("does not negotiate or reconnect an exact lifecycle session", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const expectedObserverIdentity = {
+      status: "healthy" as const,
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: `0.0.0+station.${"b".repeat(64)}`,
+      socketPath,
+    };
+    let connectionCount = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const request = ProtocolRequestSchema.parse((await iterator.next()).value);
+        connection.send({
+          schemaVersion: "0.10.0",
+          jsonrpc: "2.0",
+          id: request.id,
+          result: { schemaVersion: "0.10.0", ...expectedObserverIdentity },
+        });
+      },
+    });
+
+    try {
+      await expect(
+        withExactObserverLifecycleSession(
+          {
+            socketPath,
+            expectedObserverIdentity,
+            deadlineMs: Date.now() + 2_000,
+          },
+          (session) => session.health(),
+        ),
+      ).rejects.toMatchObject({ code: "PROTOCOL_SCHEMA_MISMATCH" });
+      expect(connectionCount).toBe(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    ["deadline", "health", 0, "PROTOCOL_REQUEST_TIMEOUT"],
+    ["deadline", "recovery", 1, "PROTOCOL_REQUEST_TIMEOUT"],
+    ["deadline", "revalidation", 2, "PROTOCOL_REQUEST_TIMEOUT"],
+    ["deadline", "stop receipt", 3, "PROTOCOL_REQUEST_TIMEOUT"],
+    ["connection loss", "health", 0, "PROTOCOL_SOCKET_CLOSED"],
+    ["connection loss", "recovery", 1, "PROTOCOL_SOCKET_CLOSED"],
+    ["connection loss", "revalidation", 2, "PROTOCOL_SOCKET_CLOSED"],
+    ["connection loss", "stop receipt", 3, "PROTOCOL_SOCKET_CLOSED"],
+  ] as const)("fails closed without reconnect on %s during pinned %s", async (failure, _stage, failureIndex, code) => {
+    const { socketPath } = await createTempSocketPath();
+    const baseApi = createFakeObserverApi();
+    const expectedObserverIdentity = {
+      status: "healthy" as const,
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: `0.0.0+station.${"d".repeat(64)}`,
+      socketPath,
+    };
+    const health = { ...(await baseApi.health()), ...expectedObserverIdentity };
+    const recovery = await baseApi.getSessionRecoveryAssessment();
+    const methods: string[] = [];
+    let connectionCount = 0;
+    let stopRequests = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        for (const [index, method] of [
+          "observer.health",
+          "session.recoveryAssessment",
+          "observer.health",
+          "observer.stop",
+        ].entries()) {
+          const request = ProtocolRequestSchema.parse((await iterator.next()).value);
+          methods.push(request.method);
+          expect(request.method).toBe(method);
+          if (request.method === "observer.stop") stopRequests += 1;
+          if (index === failureIndex) {
+            if (failure === "connection loss") connection.close();
+            return;
+          }
+          if (request.method === "observer.health") {
+            connection.send(protocolSuccessResponse(request.id, "observer.health", health));
+          } else {
+            connection.send(
+              protocolSuccessResponse(request.id, "session.recoveryAssessment", recovery),
+            );
+          }
+        }
+      },
+    });
+
+    try {
+      await expect(
+        withExactObserverLifecycleSession(
+          {
+            socketPath,
+            expectedObserverIdentity,
+            deadlineMs: Date.now() + (failure === "deadline" ? 100 : 2_000),
+          },
+          async (session) => {
+            await session.health();
+            await session.getSessionRecoveryAssessment();
+            await session.health();
+            return session.stop();
+          },
+        ),
+      ).rejects.toMatchObject({ code });
+      expect(connectionCount).toBe(1);
+      expect(stopRequests).toBe(failureIndex === 3 ? 1 : 0);
+      expect(methods).toHaveLength(failureIndex + 1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    "closed-before-receipt",
+    "false-receipt",
+    "missing-receipt",
+    "extra-frame",
+    "closure-timeout",
+  ] as const)("fails exact stop without retry when the outcome is %s", async (outcome) => {
+    const { socketPath } = await createTempSocketPath();
+    const baseApi = createFakeObserverApi();
+    const expectedObserverIdentity = {
+      status: "healthy" as const,
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: `0.0.0+station.${"c".repeat(64)}`,
+      socketPath,
+    };
+    const health = { ...(await baseApi.health()), ...expectedObserverIdentity };
+    const stopReceipt = await baseApi.stop();
+    let connectionCount = 0;
+    let stopRequests = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const healthRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        connection.send(protocolSuccessResponse(healthRequest.id, "observer.health", health));
+        const stopRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        stopRequests += 1;
+        if (outcome === "closed-before-receipt") {
+          connection.close();
+        } else if (outcome === "missing-receipt") {
+          const { stopped: _stopped, ...missingReceipt } = stopReceipt;
+          connection.send({
+            schemaVersion: STATION_SCHEMA_VERSION,
+            jsonrpc: "2.0",
+            id: stopRequest.id,
+            result: missingReceipt,
+          });
+        } else {
+          connection.send(
+            protocolSuccessResponse(stopRequest.id, "observer.stop", {
+              ...stopReceipt,
+              stopped: outcome !== "false-receipt",
+            }),
+          );
+          if (outcome === "extra-frame") {
+            connection.send(protocolSuccessResponse("extra", "observer.health", health));
+            connection.close();
+          }
+        }
+      },
+    });
+
+    try {
+      await expect(
+        withExactObserverLifecycleSession(
+          {
+            socketPath,
+            expectedObserverIdentity,
+            deadlineMs: Date.now() + (outcome === "closure-timeout" ? 100 : 2_000),
+          },
+          async (session) => {
+            await session.health();
+            return session.stop();
+          },
+        ),
+      ).rejects.toMatchObject({
+        code:
+          outcome === "closed-before-receipt"
+            ? "PROTOCOL_SOCKET_CLOSED"
+            : outcome === "false-receipt"
+              ? "PROTOCOL_REQUEST_FAILED"
+              : outcome === "missing-receipt"
+                ? "PROTOCOL_RESPONSE_VALIDATION_FAILED"
+                : outcome === "extra-frame"
+                  ? "PROTOCOL_REQUEST_FAILED"
+                  : "PROTOCOL_REQUEST_TIMEOUT",
+      });
+      expect(connectionCount).toBe(1);
+      expect(stopRequests).toBe(1);
     } finally {
       await server.close();
     }

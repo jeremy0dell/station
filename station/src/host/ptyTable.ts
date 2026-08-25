@@ -16,6 +16,7 @@ import {
   isSameHostPtyIdentity,
   StationHostProviderError,
 } from "@station/host";
+import { compareStationHostTerminalLifetimeIdentity } from "@station/contracts";
 import type { HostHandoffFidelity, PtyHandoffManifest } from "@station/contracts";
 import { adoptLocalPtyBridge } from "../terminal/pty/ptyBridgeAdoption.js";
 import { createLocalPtyTerminal } from "../terminal/pty/localPtyTerminal.js";
@@ -107,7 +108,7 @@ export type PtyTable = {
   spawn(params: HostSpawnParams): PtySpawnOutcome;
   /** List exact protocol-v8 PTY lifetimes without exporting or parking them. */
   list(): HostListEntry[];
-  /** Add read-only handoff support for the separately negotiated recovery query. */
+  /** Return recovery evidence in canonical terminal-lifetime identity order. */
   recoveryInventory(): HostRecoveryInventoryEntry[];
   snapshot(ptyId: string): PtySnapshot;
   /**
@@ -675,7 +676,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           ...listEntry(entry),
           handoffSupport: classifyPtyHandoffSupport({ entry, orphanBridges }),
         };
-      });
+      }).sort(compareStationHostTerminalLifetimeIdentity);
     },
 
     snapshot(ptyId) {

@@ -91,6 +91,38 @@ describe("registered stn update command", () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
+  it("keeps mutation-capable Host dependencies outside dry-run preflight", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const ensureHost = vi.fn();
+    const resolveHostCommand = vi.fn();
+    const clientFactory = vi.fn();
+    const probe: UpdateChannelProbe = {
+      channel: "installer-binary",
+      detectAndPlan: async () => ({
+        channel: "installer-binary",
+        plan: {
+          channel: "installer-binary",
+          status: "current",
+          currentVersion: "1.0.0",
+          targetVersion: "1.0.0",
+          currentCli: ["/opt/stn"],
+        },
+        apply: vi.fn(),
+      }),
+    };
+
+    const result = await runCli(["--config", configPath, "update", "--dry-run", "--json"], {
+      hostDeps: { ensureHost, resolveHostCommand, clientFactory },
+      updateDeps: { probes: [probe], buildInfo: () => build },
+    });
+
+    expect(result).toMatchObject({ code: expect.any(Number), output: { kind: "preview" } });
+    expect(ensureHost).not.toHaveBeenCalled();
+    expect(resolveHostCommand).not.toHaveBeenCalled();
+    expect(clientFactory).not.toHaveBeenCalled();
+  });
+
   it("renders update help without loading config", async () => {
     const result = await runCli(["--config", "/missing/config.toml", "update", "--help"]);
     expect(result).toMatchObject({ code: 0, outputFormat: "text" });
@@ -100,6 +132,12 @@ describe("registered stn update command", () => {
     expect(result.output).toContain("--no-handoff");
   });
 });
+
+const build = {
+  compiled: false,
+  version: "1.0.0",
+  buildIdentity: "a".repeat(64),
+};
 
 async function emptyPreflight({
   installed,

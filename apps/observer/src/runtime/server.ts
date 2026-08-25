@@ -67,8 +67,8 @@ export async function probeObserverSocket(
   };
 }
 
-export function readObserverSocketHolderPids(socketPath: string): number[] {
-  return readUnixSocketHolderPids(socketPath);
+export function readObserverSocketHolderPids(socketPath: string, timeoutMs: number): number[] {
+  return readUnixSocketHolderPids(socketPath, { timeoutMs });
 }
 
 /**

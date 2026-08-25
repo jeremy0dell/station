@@ -587,7 +587,13 @@
           "name": "reconcileConfiguredHarnessHooksOrThrow",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Reconciles every composed provider capability within the caller's startup budget before Observer health is published."
+          "purpose": "Reconciles all configured provider hooks within one Observer startup budget."
+        },
+        {
+          "name": "reconcileHarnessHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Requests one provider-owned reconciliation and returns its provider-neutral result."
         },
         {
           "name": "ReconcileHarnessHooksOptions",
@@ -600,15 +606,15 @@
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome."
+        },
+        {
+          "name": "reconcileProviderHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Admits only canonical requested-provider results from one provider callback."
         }
       ],
       "imports": [
-        {
-          "specifier": "./providers.js",
-          "resolvedPath": "apps/observer/src/commands/providers.ts",
-          "edgeKind": "runtime",
-          "bindings": ["resolveHarnessProviderOrThrow"]
-        },
         {
           "specifier": "../diagnostics/errors.js",
           "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
@@ -625,18 +631,21 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["SafeErrorSchema", "providerHookReconciliationSucceeded"]
+          "bindings": [
+            "ProviderHookReconciliationResultSchema",
+            "providerHookReconciliationSucceeded"
+          ]
         },
         {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
-            "HarnessProvider",
             "ProviderHookReconciliationContext",
             "ProviderHookReconciliationResult",
             "ProviderId",
-            "SafeError"
+            "SafeError",
+            "SuccessfulProviderHookReconciliationResult"
           ]
         }
       ]
@@ -883,6 +892,12 @@
           "purpose": null
         },
         {
+          "name": "CommandResultHandler",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "createCommandQueue",
           "kind": "function",
           "role": null,
@@ -890,6 +905,12 @@
         },
         {
           "name": "CreateCommandQueueOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverCommandHandlers",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -936,7 +957,12 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["CommandReceiptSchema", "StationCommandSchema"]
+          "bindings": [
+            "CommandReceiptSchema",
+            "StationCommandResultSchema",
+            "StationCommandResultTypeSchema",
+            "StationCommandSchema"
+          ]
         },
         {
           "specifier": "@station/contracts",
@@ -946,6 +972,9 @@
             "CommandId",
             "CommandReceipt",
             "StationCommand",
+            "StationCommandResult",
+            "StationCommandResultFor",
+            "StationCommandResultType",
             "StationEvent",
             "TerminalClosePayload",
             "TerminalFocusPayload",
@@ -1053,8 +1082,14 @@
         {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["CommandRecordSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandRecord"]
+          "bindings": ["CommandRecord", "CommandRecordInput"]
         }
       ]
     },
@@ -1107,7 +1142,7 @@
           "specifier": "./queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler", "CommandQueue"]
+          "bindings": ["CommandQueue", "ObserverCommandHandlers"]
         },
         {
           "specifier": "./reconcile.js",
@@ -1444,7 +1479,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command."
+          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command. Success returns the exact created identities and the provider-resolved placement projection."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -1480,7 +1515,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandResultHandler"]
         },
         {
           "specifier": "../reconcile.js",
@@ -1515,7 +1550,7 @@
           "specifier": "../terminalOperations.js",
           "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
           "edgeKind": "runtime",
-          "bindings": ["ensureAgentWorkspace"]
+          "bindings": ["commandPlacementResult", "ensureAgentWorkspace"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -1568,7 +1603,7 @@
           "name": "createSessionForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback."
+          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback. Success returns the exact created identities and the provider-resolved placement projection."
         },
         {
           "name": "CreateSessionForkHandlerOptions",
@@ -1604,7 +1639,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandResultHandler"]
         },
         {
           "specifier": "../reconcile.js",
@@ -1643,7 +1678,7 @@
           "specifier": "../terminalOperations.js",
           "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
           "edgeKind": "runtime",
-          "bindings": ["ensureAgentWorkspace"]
+          "bindings": ["commandPlacementResult", "ensureAgentWorkspace"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -2444,7 +2479,7 @@
           "name": "createSessionGroupCommandHandlers",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Validates, durably mutates, projects, and publishes project-local Session Group intent."
+          "purpose": "Validates, durably mutates, projects, and publishes project-local Session Group intent, returning the exact identity and version created by create commands."
         },
         {
           "name": "CreateSessionGroupCommandHandlersOptions",
@@ -2481,7 +2516,12 @@
           "specifier": "./queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler", "CommandHandlerContext"]
+          "bindings": [
+            "CommandHandler",
+            "CommandHandlerContext",
+            "CommandResultHandler",
+            "ObserverCommandHandlers"
+          ]
         },
         {
           "specifier": "../persistence/index.js",
@@ -2519,6 +2559,7 @@
           "edgeKind": "type-only",
           "bindings": [
             "SafeError",
+            "SessionGroupCreateCommandResult",
             "SessionGroupId",
             "SessionGroupView",
             "StationCommand",
@@ -2685,10 +2726,16 @@
           "purpose": null
         },
         {
+          "name": "commandPlacementResult",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ensureAgentWorkspace",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal."
+          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof."
         },
         {
           "name": "focusTerminal",
@@ -2775,7 +2822,9 @@
             "OpenPlacedWorkspaceResult",
             "OpenWorkspaceResult",
             "ProviderProjectConfig",
+            "ResolvedTerminalPlacement",
             "SafeError",
+            "SessionCommandPlacementResult",
             "SessionView",
             "TerminalFocusOrigin",
             "TerminalPlacementPort",
@@ -2808,7 +2857,7 @@
           "name": "createWorktreeCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch."
+          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch, then returns the exact project and worktree identities created by the provider."
         },
         {
           "name": "CreateWorktreeCreateHandlerOptions",
@@ -2834,7 +2883,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandResultHandler"]
         },
         {
           "specifier": "../reconcile.js",
@@ -2893,7 +2942,7 @@
           "name": "createWorktreeForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot."
+          "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot. Success returns the exact project and forked-worktree identities."
         },
         {
           "name": "WorktreeForkHandlerOptions",
@@ -2919,7 +2968,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandResultHandler"]
         },
         {
           "specifier": "../reconcile.js",
@@ -4270,10 +4319,22 @@
           "name": "CommandJournal",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Preserves the durable lifecycle and diagnostic history of Observer commands."
+          "purpose": "Preserves durable Observer command lifecycle, diagnostic history, and typed success results before terminal completion is observable."
+        },
+        {
+          "name": "commandPlacementResult",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "CommandQueue",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "CommandResultHandler",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -4366,7 +4427,7 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
+          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision. OS subprocess timeouts shrink only when an absolute evidence deadline is supplied."
         },
         {
           "name": "createLocalObserverProcessIdentityRepair",
@@ -4600,7 +4661,7 @@
           "name": "ensureAgentWorkspace",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal."
+          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof."
         },
         {
           "name": "EventAndObservationIngressDedupeResult",
@@ -4622,6 +4683,42 @@
         },
         {
           "name": "EventRecordOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverHealthEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverInspectionFailureReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverInspectionPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies read-only status, pidfile, cooperative process, and pinned recovery evidence."
+        },
+        {
+          "name": "ExactObserverOwnershipEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverProcessEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverStatusEvidence",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -4685,6 +4782,12 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "purpose": "Atomically records ingress acceptance, observations, native execution binding, recovery, and readiness under dedupe keys."
+        },
+        {
+          "name": "inspectExactObserverOwner",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Captures and revalidates one coherent Observer generation around recovery inspection."
         },
         {
           "name": "inspectObserverDuplicates",
@@ -4761,6 +4864,12 @@
         {
           "name": "observerBuildSelectorIsValid",
           "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverCommandHandlers",
+          "kind": "type",
           "role": null,
           "purpose": null
         },
@@ -5227,6 +5336,12 @@
           "purpose": null
         },
         {
+          "name": "PinnedObserverRecoveryIdentity",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "probeObserverSocket",
           "kind": "function",
           "role": "ADAPTER",
@@ -5440,7 +5555,13 @@
           "name": "reconcileConfiguredHarnessHooksOrThrow",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Reconciles every composed provider capability within the caller's startup budget before Observer health is published."
+          "purpose": "Reconciles all configured provider hooks within one Observer startup budget."
+        },
+        {
+          "name": "reconcileHarnessHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Requests one provider-owned reconciliation and returns its provider-neutral result."
         },
         {
           "name": "ReconcileHarnessHooksOptions",
@@ -5453,6 +5574,12 @@
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome."
+        },
+        {
+          "name": "reconcileProviderHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Admits only canonical requested-provider results from one provider callback."
         },
         {
           "name": "ReconcileScheduler",
@@ -5611,6 +5738,12 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupRepairInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionGroupRepairResult",
           "kind": "type",
           "role": null,
@@ -5620,7 +5753,7 @@
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore."
+          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Reconcile must name the projects whose complete provider evidence authorizes absent-member pruning; identity and parent corruption repair remains unconditional. Fresh-session placement is owned by SessionStore."
         },
         {
           "name": "SessionGroupStoreConflictReason",
@@ -5969,6 +6102,12 @@
         {
           "specifier": "./runtime/eventBus.js",
           "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./runtime/inspectExactObserverOwner.js",
+          "resolvedPath": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -6991,6 +7130,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/018_command_results.ts",
+      "exports": [
+        {
+          "name": "commandResultsMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -7116,6 +7274,12 @@
           "bindings": ["sessionGroupsMigration"]
         },
         {
+          "specifier": "./018_command_results.js",
+          "resolvedPath": "apps/observer/src/migrations/018_command_results.ts",
+          "edgeKind": "runtime",
+          "bindings": ["commandResultsMigration"]
+        },
+        {
           "specifier": "./migration.js",
           "resolvedPath": "apps/observer/src/migrations/migration.ts",
           "edgeKind": "type-only",
@@ -7216,7 +7380,12 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["ErrorEnvelopeSchema", "SafeErrorSchema", "StationCommandSchema"]
+          "bindings": [
+            "ErrorEnvelopeSchema",
+            "SafeErrorSchema",
+            "StationCommandResultSchema",
+            "StationCommandSchema"
+          ]
         },
         {
           "specifier": "@station/contracts",
@@ -7227,7 +7396,8 @@
             "DiagnosticDetail",
             "ErrorEnvelope",
             "SafeError",
-            "StationCommand"
+            "StationCommand",
+            "StationCommandResult"
           ]
         }
       ]
@@ -7475,7 +7645,7 @@
           "name": "CommandJournal",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Preserves the durable lifecycle and diagnostic history of Observer commands."
+          "purpose": "Preserves durable Observer command lifecycle, diagnostic history, and typed success results before terminal completion is observable."
         },
         {
           "name": "createSqliteObserverPersistence",
@@ -7700,6 +7870,12 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupRepairInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionGroupRepairResult",
           "kind": "type",
           "role": null,
@@ -7709,7 +7885,7 @@
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore."
+          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Reconcile must name the projects whose complete provider evidence authorizes absent-member pruning; identity and parent corruption repair remains unconditional. Fresh-session placement is owned by SessionStore."
         },
         {
           "name": "SessionGroupStoreConflictReason",
@@ -8012,7 +8188,7 @@
           "name": "CommandJournal",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Preserves the durable lifecycle and diagnostic history of Observer commands."
+          "purpose": "Preserves durable Observer command lifecycle, diagnostic history, and typed success results before terminal completion is observable."
         },
         {
           "name": "EventJournal",
@@ -8054,7 +8230,7 @@
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore."
+          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Reconcile must name the projects whose complete provider evidence authorizes absent-member pruning; identity and parent corruption repair remains unconditional. Fresh-session placement is owned by SessionStore."
         },
         {
           "name": "SessionStore",
@@ -8096,6 +8272,7 @@
             "ProviderObservationsIngressDedupeResult",
             "RecordProviderObservationInput",
             "SessionGroupMemberExpectation",
+            "SessionGroupRepairInput",
             "SessionGroupRepairResult",
             "SessionGroupStoreResult",
             "SessionHarnessDerivedStateRepair",
@@ -8121,6 +8298,7 @@
             "SessionGroupView",
             "SessionRecoveryHandle",
             "StationCommand",
+            "StationCommandResult",
             "StationEvent"
           ]
         }
@@ -8315,9 +8493,11 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "CommandRecordSchema",
             "ErrorEnvelopeSchema",
             "SafeErrorSchema",
             "SessionGroupViewSchema",
+            "StationCommandResultSchema",
             "StationCommandSchema",
             "StationEventSchema"
           ]
@@ -8414,6 +8594,7 @@
           "bindings": [
             "SessionGroupMemberExpectation",
             "SessionGroupRepairEvidence",
+            "SessionGroupRepairInput",
             "SessionGroupRepairResult",
             "SessionGroupStoreResult",
             "SessionSeedGroupPlacement",
@@ -9040,6 +9221,12 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupRepairInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionGroupRepairResult",
           "kind": "type",
           "role": null,
@@ -9119,6 +9306,7 @@
             "HarnessEventObservation",
             "HarnessRunObservation",
             "ObservedStatus",
+            "ProjectId",
             "ProviderHealth",
             "ProviderId",
             "SafeError",
@@ -9127,6 +9315,7 @@
             "SessionId",
             "SessionRecoveryHandle",
             "StationCommand",
+            "StationCommandResult",
             "StationEvent",
             "TerminalTargetObservation",
             "WorktreeChangeSummary",
@@ -9862,7 +10051,19 @@
       "path": "apps/observer/src/reconcile/providerObservations.ts",
       "exports": [
         {
+          "name": "HarnessProviderReadOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ProviderReadOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ProviderReadOutcome",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -9888,6 +10089,18 @@
         {
           "name": "readWorktreeObservations",
           "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "TerminalProviderReadOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "WorktreeProjectReadOutcome",
+          "kind": "type",
           "role": null,
           "purpose": null
         }
@@ -9918,6 +10131,7 @@
           "bindings": [
             "HarnessCapabilities",
             "HarnessRunObservation",
+            "ProjectId",
             "ProviderHealth",
             "ProviderId",
             "ProviderProjectConfig",
@@ -9960,7 +10174,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["SafeError"]
+          "bindings": ["SafeError", "SessionGroupRepairSummary"]
         }
       ]
     },
@@ -9971,7 +10185,7 @@
           "name": "runReconcileOnce",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence."
+          "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence."
         }
       ],
       "imports": [
@@ -10050,6 +10264,12 @@
           "bindings": ["ReconcileSnapshotInputs"]
         },
         {
+          "specifier": "./sessionGroupRepairAuthority.js",
+          "resolvedPath": "apps/observer/src/reconcile/sessionGroupRepairAuthority.ts",
+          "edgeKind": "runtime",
+          "bindings": ["decideSessionGroupRepairAuthority"]
+        },
+        {
           "specifier": "./sessionGroups.js",
           "resolvedPath": "apps/observer/src/reconcile/sessionGroups.ts",
           "edgeKind": "runtime",
@@ -10072,6 +10292,7 @@
             "ProviderId",
             "ProviderProjectConfig",
             "SafeError",
+            "SessionGroupRepairSummary",
             "StationSnapshot",
             "TerminalTargetObservation",
             "WorktreeObservation"
@@ -10150,7 +10371,7 @@
           "specifier": "../providerObservations.js",
           "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderReadOptions"]
+          "bindings": ["ProviderReadOptions", "ProviderReadOutcome"]
         },
         {
           "specifier": "../worktreeMetadataOverlay.js",
@@ -10235,6 +10456,31 @@
       ]
     },
     {
+      "path": "apps/observer/src/reconcile/sessionGroupRepairAuthority.ts",
+      "exports": [
+        {
+          "name": "decideSessionGroupRepairAuthority",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Decides which configured projects have enough provider evidence to prune absent Group members. Terminal or harness uncertainty blocks absence pruning globally because assignments retain no provider provenance; positive identity corruption remains repairable by persistence."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./providerObservations.js",
+          "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderReadOutcome"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProjectId", "SessionGroupRepairBlocker", "SessionGroupRepairSummary"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/reconcile/sessionGroups.ts",
       "exports": [
         {
@@ -10247,7 +10493,7 @@
           "name": "reconcileSessionGroups",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Repairs durable Group membership and parentage against canonical state, then projects configured Groups with reason-specific diagnostics."
+          "purpose": "Repairs durable Group identity and parentage against canonical state, prunes absent membership only for explicitly authoritative projects, then projects configured Groups with reason-specific diagnostics."
         },
         {
           "name": "SessionGroupProjection",
@@ -10267,7 +10513,13 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "SafeError", "SessionGroupView", "SessionView"]
+          "bindings": [
+            "ProjectId",
+            "ProviderProjectConfig",
+            "SafeError",
+            "SessionGroupView",
+            "SessionView"
+          ]
         }
       ]
     },
@@ -11049,6 +11301,105 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+      "exports": [
+        {
+          "name": "ExactObserverHealthEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverInspectionFailureReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverInspectionPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies read-only status, pidfile, cooperative process, and pinned recovery evidence."
+        },
+        {
+          "name": "ExactObserverOwnershipEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverProcessEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverStatusEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "inspectExactObserverOwner",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Captures and revalidates one coherent Observer generation around recovery inspection."
+        },
+        {
+          "name": "PinnedObserverRecoveryIdentity",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../diagnostics/errors.js",
+          "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["toSafeError"]
+        },
+        {
+          "specifier": "./observerCooperativeProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["verifyCooperativeObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerCooperativeProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverCooperativeProcessEntry",
+            "ObserverCooperativeProcessEvidenceSource"
+          ]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessIdentitiesMatch"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverHealth",
+            "ObserverProcessIdentity",
+            "ObserverRecoveryAssessment",
+            "SafeError"
+          ]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["parseStationObserverBuildVersion"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/logging.ts",
       "exports": [
         {
@@ -11523,6 +11874,47 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+      "exports": [
+        {
+          "name": "ObserverCooperativeProcessEntry",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverCooperativeProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies cooperative provenance without lifecycle authority or generic-reader exposure."
+        },
+        {
+          "name": "verifyCooperativeObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Verifies cooperative provenance through the canonical exact identity policy."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["verifyObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverProcessEntry",
+            "ObserverProcessIdentityExpectation",
+            "ObserverProcessIdentityVerification"
+          ]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/observerEvidenceRepair.ts",
       "exports": [
         {
@@ -11856,7 +12248,7 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
+          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision. OS subprocess timeouts shrink only when an absolute evidence deadline is supplied."
         },
         {
           "name": "LocalObserverProcessEvidenceSource",
@@ -11878,6 +12270,15 @@
         }
       ],
       "imports": [
+        {
+          "specifier": "./observerCooperativeProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverCooperativeProcessEntry",
+            "ObserverCooperativeProcessEvidenceSource"
+          ]
+        },
         {
           "specifier": "./observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
@@ -13228,6 +13629,73 @@
   ],
   "controlledDeclarations": [
     {
+      "path": "apps/cli/src/commands/command.ts",
+      "declaration": "executeTypedObserverCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Starts or selects the pinned Observer, dispatches one typed Station command, and optionally reloads its durable terminal outcome through the race-safe protocol completion wait.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/observer.ts",
+          "declaration": "ObserverApi",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/command.ts",
+      "declaration": "runCommandCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates raw CLI argv and stdin JSON into typed Observer command execution or record lookup.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/command.ts",
+          "declaration": "executeTypedObserverCommand",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/observer.ts",
+          "declaration": "ObserverApi",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/debugLogs.ts",
       "declaration": "runDebugLogsCommand",
       "kind": "function",
@@ -13274,13 +13742,6 @@
       "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. Mutating handoff defers policy to `ensureStationHostRunning`; this layer only projects the ensure outcome.",
       "dependencies": [
         {
-          "path": "packages/protocol/src/transport.ts",
-          "declaration": "probeUnixSocket",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
           "path": "packages/station-host/src/protocol.ts",
           "declaration": "classifyHostCompatibility",
           "kind": "function",
@@ -13296,13 +13757,6 @@
       "role": "COMPOSITION ROOT",
       "purpose": "Selects Observer process lifecycle and duplicate-inspection adapters for one CLI action.",
       "dependencies": [
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "ensureExactObserverBuild",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "getObserverStatus",
@@ -13327,6 +13781,13 @@
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "stopObserver",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+          "declaration": "ensureExactObserverBuild",
           "kind": "function",
           "role": "COMPOSITION ROOT",
           "edgeKind": "runtime"
@@ -13373,6 +13834,52 @@
           "declaration": "openTmuxPopup",
           "kind": "function",
           "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/project.ts",
+      "declaration": "runProjectCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates project CLI intent into configuration reads or typed Observer project commands.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/command.ts",
+          "declaration": "executeTypedObserverCommand",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/reconcile.ts",
+      "declaration": "runReconcileCommand",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Proves one current Observer and binds only its reconcile method to the use case.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/persistedStateReconcile.ts",
+          "declaration": "reconcilePersistedState",
+          "kind": "function",
+          "role": "USE CASE",
           "edgeKind": "runtime"
         },
         {
@@ -13865,11 +14372,18 @@
       "declaration": "sendCodexHookPayload",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Admits Codex's forwarded events before applying Station ownership/cwd correlation and translating hook stdin into shared harness ingress.",
+      "purpose": "Admits Codex's forwarded events, applies Station correlation, then adds bounded provider-private permission-reviewer evidence before shared harness ingress.",
       "dependencies": [
         {
           "path": "apps/cli/src/ingress/sender.ts",
           "declaration": "sendProviderHookEvent",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/harness/codex/src/permissionReviewerEvidence.ts",
+          "declaration": "enrichCodexPermissionReviewerEvidence",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -14027,43 +14541,6 @@
     },
     {
       "path": "apps/cli/src/observerProcess.ts",
-      "declaration": "ensureExactObserverBuild",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Converges one configured Observer socket to this caller's exact immutable build within one deadline. At most the admitted identity-pinned incumbent is stopped cooperatively; the child preserves any later non-exact owner. Failures report their phase and the admitted incumbent's last proven disposition while retaining a separate typed cause and startup evidence, without changing generic singleton ordering.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "getObserverStatus",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "logObserverLifecycleFailure",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProcess/startup.ts",
-          "declaration": "startObserverProcess",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/protocol/src/client.ts",
-          "declaration": "createObserverClient",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/cli/src/observerProcess.ts",
       "declaration": "getObserverStatus",
       "kind": "function",
       "role": "ADAPTER",
@@ -14155,6 +14632,36 @@
     },
     {
       "path": "apps/cli/src/observerProcess.ts",
+      "declaration": "startObserverPreservingIncumbent",
+      "kind": "const",
+      "role": "ADAPTER",
+      "purpose": "Starts a child only when singleton boot claims preserve any listening incumbent.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "logObserverLifecycleFailure",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/startup.ts",
+          "declaration": "startObserverProcess",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess.ts",
       "declaration": "stopObserver",
       "kind": "function",
       "role": "COMPOSITION ROOT",
@@ -14182,6 +14689,59 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+      "declaration": "convergeExactObserverBuild",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Converges exact absence or one revalidated owner and requires an independent final proof.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+      "declaration": "ensureExactObserverBuild",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Preserves standalone exact reuse while wiring local adapters into exact convergence.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserverPreservingIncumbent",
+          "kind": "const",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+          "declaration": "convergeExactObserverBuild",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/inspectExactObserverOwner.ts",
+          "declaration": "inspectExactObserverOwnerWithLocalAdapters",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "withExactObserverLifecycleSession",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+      "declaration": "ExactObserverLifecycleSessionCapability",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Keeps exact lifecycle reads and cooperative stop on one identity-pinned connection.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/observerProcess/evidenceRepair.ts",
@@ -14265,6 +14825,50 @@
       "dependencies": []
     },
     {
+      "path": "apps/cli/src/observerProcess/inspectExactObserverOwner.ts",
+      "declaration": "inspectExactObserverOwnerWithLocalAdapters",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Binds local status, identity, process, and pinned recovery inspection adapters.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+          "declaration": "ExactObserverInspectionPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+          "declaration": "inspectExactObserverOwner",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "declaration": "createLocalObserverProcessEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/observerProcess/spawn.ts",
       "declaration": "defaultSpawnObserver",
       "kind": "function",
@@ -14285,7 +14889,7 @@
       "declaration": "startObserverProcess",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Starts the Observer child and waits for exact-build health inside one timed runtime boundary, retaining a separate typed cause and bounded boot evidence before diagnostic handles close.",
+      "purpose": "Starts the Observer child and waits for exact-build health inside one absolute-deadline boundary, retaining a separate typed cause and bounded boot evidence before handles close.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess/spawn.ts",
@@ -14515,6 +15119,30 @@
       ]
     },
     {
+      "path": "apps/cli/src/persistedStateReconcile.ts",
+      "declaration": "PersistedStateReconcilePort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Creates reconcile-only authority pinned to one current Observer identity and timeout.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/persistedStateReconcile.ts",
+      "declaration": "reconcilePersistedState",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Reconciles persisted state through one exact current Observer without lifecycle authority.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/persistedStateReconcile.ts",
+          "declaration": "PersistedStateReconcilePort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/update/convergencePlan.ts",
       "declaration": "deriveUpdateConvergencePlan",
       "kind": "function",
@@ -14689,20 +15317,13 @@
       "declaration": "createUpdateRecoveryPreflightPorts",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. Both runtime selectors derive from one composition-captured build identity; no lifecycle or repair capability is exposed.",
+      "purpose": "Binds exact Observer inspection, strict Host inventory, and provider-neutral hook health.",
       "dependencies": [
         {
-          "path": "apps/cli/src/commands/host/index.ts",
-          "declaration": "runHostCommand",
+          "path": "apps/cli/src/observerProcess/inspectExactObserverOwner.ts",
+          "declaration": "inspectExactObserverOwnerWithLocalAdapters",
           "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "getObserverStatus",
-          "kind": "function",
-          "role": "ADAPTER",
+          "role": "COMPOSITION ROOT",
           "edgeKind": "runtime"
         },
         {
@@ -14717,34 +15338,6 @@
           "declaration": "readHarnessHookHealth",
           "kind": "function",
           "role": "USE CASE",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
-          "declaration": "createLocalObserverProcessEvidence",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
-          "declaration": "ObserverProcessIdentityEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
-          "declaration": "verifyObserverProcessIdentity",
-          "kind": "function",
-          "role": "USE CASE",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/protocol/src/client.ts",
-          "declaration": "createObserverClient",
-          "kind": "function",
-          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
@@ -14786,21 +15379,30 @@
       "declaration": "reconcileConfiguredHarnessHooksOrThrow",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Reconciles every composed provider capability within the caller's startup budget before Observer health is published.",
+      "purpose": "Reconciles all configured provider hooks within one Observer startup budget.",
       "dependencies": [
         {
-          "path": "packages/contracts/src/providerHooks.ts",
-          "declaration": "providerHookReconciliationSucceeded",
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileHarnessHooksOrThrow",
           "kind": "function",
-          "role": "POLICY",
+          "role": "USE CASE",
           "edgeKind": "runtime"
-        },
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "declaration": "reconcileHarnessHooks",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Requests one provider-owned reconciliation and returns its provider-neutral result.",
+      "dependencies": [
         {
-          "path": "packages/contracts/src/providers.ts",
-          "declaration": "HarnessProvider",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileProviderHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
         }
       ]
     },
@@ -14812,20 +15414,28 @@
       "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome.",
       "dependencies": [
         {
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileHarnessHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/contracts/src/providerHooks.ts",
           "declaration": "providerHookReconciliationSucceeded",
           "kind": "function",
           "role": "POLICY",
           "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/contracts/src/providers.ts",
-          "declaration": "HarnessProvider",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "declaration": "reconcileProviderHooks",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Admits only canonical requested-provider results from one provider callback.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -15002,7 +15612,7 @@
       "declaration": "createSessionCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command.",
+      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command. Success returns the exact created identities and the provider-resolved placement projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",
@@ -15018,7 +15628,7 @@
       "declaration": "createSessionForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback.",
+      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback. Success returns the exact created identities and the provider-resolved placement projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",
@@ -15097,7 +15707,7 @@
       "declaration": "createSessionGroupCommandHandlers",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Validates, durably mutates, projects, and publishes project-local Session Group intent.",
+      "purpose": "Validates, durably mutates, projects, and publishes project-local Session Group intent, returning the exact identity and version created by create commands.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -15113,7 +15723,7 @@
       "declaration": "ensureAgentWorkspace",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal.",
+      "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof.",
       "dependencies": [
         {
           "path": "apps/observer/src/stationLogger.ts",
@@ -15150,7 +15760,7 @@
       "declaration": "createWorktreeCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch.",
+      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch, then returns the exact project and worktree identities created by the provider.",
       "dependencies": []
     },
     {
@@ -15158,7 +15768,7 @@
       "declaration": "createWorktreeForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot.",
+      "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot. Success returns the exact project and forked-worktree identities.",
       "dependencies": []
     },
     {
@@ -15395,7 +16005,7 @@
       "declaration": "CommandJournal",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Preserves the durable lifecycle and diagnostic history of Observer commands.",
+      "purpose": "Preserves durable Observer command lifecycle, diagnostic history, and typed success results before terminal completion is observable.",
       "dependencies": []
     },
     {
@@ -15443,7 +16053,7 @@
       "declaration": "SessionGroupStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore.",
+      "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Reconcile must name the projects whose complete provider evidence authorizes absent-member pruning; identity and parent corruption repair remains unconditional. Fresh-session placement is owned by SessionStore.",
       "dependencies": []
     },
     {
@@ -15528,7 +16138,7 @@
       "declaration": "runReconcileOnce",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
+      "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -15580,6 +16190,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/reconcile/sessionGroupRepairAuthority.ts",
+          "declaration": "decideSessionGroupRepairAuthority",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/reconcile/sessionGroups.ts",
           "declaration": "reconcileSessionGroups",
           "kind": "function",
@@ -15587,6 +16204,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/sessionGroupRepairAuthority.ts",
+      "declaration": "decideSessionGroupRepairAuthority",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Decides which configured projects have enough provider evidence to prune absent Group members. Terminal or harness uncertainty blocks absence pruning globally because assignments retain no provider provenance; positive identity corruption remains repairable by persistence.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/reconcile/sessionGroups.ts",
@@ -15601,7 +16226,7 @@
       "declaration": "reconcileSessionGroups",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Repairs durable Group membership and parentage against canonical state, then projects configured Groups with reason-specific diagnostics.",
+      "purpose": "Repairs durable Group identity and parentage against canonical state, prunes absent membership only for explicitly authoritative projects, then projects configured Groups with reason-specific diagnostics.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -15841,6 +16466,45 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+      "declaration": "ExactObserverInspectionPorts",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies read-only status, pidfile, cooperative process, and pinned recovery evidence.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "declaration": "ObserverCooperativeProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+      "declaration": "inspectExactObserverOwner",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Captures and revalidates one coherent Observer generation around recovery inspection.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+          "declaration": "ExactObserverInspectionPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "declaration": "verifyCooperativeObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/logging.ts",
       "declaration": "createObserverLogger",
       "kind": "function",
@@ -16045,6 +16709,37 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+      "declaration": "ObserverCooperativeProcessEvidenceSource",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies cooperative provenance without lifecycle authority or generic-reader exposure.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+      "declaration": "verifyCooperativeObserverProcessIdentity",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Verifies cooperative provenance through the canonical exact identity policy.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "declaration": "ObserverCooperativeProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/observerEvidenceRepair.ts",
       "declaration": "repairStaleObserverEvidence",
       "kind": "function",
@@ -16166,7 +16861,7 @@
       "declaration": "createLocalObserverProcessEvidence",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision.",
+      "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision. OS subprocess timeouts shrink only when an absolute evidence deadline is supplied.",
       "dependencies": []
     },
     {
@@ -16550,7 +17245,7 @@
       "declaration": "codexHookAdapter",
       "kind": "const",
       "role": "ADAPTER",
-      "purpose": "Normalizes Codex hook delivery into shared provider-event and harness-report contracts. Inherited Station identity is authoritative only when Codex cwd remains in the stamped worktree.",
+      "purpose": "Normalizes Codex hook delivery, including provider-private reviewer evidence, into shared harness reports. Inherited Station identity is authoritative only when Codex cwd remains in the stamped worktree.",
       "dependencies": [
         {
           "path": "packages/harness-shared/src/hookAdapter.ts",
@@ -16560,6 +17255,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "integrations/harness/codex/src/permissionReviewerEvidence.ts",
+      "declaration": "enrichCodexPermissionReviewerEvidence",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Removes caller-supplied reviewer claims and reads a bounded Codex transcript tail so only a strictly parsed, matching turn context can add provider-private permission-reviewer evidence.",
+      "dependencies": []
     },
     {
       "path": "integrations/harness/codex/src/provider.ts",
@@ -16761,6 +17464,22 @@
       ]
     },
     {
+      "path": "integrations/terminal/station/src/host/inspectStationHost.ts",
+      "declaration": "inspectStationHost",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Reads one current Host lifetime without starting, replacing, handing off, or retaining a connection. Exact evidence is correlated to the configured socket path across both probes.",
+      "dependencies": [
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "probeUnixSocket",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "integrations/terminal/station/src/provider.ts",
       "declaration": "StationTerminalProvider",
       "kind": "class",
@@ -16868,7 +17587,7 @@
       "declaration": "createObserverService",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Presents one build-pinned Observer protocol endpoint as the shared client service.",
+      "purpose": "Presents one build-pinned Observer protocol endpoint as the shared client service and preserves durable command results loaded at terminal completion.",
       "dependencies": [
         {
           "path": "packages/contracts/src/observer.ts",
@@ -17004,6 +17723,14 @@
       "kind": "function",
       "role": "ADAPTER",
       "purpose": "Presents Observer operations to clients through validated NDJSON requests.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/protocol/src/client.ts",
+      "declaration": "withExactObserverLifecycleSession",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Binds current-schema health, recovery, and one cooperative stop to one physical connection, requiring exact identity and peer closure before the absolute deadline.",
       "dependencies": []
     },
     {

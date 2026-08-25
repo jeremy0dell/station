@@ -117,6 +117,13 @@ describe("station build info", () => {
         buildIdentity: "A".repeat(64),
       }),
     ).toThrow("64 lowercase hexadecimal");
+    expect(() =>
+      stationObserverBuildVersion({
+        version: "1.2.3",
+        compiled: false,
+        buildIdentity: "a".repeat(63),
+      }),
+    ).toThrow("64 lowercase hexadecimal");
     expect(parseStationObserverBuildVersion(`1.2.3+station.${"A".repeat(64)}`)).toEqual({
       version: `1.2.3+station.${"A".repeat(64)}`,
     });

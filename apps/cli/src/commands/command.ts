@@ -1,11 +1,15 @@
 import type { StationConfig } from "@station/config";
 import type {
+  AcceptedCommandReceipt,
+  CommandExecutionOutcome,
   CommandId,
   CommandReceipt,
   CommandRecord,
+  FailedCommandRecord,
   ObserverApi,
   SafeError,
   StationCommand,
+  SucceededCommandRecord,
 } from "@station/contracts";
 import { CommandIdSchema, StationCommandSchema } from "@station/contracts";
 import { createObserverClient, type ObserverClient } from "@station/protocol";
@@ -23,6 +27,13 @@ export type CommandCommandOptions = {
   configPath?: string;
   stdin?: string;
   timeoutMs?: number;
+};
+
+export type TypedObserverCommandOptions = {
+  config?: StationConfig;
+  configPath?: string;
+  timeoutMs?: number;
+  waitForCompletion?: boolean;
 };
 
 export type CommandDispatchAcceptedResult = {
@@ -58,6 +69,57 @@ type ParsedCommandArgs =
       timeoutMs?: number;
     };
 
+/**
+ * ADAPTER
+ *
+ * Starts or selects the pinned Observer, dispatches one typed Station command, and optionally
+ * reloads its durable terminal outcome through the race-safe protocol completion wait.
+ */
+export async function executeTypedObserverCommand<TCommand extends StationCommand>(
+  command: TCommand,
+  options: TypedObserverCommandOptions = {},
+  deps: ObserverProcessDeps = {},
+): Promise<CommandExecutionOutcome<TCommand>> {
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  const client = await createCommandObserverClient(options, timeoutMs, deps);
+  const receipt = await dispatchCommand(client, command, timeoutMs);
+  if (!receipt.accepted) {
+    return {
+      status: "rejected",
+      receipt,
+    };
+  }
+  if (options.waitForCompletion !== true) {
+    return {
+      status: "accepted",
+      receipt,
+    };
+  }
+
+  const record = await waitForCommand(client, receipt.commandId, timeoutMs);
+  if (record.status !== "succeeded" && record.status !== "failed") {
+    throw commandWaitTimeoutError();
+  }
+  assertMatchingCommandCompletion(command, receipt, record);
+  if (record.status === "succeeded") {
+    return {
+      status: "succeeded",
+      receipt,
+      record,
+    };
+  }
+  return {
+    status: "failed",
+    receipt,
+    record,
+  };
+}
+
+/**
+ * ADAPTER
+ *
+ * Translates raw CLI argv and stdin JSON into typed Observer command execution or record lookup.
+ */
 export async function runCommandCommand(
   args: string[],
   options: CommandCommandOptions = {},
@@ -65,44 +127,25 @@ export async function runCommandCommand(
 ): Promise<CommandCommandResult> {
   const parsed = parseCommandArgs(args);
   const timeoutMs = parsed.timeoutMs ?? options.timeoutMs ?? 30_000;
-  const paths = resolveObserverPaths(options.config);
-  const status = await startObserver({ ...options, paths, timeoutMs }, deps);
-  assertObserverRunning(status);
-  const client =
-    deps.clientFactory?.(paths.socketPath) ??
-    createObserverClient({
-      socketPath: paths.socketPath,
-      timeoutMs,
-      ...(status.health.version === undefined
-        ? {}
-        : { expectedBuildVersion: status.health.version }),
-    });
 
   if (parsed.action === "get") {
+    const client = await createCommandObserverClient(options, timeoutMs, deps);
     return getCommand(client, parsed.commandId);
   }
 
   const command = parseCommandFromStdin(options.stdin, parsed.stdin);
-  const receipt = await dispatchCommand(client, command, timeoutMs);
-  if (!parsed.wait || !receipt.accepted) {
+  const executionOptions = typedObserverCommandOptions(options, timeoutMs, parsed.wait);
+  const outcome = await executeTypedObserverCommand(command, executionOptions, deps);
+  if (outcome.status === "accepted" || outcome.status === "rejected") {
     return {
-      status: receipt.status,
-      receipt,
-    };
-  }
-
-  const record = await waitForCommand(client, receipt.commandId, timeoutMs);
-  if (record.status !== "succeeded" && record.status !== "failed") {
-    throw {
-      tag: "TimeoutError",
-      code: "COMMAND_WAIT_TIMEOUT",
-      message: "Command did not finish before the timeout.",
+      status: outcome.status,
+      receipt: outcome.receipt,
     };
   }
   return {
-    status: record.status,
-    receipt,
-    command: record,
+    status: outcome.status,
+    receipt: outcome.receipt,
+    command: outcome.record,
   };
 }
 
@@ -124,6 +167,40 @@ async function getCommand(client: ObserverApi, commandId: CommandId): Promise<Co
   return {
     command,
   };
+}
+
+async function createCommandObserverClient(
+  options: Pick<TypedObserverCommandOptions, "config" | "configPath">,
+  timeoutMs: number,
+  deps: ObserverProcessDeps,
+): Promise<ObserverClient> {
+  const paths = resolveObserverPaths(options.config);
+  const status = await startObserver({ ...options, paths, timeoutMs }, deps);
+  assertObserverRunning(status);
+  return (
+    deps.clientFactory?.(paths.socketPath) ??
+    createObserverClient({
+      socketPath: paths.socketPath,
+      timeoutMs,
+      ...(status.health.version === undefined
+        ? {}
+        : { expectedBuildVersion: status.health.version }),
+    })
+  );
+}
+
+function typedObserverCommandOptions(
+  options: CommandCommandOptions,
+  timeoutMs: number,
+  waitForCompletion: boolean,
+): TypedObserverCommandOptions {
+  const executionOptions: TypedObserverCommandOptions = {
+    timeoutMs,
+    waitForCompletion,
+  };
+  if (options.config !== undefined) executionOptions.config = options.config;
+  if (options.configPath !== undefined) executionOptions.configPath = options.configPath;
+  return executionOptions;
 }
 
 function missingCommandRecordError(commandId: CommandId): SafeError {
@@ -178,11 +255,7 @@ async function waitForCommand(
         code: "COMMAND_WAIT_FAILED",
         message: "Command wait could not load the observer command record.",
       },
-      timeoutError: {
-        tag: "TimeoutError",
-        code: "COMMAND_WAIT_TIMEOUT",
-        message: "Command did not finish before the timeout.",
-      },
+      timeoutError: commandWaitTimeoutError(),
     },
     async () => client.waitForCommand(commandId, { timeoutMs }).catch(mapCommandWaitError),
   );
@@ -192,13 +265,41 @@ async function waitForCommand(
   return result.value;
 }
 
+function assertMatchingCommandCompletion<TCommand extends StationCommand>(
+  command: TCommand,
+  receipt: AcceptedCommandReceipt,
+  record: CommandRecord,
+): asserts record is SucceededCommandRecord<TCommand> | FailedCommandRecord<TCommand> {
+  if (
+    record.id !== receipt.commandId ||
+    record.type !== command.type ||
+    record.command.type !== command.type
+  ) {
+    throw commandCompletionMismatchError(receipt.commandId);
+  }
+}
+
+function commandCompletionMismatchError(commandId: CommandId): SafeError {
+  return {
+    tag: "CommandCliError",
+    code: "COMMAND_COMPLETION_MISMATCH",
+    message: "The observer returned completion that did not match the dispatched command.",
+    hint: `Inspect the durable record with \`stn command get ${commandId}\` before retrying.`,
+    commandId,
+  };
+}
+
+function commandWaitTimeoutError(): SafeError {
+  return {
+    tag: "TimeoutError",
+    code: "COMMAND_WAIT_TIMEOUT",
+    message: "Command did not finish before the timeout.",
+  };
+}
+
 function mapCommandWaitError(error: unknown): never {
   if (isSafeError(error) && error.tag === "TimeoutError") {
-    throw {
-      tag: "TimeoutError",
-      code: "COMMAND_WAIT_TIMEOUT",
-      message: "Command did not finish before the timeout.",
-    };
+    throw commandWaitTimeoutError();
   }
   throw error;
 }
