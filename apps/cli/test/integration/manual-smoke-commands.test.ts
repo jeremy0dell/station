@@ -136,7 +136,7 @@ describe("CLI manual-smoke commands", () => {
       "--version",
     ]);
 
-    expect(direct).toEqual({ code: 0, output: "0.0.0-pre-alpha.5.16", outputFormat: "text" });
+    expect(direct).toEqual({ code: 0, output: "0.0.0-pre-alpha.6", outputFormat: "text" });
     expect(withMissingConfig).toEqual(direct);
   });
 
