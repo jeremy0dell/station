@@ -210,13 +210,15 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
           if (pane.id !== paneId) {
             return pane;
           }
-          const worktreeId = pane.worktreeId ?? worktreeIdFromAgentPaneId(pane.id);
-          return {
-            ...pane,
+          const next: PaneRecord = {
+            id: pane.id,
+            split: pane.split,
             role: "primary-agent",
             agentIdentity: nextIdentity,
-            ...(worktreeId === undefined ? {} : { worktreeId }),
           };
+          const worktreeId = pane.worktreeId ?? worktreeIdFromAgentPaneId(pane.id);
+          if (worktreeId !== undefined) next.worktreeId = worktreeId;
+          return next;
         });
         setState({
           ...state,

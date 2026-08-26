@@ -33,7 +33,7 @@ export function AgentChoiceListView({
         // show an update nudge.
         const update =
           option.status === "healthy" || option.status === "unknown" ? option.update : undefined;
-        let detail = option.status;
+        let detail: string = option.status;
         let color = providerHealthColor(theme, option.status);
         if (update !== undefined) {
           detail = `● update v${update.installed} → v${update.latest}`;
