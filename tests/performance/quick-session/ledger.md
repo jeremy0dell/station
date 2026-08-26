@@ -2601,3 +2601,117 @@ focused Station tests; Biome; `git diff --check`; skipped-runner loading; and
 the timing-blind native smoke. UX remained exact in 20/20 runs: the already-open
 native overlay landed on the new session, accepted one input once, and cleaned
 up the worktree, terminal, UI, and Observer.
+
+## BENCH-050-E registered target event-egress plan
+
+Governing sources are `docs/debugging.md`, `docs/architecture.md`,
+`docs/observer-architecture.md`, `docs/architecture-documentation.md`,
+`docs/configuration.md`, `tests/README.md`, the original experiment protocol,
+BENCH-048-I/P, and BENCH-049-I/P. BENCH-049 rejected its stronger blind
+prediction while passing every subscription-handoff attribution floor. Its
+post-result decomposition left 0.599/2.492ms median/p95 uncovered. Every run
+contained an uncovered interval after root React and before another
+subscription socket callback at 0.353/1.152ms, and two tail runs contained
+1.971ms and 3.538ms before their first recorded client activity. The first
+OpenTUI frame completion predated target application in all twenty runs, so
+BENCH-050 tests target-event publication, protocol egress, and cross-process
+socket scheduling rather than native frame execution.
+
+BENCH-050 inherits BENCH-049's twenty native repetitions, idle-before-active
+same-process control, forty separate admissions, one-minute-load ceiling,
+49-worktree fixture, ordinary Observer restart, warm preserved Host, exact
+renderer-child identity, all existing phase layers, renderer and handoff
+occupancy, exit-only persistence, and every correctness and product guard. It
+adds an observation-only target-event trace shared by Observer's event bus and
+the Protocol server through `@station/runtime`. The trace uses `WeakMap`
+identity for already-created objects and an in-memory activity buffer. It does
+not add a field, symbol, wrapper, diagnostic value, or mutable property to a
+Station event, queue value, protocol envelope, NDJSON message, service
+contract, runtime state, or socket payload.
+
+The server trace arms only when the exact `agent.prepareExternalLaunch`
+request is parsed and stops admitting new activities after that response send
+returns. Existing target activities may finish their asynchronous socket-write
+callback after admission closes. Each admitted `worktree.updated` or
+`session.created` activity records this exact sequence:
+
+- Observer event publication entered, strict event validation completed, and
+  publication to matching subscriber queues completed;
+- the Protocol subscription iterator resumed and the strict event envelope was
+  validated; and
+- NDJSON serialization started and completed, `socket.write()` returned, and
+  its existing completion callback ran.
+
+The already-recorded target frame parse identifies the client activity by its
+unique event type. Its containing competing-socket interval supplies that
+frame's client socket-callback entry without adding another callback. Every
+server phase group and client match must be unique, strict, monotonic, and
+inside its registered server or client window. Server publication and socket
+write return must precede client callback entry on the existing comparable
+epoch clock; the socket-write completion callback is reported separately and
+is not required to precede peer delivery.
+
+Analysis partitions publication validation/queue offer, event-bus-to-protocol
+iterator scheduling, envelope construction, JSON serialization, synchronous
+socket write, and socket-return-to-client-callback delivery. It also measures
+worktree React completion to `session.created` publication and publication to
+that event's client callback. Target publication-to-client intervals are
+clipped to active server-send-to-response-callback and unioned with BENCH-049's
+renderer-plus-handoff intervals, never summed across overlaps. Incremental
+coverage is the difference between those unions, not the raw duration of a
+server phase.
+
+All twenty runs must pass all forty admissions with immediate-turn p95 at most
+1ms, process-launch p95 at most 5ms, and one-minute load at most twice the
+logical CPU count. Every inherited safety, exact-identity, phase, exit-only,
+nonnegative-order, and 1ms reconstruction guard remains. User-facing p95 stays
+at most 380ms, attachment p95 at most 30ms, transport residual p95 at most
+35ms, and active response-egress p95 at most 15ms.
+
+Attribute the remaining active interval to target event egress only if at
+least fifteen runs contain both exact server activities and client matches,
+the egress intervals add at least 10% of active p95 beyond the existing union,
+the full union explains at least 90% of active p95, and at least fifteen runs
+explain 85% individually. Attribute the recurring wait specifically to
+post-write cross-process delivery only if socket-write-return-to-client-callback
+p95 is at least 0.5ms and at least 25% of uncovered p95.
+
+Blind prediction: all twenty runs contain exactly one complete
+`worktree.updated` and one complete `session.created` server activity with an
+exact client match; event egress adds at least 12.5% of active p95; the full
+union explains at least 92.5% of active p95; at least eighteen runs explain
+90% individually; and socket-write-return-to-client-callback is both the
+largest server-egress phase by p95 and at least 0.75ms p95. Any failed trace,
+admission, safety, product, attribution, or prediction condition rejects the
+hypothesis mechanically. Acceptance authorizes only a separately registered
+candidate at the single dominant measured egress phase. Rejection redirects
+the next diagnostic to Observer work before target publication or to the
+remaining client scheduler gap identified by the exact interval boundaries.
+
+Expected temporary files are all BENCH-049 diagnostic files plus
+`packages/runtime/src/quickSessionEventEgressDiagnostic.ts`,
+`packages/runtime/src/index.ts`, `apps/observer/src/runtime/eventBus.ts`,
+`packages/protocol/src/server.ts`, `packages/protocol/src/transport.ts`, and
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts`. The
+runtime module owns only the private weak identity, arm state, timestamps, and
+exit-only diagnostic file. No production test, contract/schema, provider,
+connector, configuration, package manifest, architecture, benchmark, report,
+or user documentation change is expected. Raw JSON, an archive-only report,
+and this ledger are the evidence artifacts.
+
+JSDoc impact is explicit: the temporary runtime functions document the
+observation-only weak association, arm lifetime, cross-package phase ownership,
+and absence of payload mutation; temporary Protocol markers document that the
+existing socket write and completion callback retain delivery authority. A
+concise comment protects the rule that closing admission cannot truncate an
+already-admitted asynchronous write activity. No backend/connector contract or
+controlled Observer seam changes. All diagnostic JSDoc is reverted after
+classification.
+
+Validation before the authoritative run adds Runtime typecheck to the five
+BENCH-049 typechecks; repeats Protocol transport unit and client/server
+integration tests, Observer event-bus and external-launch tests, Client
+runtime/reducer tests, Dashboard runtime tests, focused Station dashboard,
+managed-launch, Observer-client, probe, and profiler tests, Biome,
+`git diff --check`, skipped-runner loading, and a timing-blind structural native
+smoke. No production optimization is registered.
