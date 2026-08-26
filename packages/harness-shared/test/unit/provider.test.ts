@@ -146,7 +146,7 @@ describe("createTerminalBoundHarnessProvider", () => {
       schemaVersion: 1 as const,
       launcher: "/source/bin/stn-ingress",
       runtimeKind: "source" as const,
-      version: "0.0.0-pre-alpha.7",
+      version: "0.0.0-pre-alpha.8",
       buildIdentity: "a".repeat(64),
     };
 
