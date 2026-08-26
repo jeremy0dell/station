@@ -2539,3 +2539,65 @@ native smoke. No production optimization is registered. Acceptance authorizes
 only a separately preregistered candidate at the single dominant measured
 handoff phase; rejection redirects the next diagnostic to OpenTUI/native frame
 execution or OS process scheduling outside both measured unions.
+
+## BENCH-049-P measured subscription handoff outcome
+
+BENCH-049 ran the frozen `56e5d4e95` implementation for twenty compiled native
+repetitions and forty independent admissions. The raw report completed with
+`failure: null`, `allSafe: true`, no false safety predicate, and exact
+exit-only traces, but `predictionPassed: false` and `thresholdsPassed: false`.
+The registered hypothesis is therefore rejected mechanically and no production
+change is retained.
+
+All twenty traces contained exactly one complete 11-phase `worktree.updated`
+handoff and one complete 11-phase `session.created` handoff. Handoff-union p95
+was 7.440ms against 9.901ms active pre-callback p95, or 75.15%, passing both
+the 20% attribution and 25% prediction floors. Unioning the handoffs with
+renderer occupancy without double counting produced 8.081ms p95, or 81.62% of
+active p95. That passed the 80% attribution floor but failed the 85% blind
+prediction. Seventeen runs explained at least 75% individually, passing the
+15-run attribution condition; only fifteen explained at least 80%, below the
+18-run prediction. An OpenTUI frame completed after worktree React and before
+`session.created` runtime entry in only 3/20 runs, below the predicted 15.
+Because the preregistration made any prediction failure reject the hypothesis,
+the passing attribution floors do not authorize an optimization.
+
+The two target handoffs together measured 2.127/7.440ms median/p95. Strict
+protocol parsing and validation was the stable cost at 2.501/2.956ms, while
+socket-callback-complete to transport-iterator dequeue was 0.041/5.342ms and
+contained four large scheduling samples. All later handoff phases were at most
+0.020ms p95. Renderer-plus-handoff coverage was 87.54/92.64% by per-run
+median/p95, leaving 0.599/2.492ms median/p95 unoccupied.
+
+All product guards passed: intent-to-interactive input acknowledgement was
+207.055/312.230ms median/p95 against 380ms; attachment resolution was
+13.454/19.024ms against 30ms; transport residual was 16.712/20.801ms against
+35ms; and active response egress was 6.298/9.942ms against 15ms. The paired
+idle p95 was 0.835ms, 91.56% below active p95, and all twenty active samples
+were at least 2ms slower. Response scopes reconstructed within 0.000184ms.
+All forty admissions passed in forty-four attempts; admitted immediate-turn
+and process-launch p95 values were 0.058ms and 4.121ms, and admitted one-minute
+load stayed below the registered 20 ceiling.
+
+Post-result gap decomposition is descriptive only. Every run had a gap after
+a root React interval and before another subscription socket callback; that
+gap was 0.353/1.152ms median/p95. Two tail runs waited 1.971ms and 3.538ms from
+active server send to the first recorded client activity. The first OpenTUI
+frame completion predated target application in every run, so native frame
+completion does not explain those waits. The registered rejection direction
+therefore selects target-event publication, protocol egress, and cross-process
+socket scheduling as the next diagnostic boundary; schema-validation or
+direct-dispatch changes remain unauthorized.
+
+Archive evidence is on
+`archive/quick-session-performance-evidence-2026-08-25-bench-049`:
+`tests/performance/quick-session/bench-049-subscription-handoff.md` and the
+2,365,966-byte raw report with SHA-256
+`be343d746c6f791dedc3dc321164633be0a20007d2d46a32d2485d11ff2293cc`.
+Validation passed the five registered typechecks; 15 Protocol transport unit,
+43 Protocol integration, 49 Client runtime/reducer, 16 Client service
+integration, 49 Dashboard, 65 Observer unit, 8 Observer integration, and 73
+focused Station tests; Biome; `git diff --check`; skipped-runner loading; and
+the timing-blind native smoke. UX remained exact in 20/20 runs: the already-open
+native overlay landed on the new session, accepted one input once, and cleaned
+up the worktree, terminal, UI, and Observer.
