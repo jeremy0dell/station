@@ -1,13 +1,13 @@
 import type { SafeError } from "@station/contracts";
-import { escapeTerminalBytes } from "../terminalOutput.js";
+import { escapeTerminalBytes } from "../../terminalOutput.js";
 import type {
   CloseSessionConvergence,
   RenameSessionConvergence,
-  SessionCommandResult,
   SessionProjectionState,
   SessionWorktreeProjectionState,
-} from "./session.js";
-import type { SessionFilters, SessionSummary } from "./sessionSummary.js";
+} from "./convergence.js";
+import type { SessionCommandResult } from "./result.js";
+import type { SessionFilters, SessionSummary } from "./summary.js";
 
 type RenderableSessionCommandResult = Exclude<SessionCommandResult, { action: "current" }>;
 
@@ -27,7 +27,7 @@ export function renderSessionCommandText(result: RenderableSessionCommandResult)
   return lines.join("\n");
 }
 
-export function renderSessionSummary(session: SessionSummary): string {
+function renderSessionSummary(session: SessionSummary): string {
   const lines = [
     `${escapeTerminalBytes(session.sessionId)}  ${escapeTerminalBytes(session.title)}`,
     `  origin: ${escapeTerminalBytes(session.origin)}`,

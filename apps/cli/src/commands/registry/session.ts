@@ -1,7 +1,10 @@
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
-import { runSessionCommand, sessionCommandExitCode } from "../session.js";
-import { renderSessionCommandText } from "../sessionOutput.js";
+import {
+  renderSessionCommandText,
+  runSessionCommand,
+  sessionCommandExitCode,
+} from "../session/index.js";
 
 const currentExamples = ["stn session current"] as const;
 const currentNotes = [

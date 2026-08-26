@@ -3,7 +3,7 @@ import type { HostCommandDeps } from "./commands/host/index.js";
 import type { NotifyCommandDeps } from "./commands/notify.js";
 import type { ObserveCommandDeps } from "./commands/observe/index.js";
 import type { PopupCommandDeps } from "./commands/popup.js";
-import type { SessionCommandDeps } from "./commands/session.js";
+import type { SessionCommandDeps } from "./commands/session/index.js";
 import type { SetupCommandDeps } from "./commands/setup/types.js";
 import type { TuiCommandDeps } from "./commands/tui.js";
 import type { UpdateCommandDeps } from "./commands/update.js";

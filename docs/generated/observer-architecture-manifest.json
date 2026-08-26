@@ -13887,7 +13887,7 @@
       ]
     },
     {
-      "path": "apps/cli/src/commands/session.ts",
+      "path": "apps/cli/src/commands/session/index.ts",
       "declaration": "runSessionCommand",
       "kind": "function",
       "role": "ADAPTER",
@@ -13896,20 +13896,6 @@
         {
           "path": "apps/cli/src/commands/command.ts",
           "declaration": "executeTypedObserverCommand",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "startObserver",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/protocol/src/client.ts",
-          "declaration": "createObserverClient",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
