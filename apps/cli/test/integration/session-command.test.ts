@@ -10,6 +10,7 @@ import { StationSnapshotSchema } from "@station/contracts";
 import type { TerminalCommandRecord } from "@station/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
+import { parseSessionArgs } from "../../src/commands/session/args.js";
 import { runSessionCommand } from "../../src/commands/session/command.js";
 import { sessionCommandExitCode } from "../../src/commands/session/result.js";
 import { renderSessionCommandText } from "../../src/commands/session/text.js";
@@ -328,21 +329,25 @@ describe("session discovery commands", () => {
     const snapshot = renamedSnapshot(sessionSnapshot(), "ses_station", "\u001bDanger");
 
     try {
+      const listedArgs = parseSessionArgs(["list"]);
+      const jsonArgs = parseSessionArgs(["get", "ses_station", "--json"]);
       const listed = await runSessionCommand(
-        ["list"],
+        listedArgs,
         { config: fixture.config },
         snapshotObserverDeps(fixture.socketPath, [snapshot]),
       );
       const json = await runSessionCommand(
-        ["get", "ses_station", "--json"],
+        jsonArgs,
         { config: fixture.config },
         snapshotObserverDeps(fixture.socketPath, [snapshot]),
       );
 
       if (listed.action !== "list") throw new Error("Expected a session list result.");
       const text = renderSessionCommandText(listed);
+      expect(listedArgs.outputFormat).toBe("text");
       expect(text).toContain("\\u001bDanger");
       expect(text).not.toContain("\u001b");
+      expect(jsonArgs.outputFormat).toBe("json");
       expect(json).toMatchObject({
         action: "get",
         session: { sessionId: "ses_station", title: "\u001bDanger" },

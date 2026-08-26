@@ -2,6 +2,7 @@ import type { AcceptedCommandReceipt, SafeError } from "@station/contracts";
 import type { ObserverProcessDeps } from "../../observerProcess.js";
 import { executeTypedObserverCommand, type TypedObserverCommandOptions } from "../command.js";
 import { loadObserverSnapshot, type ObserverSnapshotLoadOptions } from "../snapshot.js";
+import type { ParsedSessionArgs } from "./args.js";
 import { parseSessionArgs } from "./args.js";
 import { loadCloseSessionConvergence, loadRenameSessionConvergence } from "./convergence.js";
 import { runCurrentSessionCommand } from "./current.js";
@@ -17,11 +18,11 @@ import { filterSessionSummaries, findSessionSummary, summarizeSessions } from ".
  * Current-session collection remains independent of provider-specific claim keys.
  */
 export async function runSessionCommand(
-  args: string[],
+  args: string[] | ParsedSessionArgs,
   options: SessionCommandOptions = {},
   deps: ObserverProcessDeps = {},
 ): Promise<SessionCommandResult> {
-  const parsed = parseSessionArgs(args);
+  const parsed = Array.isArray(args) ? parseSessionArgs(args) : args;
   if (parsed.action === "current") {
     return { action: "current", context: await runCurrentSessionCommand(options, deps) };
   }

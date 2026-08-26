@@ -19,27 +19,32 @@ import type { SessionFilters } from "./summary.js";
 
 export type RenameSessionCommand = Extract<StationCommand, { type: "session.rename" }>;
 export type CloseSessionCommand = Extract<StationCommand, { type: "session.close" }>;
+export type SessionOutputFormat = "json" | "text";
 
 export type ParsedSessionArgs =
-  | { action: "current" }
+  | { action: "current"; outputFormat: "json" }
   | {
       action: "list";
       filters: SessionFilters;
+      outputFormat: SessionOutputFormat;
       requireRunning: boolean;
     }
   | {
       action: "get";
+      outputFormat: SessionOutputFormat;
       sessionId: SessionId;
       requireRunning: boolean;
     }
   | {
       action: "rename";
       command: RenameSessionCommand;
+      outputFormat: SessionOutputFormat;
       timeoutMs?: number;
     }
   | {
       action: "close";
       command: CloseSessionCommand;
+      outputFormat: SessionOutputFormat;
       timeoutMs?: number;
     };
 
@@ -63,18 +68,20 @@ function parseCurrentArgs(args: string[]): Extract<ParsedSessionArgs, { action: 
       `Unexpected argument for stn session current: ${unexpected}. Use: stn session current --help.`,
     );
   }
-  return { action: "current" };
+  return { action: "current", outputFormat: "json" };
 }
 
 function parseListArgs(args: string[]): Extract<ParsedSessionArgs, { action: "list" }> {
   const filters: SessionFilters = {};
   const seen = new Set<string>();
+  let outputFormat: SessionOutputFormat = "text";
   let requireRunning = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const option = args[index];
     if (option === "--json") {
       claimOption(seen, option, "session list");
+      outputFormat = "json";
       continue;
     }
     if (option === "--require-running") {
@@ -114,17 +121,19 @@ function parseListArgs(args: string[]): Extract<ParsedSessionArgs, { action: "li
     }
     throw new Error(`Unknown session list option: ${option ?? ""}`);
   }
-  return { action: "list", filters, requireRunning };
+  return { action: "list", filters, outputFormat, requireRunning };
 }
 
 function parseGetArgs(args: string[]): Extract<ParsedSessionArgs, { action: "get" }> {
   const sessionId = parseSessionId(args[0], "session get");
   const seen = new Set<string>();
+  let outputFormat: SessionOutputFormat = "text";
   let requireRunning = false;
   for (let index = 1; index < args.length; index += 1) {
     const option = args[index];
     if (option === "--json") {
       claimOption(seen, option, "session get");
+      outputFormat = "json";
       continue;
     }
     if (option === "--require-running") {
@@ -134,7 +143,7 @@ function parseGetArgs(args: string[]): Extract<ParsedSessionArgs, { action: "get
     }
     throw new Error(`Unknown session get option: ${option ?? ""}`);
   }
-  return { action: "get", sessionId, requireRunning };
+  return { action: "get", outputFormat, sessionId, requireRunning };
 }
 
 function parseRenameArgs(args: string[]): Extract<ParsedSessionArgs, { action: "rename" }> {
@@ -144,11 +153,13 @@ function parseRenameArgs(args: string[]): Extract<ParsedSessionArgs, { action: "
     throw new Error("session rename requires a non-empty title.");
   }
   const seen = new Set<string>();
+  let outputFormat: SessionOutputFormat = "text";
   let timeoutMs: number | undefined;
   for (let index = 2; index < args.length; index += 1) {
     const option = args[index];
     if (option === "--json") {
       claimOption(seen, option, "session rename");
+      outputFormat = "json";
       continue;
     }
     if (option === "--timeout-ms") {
@@ -166,6 +177,7 @@ function parseRenameArgs(args: string[]): Extract<ParsedSessionArgs, { action: "
   const parsed: Extract<ParsedSessionArgs, { action: "rename" }> = {
     action: "rename",
     command,
+    outputFormat,
   };
   if (timeoutMs !== undefined) parsed.timeoutMs = timeoutMs;
   return parsed;
@@ -174,6 +186,7 @@ function parseRenameArgs(args: string[]): Extract<ParsedSessionArgs, { action: "
 function parseCloseArgs(args: string[]): Extract<ParsedSessionArgs, { action: "close" }> {
   const sessionId = parseSessionId(args[0], "session close");
   const seen = new Set<string>();
+  let outputFormat: SessionOutputFormat = "text";
   let mode: "harness" | "terminal" | "all" | undefined;
   let force = false;
   let timeoutMs: number | undefined;
@@ -181,6 +194,7 @@ function parseCloseArgs(args: string[]): Extract<ParsedSessionArgs, { action: "c
     const option = args[index];
     if (option === "--json") {
       claimOption(seen, option, "session close");
+      outputFormat = "json";
       continue;
     }
     if (option === "--mode") {
@@ -211,6 +225,7 @@ function parseCloseArgs(args: string[]): Extract<ParsedSessionArgs, { action: "c
   const parsed: Extract<ParsedSessionArgs, { action: "close" }> = {
     action: "close",
     command,
+    outputFormat,
   };
   if (timeoutMs !== undefined) parsed.timeoutMs = timeoutMs;
   return parsed;

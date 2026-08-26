@@ -27,7 +27,11 @@ export type {
   SessionWorktreeSummary,
 } from "./commands/session/summary.js";
 export * from "./commands/setup/index.js";
-export * from "./commands/snapshot.js";
+export type {
+  ObserverSnapshotLoadOptions,
+  SnapshotCommandOptions,
+} from "./commands/snapshot.js";
+export { runSnapshotCommand } from "./commands/snapshot.js";
 export * from "./commands/tui.js";
 export { runCliMain, shouldSuppressCliProcessOutput } from "./main.js";
 export {

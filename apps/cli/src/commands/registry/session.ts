@@ -1,5 +1,6 @@
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
+import { parseSessionArgs } from "../session/args.js";
 import { runSessionCommand } from "../session/command.js";
 import { sessionCommandExitCode } from "../session/result.js";
 import { renderSessionCommandText } from "../session/text.js";
@@ -149,8 +150,9 @@ export const sessionCliCommand: CliCommandNode = {
 };
 
 async function runSessionCliCommand(context: CliCommandRunContext) {
+  const parsed = parseSessionArgs(context.args);
   const result = await runSessionCommand(
-    context.args,
+    parsed,
     { ...loadedCommandOptions(context), ...context.options.sessionDeps },
     context.options.observerDeps,
   );
@@ -158,7 +160,7 @@ async function runSessionCliCommand(context: CliCommandRunContext) {
     return { code: 0, output: result.context };
   }
   const code = sessionCommandExitCode(result);
-  if (context.args.includes("--json")) {
+  if (parsed.outputFormat === "json") {
     return { code, output: result };
   }
   return { code, output: renderSessionCommandText(result), outputFormat: "text" as const };
