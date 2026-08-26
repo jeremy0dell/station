@@ -1540,6 +1540,8 @@ async function expectSingleObserver(
   await waitFor(async () => (await observerProcessesForSocket(socketPath)).length === 1, 3000);
   expect(await observerProcessesForSocket(socketPath)).toEqual([pid]);
 
+  // Process discovery can precede Linux /proc socket-holder visibility.
+  await waitFor(async () => (await socketHolders(socketPath)).includes(pid), 3000);
   expect(await socketHolders(socketPath)).toEqual([pid]);
 }
 
