@@ -49,6 +49,10 @@ In `integrations/harness/<name>/src`:
 - Map to `HarnessEventReport`: `status` with `attention` kind for every
   user-blocking state, strongest available `correlation` ids, deterministic
   `reportId`/`coalesceKey` from native ids.
+- When a provider's hook types split native session ids for one user-visible
+  turn, emit a pane-stable `nativeSessionId` equal to `harnessRunId` whenever
+  Station terminal identity is present. Keep the unstable provider ids in
+  `providerData`.
 - Corroborate Station IDs inherited from the process environment with
   provider-origin evidence and any required Station launch context. When they
   contradict, retain native identity and origin diagnostics, withhold Station

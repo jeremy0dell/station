@@ -655,7 +655,10 @@ active, a mismatched native report is stored as diagnostic evidence but cannot
 mutate recovery handles, readiness, live or reconciled status, or emit derived
 state-change/completion notifications. A completion report cannot claim an
 unbound session, and a later active execution may bind only after explicit
-`idle` or `exited` evidence from the prior execution.
+`idle` or `exited` evidence from the prior execution. When evidence identifies
+the pane-scoped run (`nativeSessionId` equals `harnessRunId`), Observer may
+replace an active conversation-scoped binding on the same Station session so a
+provider whose native ids split across hook types can settle the pane.
 
 Harness adapters own the authority to corroborate inherited Station identity
 against provider-origin evidence and provider-required Station launch context.
