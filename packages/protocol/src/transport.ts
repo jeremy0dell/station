@@ -89,7 +89,8 @@ export async function ensureSocketDirectory(socketPath: string): Promise<void> {
  * ADAPTER
  *
  * Translates filesystem, connection, and process-holder evidence into four
- * fail-closed Unix-socket ownership states.
+ * fail-closed Unix-socket ownership states, revalidating path identity after
+ * holder-evidence races before classifying the final state.
  */
 export async function probeUnixSocket(
   socketPath: string,
@@ -157,6 +158,20 @@ export async function probeUnixSocket(
         ? { status: "stale", identity: initialIdentity }
         : inaccessibleSocket("live-holder", error, initialIdentity);
     } catch (evidenceError) {
+      // Holder evidence can race normal endpoint removal; refresh the path fact before refusing.
+      let final: UnixSocketPathMetadata | undefined;
+      try {
+        final = await readMetadata(socketPath);
+      } catch (metadataError) {
+        return inaccessibleSocket("unclassified", metadataError, initialIdentity);
+      }
+      if (final === undefined) return { status: "absent" };
+      if (!final.isSocket) {
+        return inaccessibleSocket("not-a-socket", evidenceError, socketIdentity(final));
+      }
+      if (!socketIdentitiesMatch(initialIdentity, final)) {
+        return inaccessibleSocket("path-changed", evidenceError, socketIdentity(final));
+      }
       return inaccessibleSocket("evidence-unavailable", evidenceError, initialIdentity);
     }
   }
@@ -234,13 +249,6 @@ export async function listenUnixSocket(
 
   await bindWithStaleReclaim(server, options.socketPath);
 
-  const boundSocket = await readUnixSocketMetadata(options.socketPath);
-  if (boundSocket === undefined || !boundSocket.isSocket) {
-    abandonServer(server, sockets);
-    throw inaccessibleSocket("path-changed", undefined, boundSocket).error;
-  }
-  const boundSocketIdentity = socketIdentity(boundSocket);
-
   try {
     await chmod(options.socketPath, 0o600);
   } catch {
@@ -249,7 +257,7 @@ export async function listenUnixSocket(
 
   return {
     socketPath: options.socketPath,
-    close: () => closeServer(server, options.socketPath, sockets, boundSocketIdentity),
+    close: () => closeServer(server, options.socketPath, sockets),
     abandon: () => abandonServer(server, sockets),
   };
 }
@@ -551,9 +559,8 @@ function inMemoryEndpoint(incoming: PassThrough, outgoing: PassThrough): NdjsonC
 
 async function closeServer(
   server: Server,
-  socketPath: string,
+  _socketPath: string,
   sockets: Set<Socket>,
-  boundSocketIdentity: SocketIdentity,
 ): Promise<void> {
   const closed = new Promise<void>((resolve, reject) => {
     server.close((error) => {
@@ -569,12 +576,6 @@ async function closeServer(
     socket.destroySoon();
   }
   await closed;
-
-  // Bun may leave the Unix pathname after close; remove only the exact socket this server bound.
-  const current = await readUnixSocketMetadata(socketPath);
-  if (current?.isSocket && socketIdentitiesMatch(boundSocketIdentity, current)) {
-    await unlink(socketPath);
-  }
 }
 
 function abandonServer(server: Server, sockets: Set<Socket>): void {

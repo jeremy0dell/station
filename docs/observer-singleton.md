@@ -186,6 +186,9 @@ incumbent stop and successor cleanup ownership; it is delivered to normal shutdo
 successor owns that cleanup. The controlled health-plus-stop exchange uses one connection, binding
 authorization to the revalidated incumbent. A stop receipt is acceptance, not exit proof: successor
 bind requires both socket closure and exact incumbent death.
+Passive post-stop polling may retry transient inaccessible samples within the same bounded exit
+wait, but those samples never prove exit or authorize a signal; a still-inaccessible final sample
+refuses with its original cause.
 
 Automatic handoff never sends SIGKILL. A missing identity, changed owner, inaccessible
 socket, wedged process, or exhausted deadline returns `OBSERVER_HANDOFF_REFUSED` and preserves

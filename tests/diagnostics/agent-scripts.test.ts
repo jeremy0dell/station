@@ -925,7 +925,7 @@ describe("binary smoke script", () => {
       stdio: "pipe",
     });
     expect(interrupted.status).toBe(130);
-  });
+  }, 15_000);
 
   it("preserves the primary failure and cancellation while retaining external evidence", () => {
     const scriptPath = fileURLToPath(

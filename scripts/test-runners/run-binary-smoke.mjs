@@ -180,8 +180,21 @@ async function runBinarySmoke() {
       if (!["SIGINT", "SIGTERM", "SIGHUP"].includes(signal)) {
         throw new Error(`Unsupported cancellation self-check signal: ${signal}`);
       }
-      process.kill(process.pid, signal);
-      await delay(0);
+      await new Promise((resolve, reject) => {
+        const signalWaitTimeout = setTimeout(
+          () => reject(new Error(`Cancellation self-check did not receive ${signal}.`)),
+          1_000,
+        );
+        cancellation.signal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(signalWaitTimeout);
+            resolve();
+          },
+          { once: true },
+        );
+        process.kill(process.pid, signal);
+      });
       throw runCancelledError(process.execPath, [], cancellation.signal);
     }
     if (process.env.STATION_BINARY_SMOKE_EVIDENCE_FAILURE_SELF_CHECK === "1") {

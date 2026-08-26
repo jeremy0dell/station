@@ -614,15 +614,35 @@ describe("negotiateObserverIncumbent", () => {
     expect(fixture.signal).not.toHaveBeenCalledWith(100, "SIGTERM");
   });
 
-  it("refuses an inaccessible exit probe before absence or termination signals", async () => {
+  it("retries a transient inaccessible exit probe without treating it as exit authority", async () => {
     const fixture = handoffFixture();
-    fixture.lifecycle.socketListening = async () => {
-      throw { code: "OBSERVER_SOCKET_INACCESSIBLE" };
-    };
+    const inaccessible = observerSocketInaccessible();
+    fixture.lifecycle.socketListening = vi
+      .fn()
+      .mockRejectedValueOnce(inaccessible)
+      .mockImplementationOnce(async () => {
+        fixture.startToken = undefined;
+        return false;
+      });
+
+    await expect(runNegotiation(fixture)).resolves.toMatchObject({ action: "replaced" });
+    expect(fixture.lifecycle.socketListening).toHaveBeenCalledTimes(2);
+    expect(fixture.signal).toHaveBeenCalledWith(100, 0);
+    expect(fixture.signal).not.toHaveBeenCalledWith(100, "SIGTERM");
+  });
+
+  it("refuses a persistently inaccessible exit probe without signaling", async () => {
+    const fixture = handoffFixture();
+    const inaccessible = observerSocketInaccessible();
+    fixture.lifecycle.socketListening = vi.fn(async () => {
+      throw inaccessible;
+    });
 
     await expect(runNegotiation(fixture)).rejects.toMatchObject({
       code: "OBSERVER_HANDOFF_REFUSED",
+      cause: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
     });
+    expect(fixture.lifecycle.socketListening).toHaveBeenCalledTimes(2);
     expect(fixture.signal).not.toHaveBeenCalled();
   });
 
@@ -683,6 +703,14 @@ function precedenceFor(candidateSelector: string, incumbentSelector: string | un
 
 function observerBuildVersion(version: string, buildIdentity: string): string {
   return `${version}${version.includes("+") ? "." : "+"}station.${buildIdentity}`;
+}
+
+function observerSocketInaccessible() {
+  return Object.assign(new Error("socket inaccessible"), {
+    tag: "ObserverSocketError",
+    code: "OBSERVER_SOCKET_INACCESSIBLE",
+    message: "The Observer socket is temporarily inaccessible.",
+  });
 }
 
 function handoffFixture() {

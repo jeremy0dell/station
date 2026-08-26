@@ -12121,6 +12121,7 @@
           "bindings": [
             "Effect",
             "hasStationObserverBuildIdentityMarker",
+            "isSafeError",
             "parseStationObserverBuildVersion"
           ]
         },
@@ -17771,7 +17772,7 @@
       "declaration": "probeUnixSocket",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates filesystem, connection, and process-holder evidence into four fail-closed Unix-socket ownership states.",
+      "purpose": "Translates filesystem, connection, and process-holder evidence into four fail-closed Unix-socket ownership states, revalidating path identity after holder-evidence races before classifying the final state.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",
