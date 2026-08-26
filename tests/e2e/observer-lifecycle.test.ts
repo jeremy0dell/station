@@ -1540,9 +1540,13 @@ async function expectSingleObserver(
   await waitFor(async () => (await observerProcessesForSocket(socketPath)).length === 1, 3000);
   expect(await observerProcessesForSocket(socketPath)).toEqual([pid]);
 
-  // Process discovery can precede Linux /proc socket-holder visibility.
-  await waitFor(async () => (await socketHolders(socketPath)).includes(pid), 3000);
-  expect(await socketHolders(socketPath)).toEqual([pid]);
+  // Reuse the successful socket-holder snapshot because a second scan can race socket activity.
+  let holders: number[] = [];
+  await waitFor(async () => {
+    holders = await socketHolders(socketPath);
+    return holders.includes(pid);
+  }, 3000);
+  expect(holders).toEqual([pid]);
 }
 
 async function socketHolders(socketPath: string): Promise<number[]> {
