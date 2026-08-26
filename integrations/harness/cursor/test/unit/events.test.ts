@@ -169,6 +169,33 @@ describe("Cursor hook event parsing", () => {
     expect(report).not.toHaveProperty("turn");
   });
 
+  it("maps Cursor sessionEnd to idle because the Station pane is still live", () => {
+    const report = reportForCursorPayload({
+      hook_event_name: "sessionEnd",
+      session_id: "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
+      conversation_id: "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
+      cwd: "/tmp/station/station-a9b1d4",
+      station_project_id: "station",
+      station_worktree_id: "wt_station_station-a9b1d4_7bee5c969f",
+      station_session_id: "ses_aad9521e-c580-4ec2-9591-390602578fd1",
+      station_terminal_target_id: "native:wt_station_station-a9b1d4_7bee5c969f",
+    });
+
+    expect(report).toMatchObject({
+      eventType: "sessionEnd",
+      status: {
+        value: "idle",
+        confidence: "high",
+        reason: "Cursor session ended.",
+      },
+      correlation: {
+        nativeSessionId: "cursor:native:wt_station_station-a9b1d4_7bee5c969f",
+        harnessRunId: "cursor:native:wt_station_station-a9b1d4_7bee5c969f",
+      },
+    });
+    expect(report).not.toHaveProperty("turn");
+  });
+
   it("maps aborted Cursor stops to medium-confidence idle", () => {
     const report = reportForCursorPayload({
       hook_event_name: "stop",

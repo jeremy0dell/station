@@ -659,6 +659,8 @@ unbound session, and a later active execution may bind only after explicit
 the pane-scoped run (`nativeSessionId` equals `harnessRunId`), Observer may
 replace an active conversation-scoped binding on the same Station session so a
 provider whose native ids split across hook types can settle the pane.
+Pane-scoped native identity is not a provider resume target and does not mint a
+native-session recovery handle.
 
 Harness adapters own the authority to corroborate inherited Station identity
 against provider-origin evidence and provider-required Station launch context.

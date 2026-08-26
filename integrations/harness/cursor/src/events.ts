@@ -242,8 +242,9 @@ export function statusFromCursorProviderHookPayload(
     };
   }
   if (eventName === "sessionEnd") {
+    // Cursor sessionEnd ends a composer conversation, not the Station pane process.
     return {
-      value: "exited",
+      value: "idle",
       confidence: "high",
       reason: "Cursor session ended.",
       source: "harness_event",
