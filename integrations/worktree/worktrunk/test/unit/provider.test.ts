@@ -1268,6 +1268,7 @@ describe("WorktrunkProvider", () => {
     let activeScans = 0;
     let maxActiveScans = 0;
     let completedScans = 0;
+    const firstBatchSaturated = Promise.withResolvers<void>();
     const provider = testProvider({
       command: "wt",
       useLifecycleHooks: false,
@@ -1276,7 +1277,8 @@ describe("WorktrunkProvider", () => {
         if (input.args?.includes("list")) {
           activeScans += 1;
           maxActiveScans = Math.max(maxActiveScans, activeScans);
-          await new Promise((resolve) => setTimeout(resolve, 5));
+          if (activeScans === 4) firstBatchSaturated.resolve();
+          await firstBatchSaturated.promise;
           activeScans -= 1;
           completedScans += 1;
           return result(input, "[]");
