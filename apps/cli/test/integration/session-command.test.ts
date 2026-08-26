@@ -713,7 +713,40 @@ describe("session rename and close commands", () => {
     }
   });
 
-  it("reports a still-present session and retained worktree after close", async () => {
+  it("confirms a still-present stopped harness and retained worktree after close", async () => {
+    const fixture = await createTempState();
+    const command: StationCommand = {
+      type: "session.close",
+      payload: { sessionId: "ses_station", mode: "harness" },
+    };
+    const refreshed = sessionStatusSnapshot(sessionSnapshot(), "ses_station", "exited");
+    try {
+      const result = await runSessionCommand(
+        ["close", "ses_station", "--mode", "harness"],
+        { config: fixture.config },
+        snapshotObserverDeps(fixture.socketPath, [sessionSnapshot(), refreshed], {
+          dispatch: async () => acceptedReceipt("cmd_close_present"),
+          waitForCommand: async () =>
+            succeededRecord("cmd_close_present", command) as TerminalCommandRecord,
+        }),
+      );
+      expect(result).toMatchObject({
+        action: "close",
+        convergence: {
+          status: "confirmed",
+          session: {
+            state: "present",
+            value: { sessionId: "ses_station", status: { value: "exited" } },
+          },
+          worktree: { state: "present", value: { worktreeId: "wt_web" } },
+        },
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("warns when close harness still projects the run as active", async () => {
     const fixture = await createTempState();
     const command: StationCommand = {
       type: "session.close",
@@ -724,19 +757,24 @@ describe("session rename and close commands", () => {
         ["close", "ses_station", "--mode", "harness"],
         { config: fixture.config },
         snapshotObserverDeps(fixture.socketPath, [sessionSnapshot(), sessionSnapshot()], {
-          dispatch: async () => acceptedReceipt("cmd_close_present"),
+          dispatch: async () => acceptedReceipt("cmd_close_stale_harness"),
           waitForCommand: async () =>
-            succeededRecord("cmd_close_present", command) as TerminalCommandRecord,
+            succeededRecord("cmd_close_stale_harness", command) as TerminalCommandRecord,
         }),
       );
       expect(result).toMatchObject({
         action: "close",
         convergence: {
-          status: "confirmed",
-          session: { state: "present", value: { sessionId: "ses_station" } },
+          status: "warning",
+          session: {
+            state: "present",
+            value: { sessionId: "ses_station", status: { value: "working" } },
+          },
           worktree: { state: "present", value: { worktreeId: "wt_web" } },
+          warning: { code: "SESSION_CLOSE_CONVERGENCE_STALE" },
         },
       });
+      expect(sessionCommandExitCode(result)).toBe(0);
     } finally {
       await fixture.cleanup();
     }
@@ -1151,5 +1189,18 @@ function closedSnapshot(snapshot: StationSnapshot, sessionId: string): StationSn
   return StationSnapshotSchema.parse({
     ...snapshot,
     sessions: snapshot.sessions.filter((session) => session.id !== sessionId),
+  });
+}
+
+function sessionStatusSnapshot(
+  snapshot: StationSnapshot,
+  sessionId: string,
+  value: StationSnapshot["sessions"][number]["status"]["value"],
+): StationSnapshot {
+  return StationSnapshotSchema.parse({
+    ...snapshot,
+    sessions: snapshot.sessions.map((session) =>
+      session.id === sessionId ? { ...session, status: { ...session.status, value } } : session,
+    ),
   });
 }

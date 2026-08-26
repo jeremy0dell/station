@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { StationConfig } from "@station/config";
 import type {
   AcceptedCommandReceipt,
@@ -279,20 +280,23 @@ function assertMatchingCommandCompletion<TCommand extends StationCommand>(
   if (
     record.id !== receipt.commandId ||
     record.type !== command.type ||
-    record.command.type !== command.type
+    record.command.type !== command.type ||
+    !isDeepStrictEqual(record.command, command)
   ) {
-    throw commandCompletionMismatchError(receipt.commandId);
+    throw commandCompletionMismatchError(receipt);
   }
 }
 
-function commandCompletionMismatchError(commandId: CommandId): SafeError {
-  return {
+function commandCompletionMismatchError(receipt: AcceptedCommandReceipt): SafeError {
+  const error: SafeError = {
     tag: "CommandCliError",
     code: "COMMAND_COMPLETION_MISMATCH",
     message: "The observer returned completion that did not match the dispatched command.",
-    hint: `Inspect the durable record with \`stn command get ${commandId}\` before retrying.`,
-    commandId,
+    hint: `Inspect the durable record with \`stn command get ${receipt.commandId}\` before retrying.`,
+    commandId: receipt.commandId,
   };
+  if (receipt.traceId !== undefined) error.traceId = receipt.traceId;
+  return error;
 }
 
 function commandWaitTimeoutError(): SafeError {

@@ -208,6 +208,9 @@ function formatSafeError(error: RuntimeSafeError): string {
   if (error.diagnosticId !== undefined) {
     lines.push(`Diagnostic: ${escapeTerminalBytes(error.diagnosticId)}`);
   }
+  if (error.commandId !== undefined) {
+    lines.push(`Command: ${escapeTerminalBytes(error.commandId)}`);
+  }
   if (error.traceId !== undefined) {
     lines.push(`Trace: ${escapeTerminalBytes(error.traceId)}`);
   }

@@ -1,4 +1,5 @@
-import type { SafeError } from "@station/contracts";
+import type { SafeError, StationCommand } from "@station/contracts";
+import { isRunningAgentState } from "@station/contracts";
 import { publicSafeErrorFromUnknown } from "@station/runtime";
 import type { ObserverProcessDeps } from "../../observerProcess.js";
 import { loadObserverSnapshot, type ObserverSnapshotLoadOptions } from "../snapshot.js";
@@ -31,6 +32,8 @@ export type CloseSessionConvergence = {
   worktree: SessionWorktreeProjectionState;
   warning?: SafeError;
 };
+
+type CloseSessionMode = Extract<StationCommand, { type: "session.close" }>["payload"]["mode"];
 
 export async function loadRenameSessionConvergence(
   target: SessionSummary,
@@ -78,6 +81,7 @@ export async function loadRenameSessionConvergence(
 
 export async function loadCloseSessionConvergence(
   target: SessionSummary,
+  mode: CloseSessionMode,
   options: ObserverSnapshotLoadOptions,
   deps: ObserverProcessDeps,
 ): Promise<CloseSessionConvergence> {
@@ -111,6 +115,18 @@ export async function loadCloseSessionConvergence(
         ),
       };
     }
+    if (session !== undefined && !closeEffectObserved(target, session, mode)) {
+      return {
+        status: "warning",
+        session: sessionState,
+        worktree: { state: "present", value: worktree },
+        warning: convergenceWarning(
+          "SESSION_CLOSE_CONVERGENCE_STALE",
+          "The close command succeeded, but the refreshed session still exposes the lifecycle resources selected for closure.",
+          target,
+        ),
+      };
+    }
     return {
       status: "confirmed",
       session: sessionState,
@@ -124,6 +140,31 @@ export async function loadCloseSessionConvergence(
       warning: convergenceRefreshWarning(error, "close", target),
     };
   }
+}
+
+function closeEffectObserved(
+  target: SessionSummary,
+  refreshed: SessionSummary,
+  mode: CloseSessionMode,
+): boolean {
+  if (
+    refreshed.origin !== target.origin ||
+    refreshed.projectId !== target.projectId ||
+    refreshed.worktreeId !== target.worktreeId ||
+    refreshed.branch !== target.branch ||
+    refreshed.path !== target.path ||
+    refreshed.harness.provider !== target.harness.provider
+  ) {
+    return false;
+  }
+  const harnessStopped = !isRunningAgentState(refreshed.status.value);
+  const terminalRetired =
+    refreshed.terminal === undefined ||
+    refreshed.terminal.state === "none" ||
+    refreshed.terminal.state === "stale";
+  if (mode === "harness") return harnessStopped;
+  if (target.origin === "station") return false;
+  return mode === "terminal" ? terminalRetired : harnessStopped && terminalRetired;
 }
 
 function renameConverged(

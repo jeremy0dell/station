@@ -95,6 +95,7 @@ export async function runSessionCommand(
     outcome,
     convergence: await loadCloseSessionConvergence(
       target,
+      parsed.command.payload.mode,
       snapshotLoadOptions(options, false, timeoutMs),
       deps,
     ),
