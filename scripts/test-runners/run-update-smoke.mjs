@@ -22,7 +22,6 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { UpdateCommandReportSchema } from "../../packages/contracts/dist/index.js";
 import {
   createObserverClient,
   readUnixSocketHolderPids,
@@ -41,6 +40,7 @@ import {
   releaseBinarySmokeEvidenceReservation,
   reserveBinarySmokeEvidenceDestination,
 } from "./binary-smoke-evidence.mjs";
+import { parseComposedUpdateReport } from "./composed-update-report.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const runnerPath = fileURLToPath(import.meta.url);
@@ -468,13 +468,11 @@ async function runScenario(input) {
             [installedBinary, "update", "--dry-run", "--json"],
             scenarioRoot,
           );
-    const dryRunReport = UpdateCommandReportSchema.parse(
+    const dryRunReport = parseComposedUpdateReport(
       parseJson(dryRunResult.stdout, `${input.name} compiled dry-run report`),
+      input.options.incumbentVersion,
     );
-    assertDryUpdateReport(dryRunReport, input);
-    const expectedDryRunCode = ["blocked", "reap-required"].includes(dryRunReport.plan.outcome)
-      ? 1
-      : 0;
+    const expectedDryRunCode = assertDryUpdateReport(dryRunReport, input);
     assertEqual(dryRunResult.code, expectedDryRunCode, `${input.name} dry-run outcome exit code`);
     assertDeepEqual(
       await captureDryRunState(dryRunStateInput),
@@ -515,8 +513,9 @@ async function runScenario(input) {
             scenarioRoot,
           );
     assertEqual(updateResult.code, expectedUpdateCode, `${input.name} update exit code`);
-    const report = UpdateCommandReportSchema.parse(
+    const report = parseComposedUpdateReport(
       parseJson(updateResult.stdout, `${input.name} update report`),
+      input.options.incumbentVersion,
     );
     assertUpdateReport(report, input, installedBinary, configPath);
     if (expectedUpdateCode === 0) {
@@ -953,7 +952,7 @@ async function captureDryRunState(input) {
     socketPath: observerHealth.socketPath,
     stateDir: observerHealth.stateDir,
   };
-  const recoveryInventory = await observer.getSessionRecoveryInventory();
+  const recoveryReadiness = await observer.getSessionRecoveryReadiness();
   let host;
   if (input.busyHost) {
     const client = createStationHostClient({
@@ -988,7 +987,7 @@ async function captureDryRunState(input) {
       ]),
       holders: readUnixSocketHolderPids(input.socketPath),
       identity: observerIdentity,
-      recoveryInventory,
+      recoveryReadiness,
     },
     host: {
       socket: await snapshotEntry(input.hostSocketPath),
@@ -1514,6 +1513,10 @@ async function verifyBareLaunches(input) {
 }
 
 function assertUpdateReport(report, input, installedBinary, configPath) {
+  if (report.schemaVersion === 1) {
+    assertLegacyUpdateReport(report, input, installedBinary, configPath);
+    return;
+  }
   assertEqual(report.schemaVersion, 4, `${input.name} update schema`);
   assertEqual(report.kind, "result", `${input.name} update result kind`);
   assertEqual(report.channel, "installer-binary", `${input.name} update channel`);
@@ -1573,7 +1576,77 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
   );
 }
 
+function assertLegacyUpdateReport(report, input, installedBinary, configPath) {
+  assertEqual(report.schemaVersion, 1, `${input.name} legacy update schema`);
+  assertEqual(report.channel, "installer-binary", `${input.name} legacy update channel`);
+  const refusal = input.busyHost && input.options.busyHostOutcome === "preserved-refusal";
+  assertEqual(report.status, refusal ? "failed" : "updated", `${input.name} legacy update status`);
+  assertEqual(
+    report.current?.version,
+    input.options.incumbentVersion,
+    `${input.name} legacy current`,
+  );
+  assertEqual(report.target?.version, input.target.version, `${input.name} legacy target`);
+  assertDeepEqual(report.warnings, [], `${input.name} legacy update warnings`);
+  const expectedRecovery = refusal
+    ? [[installedBinary, "--config", configPath, "host", "handoff", "--fidelity", "processes"]]
+    : [];
+  assertDeepEqual(
+    report.recoveryCommands,
+    expectedRecovery,
+    `${input.name} legacy recovery commands (${JSON.stringify({
+      error: report.error,
+      steps: report.steps,
+    })})`,
+  );
+  assertEqual(
+    report.error?.code,
+    refusal ? "UPDATE_RUNTIME_CROSSOVER_FAILED" : undefined,
+    `${input.name} legacy update error`,
+  );
+  assertDeepEqual(
+    report.steps.map((step) => step.id),
+    ["detect", "plan", "apply", "observer-restart", "host-handoff"],
+    `${input.name} exact ordered legacy update steps`,
+  );
+  assertDeepEqual(
+    report.steps.map((step) => step.status),
+    [
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      refusal ? "failed" : input.busyHost ? "completed" : "skipped",
+    ],
+    `${input.name} exact legacy update step outcomes`,
+  );
+}
+
 function assertDryUpdateReport(report, input) {
+  if (report.schemaVersion === 1) {
+    assertEqual(report.status, "planned", `${input.name} legacy dry-run status`);
+    assertEqual(report.channel, "installer-binary", `${input.name} legacy dry-run channel`);
+    assertEqual(
+      report.current?.version,
+      input.options.incumbentVersion,
+      `${input.name} legacy dry current`,
+    );
+    assertEqual(report.target?.version, input.target.version, `${input.name} legacy dry target`);
+    assertDeepEqual(report.warnings, [], `${input.name} legacy dry-run warnings`);
+    assertDeepEqual(report.recoveryCommands, [], `${input.name} legacy dry-run recovery commands`);
+    assertEqual(report.error, undefined, `${input.name} legacy dry-run error`);
+    assertDeepEqual(
+      report.steps.map((step) => step.id),
+      ["detect", "plan", "apply", "observer-restart", "host-handoff"],
+      `${input.name} exact ordered legacy dry-run steps`,
+    );
+    assertDeepEqual(
+      report.steps.map((step) => step.status),
+      ["completed", "completed", "planned", "planned", input.busyHost ? "planned" : "skipped"],
+      `${input.name} exact legacy dry-run step outcomes`,
+    );
+    return 0;
+  }
   assertEqual(report.schemaVersion, 4, `${input.name} dry-run schema`);
   assertEqual(report.kind, "preview", `${input.name} dry-run kind`);
   assertEqual(report.channel, "installer-binary", `${input.name} dry-run channel`);
@@ -1582,6 +1655,7 @@ function assertDryUpdateReport(report, input) {
   assertEqual(report.initial?.boundary.authorization, "none", `${input.name} dry authorization`);
   assertEqual(report.plan?.authorization, "none", `${input.name} dry plan authorization`);
   assertEqual("recoveryPreflight" in report, false, `${input.name} dry omits nested preflight`);
+  return ["blocked", "reap-required"].includes(report.plan.outcome) ? 1 : 0;
 }
 
 function assertVisibleRefusal(result, label) {
