@@ -28,6 +28,9 @@ import {
 import {
   markIdleResponseDeliveryClientProtocolPhase,
   markPrepareExternalLaunchClientProtocolPhase,
+  markSubscriptionHandoffRendererOccupancy,
+  markValidatedSubscriptionHandoffRendererOccupancy,
+  validateSubscriptionHandoffRendererOccupancy,
 } from "./prepareExternalLaunchPhaseDiagnostic.js";
 
 export { IDLE_RESPONSE_DELIVERY_REQUEST_ID_PREFIX } from "./prepareExternalLaunchPhaseDiagnostic.js";
@@ -594,6 +597,7 @@ function subscriptionIterator(
               await close();
               return { done: true, value: undefined };
             }
+            markValidatedSubscriptionHandoffRendererOccupancy(event, "subscriptionNextCompleted");
             return { done: false, value: event };
           } catch (error) {
             await close();
@@ -725,9 +729,12 @@ async function readSubscriptionEvent(
   if (next.done) {
     return undefined;
   }
+  markSubscriptionHandoffRendererOccupancy(next.value, "protocolReadResumed");
   const envelope = parseProtocolEventEnvelope(next.value);
+  markSubscriptionHandoffRendererOccupancy(next.value, "envelopeParsed");
   const parsed = StationEventSchema.safeParse(envelope.event);
   if (parsed.success) {
+    validateSubscriptionHandoffRendererOccupancy(next.value, parsed.data, parsed.data.type);
     return parsed.data;
   }
   throw protocolSafeError({

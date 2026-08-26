@@ -123,6 +123,34 @@ export type RendererOccupancyDiagnosticEvent =
       actualDurationMs: number;
       baseDurationMs: number;
       commitAtMs: number;
+    })
+  | (DiagnosticTimestamp & {
+      source: "subscriptionHandoff";
+      phase:
+        | "frameParsed"
+        | "frameQueued"
+        | "socketWakeCompleted"
+        | "socketCallbackCompleted"
+        | "transportIteratorDequeued"
+        | "protocolReadResumed"
+        | "envelopeParsed";
+      activityId: number;
+    })
+  | (DiagnosticTimestamp & {
+      source: "subscriptionHandoff";
+      phase:
+        | "eventValidated"
+        | "subscriptionNextCompleted"
+        | "runtimeIteratorResumed"
+        | "runtimeEventEntered";
+      activityId: number;
+      eventType: string;
+    })
+  | (DiagnosticTimestamp & {
+      source: "openTuiFrame";
+      phase: "completed";
+      activityId: number;
+      frameId: number;
     });
 export type ExpectedObserverHealthServerProtocolDiagnostic = {
   requestParsed: DiagnosticTimestamp;
@@ -146,6 +174,8 @@ const serverEvents: DiagnosticEvent<ServerPhase>[] = [];
 const idleClientEvents: DiagnosticEvent<IdleResponseDeliveryClientPhase>[] = [];
 const idleServerEvents: DiagnosticEvent<IdleResponseDeliveryServerPhase>[] = [];
 const rendererOccupancyEvents: RendererOccupancyDiagnosticEvent[] = [];
+const subscriptionHandoffActivityByValue = new WeakMap<object, number>();
+const subscriptionHandoffEventTypeByValue = new WeakMap<object, string>();
 let rendererOccupancyWindowOpen = false;
 let nextRendererOccupancyActivityId = 0;
 
@@ -316,6 +346,89 @@ export function recordRootReactRendererOccupancy(input: {
     actualDurationMs: input.actualDurationMs,
     baseDurationMs: input.baseDurationMs,
     commitAtMs: input.commitAtMs,
+    ...diagnosticTimestamp(),
+  });
+}
+
+/** Associates one parsed frame by object identity without mutating its protocol payload. */
+export function beginSubscriptionHandoffRendererOccupancy(value: unknown): number | undefined {
+  if (!rendererOccupancyWindowOpen || !(value instanceof Object)) return undefined;
+  const activityId = ++nextRendererOccupancyActivityId;
+  subscriptionHandoffActivityByValue.set(value, activityId);
+  rendererOccupancyEvents.push({
+    source: "subscriptionHandoff",
+    phase: "frameParsed",
+    activityId,
+    ...diagnosticTimestamp(),
+  });
+  return activityId;
+}
+
+export function markSubscriptionHandoffRendererOccupancy(
+  value: unknown,
+  phase:
+    | "frameQueued"
+    | "socketWakeCompleted"
+    | "socketCallbackCompleted"
+    | "transportIteratorDequeued"
+    | "protocolReadResumed"
+    | "envelopeParsed",
+): void {
+  if (!(value instanceof Object)) return;
+  const activityId = subscriptionHandoffActivityByValue.get(value);
+  if (activityId === undefined) return;
+  rendererOccupancyEvents.push({
+    source: "subscriptionHandoff",
+    phase,
+    activityId,
+    ...diagnosticTimestamp(),
+  });
+}
+
+/** Propagates the frame's weak diagnostic identity to its validated event object. */
+export function validateSubscriptionHandoffRendererOccupancy(
+  frame: unknown,
+  event: object,
+  eventType: string,
+): void {
+  if (!(frame instanceof Object)) return;
+  const activityId = subscriptionHandoffActivityByValue.get(frame);
+  if (activityId === undefined) return;
+  subscriptionHandoffActivityByValue.set(event, activityId);
+  subscriptionHandoffEventTypeByValue.set(event, eventType);
+  rendererOccupancyEvents.push({
+    source: "subscriptionHandoff",
+    phase: "eventValidated",
+    activityId,
+    eventType,
+    ...diagnosticTimestamp(),
+  });
+}
+
+export function markValidatedSubscriptionHandoffRendererOccupancy(
+  event: object,
+  phase: "subscriptionNextCompleted" | "runtimeIteratorResumed" | "runtimeEventEntered",
+): void {
+  const activityId = subscriptionHandoffActivityByValue.get(event);
+  const eventType = subscriptionHandoffEventTypeByValue.get(event);
+  if (activityId === undefined || eventType === undefined) return;
+  rendererOccupancyEvents.push({
+    source: "subscriptionHandoff",
+    phase,
+    activityId,
+    eventType,
+    ...diagnosticTimestamp(),
+  });
+}
+
+/** Records OpenTUI's existing synchronous frame-complete event without requesting a render. */
+export function recordOpenTuiFrameRendererOccupancy(frameId: number): void {
+  if (!rendererOccupancyWindowOpen) return;
+  rendererOccupancyEvents.push({
+    source: "openTuiFrame",
+    phase: "completed",
+    activityId: ++nextRendererOccupancyActivityId,
+    frameId,
     ...diagnosticTimestamp(),
   });
 }

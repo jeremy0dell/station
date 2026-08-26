@@ -11,6 +11,7 @@ import { createObserverService } from "./observerService.js";
 import {
   beginClientRuntimeEventRendererOccupancy,
   markClientRuntimeEventRendererOccupancy,
+  markValidatedSubscriptionHandoffRendererOccupancy,
 } from "./rendererOccupancyDiagnostic.js";
 import { applyStationEvent } from "./snapshotReducer.js";
 import type {
@@ -245,6 +246,7 @@ export function createStationClientRuntime(
   // resync load applies. Events before the first snapshot cannot be reduced;
   // the in-flight initial resync covers them.
   function applyEvent(event: StationEvent): void {
+    markValidatedSubscriptionHandoffRendererOccupancy(event, "runtimeEventEntered");
     reportedSubscriptionError = false;
     const occupancyActivityId = beginClientRuntimeEventRendererOccupancy(event.type);
     if (state.snapshot === undefined) {
@@ -534,6 +536,7 @@ async function consumeCurrentSubscription(
     if (next.done) {
       return;
     }
+    markValidatedSubscriptionHandoffRendererOccupancy(next.value, "runtimeIteratorResumed");
     handleEvent(next.value);
   }
 }

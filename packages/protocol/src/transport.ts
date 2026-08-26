@@ -10,8 +10,10 @@ import { protocolSafeError } from "./messages.js";
 import {
   armRendererOccupancyDiagnosticWindow,
   beginCompetingSocketRendererOccupancy,
+  beginSubscriptionHandoffRendererOccupancy,
   completeCompetingSocketRendererOccupancy,
   markResponseDeliveryClientProtocolPhase,
+  markSubscriptionHandoffRendererOccupancy,
   prepareExternalLaunchClientProtocolDiagnosticEnabled,
   type ResponseDeliveryDiagnosticScope,
 } from "./prepareExternalLaunchPhaseDiagnostic.js";
@@ -21,8 +23,11 @@ export {
   beginDashboardSourceRendererOccupancy,
   markClientRuntimeEventRendererOccupancy,
   markDashboardSourceRendererOccupancy,
+  markValidatedSubscriptionHandoffRendererOccupancy,
+  recordOpenTuiFrameRendererOccupancy,
   recordRootReactRendererOccupancy,
   rendererOccupancyDiagnosticEnabled,
+  validateSubscriptionHandoffRendererOccupancy,
 } from "./prepareExternalLaunchPhaseDiagnostic.js";
 
 import { unwrapBoundaryResult } from "./runtime.js";
@@ -420,6 +425,7 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
       responseDeliveryDiagnosticScope === undefined
         ? beginCompetingSocketRendererOccupancy()
         : undefined;
+    const handoffValues: unknown[] = [];
     try {
       if (responseDeliveryDiagnosticScope !== undefined && !responseDataCallbackRecorded) {
         responseDataCallbackRecorded = true;
@@ -448,11 +454,18 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
           if (diagnosticScope !== undefined) {
             markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseJsonParsed");
           }
+          if (
+            diagnosticScope === undefined &&
+            beginSubscriptionHandoffRendererOccupancy(value) !== undefined
+          ) {
+            handoffValues.push(value);
+          }
           const message =
             diagnosticScope === undefined
               ? { value }
               : { value, responseDeliveryDiagnosticScope: diagnosticScope };
           messages.push(message);
+          markSubscriptionHandoffRendererOccupancy(value, "frameQueued");
           if (diagnosticScope !== undefined) {
             markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseQueued");
           }
@@ -463,7 +476,13 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
         }
       }
       wake(responseDeliveryDiagnosticScope);
+      for (const value of handoffValues) {
+        markSubscriptionHandoffRendererOccupancy(value, "socketWakeCompleted");
+      }
     } finally {
+      for (const value of handoffValues) {
+        markSubscriptionHandoffRendererOccupancy(value, "socketCallbackCompleted");
+      }
       completeCompetingSocketRendererOccupancy(competingActivityId);
     }
   });
@@ -503,6 +522,7 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
       for (;;) {
         if (messages.length > 0) {
           const message = messages.shift();
+          markSubscriptionHandoffRendererOccupancy(message?.value, "transportIteratorDequeued");
           if (message?.responseDeliveryDiagnosticScope !== undefined) {
             markResponseDeliveryClientProtocolPhase(
               message.responseDeliveryDiagnosticScope,
