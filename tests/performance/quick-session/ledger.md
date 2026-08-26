@@ -2744,3 +2744,74 @@ remain unchanged. The temporary runtime JSDoc now documents whole-process
 capture plus analytical exact-correlation selection rather than arm lifetime;
 the Observer event-bus edit uses an exhaustive typed event switch to derive the
 private correlation id.
+
+## BENCH-050-P measured target event-egress outcome
+
+BENCH-050 ran the frozen `c8f930f7f` implementation for twenty compiled native
+repetitions and forty independent admissions. The raw report completed with
+`failure: null`, `allSafe: true`, no false safety predicate, and exact exit-only
+traces. Every blind attribution prediction passed (`predictionPassed: true`),
+but three inherited product bounds failed (`thresholdsPassed: false`). The
+registered experiment is therefore rejected mechanically and no production or
+diagnostic change is retained.
+
+All twenty traces contained exactly one complete nine-phase `worktree.updated`
+egress activity and one complete nine-phase `session.created` activity with the
+exact worktree correlation and exact client callback: 360 phase events, forty
+complete activities, and forty exact matches. Egress added 5.205ms at active
+p95 beyond BENCH-049's existing union, or 29.32%, passing the 10% attribution
+and 12.5% prediction floors. The full union reached 17.209ms against 17.750ms
+active p95, or 96.95%, passing the 90% attribution and 92.5% prediction floors.
+All twenty runs explained at least 90% individually, above both the fifteen-run
+85% attribution condition and eighteen-run 90% prediction.
+
+The two targets' summed socket-write-return-to-client-callback phase was
+5.485/12.929ms median/p95. It was the largest egress phase at p95 and exceeded
+the 0.75ms prediction. Its p95 was 246.09% of remaining uncovered p95; that
+ratio may exceed 100% because it sums two target phases while the denominator
+is a de-duplicated wall-clock union. Event publication measured 1.880/5.292ms,
+event-bus completion to protocol-iterator resumption 2.474/6.653ms, protocol
+iterator to serialization 0.058/0.159ms, serialization 0.007/0.020ms,
+synchronous socket write 0.078/0.159ms, and client callback to parsed frame
+0.066/0.110ms. The full union covered 99.30/99.58% by per-run median/p95 and
+left 0.639/5.254ms median/p95 unoccupied.
+
+The product gates rejected the cohort. Intent-to-interactive input
+acknowledgement was 244.810/920.990ms median/p95 against the 380ms bound;
+transport residual was 19.032/66.918ms against 35ms; and active response egress
+was 7.292/17.831ms against 15ms. Attachment resolution passed at
+11.216/27.525ms against 30ms. The paired idle response was 0.071/0.704ms,
+96.03% below active p95, and all twenty active samples were at least 2ms slower.
+Response scopes reconstructed within 0.000213ms.
+
+All forty admissions passed in 311 attempts; admitted immediate-turn and
+process-launch p95 values were 0.247ms and 4.253ms, and admitted one-minute load
+was 15.10-19.77 on ten logical CPUs. Post-result analysis is descriptive only.
+One repetition coupled a 223.906ms active callback interval with 393.896ms of
+summed cross-process delivery, 1,393.459ms intent-to-interactive latency,
+272.017ms transport residual, and 375.524ms external-launch preparation. The
+p95 product repetition coupled 920.990ms intent-to-interactive with 66.918ms
+transport residual, 118.989ms external-launch preparation, and 274.736ms final
+focus-to-input acknowledgement. Unrelated work could resume after an admission
+passed, so the inherited product guards correctly prevent the passing
+attribution result from authorizing an optimization under this noisy cohort.
+
+The measured frontier is now precise: target event egress raises active p95
+coverage from 76.35% to 96.95%, and cross-process delivery is its largest
+phase. A production change remains unauthorized. The next experiment should
+strengthen whole-repetition contention control and separate stable egress cost
+from scheduler tails before registering any event batching, coalescing, or
+socket-delivery optimization.
+
+Archive evidence is on
+`archive/quick-session-performance-evidence-2026-08-25-bench-050`:
+`tests/performance/quick-session/bench-050-target-event-egress.md` and the
+4,247,644-byte raw report with SHA-256
+`e63f0e40ff94cc2f3df50ebf9904302fc7111ce7685165fa3c210cd5c634fe6d`.
+Validation passed the six registered typechecks; the full binary build; 15
+Protocol transport unit, 43 Protocol integration, 49 Client runtime/reducer,
+16 Client service integration, 49 Dashboard, 69 Observer unit, 8 Observer
+integration, and 73 focused Station tests; Biome; `git diff --check`;
+skipped-runner loading; and the timing-blind native smoke. UX remained exact in
+20/20 runs: the already-open native overlay landed on the new session, accepted
+one input once, and cleaned up the worktree, terminal, UI, and Observer.
