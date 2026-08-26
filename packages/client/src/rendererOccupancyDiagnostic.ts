@@ -7,6 +7,8 @@ export {
   beginDashboardSourceRendererOccupancy,
   markClientRuntimeEventRendererOccupancy,
   markDashboardSourceRendererOccupancy,
+  markValidatedSubscriptionHandoffRendererOccupancy,
+  recordOpenTuiFrameRendererOccupancy,
   recordRootReactRendererOccupancy,
   rendererOccupancyDiagnosticEnabled,
 } from "@station/protocol";

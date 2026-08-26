@@ -1,8 +1,14 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createCliRenderer, type CliRenderer } from "@opentui/core";
+import {
+  CliRenderEvents,
+  type CliRenderer,
+  type CliRendererFrameEvent,
+  createCliRenderer,
+} from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import {
+  recordOpenTuiFrameRendererOccupancy,
   recordRootReactRendererOccupancy,
   rendererOccupancyDiagnosticEnabled,
 } from "@station/client";
@@ -441,6 +447,14 @@ async function startStationMain(
     ? createRenderProfiler(devRenderProfilePath())
     : undefined;
   const recordRendererOccupancy = rendererOccupancyDiagnosticEnabled();
+  const recordOpenTuiFrame = recordRendererOccupancy
+    ? (event: CliRendererFrameEvent) => {
+        recordOpenTuiFrameRendererOccupancy(event.frameId);
+      }
+    : undefined;
+  if (recordOpenTuiFrame !== undefined) {
+    renderer.on(CliRenderEvents.FRAME, recordOpenTuiFrame);
+  }
   const onRender: ProfilerOnRenderCallback | undefined =
     onRenderProfile === undefined && !recordRendererOccupancy
       ? undefined
@@ -486,6 +500,11 @@ async function startStationMain(
               // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
               () => stopSurfaceObservation?.(),
               () => root.unmount(),
+              () => {
+                if (recordOpenTuiFrame !== undefined) {
+                  renderer.off(CliRenderEvents.FRAME, recordOpenTuiFrame);
+                }
+              },
               () => renderer.destroy(),
               () => {
                 if (stationGlobalSlots.__stationHotRenderer === renderer) {
