@@ -1,4 +1,3 @@
-import type { StationConfig } from "@station/config";
 import type { CurrentSessionContext, TerminalCallerContextRequest } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import {
@@ -11,50 +10,14 @@ import {
   type ObserverStatus,
   observerStatusErrorMessage,
   startObserver,
-} from "../observerProcess.js";
-import { resolveObserverPaths } from "../paths.js";
+} from "../../observerProcess.js";
+import { resolveObserverPaths } from "../../paths.js";
+import type { SessionCommandOptions } from "./options.js";
 
-export type SessionCommandOptions = {
-  config?: StationConfig;
-  configPath?: string;
-  timeoutMs?: number;
-  caller?: () => TerminalCallerContextRequest;
-  processEvidence?: ProcessEvidence;
-  environment?: Readonly<Record<string, string | undefined>>;
-  captureCallerClaims?: (
-    environment: Readonly<Record<string, string | undefined>>,
-  ) => Record<string, string>;
-};
-
-export type SessionCommandDeps = Pick<
-  SessionCommandOptions,
-  "caller" | "captureCallerClaims" | "environment" | "processEvidence"
->;
-
-/**
- * ADAPTER
- *
- * Collects the invoking process identity and composition-supplied terminal claims for the
- * Observer's provider-bound current-session query. The command does not know provider claim keys.
- */
-export async function runSessionCommand(
-  args: string[],
-  options: SessionCommandOptions = {},
-  deps: ObserverProcessDeps = {},
+export async function runCurrentSessionCommand(
+  options: SessionCommandOptions,
+  deps: ObserverProcessDeps,
 ): Promise<CurrentSessionContext> {
-  const action = args[0];
-  if (action === undefined) {
-    throw new Error("Session command requires a subcommand. Use: stn session --help.");
-  }
-  if (action !== "current") {
-    throw new Error(`Unknown session command: ${action}. Use: stn session --help.`);
-  }
-  const unexpected = args[1];
-  if (unexpected !== undefined) {
-    throw new Error(
-      `Unexpected argument for stn session current: ${unexpected}. Use: stn session current --help.`,
-    );
-  }
   const timeoutMs = options.timeoutMs ?? 30_000;
   const paths = resolveObserverPaths(options.config);
   const status = await startObserver({ ...options, paths, timeoutMs }, deps);

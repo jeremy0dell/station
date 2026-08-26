@@ -1,14 +1,20 @@
-import { runCli } from "@station/cli";
-import { executeTypedObserverCommand, runCommandCommand } from "@station/cli/internal";
 import type { CommandReceipt, CommandRecord, StationCommand } from "@station/contracts";
 import { StationCommandSchema } from "@station/contracts";
 import type { TerminalCommandRecord } from "@station/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
+import { executeTypedObserverCommand, runCommandCommand } from "../../src/commands/command.js";
 
 const now = "2026-05-22T12:00:00.000Z";
 const incumbentBuildVersion = `1.2.3+station.${"a".repeat(64)}`;
 const replacementBuildVersion = `1.2.3+station.${"b".repeat(64)}`;
+
+type RunCli = typeof import("@station/cli").runCli;
+
+async function runCli(...args: Parameters<RunCli>): ReturnType<RunCli> {
+  const cli = await import("@station/cli");
+  return cli.runCli(...args);
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -283,6 +289,78 @@ describe("CLI command dispatch/get", () => {
       ),
     ).rejects.toMatchObject({
       code: "COMMAND_WAIT_TIMEOUT",
+      commandId: "cmd_timeout",
+      traceId: "trc_cli",
+    });
+  });
+
+  it("renders accepted command and trace correlation for a post-dispatch wait failure", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const command = reconcileCommand("cli-command-rendered-timeout");
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      const cli = await import("../../src/main.js");
+      await cli.runCliMain(
+        ["--config", configPath, "command", "dispatch", "--stdin", "--wait", "--timeout-ms", "5"],
+        {
+          stdin: JSON.stringify(command),
+          observerDeps: runningObserverDeps({
+            socketPath: fixture.socketPath,
+            dispatch: async () => receipt("cmd_rendered_timeout"),
+            waitForCommand: async () => {
+              throw {
+                tag: "TimeoutError",
+                code: "PROTOCOL_COMMAND_WAIT_TIMEOUT",
+                message: "Observer command did not finish before the timeout.",
+              };
+            },
+          }),
+        },
+      );
+
+      expect(stderrWrite).toHaveBeenCalledWith(
+        [
+          "Command did not finish before the timeout. (COMMAND_WAIT_TIMEOUT)",
+          "Command: cmd_rendered_timeout",
+          "Trace: trc_cli",
+          "",
+        ].join("\n"),
+      );
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode;
+      stderrWrite.mockRestore();
+    }
+  });
+
+  it("correlates non-timeout wait failures after acceptance", async () => {
+    const fixture = await createTempState();
+    const command = reconcileCommand("cli-command-wait-failure");
+
+    await expect(
+      executeTypedObserverCommand(
+        command,
+        { config: fixture.config, timeoutMs: 1000, waitForCompletion: true },
+        runningObserverDeps({
+          socketPath: fixture.socketPath,
+          dispatch: async () => receipt("cmd_wait_failure"),
+          waitForCommand: async () => {
+            throw {
+              tag: "ProtocolError",
+              code: "PROTOCOL_COMMAND_WAIT_FAILED",
+              message: "The accepted command record could not be reloaded.",
+            };
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "PROTOCOL_COMMAND_WAIT_FAILED",
+      commandId: "cmd_wait_failure",
+      traceId: "trc_cli",
     });
   });
 
@@ -327,6 +405,7 @@ describe("CLI command dispatch/get", () => {
       tag: "CommandCliError",
       code: "COMMAND_COMPLETION_MISMATCH",
       commandId: "cmd_expected",
+      traceId: "trc_cli",
     });
   });
 
@@ -353,6 +432,34 @@ describe("CLI command dispatch/get", () => {
       tag: "CommandCliError",
       code: "COMMAND_COMPLETION_MISMATCH",
       commandId: "cmd_expected",
+      traceId: "trc_cli",
+    });
+  });
+
+  it("rejects a same-id and same-type terminal record for another payload", async () => {
+    const fixture = await createTempState();
+    const command = reconcileCommand("cli-command-payload-expected");
+    const mismatched = commandRecord(
+      "cmd_expected",
+      reconcileCommand("cli-command-payload-other"),
+      "succeeded",
+    );
+
+    await expect(
+      executeTypedObserverCommand(
+        command,
+        { config: fixture.config, timeoutMs: 1000, waitForCompletion: true },
+        runningObserverDeps({
+          socketPath: fixture.socketPath,
+          dispatch: async () => receipt("cmd_expected"),
+          waitForCommand: async () => mismatched as TerminalCommandRecord,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      tag: "CommandCliError",
+      code: "COMMAND_COMPLETION_MISMATCH",
+      commandId: "cmd_expected",
+      traceId: "trc_cli",
     });
   });
 

@@ -11,11 +11,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// An installed Station pane can carry a Bun-embedded asset path that is valid
-// only inside that binary process. Source devbox children must resolve their
-// checkout plugin body instead.
-delete process.env.STATION_OPENCODE_PLUGIN_BODY_PATH;
-
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DS = join(repoRoot, ".dev-state");
 const CFG = join(DS, "config.toml");

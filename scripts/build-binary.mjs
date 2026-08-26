@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { cp, mkdir, rm, symlink } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, symlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readBuildIdentity, verifyBuildIdentity } from "./build-identity.mjs";
@@ -148,13 +148,9 @@ async function main() {
     "Pi extension bundle",
   );
 
-  // The OpenCode plugin body is a checked-in plain-JS file; embed it as a binary
-  // asset so compiled `stn hooks install opencode` renders the same body.
-  const openCodePluginBodyPath = join(outputDir, "..", "station-opencode-plugin-body.js");
-  await mkdir(dirname(openCodePluginBodyPath), { recursive: true });
-  await cp(
+  const openCodePluginBody = await readFile(
     join(repoRoot, "integrations", "harness", "opencode", "pluginScriptBody.js"),
-    openCodePluginBodyPath,
+    "utf8",
   );
 
   await mkdir(outputDir, { recursive: true });
@@ -172,6 +168,7 @@ async function main() {
         STATION_BUILD_VERSION: JSON.stringify(version),
         STATION_BUILD_COMPILED: "true",
         STATION_BUILD_IDENTITY: JSON.stringify(buildIdentity),
+        STATION_BUILD_OPENCODE_PLUGIN_BODY: JSON.stringify(openCodePluginBody),
       },
     },
     "Station binary compile",

@@ -6,6 +6,7 @@ import {
   assertObserverRunning,
   getObserverStatus,
   type ObserverProcessDeps,
+  type ObserverProcessOptions,
   startObserver,
 } from "../observerProcess.js";
 import { resolveObserverPaths } from "../paths.js";
@@ -16,11 +17,16 @@ export type SnapshotCommandOptions = {
   timeoutMs?: number;
 };
 
+export type ObserverSnapshotLoadOptions = SnapshotCommandOptions & {
+  includeDebug?: boolean;
+  requireRunning?: boolean;
+};
+
 /**
  * ADAPTER
  *
- * Translates snapshot CLI options into a pinned Observer query, optionally
- * refusing to spawn a missing runtime for read-only maintenance planning.
+ * Parses raw snapshot argv once and delegates to the typed pinned Observer loader while
+ * preserving normal startup and read-only refusal semantics.
  */
 export async function runSnapshotCommand(
   args: string[],
@@ -28,12 +34,29 @@ export async function runSnapshotCommand(
   deps: ObserverProcessDeps = {},
 ): Promise<StationSnapshot> {
   const parsed = parseSnapshotArgs(args);
+  const loadOptions: ObserverSnapshotLoadOptions = {
+    includeDebug: parsed.includeDebug,
+    requireRunning: parsed.requireRunning,
+  };
+  if (options.config !== undefined) loadOptions.config = options.config;
+  if (options.configPath !== undefined) loadOptions.configPath = options.configPath;
+  if (options.timeoutMs !== undefined) loadOptions.timeoutMs = options.timeoutMs;
+  return loadObserverSnapshot(loadOptions, deps);
+}
+
+export async function loadObserverSnapshot(
+  options: ObserverSnapshotLoadOptions = {},
+  deps: ObserverProcessDeps = {},
+): Promise<StationSnapshot> {
   const timeoutMs = options.timeoutMs ?? 30_000;
   const paths = resolveObserverPaths(options.config);
-  const processOptions = { ...options, paths, timeoutMs };
-  const status = parsed.requireRunning
-    ? await getObserverStatus(processOptions, deps)
-    : await startObserver(processOptions, deps);
+  const processOptions: ObserverProcessOptions = { paths, timeoutMs };
+  if (options.config !== undefined) processOptions.config = options.config;
+  if (options.configPath !== undefined) processOptions.configPath = options.configPath;
+  const status =
+    options.requireRunning === true
+      ? await getObserverStatus(processOptions, deps)
+      : await startObserver(processOptions, deps);
   assertObserverRunning(status);
   const client =
     deps.clientFactory?.(paths.socketPath) ??
@@ -59,7 +82,8 @@ export async function runSnapshotCommand(
         message: "Snapshot command timed out while contacting the observer.",
       },
     },
-    async () => client.getSnapshot(parsed.includeDebug ? { includeDebug: true } : undefined),
+    async () =>
+      client.getSnapshot(options.includeDebug === true ? { includeDebug: true } : undefined),
   );
   if (!result.ok) {
     throw result.error;

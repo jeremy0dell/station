@@ -13628,7 +13628,7 @@
       "declaration": "executeTypedObserverCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Starts or selects the pinned Observer, dispatches one typed Station command, and optionally reloads its durable terminal outcome through the race-safe protocol completion wait.",
+      "purpose": "Starts or selects the pinned Observer, dispatches one typed Station command, and optionally reloads its durable terminal outcome through the race-safe protocol completion wait. Post-dispatch wait failures retain the accepted command and trace correlation.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -13887,22 +13887,15 @@
       ]
     },
     {
-      "path": "apps/cli/src/commands/session.ts",
+      "path": "apps/cli/src/commands/session/command.ts",
       "declaration": "runSessionCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Collects the invoking process identity and composition-supplied terminal claims for the Observer's provider-bound current-session query. The command does not know provider claim keys.",
+      "purpose": "Collects provider-bound current-session evidence, projects exact sessions from one current snapshot, and translates exact rename or close CLI intent into recorded typed commands. Current-session collection remains independent of provider-specific claim keys.",
       "dependencies": [
         {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "startObserver",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/protocol/src/client.ts",
-          "declaration": "createObserverClient",
+          "path": "apps/cli/src/commands/command.ts",
+          "declaration": "executeTypedObserverCommand",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -14134,30 +14127,8 @@
       "declaration": "runSnapshotCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates snapshot CLI options into a pinned Observer query, optionally refusing to spawn a missing runtime for read-only maintenance planning.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "getObserverStatus",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "startObserver",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/protocol/src/client.ts",
-          "declaration": "createObserverClient",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
+      "purpose": "Parses raw snapshot argv once and delegates to the typed pinned Observer loader while preserving normal startup and read-only refusal semantics.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/commands/stationUiBuildAdmission.ts",
@@ -17344,23 +17315,7 @@
       "declaration": "renderStationOpenCodePlugin",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Renders the plugin body with install-time values JSON-encoded into the placeholder tokens, so the generated artifact stays valid standalone JS.",
-      "dependencies": [
-        {
-          "path": "integrations/harness/opencode/src/pluginScript.ts",
-          "declaration": "StationOpenCodePluginScriptInput",
-          "kind": "type",
-          "role": "ADAPTER",
-          "edgeKind": "type-only"
-        }
-      ]
-    },
-    {
-      "path": "integrations/harness/opencode/src/pluginScript.ts",
-      "declaration": "StationOpenCodePluginScriptInput",
-      "kind": "type",
-      "role": "ADAPTER",
-      "purpose": "Renders the generated `station-agent-state.js` plugin body from `pluginScriptBody.js` with install-time values JSON-encoded into the `__STATION_*__` placeholder tokens.",
+      "purpose": "Renders the generated `station-agent-state.js` plugin body from the checked-in source body or its compiled-binary embedding, with install-time values JSON-encoded into `__STATION_*__` placeholder tokens so the generated artifact stays valid standalone JS.",
       "dependencies": []
     },
     {

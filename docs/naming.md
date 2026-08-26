@@ -188,6 +188,13 @@ There is no deletable "session" unit and no `session.remove` command. The durabl
 
 The UX calls the display value a **session name**, but its durable authority is the worktree-scoped title keyed by `(projectId, worktreeId)`. `WorktreeRow.title` and every `SessionView.title` for that worktree project the same value. Agent session IDs remain lifecycle-specific: a fresh agent can receive a new `ses_<uuid>` while inheriting the worktree title. Branch supplies only the initial fallback when no canonical or historical non-ended title exists; later branch changes do not rename the workspace.
 
+`stn session list` projects canonical membership for discovery, while `stn session
+get`, `rename`, and `close` select by complete, exact current session ID only.
+Prefixes are conventions rather than parsers; titles, branches, fuzzy fragments,
+and display indexes are not session selectors. CLI rename changes the canonical
+worktree-scoped title without changing its branch, path, harness, or terminal
+identity.
+
 ### Worktree
 
 A worktree is the durable, deletable unit: the git worktree, its branch, its checkout, and its Observer-owned display title. Worktree ids are **provider-supplied** (e.g. Worktrunk), not minted by the observer, so code must not parse or validate the `wt_` prefix. Removing a worktree also tears down its session and panes.
@@ -207,6 +214,8 @@ Avoid the older `sessionPaneIds` / `closeSession` names: the panes belong to the
 | Delete the worktree | `worktree.remove` | harness, terminal, worktree, branch, panes |
 
 `session.close` takes a `mode` of `harness | terminal | all` (`CloseSessionPayloadSchema`). Use it for non-destructive stops; use `worktree.remove` for destructive deletes.
+The CLI requires one explicit `--mode`; it never infers mode or force, offers no
+bulk close, and verifies from a refreshed snapshot that the worktree remains.
 
 A stale terminal target is still provider-visible but no longer live; a missing
 target is absent from the provider listing. Focus rejects stale targets. Direct
@@ -221,6 +230,10 @@ satisfies terminal retirement. Other close failures remain visible.
 The current row action is destructive:
 
 - **Delete Session** (`X`) is destructive. It runs `worktree.remove` and removes the agent, worktree, and panes. Copy must say so: "Removes agent, worktree, and panes."
+
+This TUI action is distinct from `stn session close`, which records only the
+explicit harness, terminal, or combined lifecycle close and never deletes the
+checkout.
 
 There is no `E` binding and no **End Agent** row action. A non-destructive End Agent
 action backed by `session.close({ mode: "harness" })` was considered and cut during

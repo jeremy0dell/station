@@ -3,7 +3,6 @@ import { dirname, join } from "node:path";
 import { dispatchSelfExec, type SelfExecRunners } from "@station/cli/self-exec";
 import cttyHelperAsset from "../../dist/ctty-helper" with { type: "file" };
 import piExtensionAsset from "../../dist/piExtension.mjs" with { type: "file" };
-import openCodePluginBodyAsset from "../../dist/station-opencode-plugin-body.js" with { type: "file" };
 import {
   preparePackagedPiExtension,
   preparePackagedPtyRuntime,
@@ -68,9 +67,6 @@ function compiledRunners(installedRoot: string): SelfExecRunners {
  * popup ownership, and setup wiring.
  */
 export async function runStationBinaryMain(): Promise<void> {
-  // The OpenCode plugin body is embedded as an asset; expose its path so the
-  // plugin installer renders the same body from the compiled binary.
-  process.env.STATION_OPENCODE_PLUGIN_BODY_PATH = openCodePluginBodyAsset;
   const installedRoot = dirname(realpathSync(process.execPath));
   await dispatchSelfExec(
     {

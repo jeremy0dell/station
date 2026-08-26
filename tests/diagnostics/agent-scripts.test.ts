@@ -1501,7 +1501,6 @@ describe("tui dev script", () => {
     expect(isolatedScript).toContain("STATION_DEV_TOOLCHAIN_PREPARED_ROOT:-");
 
     const frozenInstall = isolatedScript.indexOf("bun install --frozen-lockfile");
-    expect(isolatedScript).toContain("unset STATION_OPENCODE_PLUGIN_BODY_PATH");
     expect(isolatedScript).toContain("STATION_CLIENT_BUILD_VERSION");
     expect(isolatedScript).toContain("STATION_OBSERVER_BUILD_VERSION");
     expect(isolatedScript).toContain("STATION_HOST_HANDOFF");
@@ -1512,7 +1511,6 @@ describe("tui dev script", () => {
     expect(isolatedScript).toContain('export STATION_OBSERVER_STATE_DIR="$DS/observer"');
     expect(isolatedScript).toContain('export STATION_HOOK_SPOOL_DIR="$DS/observer/spool/hooks"');
     expect(isolatedScript).toContain('export STATION_INGRESS_BIN="$ROOT/bin/stn-ingress"');
-    expect(devboxScript).toContain("delete process.env.STATION_OPENCODE_PLUGIN_BODY_PATH");
     expect(isolatedScript).toContain('if [ "$COMMAND" = "inventory" ]');
     expect(isolatedScript.indexOf('if [ "$COMMAND" = "inventory" ]')).toBeLessThan(frozenInstall);
     expect(isolatedScript).toContain('if [ "$COMMAND" = "prune" ]');

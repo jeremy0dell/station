@@ -90,8 +90,6 @@ describe("setup core flow e2e", () => {
         mkdir(env.XDG_CACHE_HOME, { recursive: true }),
         mkdir(env.XDG_STATE_HOME, { recursive: true }),
       ]);
-      delete env.STATION_OPENCODE_PLUGIN_BODY_PATH;
-
       expect(run("bun", ["--version"], { cwd: repoRoot, env }).stdout.trim()).toBe("1.4.0");
       const bootstrap = run(join(repoRoot, "scripts/setup/bootstrap.sh"), [], { cwd: root, env });
       expect(bootstrap.stdout).toContain("Linking STATION launchers onto your PATH");

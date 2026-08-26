@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { StationConfig } from "@station/config";
 import type {
   AcceptedCommandReceipt,
@@ -74,6 +75,7 @@ type ParsedCommandArgs =
  *
  * Starts or selects the pinned Observer, dispatches one typed Station command, and optionally
  * reloads its durable terminal outcome through the race-safe protocol completion wait.
+ * Post-dispatch wait failures retain the accepted command and trace correlation.
  */
 export async function executeTypedObserverCommand<TCommand extends StationCommand>(
   command: TCommand,
@@ -96,9 +98,14 @@ export async function executeTypedObserverCommand<TCommand extends StationComman
     };
   }
 
-  const record = await waitForCommand(client, receipt.commandId, timeoutMs);
+  let record: CommandRecord;
+  try {
+    record = await waitForCommand(client, receipt.commandId, timeoutMs);
+  } catch (error) {
+    throw correlateCommandWaitError(error, receipt);
+  }
   if (record.status !== "succeeded" && record.status !== "failed") {
-    throw commandWaitTimeoutError();
+    throw correlateCommandWaitError(commandWaitTimeoutError(), receipt);
   }
   assertMatchingCommandCompletion(command, receipt, record);
   if (record.status === "succeeded") {
@@ -273,20 +280,23 @@ function assertMatchingCommandCompletion<TCommand extends StationCommand>(
   if (
     record.id !== receipt.commandId ||
     record.type !== command.type ||
-    record.command.type !== command.type
+    record.command.type !== command.type ||
+    !isDeepStrictEqual(record.command, command)
   ) {
-    throw commandCompletionMismatchError(receipt.commandId);
+    throw commandCompletionMismatchError(receipt);
   }
 }
 
-function commandCompletionMismatchError(commandId: CommandId): SafeError {
-  return {
+function commandCompletionMismatchError(receipt: AcceptedCommandReceipt): SafeError {
+  const error: SafeError = {
     tag: "CommandCliError",
     code: "COMMAND_COMPLETION_MISMATCH",
     message: "The observer returned completion that did not match the dispatched command.",
-    hint: `Inspect the durable record with \`stn command get ${commandId}\` before retrying.`,
-    commandId,
+    hint: `Inspect the durable record with \`stn command get ${receipt.commandId}\` before retrying.`,
+    commandId: receipt.commandId,
   };
+  if (receipt.traceId !== undefined) error.traceId = receipt.traceId;
+  return error;
 }
 
 function commandWaitTimeoutError(): SafeError {
@@ -295,6 +305,20 @@ function commandWaitTimeoutError(): SafeError {
     code: "COMMAND_WAIT_TIMEOUT",
     message: "Command did not finish before the timeout.",
   };
+}
+
+function correlateCommandWaitError(error: unknown, receipt: AcceptedCommandReceipt): unknown {
+  if (!isSafeError(error)) {
+    return error;
+  }
+  const correlated: SafeError = {
+    ...error,
+    commandId: receipt.commandId,
+  };
+  if (receipt.traceId !== undefined) {
+    correlated.traceId = receipt.traceId;
+  }
+  return correlated;
 }
 
 function mapCommandWaitError(error: unknown): never {

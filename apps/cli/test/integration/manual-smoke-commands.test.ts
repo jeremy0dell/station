@@ -10,7 +10,7 @@ import {
   type StationSnapshot,
 } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { cliCommandRegistry } from "../../src/commandRegistry.js";
 import type { CliCommandNode } from "../../src/commands/cliCommand/types.js";
@@ -241,6 +241,35 @@ describe("CLI manual-smoke commands", () => {
     expect(currentManual).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(currentManual)).toContain("Behavior Notes:");
     expect(textOutput(currentManual)).toContain("Detached placement is source-free");
+  });
+
+  it("documents exact session discovery, rename, and non-destructive close before startup", async () => {
+    const spawnObserver = vi.fn();
+    const list = await runCli(["--config", "/missing/config.toml", "session", "list", "--help"], {
+      observerDeps: { spawnObserver },
+    });
+    const get = await runCli(["session", "get", "--man"]);
+    const rename = await runCli(["session", "rename", "--man"]);
+    const close = await runCli(["session", "close", "--man"]);
+
+    expect(textOutput(list)).toContain("--project <projectId>");
+    expect(textOutput(list)).toContain("--origin <station|external>");
+    expect(textOutput(list)).toContain("--require-running");
+    expect(textOutput(list)).toContain("--json");
+    expect(textOutput(get)).toContain("exact current session-ID equality only");
+    expect(textOutput(get)).toContain(
+      "Prefixes, titles, branches, fuzzy text, and display indexes",
+    );
+    expect(textOutput(rename)).toContain("worktree-scoped display authority");
+    expect(textOutput(rename)).toContain("does not rename the branch");
+    expect(textOutput(rename)).toContain("accepted command and trace IDs");
+    expect(textOutput(close)).toContain("--mode <harness|terminal|all>");
+    expect(textOutput(close)).toContain("Mode harness stops only the harness lifecycle");
+    expect(textOutput(close)).toContain("Mode and force are never inferred");
+    expect(textOutput(close)).toContain("There is no bulk close form");
+    expect(textOutput(close)).toContain("never dispatches worktree.remove");
+    expect(textOutput(close)).toContain("destructive TUI Delete Session action is a different");
+    expect(spawnObserver).not.toHaveBeenCalled();
   });
 
   it("resolves hook action target help without running hook commands", async () => {
