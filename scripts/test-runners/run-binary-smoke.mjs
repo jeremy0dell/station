@@ -20,6 +20,8 @@ import { dirname, join, parse, relative, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
+import { openCodeForwardedEventTypes } from "../../integrations/harness/opencode/dist/ingressRules.js";
+import { renderStationOpenCodePlugin } from "../../integrations/harness/opencode/dist/pluginScript.js";
 import {
   ObserverHealthSchema,
   ObserverProcessIdentitySchema,
@@ -454,6 +456,17 @@ async function runBinarySmoke() {
         "compiled OpenCode plugin path",
       );
       const openCodePlugin = await readFile(openCodePluginPath, "utf8");
+      const expectedOpenCodePluginBody = renderStationOpenCodePlugin({
+        observerSocketPath: socketPath,
+        stateDir,
+        hookSpoolDir: join(stateDir, "spool", "hooks"),
+        forwardedEventTypes: openCodeForwardedEventTypes,
+      });
+      assertEqual(
+        openCodePlugin.endsWith(expectedOpenCodePluginBody),
+        true,
+        "compiled OpenCode plugin body matches source rendering",
+      );
       assertIncludes(
         openCodePlugin,
         "station-opencode-observer-plugin:v1",

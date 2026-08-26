@@ -3,14 +3,6 @@ import { fileURLToPath } from "node:url";
 
 declare const STATION_BUILD_OPENCODE_PLUGIN_BODY: string;
 
-/**
- * ADAPTER
- *
- * Renders the generated `station-agent-state.js` plugin body from the checked-in source body or
- * its compiled-binary embedding, with install-time values JSON-encoded into `__STATION_*__`
- * placeholder tokens.
- */
-
 export type StationOpenCodePluginScriptInput = {
   observerSocketPath: string;
   stateDir: string;
@@ -35,8 +27,9 @@ const STATION_OPENCODE_PLUGIN_TOKENS = {
 /**
  * ADAPTER
  *
- * Renders the plugin body with install-time values JSON-encoded into the
- * placeholder tokens, so the generated artifact stays valid standalone JS.
+ * Renders the generated `station-agent-state.js` plugin body from the checked-in source body or
+ * its compiled-binary embedding, with install-time values JSON-encoded into `__STATION_*__`
+ * placeholder tokens so the generated artifact stays valid standalone JS.
  */
 export function renderStationOpenCodePlugin(input: StationOpenCodePluginScriptInput): string {
   return stationOpenCodePluginBody
