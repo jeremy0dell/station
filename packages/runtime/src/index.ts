@@ -11,3 +11,4 @@ export * from "./names.js";
 export * from "./objects.js";
 export * from "./paths.js";
 export * from "./processEvidence.js";
+export * from "./quickSessionEventEgressDiagnostic.js";

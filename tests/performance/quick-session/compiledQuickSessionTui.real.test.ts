@@ -90,8 +90,16 @@ const runBench049SubscriptionHandoffSmoke =
   process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_BENCH_049_SUBSCRIPTION_HANDOFF_SMOKE === "1";
 const runBench049SubscriptionHandoffExperiment =
   runBench049SubscriptionHandoff || runBench049SubscriptionHandoffSmoke;
+const runBench050TargetEventEgress =
+  process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_BENCH_050_TARGET_EVENT_EGRESS === "1";
+const runBench050TargetEventEgressSmoke =
+  process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_BENCH_050_TARGET_EVENT_EGRESS_SMOKE === "1";
+const runBench050TargetEventEgressExperiment =
+  runBench050TargetEventEgress || runBench050TargetEventEgressSmoke;
+const runSubscriptionHandoffExperiment =
+  runBench049SubscriptionHandoffExperiment || runBench050TargetEventEgressExperiment;
 const runRendererOccupancyExperiment =
-  runBench048RendererOccupancyExperiment || runBench049SubscriptionHandoffExperiment;
+  runBench048RendererOccupancyExperiment || runSubscriptionHandoffExperiment;
 const runNativeTuiIdleExperiment =
   runBench047NativeTuiIdleExperiment || runRendererOccupancyExperiment;
 const runProtocolPhaseAttribution =
@@ -128,41 +136,45 @@ const outputPath = resolve(
     .min(1)
     .parse(
       process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_OUTPUT ??
-        (runBench049SubscriptionHandoffSmoke
-          ? ".dev-state/performance/quick-session/bench-049-subscription-handoff-smoke.real.json"
-          : runBench049SubscriptionHandoff
-            ? ".dev-state/performance/quick-session/bench-049-subscription-handoff.real.json"
-            : runBench048RendererOccupancySmoke
-              ? ".dev-state/performance/quick-session/bench-048-native-renderer-occupancy-smoke.real.json"
-              : runBench048RendererOccupancy
-                ? ".dev-state/performance/quick-session/bench-048-native-renderer-occupancy.real.json"
-                : runBench047NativeTuiIdleSmoke
-                  ? ".dev-state/performance/quick-session/bench-047-native-tui-idle-control-smoke.real.json"
-                  : runBench047NativeTuiIdleControl
-                    ? ".dev-state/performance/quick-session/bench-047-native-tui-idle-control.real.json"
-                    : runBench046StandaloneTransportControl
-                      ? ".dev-state/performance/quick-session/bench-046-standalone-transport-control.real.json"
-                      : runBench045TransportDeliveryAttribution
-                        ? ".dev-state/performance/quick-session/bench-045-transport-delivery.real.json"
-                        : runBench044WireAttribution
-                          ? ".dev-state/performance/quick-session/bench-044-wire-attribution.real.json"
-                          : runBench043ProtocolResidualAttribution
-                            ? ".dev-state/performance/quick-session/bench-043-protocol-residual.real.json"
-                            : runBench042ObserverPhaseAttribution
-                              ? ".dev-state/performance/quick-session/bench-042-observer-launch-phases.real.json"
-                              : runBench041PhaseAttribution
-                                ? ".dev-state/performance/quick-session/bench-041-managed-launch-phases.real.json"
-                                : runBench040ImmediateInput
-                                  ? ".dev-state/performance/quick-session/bench-040-immediate-input.real.json"
-                                  : runExp016Control
-                                    ? ".dev-state/performance/quick-session/exp-016-control.real.json"
-                                    : runExp016Candidate
-                                      ? ".dev-state/performance/quick-session/exp-016-candidate.real.json"
-                                      : runFocusComparison
-                                        ? ".dev-state/performance/quick-session/compiled-quick-session-focus.real.json"
-                                        : runSafetyAudit
-                                          ? ".dev-state/performance/quick-session/compiled-quick-session-safety.real.json"
-                                          : ".dev-state/performance/quick-session/compiled-quick-session-tui.real.json"),
+        (runBench050TargetEventEgressSmoke
+          ? ".dev-state/performance/quick-session/bench-050-target-event-egress-smoke.real.json"
+          : runBench050TargetEventEgress
+            ? ".dev-state/performance/quick-session/bench-050-target-event-egress.real.json"
+            : runBench049SubscriptionHandoffSmoke
+              ? ".dev-state/performance/quick-session/bench-049-subscription-handoff-smoke.real.json"
+              : runBench049SubscriptionHandoff
+                ? ".dev-state/performance/quick-session/bench-049-subscription-handoff.real.json"
+                : runBench048RendererOccupancySmoke
+                  ? ".dev-state/performance/quick-session/bench-048-native-renderer-occupancy-smoke.real.json"
+                  : runBench048RendererOccupancy
+                    ? ".dev-state/performance/quick-session/bench-048-native-renderer-occupancy.real.json"
+                    : runBench047NativeTuiIdleSmoke
+                      ? ".dev-state/performance/quick-session/bench-047-native-tui-idle-control-smoke.real.json"
+                      : runBench047NativeTuiIdleControl
+                        ? ".dev-state/performance/quick-session/bench-047-native-tui-idle-control.real.json"
+                        : runBench046StandaloneTransportControl
+                          ? ".dev-state/performance/quick-session/bench-046-standalone-transport-control.real.json"
+                          : runBench045TransportDeliveryAttribution
+                            ? ".dev-state/performance/quick-session/bench-045-transport-delivery.real.json"
+                            : runBench044WireAttribution
+                              ? ".dev-state/performance/quick-session/bench-044-wire-attribution.real.json"
+                              : runBench043ProtocolResidualAttribution
+                                ? ".dev-state/performance/quick-session/bench-043-protocol-residual.real.json"
+                                : runBench042ObserverPhaseAttribution
+                                  ? ".dev-state/performance/quick-session/bench-042-observer-launch-phases.real.json"
+                                  : runBench041PhaseAttribution
+                                    ? ".dev-state/performance/quick-session/bench-041-managed-launch-phases.real.json"
+                                    : runBench040ImmediateInput
+                                      ? ".dev-state/performance/quick-session/bench-040-immediate-input.real.json"
+                                      : runExp016Control
+                                        ? ".dev-state/performance/quick-session/exp-016-control.real.json"
+                                        : runExp016Candidate
+                                          ? ".dev-state/performance/quick-session/exp-016-candidate.real.json"
+                                          : runFocusComparison
+                                            ? ".dev-state/performance/quick-session/compiled-quick-session-focus.real.json"
+                                            : runSafetyAudit
+                                              ? ".dev-state/performance/quick-session/compiled-quick-session-safety.real.json"
+                                              : ".dev-state/performance/quick-session/compiled-quick-session-tui.real.json"),
     ),
 );
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -176,7 +188,8 @@ const tmuxCommand = process.env.STATION_TMUX_BIN ?? "tmux";
 const repetitions =
   runBench047NativeTuiIdleSmoke ||
   runBench048RendererOccupancySmoke ||
-  runBench049SubscriptionHandoffSmoke
+  runBench049SubscriptionHandoffSmoke ||
+  runBench050TargetEventEgressSmoke
     ? 1
     : runBench041PhaseAttribution ||
         runBench042ObserverPhaseAttribution ||
@@ -368,6 +381,24 @@ const bench049Prediction = {
   minimumPerRunCombinedFraction: 0.8,
   minimumExplainedRuns: 18,
   minimumFramePlacementRuns: 15,
+} as const;
+const bench050Thresholds = {
+  ...bench049Thresholds,
+  minimumExactTargetRuns: 15,
+  minimumIncrementalP95Fraction: 0.1,
+  minimumFullUnionP95Fraction: 0.9,
+  minimumPerRunFullUnionFraction: 0.85,
+  minimumExplainedRuns: 15,
+  minimumCrossProcessDeliveryP95Ms: 0.5,
+  minimumCrossProcessDeliveryUncoveredP95Fraction: 0.25,
+} as const;
+const bench050Prediction = {
+  exactTargetRuns: 20,
+  minimumIncrementalP95Fraction: 0.125,
+  minimumFullUnionP95Fraction: 0.925,
+  minimumPerRunFullUnionFraction: 0.9,
+  minimumExplainedRuns: 18,
+  minimumCrossProcessDeliveryP95Ms: 0.75,
 } as const;
 const exp016CandidateIntentP95Ms = 357.7810000000027;
 const exp016CandidateBuildIdentity =
@@ -671,6 +702,34 @@ const subscriptionHandoffPhases = [
   ...subscriptionHandoffPreValidationPhases,
   ...subscriptionHandoffValidatedPhases,
 ] as const;
+const targetEventEgressEventTypes = ["worktree.updated", "session.created"] as const;
+const targetEventEgressPhases = [
+  "publishEntered",
+  "eventValidated",
+  "publishCompleted",
+  "protocolIteratorResumed",
+  "envelopeValidated",
+  "serializationStarted",
+  "serializationCompleted",
+  "socketWriteReturned",
+  "socketWriteCallbackCompleted",
+] as const;
+const targetEventEgressTraceSchema = z
+  .object({
+    events: z.array(
+      z
+        .object({
+          activityId: z.number().int().positive(),
+          eventType: z.enum(targetEventEgressEventTypes),
+          correlationId: z.string().min(1),
+          phase: z.enum(targetEventEgressPhases),
+          atMs: z.number().nonnegative(),
+          epochMs: z.number().nonnegative(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
 const rendererOccupancyDiagnosticEventSchema = z.union([
   z
     .object({
@@ -997,41 +1056,45 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
   it("measures cold CLI startup and raw native Quick Session input independently", async () => {
     const report = {
       schemaVersion: 1,
-      benchmark: runBench049SubscriptionHandoffSmoke
-        ? "station-quick-session-bench-049-subscription-handoff-smoke"
-        : runBench049SubscriptionHandoff
-          ? "station-quick-session-bench-049-subscription-handoff"
-          : runBench048RendererOccupancySmoke
-            ? "station-quick-session-bench-048-native-renderer-occupancy-smoke"
-            : runBench048RendererOccupancy
-              ? "station-quick-session-bench-048-native-renderer-occupancy"
-              : runBench047NativeTuiIdleSmoke
-                ? "station-quick-session-bench-047-native-tui-idle-control-smoke"
-                : runBench047NativeTuiIdleControl
-                  ? "station-quick-session-bench-047-native-tui-idle-control"
-                  : runBench046StandaloneTransportControl
-                    ? "station-quick-session-bench-046-standalone-transport-control"
-                    : runBench045TransportDeliveryAttribution
-                      ? "station-quick-session-bench-045-transport-delivery-attribution"
-                      : runBench044WireAttribution
-                        ? "station-quick-session-bench-044-wire-attribution"
-                        : runBench043ProtocolResidualAttribution
-                          ? "station-quick-session-bench-043-protocol-residual-attribution"
-                          : runBench042ObserverPhaseAttribution
-                            ? "station-quick-session-bench-042-observer-launch-phase-attribution"
-                            : runBench041PhaseAttribution
-                              ? "station-quick-session-bench-041-managed-launch-phase-attribution"
-                              : runBench040ImmediateInput
-                                ? "station-quick-session-bench-040-immediate-input"
-                                : runExp016Control
-                                  ? "station-quick-session-exp-016-control"
-                                  : runExp016Candidate
-                                    ? "station-quick-session-exp-016-candidate"
-                                    : runFocusComparison
-                                      ? "station-quick-session-compiled-cli-native-focus-comparison"
-                                      : runSafetyAudit
-                                        ? "station-quick-session-compiled-cli-native-safety-audit"
-                                        : "station-quick-session-compiled-cli-native-tui",
+      benchmark: runBench050TargetEventEgressSmoke
+        ? "station-quick-session-bench-050-target-event-egress-smoke"
+        : runBench050TargetEventEgress
+          ? "station-quick-session-bench-050-target-event-egress"
+          : runBench049SubscriptionHandoffSmoke
+            ? "station-quick-session-bench-049-subscription-handoff-smoke"
+            : runBench049SubscriptionHandoff
+              ? "station-quick-session-bench-049-subscription-handoff"
+              : runBench048RendererOccupancySmoke
+                ? "station-quick-session-bench-048-native-renderer-occupancy-smoke"
+                : runBench048RendererOccupancy
+                  ? "station-quick-session-bench-048-native-renderer-occupancy"
+                  : runBench047NativeTuiIdleSmoke
+                    ? "station-quick-session-bench-047-native-tui-idle-control-smoke"
+                    : runBench047NativeTuiIdleControl
+                      ? "station-quick-session-bench-047-native-tui-idle-control"
+                      : runBench046StandaloneTransportControl
+                        ? "station-quick-session-bench-046-standalone-transport-control"
+                        : runBench045TransportDeliveryAttribution
+                          ? "station-quick-session-bench-045-transport-delivery-attribution"
+                          : runBench044WireAttribution
+                            ? "station-quick-session-bench-044-wire-attribution"
+                            : runBench043ProtocolResidualAttribution
+                              ? "station-quick-session-bench-043-protocol-residual-attribution"
+                              : runBench042ObserverPhaseAttribution
+                                ? "station-quick-session-bench-042-observer-launch-phase-attribution"
+                                : runBench041PhaseAttribution
+                                  ? "station-quick-session-bench-041-managed-launch-phase-attribution"
+                                  : runBench040ImmediateInput
+                                    ? "station-quick-session-bench-040-immediate-input"
+                                    : runExp016Control
+                                      ? "station-quick-session-exp-016-control"
+                                      : runExp016Candidate
+                                        ? "station-quick-session-exp-016-candidate"
+                                        : runFocusComparison
+                                          ? "station-quick-session-compiled-cli-native-focus-comparison"
+                                          : runSafetyAudit
+                                            ? "station-quick-session-compiled-cli-native-safety-audit"
+                                            : "station-quick-session-compiled-cli-native-tui",
       generatedAt: new Date().toISOString(),
       machine: {
         platform: platform(),
@@ -1060,33 +1123,35 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
         ordinaryObserverRestartPerRun: true,
         ptyUsedHostPreservedAcrossRuns: true,
       },
-      thresholds: runBench049SubscriptionHandoffExperiment
-        ? bench049Thresholds
-        : runBench048RendererOccupancyExperiment
-          ? bench048Thresholds
-          : runBench047NativeTuiIdleExperiment
-            ? bench047Thresholds
-            : runBench046StandaloneTransportControl
-              ? bench046Thresholds
-              : runBench045TransportDeliveryAttribution
-                ? bench045Thresholds
-                : runBench044WireAttribution
-                  ? bench044Thresholds
-                  : runBench043ProtocolResidualAttribution
-                    ? bench043Thresholds
-                    : runBench042ObserverPhaseAttribution
-                      ? bench042Thresholds
-                      : runBench041PhaseAttribution
-                        ? bench041Thresholds
-                        : runBench040ImmediateInput
-                          ? bench040Thresholds
-                          : runExp016Control
-                            ? null
-                            : runExp016Candidate
-                              ? exp016Thresholds
-                              : runFocusComparison
-                                ? focusThresholds
-                                : thresholds,
+      thresholds: runBench050TargetEventEgressExperiment
+        ? bench050Thresholds
+        : runBench049SubscriptionHandoffExperiment
+          ? bench049Thresholds
+          : runBench048RendererOccupancyExperiment
+            ? bench048Thresholds
+            : runBench047NativeTuiIdleExperiment
+              ? bench047Thresholds
+              : runBench046StandaloneTransportControl
+                ? bench046Thresholds
+                : runBench045TransportDeliveryAttribution
+                  ? bench045Thresholds
+                  : runBench044WireAttribution
+                    ? bench044Thresholds
+                    : runBench043ProtocolResidualAttribution
+                      ? bench043Thresholds
+                      : runBench042ObserverPhaseAttribution
+                        ? bench042Thresholds
+                        : runBench041PhaseAttribution
+                          ? bench041Thresholds
+                          : runBench040ImmediateInput
+                            ? bench040Thresholds
+                            : runExp016Control
+                              ? null
+                              : runExp016Candidate
+                                ? exp016Thresholds
+                                : runFocusComparison
+                                  ? focusThresholds
+                                  : thresholds,
       setup: {
         repositoryShapeMs: 0,
         hostSeedMs: 0,
@@ -1120,6 +1185,7 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
       > | null,
       rendererOccupancy: null as ReturnType<typeof summarizeRendererOccupancy> | null,
       subscriptionHandoff: null as ReturnType<typeof summarizeSubscriptionHandoff> | null,
+      targetEventEgress: null as ReturnType<typeof summarizeTargetEventEgress> | null,
       stabilityAdmission: null as ReturnType<typeof summarizeStabilityAdmission> | null,
       stabilityAdmissions: [] as StabilityAdmission[],
       falseSafetyPredicates: [] as string[],
@@ -1269,6 +1335,7 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
     report.nativeTuiIdleTransportControl = summarizeNativeTuiIdleTransportControl(report.runs);
     report.rendererOccupancy = summarizeRendererOccupancy(report.runs);
     report.subscriptionHandoff = summarizeSubscriptionHandoff(report.runs);
+    report.targetEventEgress = summarizeTargetEventEgress(report.runs);
     report.stabilityAdmission = summarizeStabilityAdmission(report.stabilityAdmissions);
     report.falseSafetyPredicates = report.runs.flatMap((run) =>
       Object.entries(run.safetyPredicates)
@@ -1296,387 +1363,453 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
       report.setup.hostStoppedCleanly &&
       report.setup.hostStderrEmpty &&
       report.setup.rootRemoved;
-    report.predictionPassed = runBench049SubscriptionHandoffSmoke
+    report.predictionPassed = runBench050TargetEventEgressSmoke
       ? report.allSafe &&
+        report.targetEventEgress.validRuns === repetitions &&
+        report.targetEventEgress.exactTargetRuns === repetitions &&
         report.subscriptionHandoff.validRuns === repetitions &&
-        report.subscriptionHandoff.exactTargetRuns === repetitions &&
         report.rendererOccupancy.validRuns === repetitions &&
         report.nativeTuiIdleTransportControl.validRuns === repetitions
-      : runBench049SubscriptionHandoff
-        ? report.subscriptionHandoff.exactTargetRuns === bench049Prediction.exactTargetRuns &&
-          report.subscriptionHandoff.handoffP95Fraction >=
-            bench049Prediction.minimumHandoffP95Fraction &&
-          report.subscriptionHandoff.combinedP95Fraction >=
-            bench049Prediction.minimumCombinedP95Fraction &&
-          report.subscriptionHandoff.predictionExplainedRuns >=
-            bench049Prediction.minimumExplainedRuns &&
-          report.subscriptionHandoff.framePlacementRuns >=
-            bench049Prediction.minimumFramePlacementRuns
-        : runBench048RendererOccupancySmoke
+      : runBench050TargetEventEgress
+        ? report.targetEventEgress.exactTargetRuns === bench050Prediction.exactTargetRuns &&
+          report.targetEventEgress.incrementalP95Fraction >=
+            bench050Prediction.minimumIncrementalP95Fraction &&
+          report.targetEventEgress.fullUnionP95Fraction >=
+            bench050Prediction.minimumFullUnionP95Fraction &&
+          report.targetEventEgress.predictionExplainedRuns >=
+            bench050Prediction.minimumExplainedRuns &&
+          report.targetEventEgress.crossProcessDeliveryDominatesEveryPhase &&
+          report.targetEventEgress.crossProcessDeliveryP95 >=
+            bench050Prediction.minimumCrossProcessDeliveryP95Ms
+        : runBench049SubscriptionHandoffSmoke
           ? report.allSafe &&
+            report.subscriptionHandoff.validRuns === repetitions &&
+            report.subscriptionHandoff.exactTargetRuns === repetitions &&
             report.rendererOccupancy.validRuns === repetitions &&
             report.nativeTuiIdleTransportControl.validRuns === repetitions
-          : runBench048RendererOccupancy
-            ? report.rendererOccupancy.exactProjectedEventRuns ===
-                bench048Prediction.exactProjectedEventRuns &&
-              report.rendererOccupancy.runsWithReactUpdate >=
-                bench048Prediction.minimumRunsWithReactUpdate &&
-              report.rendererOccupancy.reactActualDurationP95Fraction >=
-                bench048Prediction.minimumReactActualDurationP95Fraction &&
-              report.rendererOccupancy.occupancyP95Fraction >=
-                bench048Prediction.minimumOccupancyP95Fraction
-            : runBench047NativeTuiIdleSmoke
-              ? report.allSafe && report.nativeTuiIdleTransportControl.validRuns === repetitions
-              : runBench047NativeTuiIdleControl
-                ? report.nativeTuiIdleTransportControl.idleServerSendToCallbackMs.median <=
-                    bench047Prediction.idleMedianMs &&
-                  report.nativeTuiIdleTransportControl.idleServerSendToCallbackMs.p95 <=
-                    bench047Prediction.idleP95Ms &&
-                  report.nativeTuiIdleTransportControl.pairedTuiSlowerSamples >=
-                    bench047Prediction.minimumPairedTuiSlowerSamples &&
-                  report.nativeTuiIdleTransportControl.idleP95ImprovementFraction >=
-                    bench047Prediction.idleP95ImprovementFraction &&
-                  report.nativeTuiIdleTransportControl.idleCallbackToValidatedMs.p95 <=
-                    bench047Prediction.callbackToValidatedP95Ms
-                : runBench046StandaloneTransportControl
-                  ? report.standaloneTransportControl.standaloneServerSendToCallbackMs.median <=
-                      bench046Prediction.standaloneMedianMs &&
-                    report.standaloneTransportControl.standaloneServerSendToCallbackMs.p95 <=
-                      bench046Prediction.standaloneP95Ms &&
-                    report.standaloneTransportControl.standaloneP95ImprovementFraction >=
-                      bench046Prediction.standaloneP95ImprovementFraction &&
-                    report.standaloneTransportControl.callbackToValidatedMs.p95 <=
-                      bench046Prediction.callbackToValidatedP95Ms
-                  : runBench045TransportDeliveryAttribution
-                    ? report.transportDeliveryAttribution.preCallbackDeliveryP95Fraction >=
-                        bench045Prediction.preCallbackDeliveryP95Fraction &&
-                      report.transportDeliveryAttribution.preCallbackDeliveryDominatesEveryTail &&
-                      transportPostCallbackPhaseKeys.every(
-                        (key) =>
-                          report.transportDeliveryAttribution.phaseDistributions[key].p95 <=
-                          bench045Prediction.individualPostCallbackP95Ms,
-                      ) &&
-                      report.transportDeliveryAttribution.postCallbackMs.p95 <=
-                        bench045Prediction.combinedPostCallbackP95Ms
-                    : runBench044WireAttribution
-                      ? report.wireAttribution.clientResponseValidationP95Fraction >=
-                          bench044Prediction.clientResponseValidationP95Fraction &&
-                        report.wireAttribution.clientResponseValidationDominatesEveryTail &&
-                        report.wireAttribution.phaseDistributions.requestConstructionMs.p95 <=
-                          bench044Prediction.requestConstructionP95Ms &&
-                        report.wireAttribution.phaseDistributions.requestSendMs.p95 <=
-                          bench044Prediction.requestSendP95Ms &&
-                        report.wireAttribution.phaseDistributions.requestIngressSchedulingMs.p95 <=
-                          bench044Prediction.requestIngressSchedulingP95Ms &&
-                        report.wireAttribution.phaseDistributions.responseEgressSchedulingMs.p95 <=
-                          bench044Prediction.responseEgressSchedulingP95Ms &&
-                        report.protocolResidualAttribution.phaseDistributions
-                          .expectedObserverHealthMs.p95 <=
-                          bench044Prediction.expectedObserverHealthP95Ms &&
-                        report.protocolResidualAttribution.serverPhaseDistributions
-                          .handlerToResponseConstructionMs.p95 <=
-                          bench044Prediction.serverResponseConstructionP95Ms &&
-                        report.protocolResidualAttribution.serverPhaseDistributions.responseSendMs
-                          .p95 <= bench044Prediction.serverResponseSendP95Ms
-                      : runBench043ProtocolResidualAttribution
-                        ? report.protocolResidualAttribution.expectedObserverHealthP95Fraction >=
-                            bench043Prediction.expectedObserverHealthP95Fraction &&
-                          report.protocolResidualAttribution
-                            .expectedObserverHealthDominatesEveryTail &&
-                          report.protocolResidualAttribution.phaseDistributions.socketConnectMs
-                            .p95 <= bench043Prediction.socketConnectP95Ms &&
-                          report.protocolResidualAttribution.phaseDistributions
-                            .actualRequestWireClientMs.p95 <=
-                            bench043Prediction.actualRequestWireClientP95Ms &&
-                          report.protocolResidualAttribution.phaseDistributions
-                            .observerProtocolPreUseCaseMs.p95 <=
-                            bench043Prediction.observerProtocolPreUseCaseP95Ms &&
-                          report.protocolResidualAttribution.phaseDistributions
-                            .observerProtocolPostUseCaseMs.p95 <=
-                            bench043Prediction.observerProtocolPostUseCaseP95Ms &&
-                          report.protocolResidualAttribution.outerClientSettlementMs.p95 <=
-                            bench043Prediction.outerClientSettlementP95Ms
-                        : runBench042ObserverPhaseAttribution
-                          ? report.observerPhaseAttribution.hostProcessLaunchP95Fraction >=
-                              bench042Prediction.hostProcessLaunchP95Fraction &&
-                            report.observerPhaseAttribution.hostProcessLaunchDominatesEveryTail &&
-                            report.observerPhaseAttribution.phaseDistributions.targetInventoryMs
-                              .p95 <= bench042Prediction.targetInventoryP95Ms &&
-                            report.observerPhaseAttribution.phaseDistributions.sessionPersistenceMs
-                              .p95 <= bench042Prediction.sessionPersistenceP95Ms &&
-                            report.observerPhaseAttribution.phaseDistributions.canonicalProjectionMs
-                              .p95 <= bench042Prediction.canonicalProjectionP95Ms &&
-                            report.observerPhaseAttribution.transportResidualMs.p95 <=
-                              bench042Prediction.transportResidualP95Ms
-                          : runBench041PhaseAttribution &&
-                            report.phaseAttribution.prepareExternalLaunchP95Fraction >=
-                              bench041Prediction.prepareExternalLaunchP95Fraction &&
-                            report.phaseAttribution.prepareExternalLaunchDominatesEveryTail &&
-                            report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-                              bench041Prediction.attachmentResolutionP95Ms;
-    report.thresholdsPassed = runBench049SubscriptionHandoffSmoke
+          : runBench049SubscriptionHandoff
+            ? report.subscriptionHandoff.exactTargetRuns === bench049Prediction.exactTargetRuns &&
+              report.subscriptionHandoff.handoffP95Fraction >=
+                bench049Prediction.minimumHandoffP95Fraction &&
+              report.subscriptionHandoff.combinedP95Fraction >=
+                bench049Prediction.minimumCombinedP95Fraction &&
+              report.subscriptionHandoff.predictionExplainedRuns >=
+                bench049Prediction.minimumExplainedRuns &&
+              report.subscriptionHandoff.framePlacementRuns >=
+                bench049Prediction.minimumFramePlacementRuns
+            : runBench048RendererOccupancySmoke
+              ? report.allSafe &&
+                report.rendererOccupancy.validRuns === repetitions &&
+                report.nativeTuiIdleTransportControl.validRuns === repetitions
+              : runBench048RendererOccupancy
+                ? report.rendererOccupancy.exactProjectedEventRuns ===
+                    bench048Prediction.exactProjectedEventRuns &&
+                  report.rendererOccupancy.runsWithReactUpdate >=
+                    bench048Prediction.minimumRunsWithReactUpdate &&
+                  report.rendererOccupancy.reactActualDurationP95Fraction >=
+                    bench048Prediction.minimumReactActualDurationP95Fraction &&
+                  report.rendererOccupancy.occupancyP95Fraction >=
+                    bench048Prediction.minimumOccupancyP95Fraction
+                : runBench047NativeTuiIdleSmoke
+                  ? report.allSafe && report.nativeTuiIdleTransportControl.validRuns === repetitions
+                  : runBench047NativeTuiIdleControl
+                    ? report.nativeTuiIdleTransportControl.idleServerSendToCallbackMs.median <=
+                        bench047Prediction.idleMedianMs &&
+                      report.nativeTuiIdleTransportControl.idleServerSendToCallbackMs.p95 <=
+                        bench047Prediction.idleP95Ms &&
+                      report.nativeTuiIdleTransportControl.pairedTuiSlowerSamples >=
+                        bench047Prediction.minimumPairedTuiSlowerSamples &&
+                      report.nativeTuiIdleTransportControl.idleP95ImprovementFraction >=
+                        bench047Prediction.idleP95ImprovementFraction &&
+                      report.nativeTuiIdleTransportControl.idleCallbackToValidatedMs.p95 <=
+                        bench047Prediction.callbackToValidatedP95Ms
+                    : runBench046StandaloneTransportControl
+                      ? report.standaloneTransportControl.standaloneServerSendToCallbackMs.median <=
+                          bench046Prediction.standaloneMedianMs &&
+                        report.standaloneTransportControl.standaloneServerSendToCallbackMs.p95 <=
+                          bench046Prediction.standaloneP95Ms &&
+                        report.standaloneTransportControl.standaloneP95ImprovementFraction >=
+                          bench046Prediction.standaloneP95ImprovementFraction &&
+                        report.standaloneTransportControl.callbackToValidatedMs.p95 <=
+                          bench046Prediction.callbackToValidatedP95Ms
+                      : runBench045TransportDeliveryAttribution
+                        ? report.transportDeliveryAttribution.preCallbackDeliveryP95Fraction >=
+                            bench045Prediction.preCallbackDeliveryP95Fraction &&
+                          report.transportDeliveryAttribution
+                            .preCallbackDeliveryDominatesEveryTail &&
+                          transportPostCallbackPhaseKeys.every(
+                            (key) =>
+                              report.transportDeliveryAttribution.phaseDistributions[key].p95 <=
+                              bench045Prediction.individualPostCallbackP95Ms,
+                          ) &&
+                          report.transportDeliveryAttribution.postCallbackMs.p95 <=
+                            bench045Prediction.combinedPostCallbackP95Ms
+                        : runBench044WireAttribution
+                          ? report.wireAttribution.clientResponseValidationP95Fraction >=
+                              bench044Prediction.clientResponseValidationP95Fraction &&
+                            report.wireAttribution.clientResponseValidationDominatesEveryTail &&
+                            report.wireAttribution.phaseDistributions.requestConstructionMs.p95 <=
+                              bench044Prediction.requestConstructionP95Ms &&
+                            report.wireAttribution.phaseDistributions.requestSendMs.p95 <=
+                              bench044Prediction.requestSendP95Ms &&
+                            report.wireAttribution.phaseDistributions.requestIngressSchedulingMs
+                              .p95 <= bench044Prediction.requestIngressSchedulingP95Ms &&
+                            report.wireAttribution.phaseDistributions.responseEgressSchedulingMs
+                              .p95 <= bench044Prediction.responseEgressSchedulingP95Ms &&
+                            report.protocolResidualAttribution.phaseDistributions
+                              .expectedObserverHealthMs.p95 <=
+                              bench044Prediction.expectedObserverHealthP95Ms &&
+                            report.protocolResidualAttribution.serverPhaseDistributions
+                              .handlerToResponseConstructionMs.p95 <=
+                              bench044Prediction.serverResponseConstructionP95Ms &&
+                            report.protocolResidualAttribution.serverPhaseDistributions
+                              .responseSendMs.p95 <= bench044Prediction.serverResponseSendP95Ms
+                          : runBench043ProtocolResidualAttribution
+                            ? report.protocolResidualAttribution
+                                .expectedObserverHealthP95Fraction >=
+                                bench043Prediction.expectedObserverHealthP95Fraction &&
+                              report.protocolResidualAttribution
+                                .expectedObserverHealthDominatesEveryTail &&
+                              report.protocolResidualAttribution.phaseDistributions.socketConnectMs
+                                .p95 <= bench043Prediction.socketConnectP95Ms &&
+                              report.protocolResidualAttribution.phaseDistributions
+                                .actualRequestWireClientMs.p95 <=
+                                bench043Prediction.actualRequestWireClientP95Ms &&
+                              report.protocolResidualAttribution.phaseDistributions
+                                .observerProtocolPreUseCaseMs.p95 <=
+                                bench043Prediction.observerProtocolPreUseCaseP95Ms &&
+                              report.protocolResidualAttribution.phaseDistributions
+                                .observerProtocolPostUseCaseMs.p95 <=
+                                bench043Prediction.observerProtocolPostUseCaseP95Ms &&
+                              report.protocolResidualAttribution.outerClientSettlementMs.p95 <=
+                                bench043Prediction.outerClientSettlementP95Ms
+                            : runBench042ObserverPhaseAttribution
+                              ? report.observerPhaseAttribution.hostProcessLaunchP95Fraction >=
+                                  bench042Prediction.hostProcessLaunchP95Fraction &&
+                                report.observerPhaseAttribution
+                                  .hostProcessLaunchDominatesEveryTail &&
+                                report.observerPhaseAttribution.phaseDistributions.targetInventoryMs
+                                  .p95 <= bench042Prediction.targetInventoryP95Ms &&
+                                report.observerPhaseAttribution.phaseDistributions
+                                  .sessionPersistenceMs.p95 <=
+                                  bench042Prediction.sessionPersistenceP95Ms &&
+                                report.observerPhaseAttribution.phaseDistributions
+                                  .canonicalProjectionMs.p95 <=
+                                  bench042Prediction.canonicalProjectionP95Ms &&
+                                report.observerPhaseAttribution.transportResidualMs.p95 <=
+                                  bench042Prediction.transportResidualP95Ms
+                              : runBench041PhaseAttribution &&
+                                report.phaseAttribution.prepareExternalLaunchP95Fraction >=
+                                  bench041Prediction.prepareExternalLaunchP95Fraction &&
+                                report.phaseAttribution.prepareExternalLaunchDominatesEveryTail &&
+                                report.phaseAttribution.phaseDistributions.attachmentResolutionMs
+                                  .p95 <= bench041Prediction.attachmentResolutionP95Ms;
+    report.thresholdsPassed = runBench050TargetEventEgressSmoke
       ? report.allSafe &&
         report.stabilityAdmission.validRuns === repetitions * 2 &&
         report.nativeTuiIdleTransportControl.validRuns === repetitions &&
         report.rendererOccupancy.validRuns === repetitions &&
         report.subscriptionHandoff.validRuns === repetitions &&
-        report.subscriptionHandoff.exactTargetRuns === repetitions &&
+        report.targetEventEgress.validRuns === repetitions &&
+        report.targetEventEgress.exactTargetRuns === repetitions &&
         report.nativeTuiIdleTransportControl.maximumReconstructionErrorMs <=
-          bench049Thresholds.reconstructionToleranceMs
-      : runBench049SubscriptionHandoff
+          bench050Thresholds.reconstructionToleranceMs
+      : runBench050TargetEventEgress
         ? report.allSafe &&
           report.predictionPassed &&
           report.stabilityAdmission.validRuns === repetitions * 2 &&
           report.nativeTuiIdleTransportControl.validRuns === repetitions &&
           report.rendererOccupancy.validRuns === repetitions &&
           report.subscriptionHandoff.validRuns === repetitions &&
+          report.targetEventEgress.validRuns === repetitions &&
           report.distributions.intentToInteractiveMs.p95 <=
-            bench049Thresholds.intentToInteractiveP95Ms &&
+            bench050Thresholds.intentToInteractiveP95Ms &&
           report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-            bench049Thresholds.attachmentResolutionP95Ms &&
+            bench050Thresholds.attachmentResolutionP95Ms &&
           report.protocolResidualAttribution.transportResidualMs.p95 >= 0 &&
           report.protocolResidualAttribution.transportResidualMs.p95 <=
-            bench049Thresholds.transportResidualP95Ms &&
+            bench050Thresholds.transportResidualP95Ms &&
           report.transportDeliveryAttribution.responseEgressMs.p95 <=
-            bench049Thresholds.responseEgressP95Ms &&
-          report.rendererOccupancy.runsWithBothProjectedEvents >=
-            bench049Thresholds.minimumRunsWithBothProjectedEvents &&
-          report.rendererOccupancy.runsWithReactUpdate >=
-            bench049Thresholds.minimumRunsWithReactUpdate &&
-          report.subscriptionHandoff.exactTargetRuns >= bench049Thresholds.minimumExactTargetRuns &&
-          report.subscriptionHandoff.handoffP95Fraction >=
-            bench049Thresholds.minimumHandoffP95Fraction &&
-          report.subscriptionHandoff.combinedP95Fraction >=
-            bench049Thresholds.minimumCombinedP95Fraction &&
-          report.subscriptionHandoff.attributionExplainedRuns >=
-            bench049Thresholds.minimumExplainedRuns &&
+            bench050Thresholds.responseEgressP95Ms &&
+          report.targetEventEgress.exactTargetRuns >= bench050Thresholds.minimumExactTargetRuns &&
+          report.targetEventEgress.incrementalP95Fraction >=
+            bench050Thresholds.minimumIncrementalP95Fraction &&
+          report.targetEventEgress.fullUnionP95Fraction >=
+            bench050Thresholds.minimumFullUnionP95Fraction &&
+          report.targetEventEgress.attributionExplainedRuns >=
+            bench050Thresholds.minimumExplainedRuns &&
+          report.targetEventEgress.crossProcessDeliveryP95 >=
+            bench050Thresholds.minimumCrossProcessDeliveryP95Ms &&
+          report.targetEventEgress.crossProcessDeliveryUncoveredP95Fraction >=
+            bench050Thresholds.minimumCrossProcessDeliveryUncoveredP95Fraction &&
           report.nativeTuiIdleTransportControl.maximumReconstructionErrorMs <=
-            bench049Thresholds.reconstructionToleranceMs
-        : runBench048RendererOccupancySmoke
+            bench050Thresholds.reconstructionToleranceMs
+        : runBench049SubscriptionHandoffSmoke
           ? report.allSafe &&
             report.stabilityAdmission.validRuns === repetitions * 2 &&
             report.nativeTuiIdleTransportControl.validRuns === repetitions &&
             report.rendererOccupancy.validRuns === repetitions &&
+            report.subscriptionHandoff.validRuns === repetitions &&
+            report.subscriptionHandoff.exactTargetRuns === repetitions &&
             report.nativeTuiIdleTransportControl.maximumReconstructionErrorMs <=
-              bench048Thresholds.reconstructionToleranceMs
-          : runBench048RendererOccupancy
+              bench049Thresholds.reconstructionToleranceMs
+          : runBench049SubscriptionHandoff
             ? report.allSafe &&
               report.predictionPassed &&
               report.stabilityAdmission.validRuns === repetitions * 2 &&
               report.nativeTuiIdleTransportControl.validRuns === repetitions &&
               report.rendererOccupancy.validRuns === repetitions &&
+              report.subscriptionHandoff.validRuns === repetitions &&
               report.distributions.intentToInteractiveMs.p95 <=
-                bench048Thresholds.intentToInteractiveP95Ms &&
+                bench049Thresholds.intentToInteractiveP95Ms &&
               report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-                bench048Thresholds.attachmentResolutionP95Ms &&
+                bench049Thresholds.attachmentResolutionP95Ms &&
               report.protocolResidualAttribution.transportResidualMs.p95 >= 0 &&
               report.protocolResidualAttribution.transportResidualMs.p95 <=
-                bench048Thresholds.transportResidualP95Ms &&
+                bench049Thresholds.transportResidualP95Ms &&
               report.transportDeliveryAttribution.responseEgressMs.p95 <=
-                bench048Thresholds.responseEgressP95Ms &&
+                bench049Thresholds.responseEgressP95Ms &&
               report.rendererOccupancy.runsWithBothProjectedEvents >=
-                bench048Thresholds.minimumRunsWithBothProjectedEvents &&
+                bench049Thresholds.minimumRunsWithBothProjectedEvents &&
               report.rendererOccupancy.runsWithReactUpdate >=
-                bench048Thresholds.minimumRunsWithReactUpdate &&
-              report.rendererOccupancy.occupancyP95Fraction >=
-                bench048Thresholds.minimumOccupancyP95Fraction &&
-              report.rendererOccupancy.explainedRuns >= bench048Thresholds.minimumExplainedRuns &&
+                bench049Thresholds.minimumRunsWithReactUpdate &&
+              report.subscriptionHandoff.exactTargetRuns >=
+                bench049Thresholds.minimumExactTargetRuns &&
+              report.subscriptionHandoff.handoffP95Fraction >=
+                bench049Thresholds.minimumHandoffP95Fraction &&
+              report.subscriptionHandoff.combinedP95Fraction >=
+                bench049Thresholds.minimumCombinedP95Fraction &&
+              report.subscriptionHandoff.attributionExplainedRuns >=
+                bench049Thresholds.minimumExplainedRuns &&
               report.nativeTuiIdleTransportControl.maximumReconstructionErrorMs <=
-                bench048Thresholds.reconstructionToleranceMs
-            : runBench047NativeTuiIdleSmoke
+                bench049Thresholds.reconstructionToleranceMs
+            : runBench048RendererOccupancySmoke
               ? report.allSafe &&
                 report.stabilityAdmission.validRuns === repetitions * 2 &&
                 report.nativeTuiIdleTransportControl.validRuns === repetitions &&
+                report.rendererOccupancy.validRuns === repetitions &&
                 report.nativeTuiIdleTransportControl.maximumReconstructionErrorMs <=
-                  bench047Thresholds.reconstructionToleranceMs
-              : runBench047NativeTuiIdleControl
+                  bench048Thresholds.reconstructionToleranceMs
+              : runBench048RendererOccupancy
                 ? report.allSafe &&
                   report.predictionPassed &&
                   report.stabilityAdmission.validRuns === repetitions * 2 &&
                   report.nativeTuiIdleTransportControl.validRuns === repetitions &&
+                  report.rendererOccupancy.validRuns === repetitions &&
                   report.distributions.intentToInteractiveMs.p95 <=
-                    bench047Thresholds.intentToInteractiveP95Ms &&
+                    bench048Thresholds.intentToInteractiveP95Ms &&
                   report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-                    bench047Thresholds.attachmentResolutionP95Ms &&
+                    bench048Thresholds.attachmentResolutionP95Ms &&
                   report.protocolResidualAttribution.transportResidualMs.p95 >= 0 &&
                   report.protocolResidualAttribution.transportResidualMs.p95 <=
-                    bench047Thresholds.transportResidualP95Ms &&
+                    bench048Thresholds.transportResidualP95Ms &&
                   report.transportDeliveryAttribution.responseEgressMs.p95 <=
-                    bench047Thresholds.responseEgressP95Ms &&
-                  report.nativeTuiIdleTransportControl.pairedTuiSlowerSamples >=
-                    bench047Thresholds.minimumPairedTuiSlowerSamples &&
-                  report.nativeTuiIdleTransportControl.idleP95ImprovementFraction >=
-                    bench047Thresholds.minimumIdleP95ImprovementFraction &&
+                    bench048Thresholds.responseEgressP95Ms &&
+                  report.rendererOccupancy.runsWithBothProjectedEvents >=
+                    bench048Thresholds.minimumRunsWithBothProjectedEvents &&
+                  report.rendererOccupancy.runsWithReactUpdate >=
+                    bench048Thresholds.minimumRunsWithReactUpdate &&
+                  report.rendererOccupancy.occupancyP95Fraction >=
+                    bench048Thresholds.minimumOccupancyP95Fraction &&
+                  report.rendererOccupancy.explainedRuns >=
+                    bench048Thresholds.minimumExplainedRuns &&
                   report.nativeTuiIdleTransportControl.maximumReconstructionErrorMs <=
-                    bench047Thresholds.reconstructionToleranceMs
-                : runBench046StandaloneTransportControl
+                    bench048Thresholds.reconstructionToleranceMs
+                : runBench047NativeTuiIdleSmoke
                   ? report.allSafe &&
                     report.stabilityAdmission.validRuns === repetitions * 2 &&
-                    report.standaloneTransportControl.validControls === repetitions &&
-                    report.standaloneTransportControl.pairedRuns === repetitions &&
-                    report.standaloneTransportControl.uniqueRepetitions === repetitions &&
-                    report.standaloneTransportControl.beforeControls === repetitions / 2 &&
-                    report.standaloneTransportControl.afterControls === repetitions / 2 &&
-                    report.distributions.intentToInteractiveMs.p95 <=
-                      bench046Thresholds.intentToInteractiveP95Ms &&
-                    report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-                      bench046Thresholds.attachmentResolutionP95Ms &&
-                    report.protocolResidualAttribution.transportResidualMs.p95 <=
-                      bench046Thresholds.transportResidualP95Ms &&
-                    report.transportDeliveryAttribution.responseEgressMs.p95 <=
-                      bench046Thresholds.responseEgressP95Ms &&
-                    report.standaloneTransportControl.pairedTuiSlowerSamples >=
-                      bench046Thresholds.minimumPairedTuiSlowerSamples &&
-                    report.standaloneTransportControl.standaloneP95ImprovementFraction >=
-                      bench046Thresholds.minimumStandaloneP95ImprovementFraction
-                  : runBench045TransportDeliveryAttribution
+                    report.nativeTuiIdleTransportControl.validRuns === repetitions &&
+                    report.nativeTuiIdleTransportControl.maximumReconstructionErrorMs <=
+                      bench047Thresholds.reconstructionToleranceMs
+                  : runBench047NativeTuiIdleControl
                     ? report.allSafe &&
-                      report.stabilityAdmission.validRuns === repetitions &&
+                      report.predictionPassed &&
+                      report.stabilityAdmission.validRuns === repetitions * 2 &&
+                      report.nativeTuiIdleTransportControl.validRuns === repetitions &&
                       report.distributions.intentToInteractiveMs.p95 <=
-                        bench045Thresholds.intentToInteractiveP95Ms &&
+                        bench047Thresholds.intentToInteractiveP95Ms &&
                       report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-                        bench045Thresholds.attachmentResolutionP95Ms &&
+                        bench047Thresholds.attachmentResolutionP95Ms &&
                       report.protocolResidualAttribution.transportResidualMs.p95 >= 0 &&
                       report.protocolResidualAttribution.transportResidualMs.p95 <=
-                        bench045Thresholds.transportResidualP95Ms &&
+                        bench047Thresholds.transportResidualP95Ms &&
                       report.transportDeliveryAttribution.responseEgressMs.p95 <=
-                        bench045Thresholds.responseEgressP95Ms &&
-                      report.transportDeliveryAttribution.tailIntervals >=
-                        bench045Thresholds.minimumTailIntervals &&
-                      report.transportDeliveryAttribution.dominantP95Fraction >=
-                        bench045Thresholds.dominantP95Fraction &&
-                      report.transportDeliveryAttribution.dominantTailIntervals >=
-                        bench045Thresholds.minimumDominantTailIntervals &&
-                      report.transportDeliveryAttribution.maximumReconstructionErrorMs <=
-                        bench045Thresholds.reconstructionToleranceMs
-                    : runBench044WireAttribution
+                        bench047Thresholds.responseEgressP95Ms &&
+                      report.nativeTuiIdleTransportControl.pairedTuiSlowerSamples >=
+                        bench047Thresholds.minimumPairedTuiSlowerSamples &&
+                      report.nativeTuiIdleTransportControl.idleP95ImprovementFraction >=
+                        bench047Thresholds.minimumIdleP95ImprovementFraction &&
+                      report.nativeTuiIdleTransportControl.maximumReconstructionErrorMs <=
+                        bench047Thresholds.reconstructionToleranceMs
+                    : runBench046StandaloneTransportControl
                       ? report.allSafe &&
-                        report.stabilityAdmission.validRuns === repetitions &&
+                        report.stabilityAdmission.validRuns === repetitions * 2 &&
+                        report.standaloneTransportControl.validControls === repetitions &&
+                        report.standaloneTransportControl.pairedRuns === repetitions &&
+                        report.standaloneTransportControl.uniqueRepetitions === repetitions &&
+                        report.standaloneTransportControl.beforeControls === repetitions / 2 &&
+                        report.standaloneTransportControl.afterControls === repetitions / 2 &&
                         report.distributions.intentToInteractiveMs.p95 <=
-                          bench044Thresholds.intentToInteractiveP95Ms &&
+                          bench046Thresholds.intentToInteractiveP95Ms &&
                         report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-                          bench044Thresholds.attachmentResolutionP95Ms &&
-                        report.protocolResidualAttribution.transportResidualMs.p95 >= 0 &&
+                          bench046Thresholds.attachmentResolutionP95Ms &&
                         report.protocolResidualAttribution.transportResidualMs.p95 <=
-                          bench044Thresholds.transportResidualP95Ms &&
-                        report.wireAttribution.tailIntervals >=
-                          bench044Thresholds.minimumTailIntervals &&
-                        report.wireAttribution.dominantP95Fraction >=
-                          bench044Thresholds.dominantP95Fraction &&
-                        report.wireAttribution.dominantTailIntervals >=
-                          bench044Thresholds.minimumDominantTailIntervals &&
-                        report.wireAttribution.maximumReconstructionErrorMs <=
-                          bench044Thresholds.reconstructionToleranceMs
-                      : runBench043ProtocolResidualAttribution
+                          bench046Thresholds.transportResidualP95Ms &&
+                        report.transportDeliveryAttribution.responseEgressMs.p95 <=
+                          bench046Thresholds.responseEgressP95Ms &&
+                        report.standaloneTransportControl.pairedTuiSlowerSamples >=
+                          bench046Thresholds.minimumPairedTuiSlowerSamples &&
+                        report.standaloneTransportControl.standaloneP95ImprovementFraction >=
+                          bench046Thresholds.minimumStandaloneP95ImprovementFraction
+                      : runBench045TransportDeliveryAttribution
                         ? report.allSafe &&
+                          report.stabilityAdmission.validRuns === repetitions &&
                           report.distributions.intentToInteractiveMs.p95 <=
-                            bench043Thresholds.intentToInteractiveP95Ms &&
+                            bench045Thresholds.intentToInteractiveP95Ms &&
                           report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-                            bench043Thresholds.attachmentResolutionP95Ms &&
+                            bench045Thresholds.attachmentResolutionP95Ms &&
                           report.protocolResidualAttribution.transportResidualMs.p95 >= 0 &&
                           report.protocolResidualAttribution.transportResidualMs.p95 <=
-                            bench043Thresholds.transportResidualP95Ms &&
-                          report.protocolResidualAttribution.tailIntervals >=
-                            bench043Thresholds.minimumTailIntervals &&
-                          report.protocolResidualAttribution.dominantP95Fraction >=
-                            bench043Thresholds.dominantP95Fraction &&
-                          report.protocolResidualAttribution.dominantTailIntervals >=
-                            bench043Thresholds.minimumDominantTailIntervals
-                        : runBench042ObserverPhaseAttribution
+                            bench045Thresholds.transportResidualP95Ms &&
+                          report.transportDeliveryAttribution.responseEgressMs.p95 <=
+                            bench045Thresholds.responseEgressP95Ms &&
+                          report.transportDeliveryAttribution.tailIntervals >=
+                            bench045Thresholds.minimumTailIntervals &&
+                          report.transportDeliveryAttribution.dominantP95Fraction >=
+                            bench045Thresholds.dominantP95Fraction &&
+                          report.transportDeliveryAttribution.dominantTailIntervals >=
+                            bench045Thresholds.minimumDominantTailIntervals &&
+                          report.transportDeliveryAttribution.maximumReconstructionErrorMs <=
+                            bench045Thresholds.reconstructionToleranceMs
+                        : runBench044WireAttribution
                           ? report.allSafe &&
+                            report.stabilityAdmission.validRuns === repetitions &&
                             report.distributions.intentToInteractiveMs.p95 <=
-                              bench042Thresholds.intentToInteractiveP95Ms &&
+                              bench044Thresholds.intentToInteractiveP95Ms &&
                             report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-                              bench042Thresholds.attachmentResolutionP95Ms &&
-                            report.observerPhaseAttribution.transportResidualMs.p95 >= 0 &&
-                            report.observerPhaseAttribution.transportResidualMs.p95 <=
-                              bench042Thresholds.transportResidualP95Ms &&
-                            report.observerPhaseAttribution.tailIntervals >=
-                              bench042Thresholds.minimumTailIntervals &&
-                            report.observerPhaseAttribution.dominantP95Fraction >=
-                              bench042Thresholds.dominantP95Fraction &&
-                            report.observerPhaseAttribution.dominantTailIntervals >=
-                              bench042Thresholds.minimumDominantTailIntervals
-                          : runBench041PhaseAttribution
+                              bench044Thresholds.attachmentResolutionP95Ms &&
+                            report.protocolResidualAttribution.transportResidualMs.p95 >= 0 &&
+                            report.protocolResidualAttribution.transportResidualMs.p95 <=
+                              bench044Thresholds.transportResidualP95Ms &&
+                            report.wireAttribution.tailIntervals >=
+                              bench044Thresholds.minimumTailIntervals &&
+                            report.wireAttribution.dominantP95Fraction >=
+                              bench044Thresholds.dominantP95Fraction &&
+                            report.wireAttribution.dominantTailIntervals >=
+                              bench044Thresholds.minimumDominantTailIntervals &&
+                            report.wireAttribution.maximumReconstructionErrorMs <=
+                              bench044Thresholds.reconstructionToleranceMs
+                          : runBench043ProtocolResidualAttribution
                             ? report.allSafe &&
                               report.distributions.intentToInteractiveMs.p95 <=
-                                bench041Thresholds.intentToInteractiveP95Ms &&
+                                bench043Thresholds.intentToInteractiveP95Ms &&
                               report.phaseAttribution.phaseDistributions.attachmentResolutionMs
-                                .p95 <= bench041Thresholds.attachmentResolutionP95Ms &&
-                              report.phaseAttribution.tailIntervals >=
-                                bench041Thresholds.minimumTailIntervals &&
-                              report.phaseAttribution.dominantP95Fraction >=
-                                bench041Thresholds.dominantP95Fraction &&
-                              report.phaseAttribution.dominantTailIntervals >=
-                                bench041Thresholds.minimumDominantTailIntervals
-                            : runBench040ImmediateInput
+                                .p95 <= bench043Thresholds.attachmentResolutionP95Ms &&
+                              report.protocolResidualAttribution.transportResidualMs.p95 >= 0 &&
+                              report.protocolResidualAttribution.transportResidualMs.p95 <=
+                                bench043Thresholds.transportResidualP95Ms &&
+                              report.protocolResidualAttribution.tailIntervals >=
+                                bench043Thresholds.minimumTailIntervals &&
+                              report.protocolResidualAttribution.dominantP95Fraction >=
+                                bench043Thresholds.dominantP95Fraction &&
+                              report.protocolResidualAttribution.dominantTailIntervals >=
+                                bench043Thresholds.minimumDominantTailIntervals
+                            : runBench042ObserverPhaseAttribution
                               ? report.allSafe &&
-                                report.runs.every(
-                                  (run) =>
-                                    !run.dismissalInputSent &&
-                                    run.acknowledgementCount === 1 &&
-                                    run.overlayDismissedToInputSentMs <=
-                                      bench040Thresholds.dismissalToInputWriteMaxMs,
-                                ) &&
-                                report.runs.some(
-                                  (run) =>
-                                    !run.readyWasReplay &&
-                                    run.inputSentToHostReadyMs >=
-                                      bench040Thresholds.minimumPreReadyWriteMs,
-                                ) &&
-                                report.distributions.intentToInteractiveMs.median <=
-                                  bench040Thresholds.intentToInteractiveMedianMs &&
                                 report.distributions.intentToInteractiveMs.p95 <=
-                                  bench040Thresholds.intentToInteractiveP95Ms &&
-                                improvement(
-                                  exp016CandidateIntentP95Ms,
-                                  report.distributions.intentToInteractiveMs.p95,
-                                ) >= bench040Thresholds.minimumP95ImprovementFraction &&
-                                report.distributions.focusToInputAckMs.p95 <=
-                                  bench040Thresholds.dismissalToInputAckP95Ms
-                              : runExp016Control
+                                  bench042Thresholds.intentToInteractiveP95Ms &&
+                                report.phaseAttribution.phaseDistributions.attachmentResolutionMs
+                                  .p95 <= bench042Thresholds.attachmentResolutionP95Ms &&
+                                report.observerPhaseAttribution.transportResidualMs.p95 >= 0 &&
+                                report.observerPhaseAttribution.transportResidualMs.p95 <=
+                                  bench042Thresholds.transportResidualP95Ms &&
+                                report.observerPhaseAttribution.tailIntervals >=
+                                  bench042Thresholds.minimumTailIntervals &&
+                                report.observerPhaseAttribution.dominantP95Fraction >=
+                                  bench042Thresholds.dominantP95Fraction &&
+                                report.observerPhaseAttribution.dominantTailIntervals >=
+                                  bench042Thresholds.minimumDominantTailIntervals
+                              : runBench041PhaseAttribution
                                 ? report.allSafe &&
-                                  report.runs.every((run) => run.dismissalInputSent)
-                                : runExp016Candidate
+                                  report.distributions.intentToInteractiveMs.p95 <=
+                                    bench041Thresholds.intentToInteractiveP95Ms &&
+                                  report.phaseAttribution.phaseDistributions.attachmentResolutionMs
+                                    .p95 <= bench041Thresholds.attachmentResolutionP95Ms &&
+                                  report.phaseAttribution.tailIntervals >=
+                                    bench041Thresholds.minimumTailIntervals &&
+                                  report.phaseAttribution.dominantP95Fraction >=
+                                    bench041Thresholds.dominantP95Fraction &&
+                                  report.phaseAttribution.dominantTailIntervals >=
+                                    bench041Thresholds.minimumDominantTailIntervals
+                                : runBench040ImmediateInput
                                   ? report.allSafe &&
-                                    report.runs.every((run) => !run.dismissalInputSent) &&
+                                    report.runs.every(
+                                      (run) =>
+                                        !run.dismissalInputSent &&
+                                        run.acknowledgementCount === 1 &&
+                                        run.overlayDismissedToInputSentMs <=
+                                          bench040Thresholds.dismissalToInputWriteMaxMs,
+                                    ) &&
+                                    report.runs.some(
+                                      (run) =>
+                                        !run.readyWasReplay &&
+                                        run.inputSentToHostReadyMs >=
+                                          bench040Thresholds.minimumPreReadyWriteMs,
+                                    ) &&
                                     report.distributions.intentToInteractiveMs.median <=
-                                      exp016Thresholds.intentToInteractiveMedianMs &&
+                                      bench040Thresholds.intentToInteractiveMedianMs &&
                                     report.distributions.intentToInteractiveMs.p95 <=
-                                      exp016Thresholds.intentToInteractiveP95Ms &&
+                                      bench040Thresholds.intentToInteractiveP95Ms &&
+                                    improvement(
+                                      exp016CandidateIntentP95Ms,
+                                      report.distributions.intentToInteractiveMs.p95,
+                                    ) >= bench040Thresholds.minimumP95ImprovementFraction &&
                                     report.distributions.focusToInputAckMs.p95 <=
-                                      exp016Thresholds.overlayDismissedToInputAckP95Ms
-                                  : runSafetyAudit
-                                    ? report.safetyAuditPassed
-                                    : runFocusComparison
-                                      ? report.runs.length === repetitions &&
-                                        report.runs.every((run) => run.phaseCoherent) &&
-                                        report.focusComparison.escape.runs === 5 &&
-                                        report.focusComparison.toggle.runs === 5 &&
-                                        report.focusComparison.toggle.focusToInputAckMs.p95 <=
-                                          focusThresholds.focusToInputAckP95Ms &&
-                                        report.focusComparison
-                                          .focusToInputAckP95ImprovementFraction >=
-                                          focusThresholds.focusToInputAckMinimumImprovementFraction &&
-                                        report.focusComparison.toggle.intentToInteractiveMs
-                                          .median <= focusThresholds.intentToInteractiveMedianMs &&
-                                        report.focusComparison.toggle.intentToInteractiveMs.p95 <=
-                                          focusThresholds.intentToInteractiveP95Ms
-                                      : report.runs.length === repetitions &&
-                                        report.distributions.launchToDashboardMs.median <=
-                                          thresholds.launchToDashboardMedianMs &&
-                                        report.distributions.launchToDashboardMs.p95 <=
-                                          thresholds.launchToDashboardP95Ms &&
-                                        report.distributions.intentToOptimisticMs.p95 <=
-                                          thresholds.intentToOptimisticP95Ms &&
+                                      bench040Thresholds.dismissalToInputAckP95Ms
+                                  : runExp016Control
+                                    ? report.allSafe &&
+                                      report.runs.every((run) => run.dismissalInputSent)
+                                    : runExp016Candidate
+                                      ? report.allSafe &&
+                                        report.runs.every((run) => !run.dismissalInputSent) &&
                                         report.distributions.intentToInteractiveMs.median <=
-                                          thresholds.intentToInteractiveMedianMs &&
+                                          exp016Thresholds.intentToInteractiveMedianMs &&
                                         report.distributions.intentToInteractiveMs.p95 <=
-                                          thresholds.intentToInteractiveP95Ms &&
-                                        report.distributions.intentToCanonicalUiMs.p95 <=
-                                          thresholds.intentToCanonicalUiP95Ms &&
-                                        report.distributions.launchToInteractiveMs.p95 <=
-                                          thresholds.launchToInteractiveP95Ms;
+                                          exp016Thresholds.intentToInteractiveP95Ms &&
+                                        report.distributions.focusToInputAckMs.p95 <=
+                                          exp016Thresholds.overlayDismissedToInputAckP95Ms
+                                      : runSafetyAudit
+                                        ? report.safetyAuditPassed
+                                        : runFocusComparison
+                                          ? report.runs.length === repetitions &&
+                                            report.runs.every((run) => run.phaseCoherent) &&
+                                            report.focusComparison.escape.runs === 5 &&
+                                            report.focusComparison.toggle.runs === 5 &&
+                                            report.focusComparison.toggle.focusToInputAckMs.p95 <=
+                                              focusThresholds.focusToInputAckP95Ms &&
+                                            report.focusComparison
+                                              .focusToInputAckP95ImprovementFraction >=
+                                              focusThresholds.focusToInputAckMinimumImprovementFraction &&
+                                            report.focusComparison.toggle.intentToInteractiveMs
+                                              .median <=
+                                              focusThresholds.intentToInteractiveMedianMs &&
+                                            report.focusComparison.toggle.intentToInteractiveMs
+                                              .p95 <= focusThresholds.intentToInteractiveP95Ms
+                                          : report.runs.length === repetitions &&
+                                            report.distributions.launchToDashboardMs.median <=
+                                              thresholds.launchToDashboardMedianMs &&
+                                            report.distributions.launchToDashboardMs.p95 <=
+                                              thresholds.launchToDashboardP95Ms &&
+                                            report.distributions.intentToOptimisticMs.p95 <=
+                                              thresholds.intentToOptimisticP95Ms &&
+                                            report.distributions.intentToInteractiveMs.median <=
+                                              thresholds.intentToInteractiveMedianMs &&
+                                            report.distributions.intentToInteractiveMs.p95 <=
+                                              thresholds.intentToInteractiveP95Ms &&
+                                            report.distributions.intentToCanonicalUiMs.p95 <=
+                                              thresholds.intentToCanonicalUiP95Ms &&
+                                            report.distributions.launchToInteractiveMs.p95 <=
+                                              thresholds.launchToInteractiveP95Ms;
 
     await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -2077,6 +2210,10 @@ async function runRepetition(input: {
     fixture.temporaryRoot,
     `server-prepare-external-launch-protocol-phases-${repetition}.json`,
   );
+  const eventEgressTracePath = join(
+    fixture.temporaryRoot,
+    `target-event-egress-${repetition}.json`,
+  );
   const idleTransportProbeCompletionPath = join(
     fixture.temporaryRoot,
     `native-idle-transport-probe-${repetition}.json`,
@@ -2147,6 +2284,7 @@ async function runRepetition(input: {
       observerPhaseTracePath,
       clientProtocolTracePath,
       serverProtocolTracePath,
+      eventEgressTracePath,
       idleTransportProbeCompletionPath,
     });
     uiPid = launched.panePid;
@@ -2434,6 +2572,7 @@ async function runRepetition(input: {
     const observerPhaseTraceAbsentBeforeStop = !(await pathExists(observerPhaseTracePath));
     const serverProtocolTraceAbsentBeforeObserverStop =
       !(await pathExists(serverProtocolTracePath));
+    const eventEgressTraceAbsentBeforeObserverStop = !(await pathExists(eventEgressTracePath));
     await observer.stop();
     observerStoppedCleanly = await waitForPidExit(observerPid, 10_000);
     uiStderr = await readFile(uiStderrPath, "utf8").catch(() => "");
@@ -2461,6 +2600,9 @@ async function runRepetition(input: {
           )
         : undefined,
     );
+    const eventEgressTrace = runBench050TargetEventEgressExperiment
+      ? await parseDiagnosticTrace(eventEgressTracePath, targetEventEgressTraceSchema)
+      : undefined;
     const protocolResidualAnalysis = analyzeProtocolResidual({
       managedLaunch: managedLaunchPhaseAnalysis,
       observerExternalLaunch: observerExternalLaunchPhaseAnalysis,
@@ -2487,6 +2629,15 @@ async function runRepetition(input: {
       clientProtocol: clientProtocolPhaseAnalysis,
       serverProtocol: serverProtocolPhaseAnalysis,
       rendererOccupancy: rendererOccupancyAnalysis,
+    });
+    const targetEventEgressAnalysis = analyzeTargetEventEgress({
+      trace: eventEgressTrace,
+      correlationId: worktree.id,
+      intentEpochMs: performance.timeOrigin + intentAt,
+      clientProtocol: clientProtocolPhaseAnalysis,
+      serverProtocol: serverProtocolPhaseAnalysis,
+      rendererOccupancy: rendererOccupancyAnalysis,
+      subscriptionHandoff: subscriptionHandoffAnalysis,
     });
     const safetyPredicates = {
       dashboardProjectVisible: dashboardFrame.includes(projectLabel),
@@ -2545,9 +2696,13 @@ async function runRepetition(input: {
       rendererOccupancyTraceExitOnly:
         !runRendererOccupancyExperiment || clientProtocolTraceAbsentBeforeUiExit,
       subscriptionHandoffTraceValid:
-        !runBench049SubscriptionHandoffExperiment || subscriptionHandoffAnalysis.valid,
+        !runSubscriptionHandoffExperiment || subscriptionHandoffAnalysis.valid,
       subscriptionHandoffTraceExitOnly:
-        !runBench049SubscriptionHandoffExperiment || clientProtocolTraceAbsentBeforeUiExit,
+        !runSubscriptionHandoffExperiment || clientProtocolTraceAbsentBeforeUiExit,
+      targetEventEgressTraceValid:
+        !runBench050TargetEventEgressExperiment || targetEventEgressAnalysis.valid,
+      targetEventEgressTraceExitOnly:
+        !runBench050TargetEventEgressExperiment || eventEgressTraceAbsentBeforeObserverStop,
       idleTransportProbeAbsentBeforeSignal:
         !runNativeTuiIdleExperiment || idleTransportProbeAbsentBeforeSignal,
       idleTransportProbeCompletionExact:
@@ -2717,6 +2872,23 @@ async function runRepetition(input: {
       subscriptionHandoffExactTargetActivities: subscriptionHandoffAnalysis.exactTargetActivities,
       subscriptionHandoffFramePlacementValid: subscriptionHandoffAnalysis.framePlacementValid,
       subscriptionHandoffPhaseDurations: subscriptionHandoffAnalysis.phaseDurations,
+      targetEventEgressTrace: targetEventEgressAnalysis.trace,
+      targetEventEgressActivities: targetEventEgressAnalysis.activities,
+      targetEventEgressMatches: targetEventEgressAnalysis.matches,
+      targetEventEgressActivePreCallbackMs: targetEventEgressAnalysis.activePreCallbackMs,
+      targetEventEgressBaselineUnionMs: targetEventEgressAnalysis.baselineUnionMs,
+      targetEventEgressUnionMs: targetEventEgressAnalysis.eventEgressUnionMs,
+      targetEventEgressIncrementalUnionMs: targetEventEgressAnalysis.incrementalUnionMs,
+      targetEventEgressIncrementalFraction: targetEventEgressAnalysis.incrementalFraction,
+      targetEventEgressFullUnionMs: targetEventEgressAnalysis.fullUnionMs,
+      targetEventEgressFullUnionFraction: targetEventEgressAnalysis.fullUnionFraction,
+      targetEventEgressUncoveredMs: targetEventEgressAnalysis.uncoveredMs,
+      targetEventEgressExactTargets: targetEventEgressAnalysis.exactTargets,
+      targetEventEgressPhaseDurations: targetEventEgressAnalysis.phaseDurations,
+      targetEventEgressSocketWriteCallbackMs: targetEventEgressAnalysis.socketWriteCallbackMs,
+      targetEventEgressReactToSessionPublishMs: targetEventEgressAnalysis.reactToSessionPublishMs,
+      targetEventEgressSessionPublishToClientCallbackMs:
+        targetEventEgressAnalysis.sessionPublishToClientCallbackMs,
       loadAverage: { before: loadBefore, after: loadavg() },
       resourceUsage: resourceDelta(usageBefore, process.resourceUsage()),
     };
@@ -3451,7 +3623,7 @@ type RendererOccupancyActivity =
       commitAtMs: number;
     });
 type RendererOccupancyInterval = {
-  source: RendererOccupancyActivity["source"] | "subscriptionHandoff";
+  source: RendererOccupancyActivity["source"] | "subscriptionHandoff" | "targetEventEgress";
   activityId: number;
   startEpochMs: number;
   endEpochMs: number;
@@ -3998,6 +4170,344 @@ function analyzeSubscriptionHandoff(input: {
   };
 }
 
+type TargetEventEgressTrace = z.infer<typeof targetEventEgressTraceSchema>;
+type TargetEventEgressEvent = TargetEventEgressTrace["events"][number];
+type TargetEventEgressActivity = {
+  activityId: number;
+  eventType: (typeof targetEventEgressEventTypes)[number];
+  correlationId: string;
+  events: TargetEventEgressEvent[];
+  publishEpochMs: number;
+  socketWriteReturnedEpochMs: number;
+  socketWriteCallbackEpochMs: number;
+};
+type TargetEventEgressMatch = {
+  eventType: (typeof targetEventEgressEventTypes)[number];
+  serverActivityId: number;
+  clientActivityId: number;
+  clientSocketActivityId: number;
+  publishEpochMs: number;
+  clientCallbackEpochMs: number;
+  clientFrameParsedEpochMs: number;
+  phaseDurations: {
+    publicationMs: number;
+    eventBusToProtocolIteratorMs: number;
+    protocolIteratorToSerializationMs: number;
+    serializationMs: number;
+    synchronousSocketWriteMs: number;
+    crossProcessDeliveryMs: number;
+    clientCallbackToFrameParsedMs: number;
+  };
+  socketWriteCallbackMs: number;
+};
+
+function analyzeTargetEventEgressActivity(
+  events: TargetEventEgressEvent[],
+): TargetEventEgressActivity | null | undefined {
+  const first = events[0];
+  const exactPrefix =
+    first !== undefined &&
+    events.length <= targetEventEgressPhases.length &&
+    events.every(
+      (event, index) =>
+        event.activityId === first.activityId &&
+        event.eventType === first.eventType &&
+        event.correlationId === first.correlationId &&
+        event.phase === targetEventEgressPhases[index] &&
+        (index === 0 ||
+          (event.atMs >= (events[index - 1]?.atMs ?? 0) &&
+            event.epochMs >= (events[index - 1]?.epochMs ?? 0))),
+    );
+  if (!exactPrefix) return undefined;
+  if (events.length < targetEventEgressPhases.length) return null;
+  const timestamps = new Map(events.map((event) => [event.phase, event.epochMs]));
+  return {
+    activityId: first.activityId,
+    eventType: first.eventType,
+    correlationId: first.correlationId,
+    events,
+    publishEpochMs: timestamps.get("publishEntered") ?? 0,
+    socketWriteReturnedEpochMs: timestamps.get("socketWriteReturned") ?? 0,
+    socketWriteCallbackEpochMs: timestamps.get("socketWriteCallbackCompleted") ?? 0,
+  };
+}
+
+function analyzeTargetEventEgress(input: {
+  trace: TargetEventEgressTrace | undefined;
+  correlationId: string;
+  intentEpochMs: number;
+  clientProtocol: ReturnType<typeof analyzePrepareExternalLaunchClientProtocolTrace>;
+  serverProtocol: ReturnType<typeof analyzePrepareExternalLaunchServerProtocolTrace>;
+  rendererOccupancy: ReturnType<typeof analyzeRendererOccupancy>;
+  subscriptionHandoff: ReturnType<typeof analyzeSubscriptionHandoff>;
+}) {
+  const invalid = {
+    valid: false,
+    trace: input.trace ?? null,
+    activities: null,
+    matches: null,
+    activePreCallbackMs: null,
+    baselineUnionMs: null,
+    eventEgressUnionMs: null,
+    incrementalUnionMs: null,
+    incrementalFraction: null,
+    fullUnionMs: null,
+    fullUnionFraction: null,
+    uncoveredMs: null,
+    exactTargets: false,
+    phaseDurations: null,
+    socketWriteCallbackMs: null,
+    reactToSessionPublishMs: null,
+    sessionPublishToClientCallbackMs: null,
+  } as const;
+  const clientTrace = input.clientProtocol.trace;
+  const serverTrace = input.serverProtocol.trace;
+  const rendererActivities = input.rendererOccupancy.activities;
+  const occupancyIntervals = input.rendererOccupancy.clippedOuterIntervals;
+  const targetHandoffs = input.subscriptionHandoff.targetActivities;
+  if (
+    input.trace === undefined ||
+    clientTrace === null ||
+    serverTrace === null ||
+    rendererActivities === null ||
+    occupancyIntervals === null ||
+    targetHandoffs === null
+  ) {
+    return invalid;
+  }
+  const activeStart = serverTrace.events.find((event) => event.phase === "prepareResponseSent");
+  const activeEnd = clientTrace.events.find(
+    (event) => event.phase === "responseSocketDataCallbackEntered",
+  );
+  if (activeStart === undefined || activeEnd === undefined) return invalid;
+
+  const globallyMonotonic = input.trace.events.every(
+    (event, index) =>
+      index === 0 ||
+      (event.atMs >= (input.trace?.events[index - 1]?.atMs ?? 0) &&
+        event.epochMs >= (input.trace?.events[index - 1]?.epochMs ?? 0)),
+  );
+  const groupedEvents = new Map<number, TargetEventEgressEvent[]>();
+  for (const event of input.trace.events) {
+    const activityEvents = groupedEvents.get(event.activityId) ?? [];
+    activityEvents.push(event);
+    groupedEvents.set(event.activityId, activityEvents);
+  }
+  const parsedActivities = [...groupedEvents.values()].map(analyzeTargetEventEgressActivity);
+  if (!globallyMonotonic || parsedActivities.some((activity) => activity === undefined)) {
+    return invalid;
+  }
+  const activities = parsedActivities.filter(
+    (activity): activity is TargetEventEgressActivity =>
+      activity !== null && activity !== undefined,
+  );
+  const competingSocketActivities = rendererActivities.filter(
+    (activity): activity is Extract<RendererOccupancyActivity, { source: "competingSocket" }> =>
+      activity.source === "competingSocket",
+  );
+  const clientTargets = targetHandoffs.flatMap((activity) => {
+    const frameParsed = activity.events.find((event) => event.phase === "frameParsed");
+    if (frameParsed === undefined) return [];
+    const containingCallbacks = competingSocketActivities.filter(
+      (candidate) =>
+        candidate.startEpochMs <= frameParsed.epochMs &&
+        candidate.endEpochMs >= frameParsed.epochMs,
+    );
+    const callback = containingCallbacks[0];
+    return containingCallbacks.length === 1 && callback !== undefined
+      ? [
+          {
+            eventType: activity.eventType,
+            activityId: activity.activityId,
+            socketActivityId: callback.activityId,
+            callbackEpochMs: callback.startEpochMs,
+            frameParsedEpochMs: frameParsed.epochMs,
+          },
+        ]
+      : [];
+  });
+  if (clientTargets.length !== targetHandoffs.length) return invalid;
+
+  const matches: TargetEventEgressMatch[] = [];
+  for (const eventType of targetEventEgressEventTypes) {
+    const clients = clientTargets.filter((target) => target.eventType === eventType);
+    const client = clients[0];
+    if (clients.length !== 1 || client === undefined) return invalid;
+    const servers = activities.filter(
+      (activity) =>
+        activity.eventType === eventType &&
+        activity.correlationId === input.correlationId &&
+        activity.publishEpochMs >= input.intentEpochMs &&
+        activity.socketWriteReturnedEpochMs <= client.callbackEpochMs,
+    );
+    const server = servers[0];
+    if (servers.length !== 1 || server === undefined) return invalid;
+    const timestamps = new Map(server.events.map((event) => [event.phase, event.epochMs]));
+    const phaseDurations = {
+      publicationMs:
+        (timestamps.get("publishCompleted") ?? 0) - (timestamps.get("publishEntered") ?? 0),
+      eventBusToProtocolIteratorMs:
+        (timestamps.get("protocolIteratorResumed") ?? 0) -
+        (timestamps.get("publishCompleted") ?? 0),
+      protocolIteratorToSerializationMs:
+        (timestamps.get("serializationStarted") ?? 0) -
+        (timestamps.get("protocolIteratorResumed") ?? 0),
+      serializationMs:
+        (timestamps.get("serializationCompleted") ?? 0) -
+        (timestamps.get("serializationStarted") ?? 0),
+      synchronousSocketWriteMs:
+        (timestamps.get("socketWriteReturned") ?? 0) -
+        (timestamps.get("serializationCompleted") ?? 0),
+      crossProcessDeliveryMs: client.callbackEpochMs - (timestamps.get("socketWriteReturned") ?? 0),
+      clientCallbackToFrameParsedMs: client.frameParsedEpochMs - client.callbackEpochMs,
+    };
+    const socketWriteCallbackMs =
+      (timestamps.get("socketWriteCallbackCompleted") ?? 0) -
+      (timestamps.get("socketWriteReturned") ?? 0);
+    const criticalPathSumMs = Object.values(phaseDurations).reduce(
+      (sum, duration) => sum + duration,
+      0,
+    );
+    if (
+      Object.values(phaseDurations).some((duration) => duration < 0) ||
+      socketWriteCallbackMs < 0 ||
+      Math.abs(criticalPathSumMs - (client.frameParsedEpochMs - server.publishEpochMs)) >
+        bench050Thresholds.reconstructionToleranceMs
+    ) {
+      return invalid;
+    }
+    matches.push({
+      eventType,
+      serverActivityId: server.activityId,
+      clientActivityId: client.activityId,
+      clientSocketActivityId: client.socketActivityId,
+      publishEpochMs: server.publishEpochMs,
+      clientCallbackEpochMs: client.callbackEpochMs,
+      clientFrameParsedEpochMs: client.frameParsedEpochMs,
+      phaseDurations,
+      socketWriteCallbackMs,
+    });
+  }
+
+  const activePreCallbackMs = activeEnd.epochMs - activeStart.epochMs;
+  const handoffIntervals = targetHandoffs.flatMap((activity) => {
+    const startEpochMs = Math.max(activeStart.epochMs, activity.startEpochMs);
+    const endEpochMs = Math.min(activeEnd.epochMs, activity.endEpochMs);
+    return endEpochMs < startEpochMs
+      ? []
+      : [
+          {
+            source: "subscriptionHandoff" as const,
+            activityId: activity.activityId,
+            startEpochMs,
+            endEpochMs,
+          },
+        ];
+  });
+  const baselineIntervals = [...occupancyIntervals, ...handoffIntervals];
+  const baselineUnionMs = rendererOccupancyIntervalUnionMs(baselineIntervals);
+  const eventEgressIntervals = matches.flatMap((match) => {
+    const startEpochMs = Math.max(activeStart.epochMs, match.publishEpochMs);
+    const endEpochMs = Math.min(activeEnd.epochMs, match.clientCallbackEpochMs);
+    return endEpochMs < startEpochMs
+      ? []
+      : [
+          {
+            source: "targetEventEgress" as const,
+            activityId: match.serverActivityId,
+            startEpochMs,
+            endEpochMs,
+          },
+        ];
+  });
+  const eventEgressUnionMs = rendererOccupancyIntervalUnionMs(eventEgressIntervals);
+  const fullUnionMs = rendererOccupancyIntervalUnionMs([
+    ...baselineIntervals,
+    ...eventEgressIntervals,
+  ]);
+  const incrementalUnionMs = fullUnionMs - baselineUnionMs;
+  const uncoveredMs = activePreCallbackMs - baselineUnionMs;
+  if (
+    baselineUnionMs > activePreCallbackMs + bench050Thresholds.reconstructionToleranceMs ||
+    fullUnionMs > activePreCallbackMs + bench050Thresholds.reconstructionToleranceMs ||
+    Math.abs(baselineUnionMs - (input.subscriptionHandoff.combinedUnionMs ?? -1)) >
+      bench050Thresholds.reconstructionToleranceMs
+  ) {
+    return invalid;
+  }
+  const phaseDurations = matches.reduce(
+    (totals, match) => ({
+      publicationMs: totals.publicationMs + match.phaseDurations.publicationMs,
+      eventBusToProtocolIteratorMs:
+        totals.eventBusToProtocolIteratorMs + match.phaseDurations.eventBusToProtocolIteratorMs,
+      protocolIteratorToSerializationMs:
+        totals.protocolIteratorToSerializationMs +
+        match.phaseDurations.protocolIteratorToSerializationMs,
+      serializationMs: totals.serializationMs + match.phaseDurations.serializationMs,
+      synchronousSocketWriteMs:
+        totals.synchronousSocketWriteMs + match.phaseDurations.synchronousSocketWriteMs,
+      crossProcessDeliveryMs:
+        totals.crossProcessDeliveryMs + match.phaseDurations.crossProcessDeliveryMs,
+      clientCallbackToFrameParsedMs:
+        totals.clientCallbackToFrameParsedMs + match.phaseDurations.clientCallbackToFrameParsedMs,
+    }),
+    {
+      publicationMs: 0,
+      eventBusToProtocolIteratorMs: 0,
+      protocolIteratorToSerializationMs: 0,
+      serializationMs: 0,
+      synchronousSocketWriteMs: 0,
+      crossProcessDeliveryMs: 0,
+      clientCallbackToFrameParsedMs: 0,
+    },
+  );
+  const socketWriteCallbackMs = matches.reduce(
+    (sum, match) => sum + match.socketWriteCallbackMs,
+    0,
+  );
+  const worktreeTarget = targetHandoffs.find(
+    (activity) => activity.eventType === "worktree.updated",
+  );
+  const sessionMatch = matches.find((match) => match.eventType === "session.created");
+  const worktreeReactCompletion =
+    worktreeTarget === undefined || sessionMatch === undefined
+      ? undefined
+      : input.rendererOccupancy.events
+          ?.filter(
+            (event) =>
+              event.source === "rootReact" &&
+              event.phase === "completed" &&
+              event.epochMs >= worktreeTarget.endEpochMs &&
+              event.epochMs <= sessionMatch.clientCallbackEpochMs,
+          )
+          .at(-1);
+  return {
+    valid: true,
+    trace: input.trace,
+    activities,
+    matches,
+    activePreCallbackMs,
+    baselineUnionMs,
+    eventEgressUnionMs,
+    incrementalUnionMs,
+    incrementalFraction: activePreCallbackMs === 0 ? 0 : incrementalUnionMs / activePreCallbackMs,
+    fullUnionMs,
+    fullUnionFraction: activePreCallbackMs === 0 ? 0 : fullUnionMs / activePreCallbackMs,
+    uncoveredMs,
+    exactTargets: true,
+    phaseDurations,
+    socketWriteCallbackMs,
+    reactToSessionPublishMs:
+      worktreeReactCompletion === undefined || sessionMatch === undefined
+        ? null
+        : sessionMatch.publishEpochMs - worktreeReactCompletion.epochMs,
+    sessionPublishToClientCallbackMs:
+      sessionMatch === undefined
+        ? null
+        : sessionMatch.clientCallbackEpochMs - sessionMatch.publishEpochMs,
+  };
+}
+
 const processTableRowSchema = z
   .object({
     pid: z.coerce.number().int().positive(),
@@ -4044,6 +4554,7 @@ async function launchNativeStation(input: {
   observerPhaseTracePath: string;
   clientProtocolTracePath: string;
   serverProtocolTracePath: string;
+  eventEgressTracePath: string;
   idleTransportProbeCompletionPath: string;
 }) {
   const command = [
@@ -4075,6 +4586,11 @@ async function launchNativeStation(input: {
       ? [
           `STATION_QUICK_SESSION_PROTOCOL_CLIENT_PHASE_DIAGNOSTIC_PATH=${shellQuote(input.clientProtocolTracePath)}`,
           `STATION_QUICK_SESSION_PROTOCOL_SERVER_PHASE_DIAGNOSTIC_PATH=${shellQuote(input.serverProtocolTracePath)}`,
+        ]
+      : []),
+    ...(runBench050TargetEventEgressExperiment
+      ? [
+          `STATION_QUICK_SESSION_EVENT_EGRESS_DIAGNOSTIC_PATH=${shellQuote(input.eventEgressTracePath)}`,
         ]
       : []),
     ...(runNativeTuiIdleExperiment
@@ -5045,6 +5561,130 @@ function summarizeSubscriptionHandoff(runs: BenchmarkRun[]) {
       exactTargetActivities: run.subscriptionHandoffExactTargetActivities,
       framePlacementValid: run.subscriptionHandoffFramePlacementValid,
       phaseDurations: run.subscriptionHandoffPhaseDurations,
+    })),
+  };
+}
+
+function summarizeTargetEventEgress(runs: BenchmarkRun[]) {
+  const validRuns = runs.filter(
+    (
+      run,
+    ): run is BenchmarkRun & {
+      targetEventEgressActivePreCallbackMs: number;
+      targetEventEgressBaselineUnionMs: number;
+      targetEventEgressUnionMs: number;
+      targetEventEgressIncrementalUnionMs: number;
+      targetEventEgressIncrementalFraction: number;
+      targetEventEgressFullUnionMs: number;
+      targetEventEgressFullUnionFraction: number;
+      targetEventEgressUncoveredMs: number;
+      targetEventEgressPhaseDurations: NonNullable<BenchmarkRun["targetEventEgressPhaseDurations"]>;
+      targetEventEgressSocketWriteCallbackMs: number;
+    } =>
+      run.targetEventEgressActivePreCallbackMs !== null &&
+      run.targetEventEgressBaselineUnionMs !== null &&
+      run.targetEventEgressUnionMs !== null &&
+      run.targetEventEgressIncrementalUnionMs !== null &&
+      run.targetEventEgressIncrementalFraction !== null &&
+      run.targetEventEgressFullUnionMs !== null &&
+      run.targetEventEgressFullUnionFraction !== null &&
+      run.targetEventEgressUncoveredMs !== null &&
+      run.targetEventEgressPhaseDurations !== null &&
+      run.targetEventEgressSocketWriteCallbackMs !== null,
+  );
+  const activePreCallbackMs = distribution(
+    validRuns.map((run) => run.targetEventEgressActivePreCallbackMs),
+  );
+  const incrementalUnionMs = distribution(
+    validRuns.map((run) => run.targetEventEgressIncrementalUnionMs),
+  );
+  const fullUnionMs = distribution(validRuns.map((run) => run.targetEventEgressFullUnionMs));
+  const uncoveredMs = distribution(validRuns.map((run) => run.targetEventEgressUncoveredMs));
+  const phaseKeys = [
+    "publicationMs",
+    "eventBusToProtocolIteratorMs",
+    "protocolIteratorToSerializationMs",
+    "serializationMs",
+    "synchronousSocketWriteMs",
+    "crossProcessDeliveryMs",
+    "clientCallbackToFrameParsedMs",
+  ] as const;
+  const phaseDistributions = Object.fromEntries(
+    phaseKeys.map((key) => [
+      key,
+      distribution(validRuns.map((run) => run.targetEventEgressPhaseDurations[key])),
+    ]),
+  ) as Record<(typeof phaseKeys)[number], ReturnType<typeof distribution>>;
+  const crossProcessDeliveryP95 = phaseDistributions.crossProcessDeliveryMs.p95;
+  const comparisonPhaseKeys = phaseKeys.filter(
+    (key): key is Exclude<(typeof phaseKeys)[number], "crossProcessDeliveryMs"> =>
+      key !== "crossProcessDeliveryMs",
+  );
+  return {
+    validRuns: validRuns.length,
+    uniqueRepetitions: new Set(validRuns.map((run) => run.repetition)).size,
+    activePreCallbackMs,
+    baselineUnionMs: distribution(validRuns.map((run) => run.targetEventEgressBaselineUnionMs)),
+    eventEgressUnionMs: distribution(validRuns.map((run) => run.targetEventEgressUnionMs)),
+    incrementalUnionMs,
+    incrementalFraction: distribution(
+      validRuns.map((run) => run.targetEventEgressIncrementalFraction),
+    ),
+    incrementalP95Fraction:
+      activePreCallbackMs.p95 === 0 ? 0 : incrementalUnionMs.p95 / activePreCallbackMs.p95,
+    fullUnionMs,
+    fullUnionFraction: distribution(validRuns.map((run) => run.targetEventEgressFullUnionFraction)),
+    fullUnionP95Fraction:
+      activePreCallbackMs.p95 === 0 ? 0 : fullUnionMs.p95 / activePreCallbackMs.p95,
+    uncoveredMs,
+    phaseDistributions,
+    socketWriteCallbackMs: distribution(
+      validRuns.map((run) => run.targetEventEgressSocketWriteCallbackMs),
+    ),
+    reactToSessionPublishMs: distribution(
+      validRuns.flatMap((run) =>
+        run.targetEventEgressReactToSessionPublishMs === null
+          ? []
+          : [run.targetEventEgressReactToSessionPublishMs],
+      ),
+    ),
+    sessionPublishToClientCallbackMs: distribution(
+      validRuns.flatMap((run) =>
+        run.targetEventEgressSessionPublishToClientCallbackMs === null
+          ? []
+          : [run.targetEventEgressSessionPublishToClientCallbackMs],
+      ),
+    ),
+    exactTargetRuns: validRuns.filter((run) => run.targetEventEgressExactTargets).length,
+    attributionExplainedRuns: validRuns.filter(
+      (run) =>
+        run.targetEventEgressFullUnionFraction >= bench050Thresholds.minimumPerRunFullUnionFraction,
+    ).length,
+    predictionExplainedRuns: validRuns.filter(
+      (run) =>
+        run.targetEventEgressFullUnionFraction >= bench050Prediction.minimumPerRunFullUnionFraction,
+    ).length,
+    crossProcessDeliveryP95,
+    crossProcessDeliveryUncoveredP95Fraction:
+      uncoveredMs.p95 === 0 ? 0 : crossProcessDeliveryP95 / uncoveredMs.p95,
+    crossProcessDeliveryDominatesEveryPhase: comparisonPhaseKeys.every(
+      (key) => crossProcessDeliveryP95 >= phaseDistributions[key].p95,
+    ),
+    perRun: validRuns.map((run) => ({
+      repetition: run.repetition,
+      activePreCallbackMs: run.targetEventEgressActivePreCallbackMs,
+      baselineUnionMs: run.targetEventEgressBaselineUnionMs,
+      eventEgressUnionMs: run.targetEventEgressUnionMs,
+      incrementalUnionMs: run.targetEventEgressIncrementalUnionMs,
+      incrementalFraction: run.targetEventEgressIncrementalFraction,
+      fullUnionMs: run.targetEventEgressFullUnionMs,
+      fullUnionFraction: run.targetEventEgressFullUnionFraction,
+      uncoveredMs: run.targetEventEgressUncoveredMs,
+      exactTargets: run.targetEventEgressExactTargets,
+      phaseDurations: run.targetEventEgressPhaseDurations,
+      socketWriteCallbackMs: run.targetEventEgressSocketWriteCallbackMs,
+      reactToSessionPublishMs: run.targetEventEgressReactToSessionPublishMs,
+      sessionPublishToClientCallbackMs: run.targetEventEgressSessionPublishToClientCallbackMs,
     })),
   };
 }

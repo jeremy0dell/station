@@ -9,7 +9,12 @@ import {
   WorktreeCancelRemovalParamsSchema,
   WorktreePrepareRemovalParamsSchema,
 } from "@station/contracts";
-import { Effect, runRuntimeBoundaryWithTimeout } from "@station/runtime";
+import {
+  Effect,
+  markQuickSessionEventEgressDiagnostic,
+  runRuntimeBoundaryWithTimeout,
+  validateQuickSessionEventEgressEnvelopeDiagnostic,
+} from "@station/runtime";
 import { ZodError } from "zod";
 import {
   CommandDispatchParamsSchema,
@@ -323,12 +328,13 @@ async function streamEvents(
       if (next.done) {
         return;
       }
-      connection.send(
-        ProtocolEventEnvelopeSchema.parse({
-          schemaVersion: STATION_SCHEMA_VERSION,
-          event: next.value,
-        }),
-      );
+      markQuickSessionEventEgressDiagnostic(next.value, "protocolIteratorResumed");
+      const envelope = ProtocolEventEnvelopeSchema.parse({
+        schemaVersion: STATION_SCHEMA_VERSION,
+        event: next.value,
+      });
+      validateQuickSessionEventEgressEnvelopeDiagnostic(next.value, envelope);
+      connection.send(envelope);
     }
   } finally {
     await iterator.return?.();

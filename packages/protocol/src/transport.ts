@@ -4,7 +4,12 @@ import { createConnection, createServer, type Server, type Socket } from "node:n
 import { dirname } from "node:path";
 import { PassThrough } from "node:stream";
 import type { SafeError } from "@station/contracts";
-import { isSafeError, runRuntimeBoundary, runRuntimeBoundaryWithTimeout } from "@station/runtime";
+import {
+  isSafeError,
+  markQuickSessionEventEgressDiagnostic,
+  runRuntimeBoundary,
+  runRuntimeBoundaryWithTimeout,
+} from "@station/runtime";
 import { z } from "zod";
 import { protocolSafeError } from "./messages.js";
 import {
@@ -501,7 +506,20 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
 
   return {
     send: (value) => {
-      socket.write(`${JSON.stringify(value)}\n`);
+      const eventEgressTracked = markQuickSessionEventEgressDiagnostic(
+        value,
+        "serializationStarted",
+      );
+      const serialized = `${JSON.stringify(value)}\n`;
+      if (!eventEgressTracked) {
+        socket.write(serialized);
+        return;
+      }
+      markQuickSessionEventEgressDiagnostic(value, "serializationCompleted");
+      socket.write(serialized, () => {
+        markQuickSessionEventEgressDiagnostic(value, "socketWriteCallbackCompleted");
+      });
+      markQuickSessionEventEgressDiagnostic(value, "socketWriteReturned");
     },
     armPrepareExternalLaunchResponseDeliveryDiagnostic: () => {
       if (prepareExternalLaunchClientProtocolDiagnosticEnabled()) {

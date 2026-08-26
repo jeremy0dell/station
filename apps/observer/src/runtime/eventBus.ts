@@ -1,6 +1,12 @@
 import type { EventFilter, StationEvent } from "@station/contracts";
 import { StationEventSchema, stationEventMetadata } from "@station/contracts";
-import { Effect, Queue } from "@station/runtime";
+import {
+  beginQuickSessionEventEgressDiagnostic,
+  Effect,
+  markQuickSessionEventEgressDiagnostic,
+  Queue,
+  validateQuickSessionEventEgressDiagnostic,
+} from "@station/runtime";
 
 export type ObserverEventBus = {
   publish(event: StationEvent): void;
@@ -18,15 +24,32 @@ export function createObserverEventBus(): ObserverEventBus {
 
   return {
     publish: (event) => {
+      const correlationId = quickSessionEventCorrelationId(event);
+      if (correlationId !== undefined) {
+        beginQuickSessionEventEgressDiagnostic(event, event.type, correlationId);
+      }
       const parsedEvent = StationEventSchema.parse(event);
+      validateQuickSessionEventEgressDiagnostic(event, parsedEvent);
       for (const subscriber of subscribers) {
         if (subscriber.active && eventMatchesFilter(parsedEvent, subscriber.filter)) {
           Effect.runSync(Queue.offer(subscriber.queue, parsedEvent));
         }
       }
+      markQuickSessionEventEgressDiagnostic(parsedEvent, "publishCompleted");
     },
     subscribe: (filter) => effectQueueSubscription(subscribers, filter),
   };
+}
+
+function quickSessionEventCorrelationId(event: StationEvent): string | undefined {
+  switch (event.type) {
+    case "worktree.updated":
+      return event.worktreeId;
+    case "session.created":
+      return event.session.worktreeId;
+    default:
+      return undefined;
+  }
 }
 
 function effectQueueSubscription(
