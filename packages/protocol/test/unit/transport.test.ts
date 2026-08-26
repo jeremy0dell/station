@@ -259,7 +259,7 @@ describe("Unix socket NDJSON transport", () => {
     await expect(server.closed).resolves.toBeUndefined();
   });
 
-  it("closes even when a client connection is still open", async () => {
+  it("closes open clients and removes the exact owned socket pathname", async () => {
     const { socketPath } = await createTempSocketPath();
     const server = await listenUnixSocket({
       socketPath,
@@ -269,6 +269,7 @@ describe("Unix socket NDJSON transport", () => {
 
     await expect(server.close()).resolves.toBeUndefined();
     await expect(client.closed).resolves.toBeUndefined();
+    await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 
