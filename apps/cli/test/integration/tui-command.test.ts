@@ -19,7 +19,7 @@ import { resolveStationWorkspaceDir } from "../../src/stationWorkspace.js";
 const now = "2026-05-20T12:00:00.000Z";
 const buildIdentity = "a".repeat(64);
 const observerBuildVersion = `0.0.0-local+station.${buildIdentity}`;
-const higherObserverBuildVersion = `0.0.0-pre-alpha.8.1+station.${buildIdentity}`;
+const higherObserverBuildVersion = `0.0.0-pre-alpha.8.2+station.${buildIdentity}`;
 const nestedTuiDisabledError = {
   tag: "TuiCommandError",
   code: "NESTED_TUI_DISABLED",

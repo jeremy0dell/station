@@ -28,7 +28,7 @@ export type StationBuildInfo = {
 export function stationBuildInfo(): StationBuildInfo {
   return {
     version:
-      typeof STATION_BUILD_VERSION === "undefined" ? "0.0.0-pre-alpha.8.1" : STATION_BUILD_VERSION,
+      typeof STATION_BUILD_VERSION === "undefined" ? "0.0.0-pre-alpha.8.2" : STATION_BUILD_VERSION,
     compiled: isCompiledBinary(),
     buildIdentity:
       typeof STATION_BUILD_IDENTITY === "undefined"
