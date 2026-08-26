@@ -29,16 +29,21 @@ export type RunGuidedPtyOptions = {
   readonly inputs: readonly GuidedPtyInput[];
   readonly rows?: number;
   readonly columns?: number;
+  /** Maximum PTY inactivity before the child is terminated. */
   readonly timeoutMs?: number;
+  /** Absolute ceiling for a child that keeps producing output. */
+  readonly hardTimeoutMs?: number;
   readonly sendSigtermOnFirstRawMode?: boolean;
 };
 
 const rawModeMarker = "__STATION_GUIDED_PTY_RAW__\n";
+const promptReadySequence = "\u001b[?25l";
 
 export function runGuidedPty(options: RunGuidedPtyOptions): Promise<GuidedPtyResult> {
   const rows = options.rows ?? 24;
   const columns = options.columns ?? 100;
   const timeoutMs = options.timeoutMs ?? 20_000;
+  const hardTimeoutMs = Math.max(options.hardTimeoutMs ?? 60_000, timeoutMs);
   const bridge = spawn(
     "python3",
     ["-c", pythonPtyBridge, String(rows), String(columns), options.command, ...options.args],
@@ -51,13 +56,46 @@ export function runGuidedPty(options: RunGuidedPtyOptions): Promise<GuidedPtyRes
   const output: Buffer[] = [];
   let bridgeStderr = "";
   let markerBuffer = "";
+  let promptBuffer = "";
   let answerIndex = 0;
   let timedOut = false;
   let sigtermAttempted = false;
   let sigtermSent = false;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
-  bridge.stdout.on("data", (chunk: Buffer) => output.push(chunk));
+  const terminateForTimeout = () => {
+    if (timedOut) return;
+    timedOut = true;
+    bridge.kill("SIGTERM");
+    setTimeout(() => bridge.kill("SIGKILL"), 500).unref();
+  };
+  const resetIdleTimer = () => {
+    if (idleTimer !== undefined) clearTimeout(idleTimer);
+    idleTimer = setTimeout(terminateForTimeout, timeoutMs);
+  };
+
+  bridge.stdout.on("data", (chunk: Buffer) => {
+    resetIdleTimer();
+    output.push(chunk);
+    promptBuffer += chunk.toString("utf8");
+    let promptIndex = promptBuffer.indexOf(promptReadySequence);
+    while (promptIndex >= 0) {
+      promptBuffer = promptBuffer.slice(promptIndex + promptReadySequence.length);
+      const input = options.inputs[answerIndex];
+      if (options.sendSigtermOnFirstRawMode !== true && input !== undefined) {
+        // Clack hides the cursor only after its keypress listener is attached. Sampled raw-mode
+        // transitions can disappear between immediate prompts, but this rendered boundary cannot.
+        bridge.stdin.write(encodeGuidedInput(input));
+        answerIndex += 1;
+      }
+      promptIndex = promptBuffer.indexOf(promptReadySequence);
+    }
+    if (promptBuffer.length >= promptReadySequence.length) {
+      promptBuffer = promptBuffer.slice(-(promptReadySequence.length - 1));
+    }
+  });
   bridge.stderr.on("data", (chunk: Buffer) => {
+    resetIdleTimer();
     markerBuffer += chunk.toString("utf8");
     let markerIndex = markerBuffer.indexOf(rawModeMarker);
     while (markerIndex >= 0) {
@@ -66,25 +104,17 @@ export function runGuidedPty(options: RunGuidedPtyOptions): Promise<GuidedPtyRes
       if (options.sendSigtermOnFirstRawMode === true && !sigtermAttempted) {
         sigtermAttempted = true;
         sigtermSent = bridge.kill("SIGTERM");
-      } else {
-        const input = options.inputs[answerIndex];
-        if (input !== undefined) {
-          bridge.stdin.write(encodeGuidedInput(input));
-          answerIndex += 1;
-        }
       }
       markerIndex = markerBuffer.indexOf(rawModeMarker);
     }
   });
 
   return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      timedOut = true;
-      bridge.kill("SIGTERM");
-      setTimeout(() => bridge.kill("SIGKILL"), 500).unref();
-    }, timeoutMs);
+    resetIdleTimer();
+    const hardTimer = setTimeout(terminateForTimeout, hardTimeoutMs);
     bridge.on("close", (exitCode) => {
-      clearTimeout(timer);
+      if (idleTimer !== undefined) clearTimeout(idleTimer);
+      clearTimeout(hardTimer);
       bridgeStderr += markerBuffer;
       const rawOutput = Buffer.concat(output).toString("utf8");
       resolve({

@@ -13,6 +13,6 @@ export default defineConfig({
       "tests/e2e/setup-guided-tty.test.ts",
     ],
     fileParallelism: false,
-    testTimeout: 60_000,
+    testTimeout: 90_000,
   },
 });

@@ -65,6 +65,38 @@ describe("guided setup real TTY", () => {
     expect(result.stdout).not.toContain("selected:claude");
   });
 
+  it("delivers each prompt answer when raw mode remains enabled between prompts", async () => {
+    const result = await runGuidedPty({
+      command: process.execPath,
+      args: ["--input-type=module", "--eval", uninterruptedRawModeScript],
+      cwd: process.cwd(),
+      env: process.env,
+      inputs: [{ raw: "a" }, { raw: "b" }],
+      timeoutMs: 5_000,
+    });
+
+    expect(result.timedOut, `${result.stdout}\n${result.stderr}`).toBe(false);
+    expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.answersSent).toBe(2);
+    expect(result.stdout).toContain("answers:a,b");
+  });
+
+  it("allows progressive PTY work to exceed the inactivity timeout", async () => {
+    const result = await runGuidedPty({
+      command: process.execPath,
+      args: ["--input-type=module", "--eval", progressiveOutputScript],
+      cwd: process.cwd(),
+      env: process.env,
+      inputs: [],
+      timeoutMs: 500,
+      hardTimeoutMs: 5_000,
+    });
+
+    expect(result.timedOut, `${result.stdout}\n${result.stderr}`).toBe(false);
+    expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain("progress:done");
+  });
+
   it("keeps the fifth agent navigable in a constrained terminal", async () => {
     const result = await runPresenterScenario({
       scenario: "multi",
@@ -174,4 +206,39 @@ if (scenario === "confirm") {
     process.stdout.write("raw-mode-after:" + String(process.stdin.isRaw === true) + "\n");
   }
 }
+`;
+
+const uninterruptedRawModeScript = String.raw`
+const cursorHide = "\u001b[?25l";
+const cursorShow = "\u001b[?25h";
+const answers = [];
+process.stdin.on("data", (chunk) => {
+  for (const answer of chunk.toString("utf8")) {
+    answers.push(answer);
+    if (answers.length === 1) {
+      process.stdout.write(cursorShow + "first:" + answer + "\n" + cursorHide);
+      continue;
+    }
+    if (answers.length === 2) {
+      process.stdout.write(cursorShow + "answers:" + answers.join(",") + "\n");
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+    }
+  }
+});
+process.stdin.setRawMode(true);
+process.stdin.resume();
+process.stdout.write(cursorHide);
+`;
+
+const progressiveOutputScript = String.raw`
+let progress = 0;
+const timer = setInterval(() => {
+  progress += 1;
+  process.stdout.write("progress:" + String(progress) + "\n");
+  if (progress === 7) {
+    clearInterval(timer);
+    process.stdout.write("progress:done\n");
+  }
+}, 100);
 `;
