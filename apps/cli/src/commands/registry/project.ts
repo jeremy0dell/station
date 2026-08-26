@@ -2,6 +2,7 @@ import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import {
   type ProjectCommandOptions,
+  projectCommandAuditMetadata,
   projectCommandExitCode,
   runProjectCommand,
 } from "../project.js";
@@ -78,5 +79,9 @@ async function runProjectCliCommand(context: CliCommandRunContext) {
     projectOptions,
     context.options.observerDeps,
   );
-  return { code: projectCommandExitCode(result), output: result };
+  return {
+    code: projectCommandExitCode(result),
+    output: result,
+    audit: projectCommandAuditMetadata(result),
+  };
 }

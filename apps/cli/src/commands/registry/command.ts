@@ -2,7 +2,11 @@ import { readStdinIfAvailable } from "../../stdin.js";
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import type { CommandCommandOptions } from "../command.js";
-import { commandCommandExitCode, runCommandCommand } from "../command.js";
+import {
+  commandCommandAuditMetadata,
+  commandCommandExitCode,
+  runCommandCommand,
+} from "../command.js";
 
 export const commandCliCommand: CliCommandNode = {
   name: "command",
@@ -62,5 +66,9 @@ async function runCommandCliCommand(context: CliCommandRunContext) {
     commandOptions,
     context.options.observerDeps,
   );
-  return { code: commandCommandExitCode(result), output: result };
+  return {
+    code: commandCommandExitCode(result),
+    output: result,
+    audit: commandCommandAuditMetadata(result),
+  };
 }

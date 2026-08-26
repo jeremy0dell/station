@@ -46,7 +46,7 @@ export function createCliCommandRegistryApi(registry: CliCommandNode): CliComman
     const path = [topLevel.name];
     let node = topLevel;
     let requiresConfig = topLevel.requiresConfig === true;
-    let route =
+    let route: Omit<CliCommandRoute, "resolvedPath"> | undefined =
       node.run === undefined
         ? undefined
         : {
@@ -59,11 +59,11 @@ export function createCliCommandRegistryApi(registry: CliCommandNode): CliComman
     for (let index = 0; index < args.length; index += 1) {
       const segment = args[index];
       if (segment === undefined) {
-        return route;
+        return route === undefined ? undefined : { ...route, resolvedPath: [...path] };
       }
       const child = findChild(node, segment);
       if (child === undefined) {
-        return route;
+        return route === undefined ? undefined : { ...route, resolvedPath: [...path] };
       }
       node = child;
       path.push(child.name);
@@ -78,7 +78,7 @@ export function createCliCommandRegistryApi(registry: CliCommandNode): CliComman
       }
     }
 
-    return route;
+    return route === undefined ? undefined : { ...route, resolvedPath: [...path] };
   }
 
   async function runCliCommandRoute(

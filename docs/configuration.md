@@ -435,6 +435,14 @@ Nested retention tables:
 See [diagnostics.md](./diagnostics.md) for current enforcement notes; some SQLite
 limits are reported through diagnostics before pruning is implemented.
 
+CLI invocation auditing adds no configuration key. After a successful config
+load, `stn` writes the process witness to `logs/cli.jsonl` under that config's
+resolved Observer state directory and applies the configured retention values.
+When the default config is missing or config loading fails, bootstrap diagnostics
+use the documented default state directory and default retention so the config
+failure can still be witnessed. A loaded configured state directory that is
+unwritable does not silently fall back to another location.
+
 ### `[feature_flags]` — temporary behavior gates (optional)
 
 Strict boolean record. Unknown flag names are rejected.

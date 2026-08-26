@@ -50,6 +50,7 @@ export type CliCommandTopic = {
 };
 
 export type CliCommandRoute = CliCommandTopic & {
+  resolvedPath: readonly string[];
   args: string[];
   requiresConfig: boolean;
 };

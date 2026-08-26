@@ -72,7 +72,9 @@ groups only retained operation, command type, signal kind, record summary,
 error code, and error message facts. It does not infer a subsystem or handler.
 
 `stn debug logs` reads structured JSONL logs from the configured state
-directory without contacting the observer. By default it searches `observer`,
+directory without contacting the observer. It searches each selected component's
+active log and bounded rotated history, reports malformed, unreadable, and
+truncated evidence, and returns at most 500 records. By default it searches `observer`,
 `cli`, `tui`, and `station-host` logs, excludes noisy hook logs, and returns recent `warn`/`error`
 records when no query is supplied, and searches all levels when a query is
 supplied. Use `--component hook` or `--all-components` only when hook delivery
@@ -83,6 +85,16 @@ and detach reasons. Each record marks `componentRole` as
 `context` for direct citation. An exactly matched warning or error record can
 establish the retained event as an observed proximate failure without
 establishing a deeper cause.
+
+Normal `stn` processes also write strict `cli.invocation.start` and
+`cli.invocation.outcome` witnesses to `logs/cli.jsonl`. Query one with
+`stn debug logs <invocationId> --component cli`. These records are redacted and
+bounded, and may correlate `invocationId -> traceId -> commandId`; they neither
+replace Observer command records nor establish current runtime state. Help,
+version, reads, and diagnostic recovery retain their command exit status when the
+audit sink fails but warn on stderr. Mutations refuse before effects when their
+start is not durable; a successful mutation whose outcome cannot be persisted
+returns nonzero and warns that the effect may already have completed.
 
 Lifecycle child reports and boot tails are redacted before they cross the process
 boundary. Ordinary JavaScript errors retain only their redacted first message
@@ -293,7 +305,15 @@ max_bundles = 10
 max_days = 30
 ```
 
-File retention is enforced for logs and bundles created by this diagnostic surface. SQLite over-limit status is reported, but SQLite rows are not pruned by this retention pass. The SQLite age settings do not determine Doctor's top-level status, prune command-error rows, or filter those rows from `recentErrors`.
+CLI invocation writes rotate `cli.jsonl` before its configured per-file or
+component cap, keep the active file, and prune only rotated CLI logs using the
+configured age and per-component count/size caps after a short deletion grace.
+Other log and bundle writers apply their own documented retention behavior;
+`max_total_mb` is currently reporting evidence rather than a cross-component
+deletion authority. SQLite over-limit status is reported, but SQLite rows are not
+pruned by this retention pass. The SQLite age settings do not determine Doctor's
+top-level status, prune command-error rows, or filter those rows from
+`recentErrors`.
 
 ## Redaction
 

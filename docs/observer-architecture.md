@@ -274,6 +274,7 @@ No single layer owns all truth.
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
 | Hook spool | Durable delivery fallback while ingress cannot reach the observer. A queued record is pending evidence, not current graph truth. Its stable spool identity drives replay completion after primary dedupe, and the filesystem record remains until all derived durable work finishes. |
+| CLI invocation witness | A bounded, redacted start/outcome pair in `logs/cli.jsonl`, identified by `invocationId`. It may carry exact allowlisted `traceId` and `commandId` correlation, but it is diagnostic evidence rather than Observer command truth and never grants execution, retry, or recovery authority. |
 | JSONL logs and debug bundles | Diagnostic evidence. They never outrank config, provider reads, current observer state, or command records. |
 | Observer recovery inventory | Point-in-time retained-session and redacted recovery-handle evidence. It never classifies recovery eligibility or grants mutation authority. |
 | Observer recovery assessment | Point-in-time classification over one recovery inventory and one separately captured graph. It may select an opaque Observer handle for downstream policy but never launches it or grants mutation authority; public update reports omit that handle identity. |
@@ -292,11 +293,29 @@ state after terminal completion without changing Observer mutation or publicatio
 Dashboard projection subscribes to that state and never constructs a second client
 runtime.
 
+## CLI Invocation Witness
+
+Every normal process that reaches `runCliMain` mints an `invocationId` before
+parsing, config loading, build inspection, Observer startup, or command side
+effects. CLI composition durably appends a strict start record before permitting
+a mutation and attempts exactly one terminal outcome after formatting and output.
+Help, version, reads, and diagnostic-recovery commands continue with a visible
+warning when the witness sink is unavailable; mutations fail closed before side
+effects. If a successful mutation cannot durably record its outcome, the CLI exits
+nonzero and warns that the effect or accepted dispatch may already have completed.
+
+The correlation chain is `invocationId -> traceId -> commandId` when each later
+identity exists. Command adapters expose only typed, pre-render audit metadata to
+the process lifecycle owner. Observer command records remain the sole durable
+execution model: the witness creates no protocol command, database row, retry, or
+claim that the Observer is current. An uncatchable process termination may leave a
+durable start without a fabricated outcome.
+
 ## Runtime Lifecycle
 
 ### Startup
 
-Normal CLI and provider-hook startup is attach-or-spawn through one CLI lifecycle;
+Normal CLI and provider-hook startup is attach-or-spawn through one Observer lifecycle owned by CLI composition;
 provider-hook delivery adds only its cross-process spawn throttle and shared deadline. Runtime composition
 owns the singleton lifecycle through the process-evidence and incumbent-lifecycle
 ports plus local socket, pidfile, boot-claim, and ownership-watcher adapters. Under

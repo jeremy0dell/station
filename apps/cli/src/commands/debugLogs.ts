@@ -1,8 +1,6 @@
-import { readFile } from "node:fs/promises";
 import type { StationConfig } from "@station/config";
 import type { LogRecord, ObserverStartupEvidence, SafeError } from "@station/contracts";
-import { LogRecordSchema } from "@station/contracts";
-import { componentLogPath } from "@station/observability";
+import { readBoundedComponentLogs } from "@station/observability";
 import { resolveObserverPaths } from "../paths.js";
 import {
   assessCauseEvidence,
@@ -38,6 +36,9 @@ export type DebugLogsResult = {
   evidence: {
     filesSearched: string[];
     matchedFiles: string[];
+    invalidLines: number;
+    unreadableFiles: number;
+    truncatedFiles: number;
   };
   causeAssessment: Pick<
     CauseAssessment,
@@ -60,6 +61,8 @@ type DebugLogRecordSummary = {
   worktreeId?: string;
   sessionId?: string;
   provider?: string;
+  invocationId?: string;
+  cliInvocation?: LogRecord["cliInvocation"];
   operationalBoundaryEvidence?: OperationalBoundaryEvidence;
   context?: DiagnosticContextEntry[];
   matchEvidence?: DiagnosticMatchEvidence[];
@@ -102,8 +105,8 @@ const logLevels: DebugLogLevel[] = ["debug", "info", "warn", "error"];
 /**
  * ADAPTER
  *
- * Reads redacted lifecycle logs and projects strict outer, causal, and startup
- * evidence fields without treating the logging component as failure ownership.
+ * Searches bounded active and rotated redacted logs, including strict invocation lifecycle
+ * summaries, without treating the logging component as failure ownership.
  */
 export async function runDebugLogsCommand(
   args: string[],
@@ -113,15 +116,23 @@ export async function runDebugLogsCommand(
   const paths = resolveObserverPaths(options.config);
   const filesSearched: string[] = [];
   const matches: DebugLogFileMatch[] = [];
+  let invalidLines = 0;
+  let unreadableFiles = 0;
+  let truncatedFiles = 0;
 
   for (const component of parsed.components) {
-    const path = componentLogPath(paths.stateDir, component);
-    filesSearched.push(path);
-    const records = (await readJsonl(path, LogRecordSchema)).filter((record) =>
-      logMatches(record, parsed),
-    );
-    if (records.length > 0) {
-      matches.push({ path, records });
+    const read = await readBoundedComponentLogs({
+      stateDir: paths.stateDir,
+      component,
+      maxRecords: 500,
+    });
+    filesSearched.push(...read.evidence.filesSearched);
+    invalidLines += read.evidence.malformedLines;
+    unreadableFiles += read.evidence.unreadableFiles;
+    truncatedFiles += read.evidence.truncatedFiles;
+    for (const file of read.files) {
+      const records = file.records.filter((record) => logMatches(record, parsed));
+      if (records.length > 0) matches.push({ path: file.path, records });
     }
   }
 
@@ -148,8 +159,8 @@ export async function runDebugLogsCommand(
     observedFailureCodes,
     observedFailureSignals,
     matched: selected.length > 0,
-    searchComplete: true,
-    invalidLines: 0,
+    searchComplete: unreadableFiles === 0 && truncatedFiles === 0,
+    invalidLines,
     reportingBoundaryOnly: selected.length > 0,
   });
   const causeAssessment: DebugLogsResult["causeAssessment"] = {
@@ -168,6 +179,9 @@ export async function runDebugLogsCommand(
     evidence: {
       filesSearched,
       matchedFiles: matches.map((match) => match.path),
+      invalidLines,
+      unreadableFiles,
+      truncatedFiles,
     },
     causeAssessment,
     evidenceRoles: diagnosticEvidenceRoles(),
@@ -237,33 +251,6 @@ function parseDebugLogsArgs(args: string[]): DebugLogsArgs {
   };
 }
 
-async function readJsonl<T>(
-  path: string,
-  schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
-): Promise<T[]> {
-  let source: string;
-  try {
-    source = await readFile(path, "utf8");
-  } catch {
-    return [];
-  }
-  const records: T[] = [];
-  for (const line of source.split("\n")) {
-    if (line.trim().length === 0) {
-      continue;
-    }
-    try {
-      const parsed = schema.safeParse(JSON.parse(line));
-      if (parsed.success) {
-        records.push(parsed.data);
-      }
-    } catch {
-      // Ignore one malformed historical line; bounded search continues with valid records.
-    }
-  }
-  return records;
-}
-
 function logMatches(record: LogRecord, args: DebugLogsArgs): boolean {
   return (
     args.components.includes(record.component) &&
@@ -313,6 +300,8 @@ function logSummary(
   if (record.worktreeId !== undefined) summary.worktreeId = record.worktreeId;
   if (record.sessionId !== undefined) summary.sessionId = record.sessionId;
   if (record.provider !== undefined) summary.provider = record.provider;
+  if (record.invocationId !== undefined) summary.invocationId = record.invocationId;
+  if (record.cliInvocation !== undefined) summary.cliInvocation = record.cliInvocation;
   if (context.length > 0) summary.context = context;
   if (query !== undefined) {
     const matchEvidence = extractDiagnosticMatchEvidence(record, query);
@@ -388,7 +377,7 @@ function parseSince(value: string): string {
 
 function parseLimit(value: string): number {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) {
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 500) {
     throw new Error(`Invalid debug logs --limit value: ${value}`);
   }
   return parsed;

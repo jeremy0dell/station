@@ -30,6 +30,7 @@ Use the narrowest tool that can answer the question:
 | --- | --- |
 | Known trace, command, or diagnostic id | `stn debug trace <id>` |
 | No id yet, historical/local symptom | `stn debug logs [query]` |
+| One CLI process invocation | `stn debug logs <invocationId> --component cli` |
 | Latest known failure | `stn debug trace --latest-failure` |
 | Process status only | `stn observer status` |
 | Current runtime health | `stn doctor` |
@@ -56,7 +57,16 @@ stn debug logs protocol
 stn debug logs --min-level error --limit 20
 stn debug logs timeout --component hook
 stn debug logs "Provider hook ignored before Observer delivery" --component hook
+stn debug logs <invocationId> --component cli
 ```
+
+The last query reads the active CLI log and bounded rotated history without
+starting the Observer. A normal invocation has a strict start record and, unless
+the process was uncatchably terminated, one terminal outcome. Follow its safe
+correlation as `invocationId -> traceId -> commandId`; use `stn command get` or
+`stn debug trace` for Observer-owned command truth. The invocation pair is only a
+CLI witness and does not prove that a current Observer or provider state still
+matches the recorded outcome.
 
 The final query finds safe local evidence for allow-listed provider hooks that
 were ignored before Observer delivery because Station ownership was missing or
