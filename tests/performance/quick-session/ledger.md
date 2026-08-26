@@ -2715,3 +2715,32 @@ runtime/reducer tests, Dashboard runtime tests, focused Station dashboard,
 managed-launch, Observer-client, probe, and profiler tests, Biome,
 `git diff --check`, skipped-runner loading, and a timing-blind structural native
 smoke. No production optimization is registered.
+
+## BENCH-050-E1 preregistration correction before implementation freeze
+
+Pre-freeze source inspection found that the target `worktree.updated` can be
+published by worktree command completion before the later
+`agent.prepareExternalLaunch` request is parsed, even though client scheduling
+delivers that frame inside the active response window. Arming server capture at
+prepare parsing could therefore omit a real target activity. No BENCH-050 smoke
+or timing result has been run or inspected.
+
+Replace only BENCH-050-E's server-admission mechanism as follows. The
+environment-gated runtime diagnostic records all complete target event-egress
+activities during the isolated Observer lifetime and adds a private diagnostic
+correlation id: `worktree.updated.worktreeId` or
+`session.created.session.worktreeId`. This value exists only in the exit trace;
+it is not added to or changed on an event, queue entry, envelope, NDJSON value,
+service, state, or socket payload. Analysis selects the exact correlation id of
+the safely created benchmark worktree, requires one activity of each target
+type whose publication begins no earlier than the user-intent epoch and whose
+socket write returns no later than that type's unique matched client callback,
+and rejects duplicates or ambiguity. Later removal updates are outside that
+intent-to-client boundary and cannot be selected.
+
+All registered phases, unions, thresholds, blind predictions, product and
+safety guards, expected temporary files, JSDoc, validation, and decision rules
+remain unchanged. The temporary runtime JSDoc now documents whole-process
+capture plus analytical exact-correlation selection rather than arm lifetime;
+the Observer event-bus edit uses an exhaustive typed event switch to derive the
+private correlation id.
