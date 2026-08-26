@@ -71,13 +71,25 @@ describe("classifyObserverBuildPrecedence", () => {
   });
 
   it("orders the public pre-alpha after the internal preview version line", () => {
-    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.5.16", higherBuildIdentity);
+    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.6", higherBuildIdentity);
     const internalPreview = observerBuildVersion("0.7.1-rc.8", lowerBuildIdentity);
 
     expect(precedenceFor(publicPreAlpha, internalPreview)).toEqual({
       outcome: "candidate-precedes",
     });
     expect(precedenceFor(internalPreview, publicPreAlpha)).toEqual({
+      outcome: "incumbent-precedes",
+    });
+  });
+
+  it("orders the next public pre-alpha epoch after the prior release", () => {
+    const nextEpoch = observerBuildVersion("0.0.0-pre-alpha.6", higherBuildIdentity);
+    const priorRelease = observerBuildVersion("0.0.0-pre-alpha.5.16", lowerBuildIdentity);
+
+    expect(precedenceFor(nextEpoch, priorRelease)).toEqual({
+      outcome: "candidate-precedes",
+    });
+    expect(precedenceFor(priorRelease, nextEpoch)).toEqual({
       outcome: "incumbent-precedes",
     });
   });
