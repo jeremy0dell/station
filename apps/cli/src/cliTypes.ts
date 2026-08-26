@@ -1,14 +1,5 @@
-import type { LoadedStationConfig, ObserverPaths } from "@station/config";
-import type {
-  CliRunAuditMetadata,
-  LogRecord,
-  ProviderHookArtifactOwner,
-  RetentionPolicy,
-} from "@station/contracts";
-import type {
-  DurableCliInvocationAppendResult,
-  PartialRetentionPolicy,
-} from "@station/observability";
+import type { ProviderHookArtifactOwner } from "@station/contracts";
+import type { CliProcessDeps, CliRunCorrelation } from "./cliProcessDiagnostics.js";
 import type { HostCommandDeps } from "./commands/host/index.js";
 import type { NotifyCommandDeps } from "./commands/notify.js";
 import type { ObserveCommandDeps } from "./commands/observe/index.js";
@@ -24,25 +15,7 @@ export type CliRunResult = {
   code: number;
   output?: unknown;
   outputFormat?: "json" | "text";
-  audit?: CliRunAuditMetadata;
-};
-
-export type CliInvocationAuditDeps = {
-  randomUUID?: () => string;
-  clock?: { now(): Date };
-  loadConfig?: (configPath?: string) => Promise<LoadedStationConfig>;
-  resolveObserverPaths?: (config: LoadedStationConfig["config"] | undefined) => ObserverPaths;
-  mergeRetentionPolicy?: (input?: PartialRetentionPolicy) => RetentionPolicy;
-  appendRecord?: (options: {
-    stateDir: string;
-    policy: RetentionPolicy;
-    record: LogRecord;
-    now?: Date;
-  }) => Promise<DurableCliInvocationAppendResult>;
-  stdoutWrite?: (value: string) => void;
-  stderrWrite?: (value: string) => void;
-  exit?: (code: number) => void;
-  setExitCode?: (code: number) => void;
+  correlation?: CliRunCorrelation;
 };
 
 export type CliRunOptions = {
@@ -57,7 +30,7 @@ export type CliRunOptions = {
   observeDeps?: ObserveCommandDeps;
   setupDeps?: SetupCommandDeps;
   updateDeps?: UpdateCommandDeps;
-  invocationAuditDeps?: CliInvocationAuditDeps;
+  cliProcessDeps?: CliProcessDeps;
   providerHookIngressLauncher?: string;
   providerHookArtifactOwner?: ProviderHookArtifactOwner;
 };

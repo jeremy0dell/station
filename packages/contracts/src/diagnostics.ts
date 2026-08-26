@@ -13,13 +13,7 @@ import {
   TimestampSchema,
   WorktreeIdSchema,
 } from "./ids.js";
-import {
-  CliInvocationIdSchema,
-  CliInvocationLifecycleSchema,
-  type CliInvocationOutcomeSchema,
-  LogComponentSchema,
-  LogLevelSchema,
-} from "./logging.js";
+import { LogComponentSchema, LogLevelSchema } from "./logging.js";
 import { ObserverHealthSchema, ObserverSqliteHealthSummarySchema } from "./observer.js";
 import { ProviderHealthSchema, ProviderHookRuntimeSchema } from "./providers.js";
 import { nonEmptyStringSchema } from "./shared.js";
@@ -49,97 +43,16 @@ export const LogRecordSchema = z
     traceId: TraceIdSchema.optional(),
     spanId: SpanIdSchema.optional(),
     commandId: CommandIdSchema.optional(),
-    diagnosticId: nonEmptyStringSchema.optional(),
-    invocationId: CliInvocationIdSchema.optional(),
     projectId: ProjectIdSchema.optional(),
     worktreeId: nonEmptyStringSchema.optional(),
     sessionId: nonEmptyStringSchema.optional(),
     provider: ProviderIdSchema.optional(),
-    cliInvocation: CliInvocationLifecycleSchema.optional(),
     lifecycle: UiLifecycleEventSchema.optional(),
     attributes: z.record(nonEmptyStringSchema, z.unknown()).optional(),
   })
-  .strict()
-  .superRefine((record, context) => {
-    const invocation = record.cliInvocation;
-    if (invocation === undefined) {
-      return;
-    }
-    if (record.component !== "cli") {
-      context.addIssue({
-        code: "custom",
-        message: "CLI invocation lifecycle records must use the cli component.",
-        path: ["component"],
-      });
-    }
-    if (record.attributes !== undefined || record.lifecycle !== undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "CLI invocation lifecycle records cannot carry arbitrary log payloads.",
-        path: [record.attributes === undefined ? "lifecycle" : "attributes"],
-      });
-    }
-    const expectedMessage =
-      invocation.kind === "start" ? "cli.invocation.start" : "cli.invocation.outcome";
-    if (record.message !== expectedMessage) {
-      context.addIssue({
-        code: "custom",
-        message: "CLI invocation lifecycle records must use the fixed lifecycle message.",
-        path: ["message"],
-      });
-    }
-    if (record.invocationId !== invocation.invocationId) {
-      context.addIssue({
-        code: "custom",
-        message: "CLI invocation lifecycle ids must be mirrored at the log-record boundary.",
-        path: ["invocationId"],
-      });
-    }
-    validateCliInvocationMirrors(
-      record,
-      invocation.kind === "outcome" ? invocation : undefined,
-      context,
-    );
-  });
+  .strict();
 
 export type LogRecord = z.infer<typeof LogRecordSchema>;
-
-function validateCliInvocationMirrors(
-  record: {
-    traceId?: string | undefined;
-    spanId?: string | undefined;
-    commandId?: string | undefined;
-    diagnosticId?: string | undefined;
-    projectId?: string | undefined;
-    worktreeId?: string | undefined;
-    sessionId?: string | undefined;
-    provider?: string | undefined;
-  },
-  invocation: z.infer<typeof CliInvocationOutcomeSchema> | undefined,
-  context: z.RefinementCtx,
-): void {
-  const audit = invocation?.audit;
-  const expected = {
-    commandId: audit?.command?.commandId ?? audit?.error?.commandId,
-    traceId: audit?.command?.traceId ?? audit?.error?.traceId,
-    spanId: undefined,
-    diagnosticId: audit?.error?.diagnosticId,
-    projectId: audit?.resources?.projectId ?? audit?.error?.projectId,
-    worktreeId: audit?.resources?.worktreeId ?? audit?.error?.worktreeId,
-    sessionId: audit?.resources?.sessionId ?? audit?.error?.sessionId,
-    provider:
-      audit?.resources?.provider ?? audit?.placement?.resolved?.provider ?? audit?.error?.provider,
-  } as const;
-  for (const [field, value] of Object.entries(expected)) {
-    if (record[field as keyof typeof record] !== value) {
-      context.addIssue({
-        code: "custom",
-        message: `CLI invocation ${field} must be mirrored at the log-record boundary.`,
-        path: [field],
-      });
-    }
-  }
-}
 
 export const RetentionPolicySchema = z
   .object({

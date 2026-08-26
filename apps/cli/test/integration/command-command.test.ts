@@ -45,10 +45,6 @@ describe("CLI command dispatch/get", () => {
     if (parsed?.success !== true) throw new Error("Expected command input to parse.");
     expect(result).toEqual({
       code: 0,
-      audit: {
-        commandStatus: "accepted",
-        command: { commandId: "cmd_1", traceId: "trc_cli" },
-      },
       output: {
         status: "accepted",
         receipt: receipt("cmd_1"),
@@ -104,11 +100,6 @@ describe("CLI command dispatch/get", () => {
 
     expect(result).toEqual({
       code: 1,
-      audit: {
-        commandStatus: "rejected",
-        command: { commandId: "cmd_rejected", traceId: "trc_cli" },
-        error: { tag: "CommandRejectedError", code: "COMMAND_REJECTED_FOR_TEST" },
-      },
       output: {
         status: "rejected",
         receipt: rejected,
@@ -135,10 +126,6 @@ describe("CLI command dispatch/get", () => {
 
     expect(result).toEqual({
       code: 0,
-      audit: {
-        commandStatus: "accepted",
-        command: { commandId: "cmd_cursor", traceId: "trc_cli" },
-      },
       output: {
         status: "accepted",
         receipt: receipt("cmd_cursor"),
@@ -191,10 +178,6 @@ describe("CLI command dispatch/get", () => {
 
     expect(result).toEqual({
       code: 1,
-      audit: {
-        commandStatus: "failed",
-        command: { commandId: "cmd_failed", traceId: "trc_cli" },
-      },
       output: {
         status: "failed",
         receipt: receipt("cmd_failed"),
@@ -477,29 +460,6 @@ describe("CLI command dispatch/get", () => {
       code: "COMMAND_COMPLETION_MISMATCH",
       commandId: "cmd_expected",
       traceId: "trc_cli",
-    });
-  });
-
-  it("rejects conflicting receipt and terminal-record trace correlation", async () => {
-    const fixture = await createTempState();
-    const command = reconcileCommand("cli-command-trace-mismatch");
-    const mismatched = commandRecord("cmd_expected", command, "succeeded");
-    mismatched.traceId = "trc_other";
-
-    await expect(
-      executeTypedObserverCommand(
-        command,
-        { config: fixture.config, timeoutMs: 1000, waitForCompletion: true },
-        runningObserverDeps({
-          socketPath: fixture.socketPath,
-          dispatch: async () => receipt("cmd_expected"),
-          waitForCommand: async () => mismatched as TerminalCommandRecord,
-        }),
-      ),
-    ).rejects.toMatchObject({
-      tag: "CommandCliError",
-      code: "COMMAND_COMPLETION_MISMATCH",
-      commandId: "cmd_expected",
     });
   });
 

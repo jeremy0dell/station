@@ -26,9 +26,6 @@ describe("CLI project commands", () => {
 
     expect(result).toEqual({
       code: 0,
-      audit: {
-        collection: { resource: "projects", count: 0, identifiersOmitted: true },
-      },
       output: {
         action: "list",
         projects: [],
@@ -60,11 +57,6 @@ describe("CLI project commands", () => {
     expect(parseCommand).not.toHaveBeenCalled();
     expect(result).toEqual({
       code: 0,
-      audit: {
-        commandStatus: "succeeded",
-        command: { commandId: "cmd_project_add", traceId: "trc_project" },
-        resources: { projectId: "web" },
-      },
       output: {
         action: "add",
         status: "succeeded",
@@ -104,11 +96,6 @@ describe("CLI project commands", () => {
     expect(parseCommand).not.toHaveBeenCalled();
     expect(result).toEqual({
       code: 0,
-      audit: {
-        commandStatus: "succeeded",
-        command: { commandId: "cmd_project_remove", traceId: "trc_project" },
-        resources: { projectId: "web" },
-      },
       output: {
         action: "remove",
         status: "succeeded",
@@ -139,11 +126,6 @@ describe("CLI project commands", () => {
     expect(parseCommand).not.toHaveBeenCalled();
     expect(result).toEqual({
       code: 1,
-      audit: {
-        commandStatus: "rejected",
-        command: { commandId: "cmd_project_rejected", traceId: "trc_project" },
-        error: { tag: "CommandRejectedError", code: "PROJECT_ALREADY_CONFIGURED" },
-      },
       output: {
         action: "add",
         status: "rejected",
@@ -170,10 +152,6 @@ describe("CLI project commands", () => {
 
     expect(result).toEqual({
       code: 1,
-      audit: {
-        commandStatus: "failed",
-        command: { commandId: "cmd_project_failed", traceId: "trc_project" },
-      },
       output: {
         action: "add",
         status: "failed",

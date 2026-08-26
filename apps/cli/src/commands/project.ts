@@ -1,21 +1,15 @@
 import { doctorProject, loadConfig, type ProjectConfig, type StationConfig } from "@station/config";
 import type {
   AcceptedCommandReceipt,
-  CliRunAuditMetadata,
   FailedCommandRecord,
   RejectedCommandReceipt,
   SafeError,
   StationCommand,
   SucceededCommandRecord,
 } from "@station/contracts";
-import { allowlistedCliRunAuditMetadata } from "@station/observability";
 import { parsePositiveIntegerOption, parseRequiredOptionValue } from "../args.js";
 import type { ObserverProcessDeps } from "../observerProcess.js";
-import {
-  commandExecutionAuditMetadata,
-  executeTypedObserverCommand,
-  type TypedObserverCommandOptions,
-} from "./command.js";
+import { executeTypedObserverCommand, type TypedObserverCommandOptions } from "./command.js";
 
 export type ProjectCommandOptions = {
   config?: StationConfig;
@@ -165,42 +159,6 @@ export function projectCommandExitCode(result: ProjectCommandResult): number {
     return 1;
   }
   return 0;
-}
-
-export function projectCommandAuditMetadata(result: ProjectCommandResult): CliRunAuditMetadata {
-  if (result.action === "list") {
-    return {
-      collection: {
-        resource: "projects",
-        count: result.projects.length,
-        identifiersOmitted: true,
-      },
-    };
-  }
-  if (result.action === "doctor") {
-    return allowlistedCliRunAuditMetadata({ resources: { projectId: result.project.id } }) ?? {};
-  }
-  const audit = commandExecutionAuditMetadata({
-    status: result.status,
-    receipt: result.receipt,
-    ...(result.status === "succeeded" || result.status === "failed"
-      ? { record: result.command }
-      : {}),
-  });
-  if (result.action === "add" && result.status === "succeeded") {
-    const command = result.command.command;
-    if (command.type !== "project.add") return audit;
-    const added = result.projects.find((project) => project.root === command.payload.path);
-    if (added !== undefined) {
-      return (
-        allowlistedCliRunAuditMetadata({
-          ...audit,
-          resources: { ...audit.resources, projectId: added.id },
-        }) ?? audit
-      );
-    }
-  }
-  return audit;
 }
 
 function projectExecutionOptions(

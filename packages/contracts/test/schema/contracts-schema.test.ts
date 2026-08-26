@@ -6,8 +6,6 @@ import {
   AgentReportExternalExitParamsSchema,
   AgentReportExternalExitResultSchema,
   ClientFeatureFlagsSchema,
-  CliInvocationLifecycleSchema,
-  CliRunAuditMetadataSchema,
   CommandExecutionOutcomeSchema,
   CommandReceiptSchema,
   CommandRecordSchema,
@@ -26,7 +24,6 @@ import {
   HarnessLaunchPlanSchema,
   HarnessResumeTargetSchema,
   HarnessRunObservationSchema,
-  LogRecordSchema,
   ManagedTerminalAttachmentSchema,
   ObservedStatusSchema,
   type ObserverApi,
@@ -109,137 +106,6 @@ function expectFails(schema: ZodType, value: unknown, label: string) {
 }
 
 describe("contract schemas", () => {
-  it("strictly validates bounded CLI invocation lifecycle and mirrored correlation", () => {
-    const invocationId = "11111111-1111-4111-8111-111111111111";
-    const start = {
-      kind: "start",
-      invocationId,
-      startedAt: "2026-08-25T12:00:00.000Z",
-      build: {
-        status: "available",
-        version: "0.7.0",
-        compiled: false,
-        buildIdentity: "a".repeat(64),
-      },
-      intentPath: ["command", "dispatch"],
-      arguments: {
-        argumentCount: 3,
-        positionalCount: 2,
-        recognizedOptions: ["--stdin"],
-        stdinRequested: true,
-      },
-      effect: "mutation",
-      sink: { source: "configured", configResolution: "explicit" },
-      callerClaims: { tmux: true, tmuxPane: true },
-    } as const;
-    const audit = {
-      commandStatus: "succeeded",
-      command: { commandId: "cmd_1", traceId: "trc_1" },
-      resources: { projectId: "web", worktreeId: "wt_1" },
-    } as const;
-    const outcome = {
-      kind: "outcome",
-      invocationId,
-      finishedAt: "2026-08-25T12:00:01.000Z",
-      durationMs: 1000,
-      status: "succeeded",
-      exitCode: 0,
-      resolvedPath: ["command", "dispatch"],
-      audit,
-    } as const;
-
-    expect(CliInvocationLifecycleSchema.parse(start)).toEqual(start);
-    expect(CliInvocationLifecycleSchema.parse(outcome)).toEqual(outcome);
-    expect(
-      LogRecordSchema.parse({
-        timestamp: outcome.finishedAt,
-        level: "info",
-        component: "cli",
-        message: "cli.invocation.outcome",
-        invocationId,
-        commandId: "cmd_1",
-        traceId: "trc_1",
-        projectId: "web",
-        worktreeId: "wt_1",
-        cliInvocation: outcome,
-      }),
-    ).toMatchObject({ invocationId, commandId: "cmd_1" });
-
-    expectFails(
-      CliInvocationLifecycleSchema,
-      { ...start, intentPath: Array.from({ length: 9 }, () => "segment") },
-      "CLI invocation with too many path segments",
-    );
-    expectFails(
-      CliInvocationLifecycleSchema,
-      {
-        ...start,
-        arguments: {
-          ...start.arguments,
-          recognizedOptions: Array.from({ length: 33 }, (_, index) => `--option-${index}`),
-        },
-      },
-      "CLI invocation with too many option names",
-    );
-    expectFails(
-      CliRunAuditMetadataSchema,
-      { callerContext: { presentation: "presented", authorityId: "secret" } },
-      "CLI caller context with placement authority",
-    );
-    expectFails(
-      CliRunAuditMetadataSchema,
-      { resources: { projectId: "sk-secret000000000000" } },
-      "CLI audit with a secret-looking exact id",
-    );
-    expectFails(
-      CliRunAuditMetadataSchema,
-      { error: { tag: "CommandError", code: "FAILED", message: "private detail" } },
-      "CLI audit with a forbidden error message",
-    );
-    expectFails(
-      CliRunAuditMetadataSchema,
-      {
-        command: { commandId: "cmd_1", traceId: "trc_1" },
-        error: { tag: "CommandError", code: "FAILED", commandId: "cmd_1", traceId: "trc_2" },
-      },
-      "CLI audit with conflicting trace correlation",
-    );
-    expectFails(
-      LogRecordSchema,
-      {
-        timestamp: outcome.finishedAt,
-        level: "info",
-        component: "cli",
-        message: "cli.invocation.outcome",
-        invocationId,
-        commandId: "cmd_other",
-        traceId: "trc_1",
-        projectId: "web",
-        worktreeId: "wt_1",
-        cliInvocation: outcome,
-      },
-      "CLI lifecycle with mismatched mirrored command id",
-    );
-    expectFails(
-      LogRecordSchema,
-      {
-        timestamp: start.startedAt,
-        level: "info",
-        component: "cli",
-        message: "cli.invocation.start",
-        invocationId,
-        commandId: "cmd_unmirrored",
-        cliInvocation: start,
-      },
-      "CLI start with unmirrored command correlation",
-    );
-    expectFails(
-      CliInvocationLifecycleSchema,
-      { ...start, extra: true },
-      "CLI invocation with an unknown key",
-    );
-  });
-
   it("accepts only the shared lowercase 64-hex Station build identity", () => {
     expectParses(StationBuildIdentitySchema, "a".repeat(64), "lowercase build identity");
     expectFails(StationBuildIdentitySchema, "A".repeat(64), "uppercase build identity");

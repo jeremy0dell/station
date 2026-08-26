@@ -26,12 +26,6 @@ const context: CurrentSessionContext = {
     expiresAt: "2026-08-21T12:10:00.000Z",
   },
   presentation: "presented",
-  session: {
-    id: "session-current",
-    projectId: "web",
-    worktreeId: "worktree-current",
-    group: { id: "group-current", name: "Private Group Name" },
-  },
 };
 
 type RunCli = typeof import("@station/cli").runCli;
@@ -65,29 +59,7 @@ describe("session current command", () => {
         }),
       });
 
-      expect(result).toEqual({
-        code: 0,
-        output: context,
-        audit: {
-          callerContext: {
-            presentation: "presented",
-            session: {
-              sessionId: "session-current",
-              projectId: "web",
-              worktreeId: "worktree-current",
-              groupId: "group-current",
-            },
-          },
-          resources: {
-            sessionId: "session-current",
-            projectId: "web",
-            worktreeId: "worktree-current",
-          },
-        },
-      });
-      expect(JSON.stringify(result.audit)).not.toContain("authority");
-      expect(JSON.stringify(result.audit)).not.toContain("expiresAt");
-      expect(JSON.stringify(result.audit)).not.toContain("Private Group Name");
+      expect(result).toEqual({ code: 0, output: context });
       expect(callers).toHaveLength(1);
       expect(callers[0]?.process).toMatchObject({ pid: process.pid });
       expect(callers[0]?.process.startToken).toBe("process-start");

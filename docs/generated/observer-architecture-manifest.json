@@ -13632,11 +13632,19 @@
   ],
   "controlledDeclarations": [
     {
+      "path": "apps/cli/src/cliProcessDiagnostics.ts",
+      "declaration": "createCliProcessDiagnostics",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Projects one CLI process onto an allowlisted, redacted JSONL diagnostic sink. Its records are non-authoritative and best-effort: logger failure never gates command effects, output, or exit status, and configured-sink failure never redirects evidence to another state directory.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/commands/command.ts",
       "declaration": "executeTypedObserverCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Starts or selects the pinned Observer, dispatches one typed Station command, and optionally reloads its durable terminal outcome through the race-safe protocol completion wait. Post-dispatch waits preserve exact receipt command/trace correlation and reject conflicting completion evidence.",
+      "purpose": "Starts or selects the pinned Observer, dispatches one typed Station command, and optionally reloads its durable terminal outcome through the race-safe protocol completion wait. Post-dispatch wait failures retain the accepted command and trace correlation.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -13666,7 +13674,7 @@
       "declaration": "runCommandCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Parses raw CLI input once, executes typed Observer commands or record lookup, and lets only allowlisted correlation/resource metadata leave the adapter beside the rendered result.",
+      "purpose": "Translates raw CLI argv and stdin JSON into typed Observer command execution or record lookup.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/command.ts",
@@ -13703,7 +13711,7 @@
       "declaration": "runDebugLogsCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Searches bounded active and rotated redacted logs, including strict invocation lifecycle summaries, without treating the logging component as failure ownership.",
+      "purpose": "Reads redacted lifecycle logs and projects strict outer, causal, and startup evidence fields without treating the logging component as failure ownership.",
       "dependencies": []
     },
     {
@@ -14436,19 +14444,11 @@
       ]
     },
     {
-      "path": "apps/cli/src/invocationAudit.ts",
-      "declaration": "createCliInvocationAuditLifecycle",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Persists one strict CLI invocation start and outcome in process order while keeping the Observer command journal authoritative for execution state.",
-      "dependencies": []
-    },
-    {
       "path": "apps/cli/src/main.ts",
       "declaration": "runCli",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates CLI arguments and loaded configuration into registered command execution with allowlisted pre-render audit metadata. Durable invocation persistence belongs to `runCliMain`.",
+      "purpose": "Translates CLI arguments and loaded configuration into registered command execution.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProviders.ts",
@@ -14464,18 +14464,11 @@
       "declaration": "runCliMain",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Owns one invocation identity from process entry through durable start-before-mutation ordering, command output, and exactly one outcome attempt. Read and recovery routes remain usable with a visible warning when the audit sink is unavailable.",
+      "purpose": "Translates process arguments, output, and exit semantics around `runCli` while composing process-owned provider-hook launcher and artifact-owner identity.",
       "dependencies": [
         {
-          "path": "apps/cli/src/invocationAudit.ts",
-          "declaration": "createCliInvocationAuditLifecycle",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProviders.ts",
-          "declaration": "probeHarnessHooksStatus",
+          "path": "apps/cli/src/main.ts",
+          "declaration": "runCli",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
