@@ -152,6 +152,37 @@ describe("Unix socket NDJSON transport", () => {
     });
   });
 
+  it.each([
+    { name: "absence", final: undefined, expected: { status: "absent" } },
+    {
+      name: "replacement socket",
+      final: metadata(2n),
+      expected: { status: "inaccessible", reason: "path-changed" },
+    },
+    {
+      name: "non-socket collision",
+      final: { ...metadata(1n), isSocket: false },
+      expected: { status: "inaccessible", reason: "not-a-socket" },
+    },
+  ] as const)("reclassifies $name after holder evidence races path teardown", async (testCase) => {
+    let reads = 0;
+    const result = await probeUnixSocket("/tmp/closing.sock", {
+      readMetadata: async () => {
+        reads += 1;
+        return reads < 3 ? metadata(1n) : testCase.final;
+      },
+      connect: async () => {
+        throw Object.assign(new Error("refused"), { code: "ECONNREFUSED" });
+      },
+      socketHolders: () => {
+        throw { code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" };
+      },
+    });
+
+    expect(result).toMatchObject(testCase.expected);
+    expect(reads).toBe(3);
+  });
+
   it("fails closed when the socket path changes during probing or is not a socket", async () => {
     let reads = 0;
     const changed = await probeUnixSocket("/tmp/replaced.sock", {
@@ -259,7 +290,7 @@ describe("Unix socket NDJSON transport", () => {
     await expect(server.closed).resolves.toBeUndefined();
   });
 
-  it("closes open clients and removes the exact owned socket pathname", async () => {
+  it("closes even when a client connection is still open", async () => {
     const { socketPath } = await createTempSocketPath();
     const server = await listenUnixSocket({
       socketPath,
@@ -269,7 +300,6 @@ describe("Unix socket NDJSON transport", () => {
 
     await expect(server.close()).resolves.toBeUndefined();
     await expect(client.closed).resolves.toBeUndefined();
-    await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 

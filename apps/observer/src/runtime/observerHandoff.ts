@@ -8,6 +8,7 @@ import { TimestampSchema } from "@station/contracts";
 import {
   Effect,
   hasStationObserverBuildIdentityMarker,
+  isSafeError,
   parseStationObserverBuildVersion,
 } from "@station/runtime";
 import { z } from "zod";
@@ -446,10 +447,24 @@ async function waitForExactExit(
   now: () => number,
   sleep: (ms: number) => Promise<void>,
 ): Promise<boolean> {
+  let pendingInaccessibleError: SafeError | undefined;
   for (;;) {
-    if (now() >= deadline) return false;
-    if (await exactProcessAndSocketExited(socketPath, identity, deadline, deps, now)) return true;
-    if (now() >= deadline) return false;
+    if (now() >= deadline) {
+      if (pendingInaccessibleError !== undefined) throw pendingInaccessibleError;
+      return false;
+    }
+    try {
+      if (await exactProcessAndSocketExited(socketPath, identity, deadline, deps, now)) return true;
+      pendingInaccessibleError = undefined;
+    } catch (error) {
+      if (!isSafeError(error) || error.code !== "OBSERVER_SOCKET_INACCESSIBLE") throw error;
+      // A closing exact incumbent can expose a transient inaccessible endpoint; it proves no exit.
+      pendingInaccessibleError = error;
+    }
+    if (now() >= deadline) {
+      if (pendingInaccessibleError !== undefined) throw pendingInaccessibleError;
+      return false;
+    }
     // pi-lens-ignore: await-in-loop
     await sleep(
       Math.min(
