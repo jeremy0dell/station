@@ -1441,7 +1441,7 @@ async function persistLegacySubagentStopSequence(
   );
   if (options.acknowledge === true) {
     await legacy.persistence.recordCommandAccepted({
-      commandId: "legacy_cmd_acknowledge",
+      commandId: "cmd_legacy_acknowledge",
       command: {
         type: "session.acknowledgeTurn",
         payload: {
@@ -1452,7 +1452,7 @@ async function persistLegacySubagentStopSequence(
       createdAt: "2026-05-21T12:00:02.500Z",
     });
     await legacy.persistence.markCommandStarted(
-      "legacy_cmd_acknowledge",
+      "cmd_legacy_acknowledge",
       "2026-05-21T12:00:02.500Z",
     );
     await legacy.persistence.deleteSessionTurnReadiness({
@@ -1460,7 +1460,7 @@ async function persistLegacySubagentStopSequence(
       token: "report_legacy_stop",
     });
     await legacy.persistence.markCommandSucceeded(
-      "legacy_cmd_acknowledge",
+      "cmd_legacy_acknowledge",
       "2026-05-21T12:00:02.500Z",
     );
   }
@@ -1843,7 +1843,7 @@ function prefixedIds(prefix: string) {
   let event = 0;
   let observation = 0;
   return {
-    commandId: () => `${prefix}_cmd_${++command}`,
+    commandId: () => `cmd_${prefix}_${++command}`,
     eventId: () => `${prefix}_evt_${++event}`,
     observationId: () => `${prefix}_obs_${++observation}`,
   };
