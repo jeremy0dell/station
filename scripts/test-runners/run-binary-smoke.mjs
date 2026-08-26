@@ -436,6 +436,45 @@ async function runBinarySmoke() {
         true,
         "Codex hook Observer exits before compiled observer start",
       );
+
+      const openCodeConfigDir = join(root, "opencode-config");
+      const openCodePluginPath = join(openCodeConfigDir, "plugins", "station-agent-state.js");
+      const openCodeHookEnv = { ...childEnv, OPENCODE_CONFIG_DIR: openCodeConfigDir };
+      await writeOpenCodeHookSmokeConfig(configPath, stateDir, socketPath);
+      const openCodeHookInstall = await run(
+        binaryPath,
+        ["--config", configPath, "hooks", "install", "opencode", "--yes"],
+        { env: openCodeHookEnv },
+      );
+      const openCodeHookInstallReport = JSON.parse(openCodeHookInstall.stdout);
+      assertEqual(openCodeHookInstallReport.installed, true, "compiled OpenCode hook install");
+      assertEqual(
+        openCodeHookInstallReport.pluginPath,
+        openCodePluginPath,
+        "compiled OpenCode plugin path",
+      );
+      const openCodePlugin = await readFile(openCodePluginPath, "utf8");
+      assertIncludes(
+        openCodePlugin,
+        "station-opencode-observer-plugin:v1",
+        "compiled OpenCode plugin marker",
+      );
+      assertIncludes(
+        openCodePlugin,
+        'import { spawn, spawnSync } from "node:child_process"',
+        "compiled OpenCode embedded body",
+      );
+      assertExcludes(openCodePlugin, "__STATION_", "compiled OpenCode install-time placeholders");
+      const openCodeStandaloneDoctor = await run(
+        binaryPath,
+        ["--config", configPath, "hooks", "doctor", "opencode"],
+        { env: openCodeHookEnv },
+      );
+      assertEqual(
+        JSON.parse(openCodeStandaloneDoctor.stdout).status,
+        "ok",
+        "compiled standalone OpenCode hook doctor",
+      );
       await writeSmokeConfig(configPath, stateDir, socketPath);
 
       observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
@@ -3098,6 +3137,32 @@ async function writeCodexHookSmokeConfig(path, state, socket) {
       'layout = "agent-shell"',
       "",
       "[harness.codex]",
+      'command = "/usr/bin/true"',
+      "install_hooks = true",
+      "",
+    ].join("\n"),
+    { mode: 0o600 },
+  );
+}
+
+async function writeOpenCodeHookSmokeConfig(path, state, socket) {
+  await writeFile(
+    path,
+    [
+      "schema_version = 1",
+      "projects = []",
+      "",
+      "[observer]",
+      `state_dir = ${JSON.stringify(state)}`,
+      `socket_path = ${JSON.stringify(socket)}`,
+      "",
+      "[defaults]",
+      'worktree_provider = "noop-worktree"',
+      'terminal = "noop-terminal"',
+      'harness = "opencode"',
+      'layout = "agent-shell"',
+      "",
+      "[harness.opencode]",
       'command = "/usr/bin/true"',
       "install_hooks = true",
       "",

@@ -17331,7 +17331,7 @@
       "declaration": "StationOpenCodePluginScriptInput",
       "kind": "type",
       "role": "ADAPTER",
-      "purpose": "Renders the generated `station-agent-state.js` plugin body from `pluginScriptBody.js` with install-time values JSON-encoded into the `__STATION_*__` placeholder tokens.",
+      "purpose": "Renders the generated `station-agent-state.js` plugin body from the checked-in source body or its compiled-binary embedding, with install-time values JSON-encoded into `__STATION_*__` placeholder tokens.",
       "dependencies": []
     },
     {

@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+declare const STATION_BUILD_OPENCODE_PLUGIN_BODY: string;
+
 /**
  * ADAPTER
  *
- * Renders the generated `station-agent-state.js` plugin body from
- * `pluginScriptBody.js` with install-time values JSON-encoded into the
- * `__STATION_*__` placeholder tokens.
+ * Renders the generated `station-agent-state.js` plugin body from the checked-in source body or
+ * its compiled-binary embedding, with install-time values JSON-encoded into `__STATION_*__`
+ * placeholder tokens.
  */
 
 export type StationOpenCodePluginScriptInput = {
@@ -16,19 +18,12 @@ export type StationOpenCodePluginScriptInput = {
   forwardedEventTypes: readonly string[];
 };
 
-/**
- * Compiled binaries embed the body as an asset; source runs read the checked-in
- * file beside this module. The compiled binary sets this env var to the asset
- * path so `stn hooks install opencode` renders the same body everywhere.
- */
-const compiledBodyPath = process.env.STATION_OPENCODE_PLUGIN_BODY_PATH;
-
-const stationOpenCodePluginBody = readFileSync(
-  compiledBodyPath !== undefined && compiledBodyPath.length > 0
-    ? compiledBodyPath
-    : fileURLToPath(new URL("../pluginScriptBody.js", import.meta.url)),
-  "utf8",
-);
+// Binary compilation replaces this identifier with the checked-in body; source execution reads
+// the same file beside dist without exporting a process-global asset path to child processes.
+const stationOpenCodePluginBody =
+  typeof STATION_BUILD_OPENCODE_PLUGIN_BODY === "undefined"
+    ? readFileSync(fileURLToPath(new URL("../pluginScriptBody.js", import.meta.url)), "utf8")
+    : STATION_BUILD_OPENCODE_PLUGIN_BODY;
 
 const STATION_OPENCODE_PLUGIN_TOKENS = {
   socketPath: "__STATION_SOCKET_PATH__",

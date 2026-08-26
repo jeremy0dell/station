@@ -493,9 +493,7 @@ function assertCodexHookDelivery() {
 }
 
 function sourceCliEnv() {
-  const env = { ...process.env };
-  delete env.STATION_OPENCODE_PLUGIN_BODY_PATH;
-  return env;
+  return { ...process.env };
 }
 
 function readBunInvocations() {

@@ -4,10 +4,6 @@
 # tears the isolated observer and host down.
 set -euo pipefail
 
-# The compiled Station binary exports a Bun-embedded OpenCode asset path to its
-# panes. That path is not readable by source checkout processes.
-unset STATION_OPENCODE_PLUGIN_BODY_PATH
-
 # Resolve THIS worktree's root from the script's own location, so the tooling
 # always targets the checkout it lives in (never the global state).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
