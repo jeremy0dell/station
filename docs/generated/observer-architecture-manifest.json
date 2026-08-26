@@ -3805,7 +3805,7 @@
           "specifier": "../persistence/types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
-          "bindings": ["RecordProviderObservationInput"]
+          "bindings": ["IngressDedupeKey", "RecordProviderObservationInput"]
         },
         {
           "specifier": "../providers/registry.js",

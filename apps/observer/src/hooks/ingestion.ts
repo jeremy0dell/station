@@ -32,7 +32,7 @@ import {
   providerObservationExpiresAt,
   providerObservationRetentionDays,
 } from "../persistence/retention.js";
-import type { RecordProviderObservationInput } from "../persistence/types.js";
+import type { IngressDedupeKey, RecordProviderObservationInput } from "../persistence/types.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import { sessionTurnReadinessMutationFromHarnessObservation } from "./turnReadiness.js";
@@ -352,10 +352,11 @@ export function createHarnessEventReportIngestion(
             observedAt: report.observedAt,
             expiresAt: providerObservationExpiresAt(report.observedAt, retentionDays),
           };
+          const dedupe: IngressDedupeKey = { kind: "harness_report", id: report.reportId };
           const persistInput = {
             event: reportedEvent,
             eventOptions: { source: "hook", createdAt: report.observedAt },
-            dedupe: { kind: "harness_report", id: report.reportId },
+            dedupe,
             observation: storedObservation,
             harnessExecution,
           };
