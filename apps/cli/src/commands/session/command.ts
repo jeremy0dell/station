@@ -136,14 +136,3 @@ function missingSessionCompletionError(receipt: AcceptedCommandReceipt): SafeErr
   if (receipt.traceId !== undefined) error.traceId = receipt.traceId;
   return error;
 }
-
-export type {
-  CloseSessionConvergence,
-  RenameSessionConvergence,
-  SessionProjectionState,
-  SessionWorktreeProjectionState,
-} from "./convergence.js";
-export type { SessionCommandDeps, SessionCommandOptions } from "./options.js";
-export { type SessionCommandResult, sessionCommandExitCode } from "./result.js";
-export type { SessionFilters, SessionSummary, SessionWorktreeSummary } from "./summary.js";
-export { renderSessionCommandText } from "./text.js";

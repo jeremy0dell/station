@@ -12,7 +12,20 @@ export * from "./commands/popup.js";
 export * from "./commands/project.js";
 export * from "./commands/providerHookAdapters.js";
 export * from "./commands/reconcile.js";
-export * from "./commands/session/index.js";
+export * from "./commands/session/command.js";
+export type {
+  CloseSessionConvergence,
+  RenameSessionConvergence,
+  SessionProjectionState,
+  SessionWorktreeProjectionState,
+} from "./commands/session/convergence.js";
+export type { SessionCommandDeps, SessionCommandOptions } from "./commands/session/options.js";
+export * from "./commands/session/result.js";
+export type {
+  SessionFilters,
+  SessionSummary,
+  SessionWorktreeSummary,
+} from "./commands/session/summary.js";
 export * from "./commands/setup/index.js";
 export * from "./commands/snapshot.js";
 export * from "./commands/tui.js";

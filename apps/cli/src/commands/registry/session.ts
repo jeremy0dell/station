@@ -1,10 +1,8 @@
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
-import {
-  renderSessionCommandText,
-  runSessionCommand,
-  sessionCommandExitCode,
-} from "../session/index.js";
+import { runSessionCommand } from "../session/command.js";
+import { sessionCommandExitCode } from "../session/result.js";
+import { renderSessionCommandText } from "../session/text.js";
 
 const currentExamples = ["stn session current"] as const;
 const currentNotes = [
@@ -76,10 +74,7 @@ export const sessionCliCommand: CliCommandNode = {
         },
         { name: "--json", description: "Print the structured list result." },
       ],
-      examples: [
-        "stn session list",
-        "stn session list --status working --origin station --json",
-      ],
+      examples: ["stn session list", "stn session list --status working --origin station --json"],
       notes: [
         outputNote,
         startupNote,

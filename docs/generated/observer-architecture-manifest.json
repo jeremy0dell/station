@@ -13887,7 +13887,7 @@
       ]
     },
     {
-      "path": "apps/cli/src/commands/session/index.ts",
+      "path": "apps/cli/src/commands/session/command.ts",
       "declaration": "runSessionCommand",
       "kind": "function",
       "role": "ADAPTER",

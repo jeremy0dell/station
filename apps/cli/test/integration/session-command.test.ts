@@ -10,11 +10,9 @@ import { StationSnapshotSchema } from "@station/contracts";
 import type { TerminalCommandRecord } from "@station/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
-import {
-  renderSessionCommandText,
-  runSessionCommand,
-  sessionCommandExitCode,
-} from "../../src/commands/session/index.js";
+import { runSessionCommand } from "../../src/commands/session/command.js";
+import { sessionCommandExitCode } from "../../src/commands/session/result.js";
+import { renderSessionCommandText } from "../../src/commands/session/text.js";
 
 const now = "2026-08-21T12:00:00.000Z";
 const observerBuildVersion = `0.0.0-local+station.${"a".repeat(64)}`;
