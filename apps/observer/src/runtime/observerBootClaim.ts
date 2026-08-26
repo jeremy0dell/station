@@ -147,12 +147,15 @@ export function createObserverReapExclusion(
         value = await operation();
       } catch {
         const release = claim.release();
+        if (release.status === "released") {
+          return {
+            status: "failed",
+            reason: "Duplicate cleanup failed while holding the boot claim.",
+          };
+        }
         return {
           status: "failed",
-          reason:
-            release.status === "released"
-              ? "Duplicate cleanup failed while holding the boot claim."
-              : "Duplicate cleanup and boot claim release both failed.",
+          reason: "Duplicate cleanup and boot claim release both failed.",
         };
       }
       const release = claim.release();
@@ -297,19 +300,20 @@ function createRelease(database: SqlDatabase): () => ObserverBootClaimReleaseRes
       errors.push(error);
     }
 
-    result =
-      errors.length === 0
-        ? { status: "released" }
-        : {
-            status: "failed",
-            error: observerBootClaimError(
-              new AggregateError(errors, "Observer boot claim release failed."),
-              {
-                code: "OBSERVER_BOOT_CLAIM_RELEASE_FAILED",
-                message: "Observer boot ownership could not be released cleanly.",
-              },
-            ),
-          };
+    if (errors.length === 0) {
+      result = { status: "released" };
+    } else {
+      result = {
+        status: "failed",
+        error: observerBootClaimError(
+          new AggregateError(errors, "Observer boot claim release failed."),
+          {
+            code: "OBSERVER_BOOT_CLAIM_RELEASE_FAILED",
+            message: "Observer boot ownership could not be released cleanly.",
+          },
+        ),
+      };
+    }
     return result;
   };
 }

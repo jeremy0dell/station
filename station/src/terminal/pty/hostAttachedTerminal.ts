@@ -13,6 +13,7 @@ import { type SafeErrorFallback, toSafeError } from "@station/observability";
 import { stationBuildInfo } from "@station/runtime";
 import { reportTerminalCorruption } from "../diagnostics.js";
 import { CsiSequence } from "../protocol/csi.js";
+import { toTerminalExit } from "./ptyBridgeChannel.js";
 import type {
   StationTerminalDisposable,
   StationTerminalExit,
@@ -487,12 +488,7 @@ export function createHostAttachedTerminal(
         case "exit":
           return {
             kind: "exited",
-            exit: {
-              exitCode: frame.exitCode ?? 0,
-              ...(frame.signal === undefined || frame.signal === null
-                ? {}
-                : { signal: frame.signal }),
-            },
+            exit: toTerminalExit(frame.exitCode ?? 0, frame.signal ?? undefined),
           };
         case "focus":
           // Focus is best-effort host metadata with no terminal-output meaning.

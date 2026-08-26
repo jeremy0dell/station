@@ -295,12 +295,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       snapshot = {
         ...snapshot,
         rows: snapshot.rows.map((row) =>
-          row.id === match.id
-            ? {
-                ...row,
-                agent: nextAgent,
-              }
-            : row,
+          row.id === match.id ? { ...row, agent: nextAgent } : row,
         ),
       };
       return {

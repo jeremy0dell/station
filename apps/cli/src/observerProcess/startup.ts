@@ -119,13 +119,14 @@ export async function startObserverProcess(
         if (spawnInput.startupTimeoutMs <= 0) {
           throw startupTimeoutError;
         }
-        child =
-          deps.spawnObserver === undefined
-            ? await defaultSpawnObserver({
-                ...spawnInput,
-                buildVersion: input.buildVersion,
-              })
-            : await deps.spawnObserver(spawnInput);
+        if (deps.spawnObserver === undefined) {
+          child = await defaultSpawnObserver({
+            ...spawnInput,
+            buildVersion: input.buildVersion,
+          });
+        } else {
+          child = await deps.spawnObserver(spawnInput);
+        }
         if (signal.aborted) {
           child.kill?.();
           throw observerHealthWaitCancelledError();

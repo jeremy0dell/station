@@ -25,6 +25,19 @@ import {
   upsertWorktreeDisplayTitle,
 } from "./worktreeDisplayTitles.js";
 
+const END_OPEN_SESSION_SQL = `
+  UPDATE sessions
+  SET lifecycle = 'ended', ended_at = ?
+  WHERE id = ? AND (lifecycle IS NULL OR lifecycle = 'open')
+`;
+
+const END_OPEN_WORKTREE_SESSIONS_SQL = `
+  UPDATE sessions
+  SET lifecycle = 'ended', ended_at = ?
+  WHERE project_id = ? AND worktree_id = ?
+    AND (lifecycle IS NULL OR lifecycle = 'open')
+`;
+
 export function persistReconcileResult(
   database: SqlDatabase,
   input: PersistReconcileResultInput,
@@ -146,24 +159,9 @@ export function markSessionsEnded(
 ): number {
   const result =
     input.subject.kind === "session"
-      ? database
-          .prepare(
-            `
-              UPDATE sessions
-              SET lifecycle = 'ended', ended_at = ?
-              WHERE id = ? AND (lifecycle IS NULL OR lifecycle = 'open')
-            `,
-          )
-          .run(input.endedAt, input.subject.sessionId)
+      ? database.prepare(END_OPEN_SESSION_SQL).run(input.endedAt, input.subject.sessionId)
       : database
-          .prepare(
-            `
-              UPDATE sessions
-              SET lifecycle = 'ended', ended_at = ?
-              WHERE project_id = ? AND worktree_id = ?
-                AND (lifecycle IS NULL OR lifecycle = 'open')
-            `,
-          )
+          .prepare(END_OPEN_WORKTREE_SESSIONS_SQL)
           .run(input.endedAt, input.subject.projectId, input.subject.worktreeId);
   return Number(result.changes);
 }

@@ -151,20 +151,22 @@ export class ProviderRegistry {
           return;
         }
         try {
+          const probeError = {
+            tag: "RuntimeError",
+            code: "HARNESS_VERSION_PROBE_FAILED",
+            message: "Harness version probe failed.",
+            provider: provider.id,
+          };
+          const probeTimeout = {
+            tag: "TimeoutError",
+            code: "HARNESS_VERSION_PROBE_TIMEOUT",
+            message: "Harness version probe timed out.",
+            provider: provider.id,
+          };
           const info = await withTimeout(() => versionInfo(), {
             timeoutMs,
-            error: {
-              tag: "RuntimeError",
-              code: "HARNESS_VERSION_PROBE_FAILED",
-              message: "Harness version probe failed.",
-              provider: provider.id,
-            },
-            timeoutError: {
-              tag: "TimeoutError",
-              code: "HARNESS_VERSION_PROBE_TIMEOUT",
-              message: "Harness version probe timed out.",
-              provider: provider.id,
-            },
+            error: probeError,
+            timeoutError: probeTimeout,
           });
           if (info.installedVersion !== undefined || info.latestVersion !== undefined) {
             this.harnessVersions.set(provider.id, info);

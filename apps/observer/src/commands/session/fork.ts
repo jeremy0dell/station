@@ -221,20 +221,20 @@ export function createSessionForkHandler(
         }
         throw error;
       }
-      const worktreeRemoved =
-        createdWorktree === undefined
-          ? false
-          : await removeWorktreeBestEffort({
-              providers: options.providers,
-              project,
-              worktreeId: createdWorktree.id,
-              expectedPath: createdWorktree.path,
-              expectedBranch: createdWorktree.branch,
-              expectedRegistrationIdentity: createdWorktree.registrationIdentity,
-              context,
-              logger: options.logger,
-              clock: options.clock,
-            });
+      let worktreeRemoved = false;
+      if (createdWorktree !== undefined) {
+        worktreeRemoved = await removeWorktreeBestEffort({
+          providers: options.providers,
+          project,
+          worktreeId: createdWorktree.id,
+          expectedPath: createdWorktree.path,
+          expectedBranch: createdWorktree.branch,
+          expectedRegistrationIdentity: createdWorktree.registrationIdentity,
+          context,
+          logger: options.logger,
+          clock: options.clock,
+        });
+      }
       if (sessionSeeded && worktreeRemoved) {
         await discardSessionSeedBestEffort({
           persistence: options.persistence,

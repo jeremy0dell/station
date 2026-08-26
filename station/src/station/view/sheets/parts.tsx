@@ -362,7 +362,7 @@ export function SheetControlRow({
   shortcut?: string;
   value: string | ReactNode;
   valueCells?: number;
-  status?: { glyph: string; text: string; color?: StationColor };
+  status?: { glyph: string; text: string; color?: StationColor } | undefined;
   focused?: boolean;
   disabled?: boolean;
   mouseTarget: StationMouseTarget;

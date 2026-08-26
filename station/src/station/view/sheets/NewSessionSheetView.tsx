@@ -20,7 +20,7 @@ import type {
   DashboardStateView,
   NewSessionFlowStateView,
 } from "@station/dashboard-core/state";
-import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
+import { providerHealthColor, useStationTheme, type StationColor } from "../../../theme/index.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
@@ -197,7 +197,15 @@ function Review({
   return (
     <>
       {content.fields.map((field) => {
-        const status = field.status;
+        const health = field.status;
+        let rowStatus: { glyph: string; text: string; color: StationColor } | undefined;
+        if (health !== undefined) {
+          rowStatus = {
+            glyph: health.glyph,
+            text: health.text,
+            color: providerHealthColor(theme, health.tone),
+          };
+        }
         return (
           <SheetControlRow
             key={field.id}
@@ -208,15 +216,7 @@ function Review({
             focused={state.reviewFocus === field.focusId}
             disabled={!field.enabled}
             mouseTarget={{ kind: "newSessionAction", actionId: field.actionId }}
-            {...(status === undefined
-              ? {}
-              : {
-                  status: {
-                    glyph: status.glyph,
-                    text: status.text,
-                    color: providerHealthColor(theme, status.tone),
-                  },
-                })}
+            status={rowStatus}
           />
         );
       })}

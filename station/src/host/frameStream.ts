@@ -6,22 +6,34 @@ export type FrameStream = {
   end(): void;
 };
 
+function frameIteratorResult(frame: HostFrame | undefined): IteratorResult<HostFrame> {
+  if (frame === undefined) {
+    return { done: true, value: undefined };
+  }
+  return { done: false, value: frame };
+}
+
 /** A pull-based frame stream fed by `push`/`end`; `frames.return()` runs onReturn. */
 export function createFrameStream(onReturn: () => void): FrameStream {
   const queue: HostFrame[] = [];
   const waiters: Array<(result: IteratorResult<HostFrame>) => void> = [];
   let ended = false;
 
-  const drain = () => {
+  // next() only parks; drain is the single path that completes a pull.
+  const drain = (): void => {
     while (waiters.length > 0 && (queue.length > 0 || ended)) {
       const waiter = waiters.shift();
       if (waiter === undefined) {
         break;
       }
-      const next = queue.shift();
-      waiter(next === undefined ? { done: true, value: undefined } : { done: false, value: next });
+      waiter(frameIteratorResult(queue.shift()));
     }
   };
+  const pullFrame = (): Promise<IteratorResult<HostFrame>> =>
+    new Promise((resolve) => {
+      waiters.push(resolve);
+      drain();
+    });
 
   return {
     push: (frame) => {
@@ -34,24 +46,12 @@ export function createFrameStream(onReturn: () => void): FrameStream {
     },
     frames: {
       [Symbol.asyncIterator]: () => ({
-        next: () =>
-          new Promise<IteratorResult<HostFrame>>((resolve) => {
-            const next = queue.shift();
-            if (next !== undefined) {
-              resolve({ done: false, value: next });
-              return;
-            }
-            if (ended) {
-              resolve({ done: true, value: undefined });
-              return;
-            }
-            waiters.push(resolve);
-          }),
+        next: pullFrame,
         return: () => {
           ended = true;
           onReturn();
           drain();
-          return Promise.resolve({ done: true, value: undefined });
+          return Promise.resolve(frameIteratorResult(undefined));
         },
       }),
     },

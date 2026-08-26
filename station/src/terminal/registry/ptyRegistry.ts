@@ -11,6 +11,7 @@ import {
 import type {
   StationTerminalExit,
   StationTerminalProcess,
+  StationTerminalReplayEvent,
   StationTerminalSize,
   StationTerminalSpawnOptions,
 } from "../types.js";
@@ -295,18 +296,10 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
           entry.replayingSnapshot = true;
           try {
             current.resize(initialSize);
-            for (const event of events) {
-              if (event.type === "data") {
-                current.feed(event.data);
-                continue;
-              }
-              await current.whenIdle();
-              if (entries.get(entry.paneId) !== entry) {
-                return;
-              }
-              current.resize({ cols: event.cols, rows: event.rows });
+            const entryStillCurrent = () => entries.get(entry.paneId) === entry;
+            if (!(await applyReplayEvents(current, events, entryStillCurrent))) {
+              return;
             }
-            await current.whenIdle();
           } finally {
             entry.replayingSnapshot = false;
           }
@@ -703,6 +696,26 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       notify();
     },
   };
+}
+
+async function applyReplayEvents(
+  screen: StationVtScreen,
+  events: readonly StationTerminalReplayEvent[],
+  entryStillCurrent: () => boolean,
+): Promise<boolean> {
+  for (const event of events) {
+    if (event.type === "data") {
+      screen.feed(event.data);
+      continue;
+    }
+    await screen.whenIdle();
+    if (!entryStillCurrent()) {
+      return false;
+    }
+    screen.resize({ cols: event.cols, rows: event.rows });
+  }
+  await screen.whenIdle();
+  return true;
 }
 
 function formatExit(event: StationTerminalExit): string {

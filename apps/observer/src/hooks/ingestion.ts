@@ -7,6 +7,7 @@ import type {
   ProviderHookAdapter,
   ProviderHookEvent,
   ProviderHookReceipt,
+  SafeError,
   SessionRecoveryHandle,
   StationEvent,
 } from "@station/contracts";
@@ -31,6 +32,7 @@ import {
   providerObservationExpiresAt,
   providerObservationRetentionDays,
 } from "../persistence/retention.js";
+import type { IngressDedupeKey, RecordProviderObservationInput } from "../persistence/types.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import { sessionTurnReadinessMutationFromHarnessObservation } from "./turnReadiness.js";
@@ -147,6 +149,12 @@ export function createProviderHookIngress(
       if (adapter?.toHarnessEventReport !== undefined) {
         // Adapter-normalized harness hooks must pass the native-execution gate on the report path.
         if (reportHarnessEvent === undefined) {
+          const error: SafeError = {
+            tag: "HookIngestionError",
+            code: "HARNESS_REPORT_INGRESS_UNAVAILABLE",
+            message: "Harness hook normalization requires the report ingress handoff.",
+            provider: event.provider,
+          };
           return ProviderHookReceiptSchema.parse({
             schemaVersion: STATION_SCHEMA_VERSION,
             hookId: id,
@@ -155,12 +163,7 @@ export function createProviderHookIngress(
             accepted: false,
             status: "rejected",
             receivedAt: event.receivedAt,
-            error: {
-              tag: "HookIngestionError",
-              code: "HARNESS_REPORT_INGRESS_UNAVAILABLE",
-              message: "Harness hook normalization requires the report ingress handoff.",
-              provider: event.provider,
-            },
+            error,
           });
         }
         return ingestViaHookAdapter({
@@ -340,25 +343,27 @@ export function createHarnessEventReportIngestion(
             ...(recoveryHandle === undefined ? {} : { recoveryHandle }),
             ...(turnReadiness === undefined ? {} : { turnReadiness }),
           };
+          const storedObservation: RecordProviderObservationInput = {
+            provider: report.provider,
+            providerType: "harness",
+            entityKind: "harness_event",
+            entityKey: harnessEventReportEntityKey(report),
+            payload: observation,
+            observedAt: report.observedAt,
+            expiresAt: providerObservationExpiresAt(report.observedAt, retentionDays),
+          };
+          const dedupe: IngressDedupeKey = { kind: "harness_report", id: report.reportId };
+          const persistInput = {
+            event: reportedEvent,
+            eventOptions: { source: "hook", createdAt: report.observedAt },
+            dedupe,
+            observation: storedObservation,
+            harnessExecution,
+          };
           const result =
-            await options.persistence.recordEventAndProviderObservationWithIngressDedupe({
-              event: reportedEvent,
-              eventOptions: {
-                source: "hook",
-                createdAt: report.observedAt,
-              },
-              dedupe: { kind: "harness_report", id: report.reportId },
-              observation: {
-                provider: report.provider,
-                providerType: "harness",
-                entityKind: "harness_event",
-                entityKey: harnessEventReportEntityKey(report),
-                payload: observation,
-                observedAt: report.observedAt,
-                expiresAt: providerObservationExpiresAt(report.observedAt, retentionDays),
-              },
-              harnessExecution,
-            });
+            await options.persistence.recordEventAndProviderObservationWithIngressDedupe(
+              persistInput,
+            );
           if (!result.deduped) {
             options.eventBus?.publish(reportedEvent);
           }

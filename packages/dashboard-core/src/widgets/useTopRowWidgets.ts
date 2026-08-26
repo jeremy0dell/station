@@ -155,16 +155,10 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
         activeWidgets.map(({ widget, index }): TopRowWidgetView => {
           switch (widget.type) {
             case "time":
-              return {
-                id: `time:${index}`,
-                text: formatTimeWidget(currentMinute, widget),
-              };
+              return { id: `time:${index}`, text: formatTimeWidget(currentMinute, widget) };
             case "weather": {
               const id = `weather:${index}`;
-              return {
-                id,
-                text: weatherTexts[id] ?? renderWeatherLoading(widget),
-              };
+              return { id, text: weatherTexts[id] ?? renderWeatherLoading(widget) };
             }
             case "tz":
               return { id: `tz:${index}`, ...formatTimezoneWidget(currentMinute, widget) };

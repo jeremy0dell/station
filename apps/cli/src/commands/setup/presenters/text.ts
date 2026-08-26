@@ -585,29 +585,21 @@ function operationText(
         label: resolveSetupMessage(setupMessageRef("action.worktrunk-shell-label")),
         explanation: resolveSetupMessage(setupMessageRef("action.worktrunk-shell-message")),
       };
-    case "configure-tmux-popup":
+    case "configure-tmux-popup": {
+      const persisted = operation.scope === "persisted";
+      const binding = projection.facts.tmuxBinding;
+      const key = binding.status === "conflict" ? "Space" : binding.bindingKey;
       return {
         label: resolveSetupMessage(
-          setupMessageRef(
-            operation.scope === "persisted"
-              ? "action.tmux-persist-label"
-              : "action.tmux-live-label",
-          ),
+          setupMessageRef(persisted ? "action.tmux-persist-label" : "action.tmux-live-label"),
         ),
         explanation: resolveSetupMessage(
-          setupMessageRef(
-            operation.scope === "persisted"
-              ? "action.tmux-persist-message"
-              : "action.tmux-live-message",
-            {
-              key:
-                projection.facts.tmuxBinding.status === "conflict"
-                  ? "Space"
-                  : projection.facts.tmuxBinding.bindingKey,
-            },
-          ),
+          setupMessageRef(persisted ? "action.tmux-persist-message" : "action.tmux-live-message", {
+            key,
+          }),
         ),
       };
+    }
     case "prepare-worktrunk-tracking":
       return {
         label: resolveSetupMessage(setupMessageRef("action.worktrunk-hooks-label")),
@@ -627,23 +619,19 @@ function operationText(
         ),
       };
     }
-    case "write-config":
+    case "write-config": {
+      const creating = operation.change === "create";
       return {
         label: resolveSetupMessage(
-          setupMessageRef(
-            operation.change === "create"
-              ? "action.config-create-label"
-              : "action.config-update-label",
-          ),
+          setupMessageRef(creating ? "action.config-create-label" : "action.config-update-label"),
         ),
         explanation: resolveSetupMessage(
           setupMessageRef(
-            operation.change === "create"
-              ? "action.config-create-message"
-              : "action.config-update-message",
+            creating ? "action.config-create-message" : "action.config-update-message",
           ),
         ),
       };
+    }
     case "activate-observer-config":
       return {
         label: resolveSetupMessage(setupMessageRef("label.observer-activation")),

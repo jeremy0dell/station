@@ -55,6 +55,21 @@ const DEFAULT_SCROLL_ON_OUTPUT: ScrollOnOutputMode = "freeze";
 const MIN_COLS = 2;
 const MIN_ROWS = 1;
 
+type XtermParserFallbacks = {
+  setCsiHandlerFallback(callback: (ident: number, params: { toArray(): unknown[] }) => void): void;
+  setEscHandlerFallback(callback: (ident: number) => void): void;
+  setOscHandlerFallback(callback: (identifier: number, action: string, data: string) => void): void;
+  setDcsHandlerFallback(callback: (ident: number, action: string) => void): void;
+};
+
+type XtermParserInternals = {
+  _core?: {
+    _inputHandler?: {
+      _parser?: XtermParserFallbacks;
+    };
+  };
+};
+
 export type StationVtScreenOptions = {
   size: StationTerminalSize;
   /** Normal-buffer history depth in lines, clamped to the native workspace safety ceiling. */
@@ -575,24 +590,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // fallback hook, so this reaches into engine internals — an engine bump that
   // moves them turns detection off instead of breaking the screen.
   try {
-    const parser = (
-      terminal as unknown as {
-        _core?: {
-          _inputHandler?: {
-            _parser?: {
-              setCsiHandlerFallback(
-                callback: (ident: number, params: { toArray(): unknown[] }) => void,
-              ): void;
-              setEscHandlerFallback(callback: (ident: number) => void): void;
-              setOscHandlerFallback(
-                callback: (identifier: number, action: string, data: string) => void,
-              ): void;
-              setDcsHandlerFallback(callback: (ident: number, action: string) => void): void;
-            };
-          };
-        };
-      }
-    )._core?._inputHandler?._parser;
+    const parser = (terminal as unknown as XtermParserInternals)._core?._inputHandler?._parser;
     if (parser === undefined) {
       // An engine bump moved the private path; make the silent loss of
       // unhandled-sequence detection observable instead of trusting empty counters.

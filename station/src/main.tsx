@@ -18,6 +18,8 @@ import {
   getOrCreateStationHotRuntime,
   STATION_HOT_RUNTIME_VERSION,
   stationHotSlots,
+  type StationHotRenderer,
+  type StationHotSlots,
 } from "./hmr/stationHotRuntime.js";
 import { invokeCleanup, settleCleanupSteps } from "./lifecycle/cleanup.js";
 import { createRenderProfiler, readRenderProfileEnabled } from "./profiling/renderProfiler.js";
@@ -467,11 +469,7 @@ async function startStationMain(
               () => stopSurfaceObservation?.(),
               () => root.unmount(),
               () => renderer.destroy(),
-              () => {
-                if (stationGlobalSlots.__stationHotRenderer === renderer) {
-                  delete stationGlobalSlots.__stationHotRenderer;
-                }
-              },
+              () => releaseHotRendererIfCurrent(stationGlobalSlots, renderer),
               () => station.disposeForHotReload(),
             ],
             "Native Station HMR cleanup failed.",
@@ -485,6 +483,15 @@ async function startStationMain(
     });
   }
   return true;
+}
+
+function releaseHotRendererIfCurrent(
+  slots: StationHotSlots,
+  renderer: StationHotRenderer,
+): void {
+  if (slots.__stationHotRenderer === renderer) {
+    delete slots.__stationHotRenderer;
+  }
 }
 
 function reportNativeHotDisposalFailure(error: unknown): void {
