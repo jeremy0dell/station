@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
 import type { AgentState, ObservedStatus } from "@station/contracts";
+import { cursorProviderHookPayloadToHarnessEventReport } from "@station/cursor";
 import { describe, expect, it } from "vitest";
 import {
   decideSessionHarnessExecution,
   type SessionHarnessExecutionDecision,
+  sessionHarnessExecutionEvidenceFromReport,
 } from "../../src/harnessExecutionIdentity";
 import type {
   PersistedSessionHarnessExecution,
@@ -67,6 +70,41 @@ describe("session harness execution identity", () => {
 
     const delayedB = decide(idleA, evidence("native_b", status("working", t1)));
     expect(delayedB).toEqual({ mayDeriveState: false });
+  });
+
+  it("lets pane-scoped Cursor stop idle a conversation-scoped tool-runner binding", () => {
+    const paneId = "cursor:native:wt_station_station-a9b1d4_7bee5c969f";
+    const bound = {
+      provider: "cursor" as const,
+      sessionId: "ses_aad9521e-c580-4ec2-9591-390602578fd1",
+      nativeSessionId: "77af7844-ad25-40e1-8cea-e8aac8c7ad84",
+      state: "working" as const,
+      statusUpdatedAt: "2026-08-26T19:39:46.208Z",
+    };
+    const fixture = JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../../integrations/harness/cursor/test/fixtures/split-native-one-turn.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    const stop = cursorProviderHookPayloadToHarnessEventReport({
+      reportId: "hook_census_stop",
+      observedAt: "2026-08-26T19:40:10.000Z",
+      payload: fixture.stop,
+    });
+    const decision = decideSessionHarnessExecution({
+      current: bound,
+      evidence: sessionHarnessExecutionEvidenceFromReport(stop),
+    });
+
+    expect(stop.correlation?.nativeSessionId).toBe(paneId);
+    expect(decision).toMatchObject({
+      mayDeriveState: true,
+      binding: { nativeSessionId: paneId, state: "idle" },
+    });
   });
 });
 

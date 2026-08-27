@@ -544,7 +544,7 @@ When Station "does nothing" or panes read "exited", inspect the `cli`, `tui`, an
 Other Station diagnostics:
 
 - A pane reading "terminal exited 1" on every local shell in a source checkout can indicate the node-pty `spawn-helper` exec-bit issue; see [Limitations and workarounds](limitations.md#source-checkout-panes-exit-immediately).
-- `stn doctor` includes a session/terminal check that reports a per-provider session breakdown (e.g. `station: 7 open · tmux: 4 detached`) and flags detached, stale, or orphaned sessions — useful when a row cannot be focused from Station.
+- `stn doctor` includes a session/terminal check that reports a per-provider session breakdown (e.g. `station: 7 open · tmux: 4 detached`) and flags stale terminal targets or orphaned runtime state. Detached targets remain visible in the tally without degrading health because Doctor has no active-renderer context.
 - Station persists its pane layout to `<state_dir>/station/layout.json` (override `STATION_LAYOUT_PATH`); a malformed or absent snapshot falls back to a single fresh shell.
 
 Station runtime files (alongside the observer state directory):

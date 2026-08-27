@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { HarnessEventReportSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { compactCursorProviderHookPayload } from "../../src/compaction";
@@ -44,7 +45,7 @@ describe("Cursor hook event parsing", () => {
         worktreeId: "wt_web_task",
         terminalTargetId: "tmux:station:@1:%2",
         harnessRunId: "cursor:tmux:station:@1:%2",
-        nativeSessionId: "cursor_session_123",
+        nativeSessionId: "cursor:tmux:station:@1:%2",
       },
       status: {
         value: "starting",
@@ -131,7 +132,7 @@ describe("Cursor hook event parsing", () => {
         worktreeId: "wt_web_task",
         sessionId: "ses_web_task",
         terminalTargetId: "tmux:station:@1:%2",
-        nativeSessionId: "cursor_session_123",
+        nativeSessionId: "cursor:tmux:station:@1:%2",
         cwd: "/tmp/station/web/task",
       },
       diagnostics: {
@@ -163,6 +164,33 @@ describe("Cursor hook event parsing", () => {
       },
       providerData: {
         cursorStopStatus: "error",
+      },
+    });
+    expect(report).not.toHaveProperty("turn");
+  });
+
+  it("maps Cursor sessionEnd to idle because the Station pane is still live", () => {
+    const report = reportForCursorPayload({
+      hook_event_name: "sessionEnd",
+      session_id: "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
+      conversation_id: "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
+      cwd: "/tmp/station/station-a9b1d4",
+      station_project_id: "station",
+      station_worktree_id: "wt_station_station-a9b1d4_7bee5c969f",
+      station_session_id: "ses_aad9521e-c580-4ec2-9591-390602578fd1",
+      station_terminal_target_id: "native:wt_station_station-a9b1d4_7bee5c969f",
+    });
+
+    expect(report).toMatchObject({
+      eventType: "sessionEnd",
+      status: {
+        value: "idle",
+        confidence: "high",
+        reason: "Cursor session ended.",
+      },
+      correlation: {
+        nativeSessionId: "cursor:native:wt_station_station-a9b1d4_7bee5c969f",
+        harnessRunId: "cursor:native:wt_station_station-a9b1d4_7bee5c969f",
       },
     });
     expect(report).not.toHaveProperty("turn");
@@ -202,6 +230,31 @@ describe("Cursor hook event parsing", () => {
       nativeSessionId: "cursor_session_123",
     });
   });
+
+  it("unifies Station-launched Cursor native identity when hook types split session ids", () => {
+    const paneNative = "cursor:native:wt_station_station-a9b1d4_7bee5c969f";
+    const reports = splitNativeOneTurnReports();
+
+    for (const report of Object.values(reports)) {
+      expect(report.correlation?.nativeSessionId).toBe(paneNative);
+      expect(report.correlation?.harnessRunId).toBe(paneNative);
+      expect(report.correlation?.sessionId).toBe("ses_aad9521e-c580-4ec2-9591-390602578fd1");
+    }
+
+    expect(reports.beforeSubmitPrompt.providerData).toMatchObject({
+      cursorSessionId: "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
+      cursorConversationId: "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
+      cursorGenerationId: "a2fa3d59-2a5b-4c2e-aeb5-40c6e3e1211f",
+    });
+    expect(reports.preToolUse.providerData).toMatchObject({
+      cursorSessionId: "77af7844-ad25-40e1-8cea-e8aac8c7ad84",
+      cursorConversationId: "77af7844-ad25-40e1-8cea-e8aac8c7ad84",
+      cursorGenerationId: "a2fa3d59-2a5b-4c2e-aeb5-40c6e3e1211f",
+      toolName: "Read",
+    });
+    expect(reports.stop.status.value).toBe("idle");
+    expect(reports.stop.turn).toEqual({ kind: "turn_completed" });
+  });
 });
 
 function reportForCursorPayload(payload: unknown) {
@@ -210,4 +263,15 @@ function reportForCursorPayload(payload: unknown) {
     observedAt: now,
     payload,
   });
+}
+
+function splitNativeOneTurnReports() {
+  const fixture = JSON.parse(
+    readFileSync(new URL("../fixtures/split-native-one-turn.json", import.meta.url), "utf8"),
+  ) as Record<string, unknown>;
+  return {
+    beforeSubmitPrompt: reportForCursorPayload(fixture.beforeSubmitPrompt),
+    preToolUse: reportForCursorPayload(fixture.preToolUse),
+    stop: reportForCursorPayload(fixture.stop),
+  };
 }

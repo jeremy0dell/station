@@ -1,0 +1,46 @@
+{
+  "beforeSubmitPrompt": {
+    "hook_event_name": "beforeSubmitPrompt",
+    "session_id": "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
+    "conversation_id": "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
+    "generation_id": "a2fa3d59-2a5b-4c2e-aeb5-40c6e3e1211f",
+    "cwd": "/tmp/station/station-a9b1d4",
+    "model": "cursor-grok-4.6-xhigh-fast",
+    "station_project_id": "station",
+    "station_worktree_id": "wt_station_station-a9b1d4_7bee5c969f",
+    "station_worktree_path": "/tmp/station/station-a9b1d4",
+    "station_session_id": "ses_aad9521e-c580-4ec2-9591-390602578fd1",
+    "station_terminal_provider": "native",
+    "station_terminal_target_id": "native:wt_station_station-a9b1d4_7bee5c969f"
+  },
+  "preToolUse": {
+    "hook_event_name": "preToolUse",
+    "session_id": "77af7844-ad25-40e1-8cea-e8aac8c7ad84",
+    "conversation_id": "77af7844-ad25-40e1-8cea-e8aac8c7ad84",
+    "generation_id": "a2fa3d59-2a5b-4c2e-aeb5-40c6e3e1211f",
+    "cwd": "/tmp/station/station-a9b1d4",
+    "model": "grok-4.6",
+    "tool_name": "Read",
+    "station_project_id": "station",
+    "station_worktree_id": "wt_station_station-a9b1d4_7bee5c969f",
+    "station_worktree_path": "/tmp/station/station-a9b1d4",
+    "station_session_id": "ses_aad9521e-c580-4ec2-9591-390602578fd1",
+    "station_terminal_provider": "native",
+    "station_terminal_target_id": "native:wt_station_station-a9b1d4_7bee5c969f"
+  },
+  "stop": {
+    "hook_event_name": "stop",
+    "session_id": "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
+    "conversation_id": "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
+    "generation_id": "a2fa3d59-2a5b-4c2e-aeb5-40c6e3e1211f",
+    "cwd": "/tmp/station/station-a9b1d4",
+    "model": "cursor-grok-4.6-xhigh-fast",
+    "status": "completed",
+    "station_project_id": "station",
+    "station_worktree_id": "wt_station_station-a9b1d4_7bee5c969f",
+    "station_worktree_path": "/tmp/station/station-a9b1d4",
+    "station_session_id": "ses_aad9521e-c580-4ec2-9591-390602578fd1",
+    "station_terminal_provider": "native",
+    "station_terminal_target_id": "native:wt_station_station-a9b1d4_7bee5c969f"
+  }
+}

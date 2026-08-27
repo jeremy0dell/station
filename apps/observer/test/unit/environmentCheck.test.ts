@@ -42,7 +42,7 @@ describe("buildSessionEnvironmentCheck", () => {
     expect(check.message).toBe("1 session(s) — no terminal: 1.");
   });
 
-  it("warns and names detached sessions with their provider (the silent-click case)", () => {
+  it("reports detached sessions without claiming they are unreachable", () => {
     const check = buildSessionEnvironmentCheck({
       sessions: [
         session("adc0a0", "native", "open"),
@@ -51,20 +51,18 @@ describe("buildSessionEnvironmentCheck", () => {
       ],
       orphans: [],
     });
-    expect(check.status).toBe("warn");
+    expect(check.status).toBe("ok");
     expect(check.message).toContain("native: 1 open · tmux: 2 detached");
-    expect(check.message).toContain("2 detached/stale (running, not attachable here):");
-    expect(check.message).toContain("b83b75 [tmux]");
-    expect(check.message).toContain("ui-explore [tmux]");
+    expect(check.message).not.toContain("not attachable here");
   });
 
-  it("treats stale terminals as detached/stale too", () => {
+  it("warns and names stale terminals", () => {
     const check = buildSessionEnvironmentCheck({
       sessions: [session("x", "native", "stale")],
       orphans: [],
     });
     expect(check.status).toBe("warn");
-    expect(check.message).toContain("1 detached/stale");
+    expect(check.message).toContain("1 stale terminal target(s): x [native].");
   });
 
   it("warns on orphaned runtime states and counts them by kind", () => {
@@ -76,10 +74,10 @@ describe("buildSessionEnvironmentCheck", () => {
     expect(check.message).toContain("2 orphaned runtime state(s) (1 session, 1 terminal_target).");
   });
 
-  it("truncates the detached list past four with a +N more suffix", () => {
-    const detached = ["a", "b", "c", "d", "e", "f"].map((t) => session(t, "tmux", "detached"));
-    const check = buildSessionEnvironmentCheck({ sessions: detached, orphans: [] });
-    expect(check.message).toContain("6 detached/stale");
+  it("truncates the stale list past four with a +N more suffix", () => {
+    const stale = ["a", "b", "c", "d", "e", "f"].map((t) => session(t, "tmux", "stale"));
+    const check = buildSessionEnvironmentCheck({ sessions: stale, orphans: [] });
+    expect(check.message).toContain("6 stale terminal target(s)");
     expect(check.message).toContain("+2 more");
   });
 });

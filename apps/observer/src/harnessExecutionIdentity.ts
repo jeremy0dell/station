@@ -109,6 +109,9 @@ export function sessionHarnessExecutionEvidenceFromReport(
   if (report.correlation?.nativeSessionId !== undefined) {
     evidence.nativeSessionId = report.correlation.nativeSessionId;
   }
+  if (report.correlation?.harnessRunId !== undefined) {
+    evidence.harnessRunId = report.correlation.harnessRunId;
+  }
   if (report.status !== undefined) evidence.status = report.status;
   return evidence;
 }
@@ -123,6 +126,9 @@ export function sessionHarnessExecutionEvidenceFromObservation(
   if (observation.nativeSessionId !== undefined) {
     evidence.nativeSessionId = observation.nativeSessionId;
   }
+  if (observation.harnessRunId !== undefined) {
+    evidence.harnessRunId = observation.harnessRunId;
+  }
   if (observation.status !== undefined) evidence.status = observation.status;
   return evidence;
 }
@@ -134,6 +140,9 @@ export function sessionHarnessExecutionEvidenceFromObservation(
  * only from non-stale lifecycle evidence.
  *
  * Completion cannot establish a binding, and a mismatch cannot replace an active binding.
+ *
+ * Pane-scoped native identity (`nativeSessionId` equal to `harnessRunId`) may replace an active
+ * conversation-scoped binding on the same Station session; stale evidence still fails closed.
  */
 export function decideSessionHarnessExecution(input: {
   current: PersistedSessionHarnessExecution | undefined;
@@ -167,10 +176,26 @@ export function decideSessionHarnessExecution(input: {
   if (nativeSessionId === undefined) return { mayDeriveState: false };
   if (current.nativeSessionId !== nativeSessionId) {
     if (
+      status !== undefined &&
+      status.value !== "unknown" &&
+      !statusIsStale(status, current) &&
+      isPaneScopedNativeIdentity(input.evidence)
+    ) {
+      return {
+        mayDeriveState: true,
+        binding: bindingFromEvidence({
+          evidence: input.evidence,
+          sessionId,
+          nativeSessionId,
+          status,
+        }),
+      };
+    }
+    if (
       status === undefined ||
       !ACTIVE_EXECUTION_STATES.has(status.value) ||
       !REPLACEABLE_EXECUTION_STATES.has(current.state) ||
-      Date.parse(status.updatedAt) < Date.parse(current.statusUpdatedAt)
+      statusIsStale(status, current)
     ) {
       return { mayDeriveState: false };
     }
@@ -185,11 +210,7 @@ export function decideSessionHarnessExecution(input: {
     };
   }
 
-  if (
-    status !== undefined &&
-    status.value !== "unknown" &&
-    Date.parse(status.updatedAt) < Date.parse(current.statusUpdatedAt)
-  ) {
+  if (status !== undefined && status.value !== "unknown" && statusIsStale(status, current)) {
     return { mayDeriveState: false };
   }
 
@@ -267,6 +288,18 @@ function nativeExecutionDecision(input: {
     return "bind";
   }
   return "reject";
+}
+
+function isPaneScopedNativeIdentity(evidence: SessionHarnessExecutionEvidence): boolean {
+  return (
+    evidence.harnessRunId !== undefined &&
+    evidence.nativeSessionId !== undefined &&
+    evidence.nativeSessionId === evidence.harnessRunId
+  );
+}
+
+function statusIsStale(status: ObservedStatus, current: PersistedSessionHarnessExecution): boolean {
+  return Date.parse(status.updatedAt) < Date.parse(current.statusUpdatedAt);
 }
 
 function hasStationExecutionIdentity(

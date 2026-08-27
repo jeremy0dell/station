@@ -206,6 +206,7 @@ export type SessionHarnessExecutionEvidence = {
   provider: ProviderId;
   sessionId?: string;
   nativeSessionId?: string;
+  harnessRunId?: string;
   status?: ObservedStatus;
 };
 

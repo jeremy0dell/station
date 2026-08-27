@@ -13,7 +13,7 @@ import {
 } from "../../support/real-station/env";
 import { CleanupStack, runStationJson } from "../../support/real-station/process";
 import { createRealTempRepo } from "../../support/real-station/repo";
-import { killTmuxSession } from "../../support/real-station/tmux";
+import { closeRealTmuxEndpoint } from "../../support/real-station/tmux";
 
 const describeReal = realE2eEnabled() ? describe : describe.skip;
 
@@ -39,16 +39,13 @@ describeReal("real Worktrunk hook ingestion", () => {
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
     const config = await writeRealStationConfig({ env, repo, useLifecycleHooks: true });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     cleanup.defer(async () => {
       await runStationJson(env, {
         configPath: config.configPath,
         args: ["hooks", "uninstall", "worktrunk", "--yes"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
-    });
-
     await expect(
       runStationJson(env, {
         configPath: config.configPath,
@@ -75,16 +72,13 @@ describeReal("real Worktrunk hook ingestion", () => {
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
     const config = await writeRealStationConfig({ env, repo });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     cleanup.defer(async () => {
       await runStationJson(env, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
-    });
-
     await runStationJson(env, {
       configPath: config.configPath,
       args: ["observer", "start", "--timeout-ms", "30000"],
@@ -111,16 +105,13 @@ describeReal("real Worktrunk hook ingestion", () => {
       repo: spoolRepo,
       autoStartFromHooks: false,
     });
+    cleanup.defer(() => closeRealTmuxEndpoint(spoolConfig.tmuxEndpoint));
     cleanup.defer(async () => {
       await runStationJson(env, {
         configPath: spoolConfig.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(env, spoolConfig.tmuxSession);
-    });
-
     const spooled = await runWorktrunkIngress(env, spoolConfig, {
       event: "post-create",
       stdin: JSON.stringify({ branch: "station/hook-spooled" }),
