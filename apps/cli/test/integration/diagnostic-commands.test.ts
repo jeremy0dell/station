@@ -670,6 +670,55 @@ describe("CLI diagnostic commands", () => {
     });
   });
 
+  it("finds opt-in CLI process traces by invocation id", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const invocationId = "11111111-1111-4111-8111-111111111111";
+    await mkdir(join(fixture.stateDir, "logs"), { recursive: true });
+    await writeFile(
+      join(fixture.stateDir, "logs", "cli.jsonl"),
+      `${[
+        JSON.stringify({
+          timestamp: "2026-05-20T12:00:00.000Z",
+          level: "debug",
+          component: "cli",
+          message: "cli.process.trace.start",
+          attributes: { invocationId, route: ["project", "list"], argumentCount: 2 },
+        }),
+        JSON.stringify({
+          timestamp: "2026-05-20T12:00:01.000Z",
+          level: "debug",
+          component: "cli",
+          message: "cli.process.trace.outcome",
+          attributes: { invocationId, durationMs: 1, exitCode: 0 },
+        }),
+      ].join("\n")}\n`,
+    );
+
+    const result = await runCli([
+      "--config",
+      configPath,
+      "debug",
+      "logs",
+      invocationId,
+      "--component",
+      "cli",
+    ]);
+
+    expect(result).toMatchObject({
+      code: 0,
+      output: {
+        query: invocationId,
+        components: ["cli"],
+        matched: 2,
+        records: [
+          { level: "debug", message: "cli.process.trace.start" },
+          { level: "debug", message: "cli.process.trace.outcome" },
+        ],
+      },
+    });
+  });
+
   it("filters runtime logs without searching hook logs by default", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);

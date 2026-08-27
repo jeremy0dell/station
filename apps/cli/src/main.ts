@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "@station/config";
+import { type LoadedStationConfig, loadConfig, resolveObserverPaths } from "@station/config";
+import { ObserverLifecycleFailureSchema } from "@station/contracts";
 import {
   isSafeError,
   providerHookArtifactOwner,
@@ -8,7 +10,11 @@ import {
   stationBuildInfo,
 } from "@station/runtime";
 import { captureTmuxCallerClaims } from "@station/tmux";
-import { parseRequiredOptionValue } from "./args.js";
+import { CliInputError, parseRequiredOptionValue } from "./args.js";
+import {
+  type CliProcessDiagnostics,
+  createCliProcessDiagnostics,
+} from "./cliProcessDiagnostics.js";
 import type { CliRunOptions, CliRunResult } from "./cliTypes.js";
 import {
   handleCliCommandConfigError,
@@ -28,20 +34,41 @@ export type { CliRunOptions, CliRunResult } from "./cliTypes.js";
 /**
  * ADAPTER
  *
- * Translates CLI arguments and loaded configuration into registered command execution.
+ * Translates CLI arguments and loaded configuration into registered command execution, exposing
+ * only a non-rendered command-correlation seam to the process owner. Direct calls never persist
+ * process diagnostics.
  */
 export async function runCli(
   argv = process.argv.slice(2),
   options: CliRunOptions = {},
 ): Promise<CliRunResult> {
+  return runParsedCli(parseGlobalOptions(argv), options);
+}
+
+type ParsedGlobalOptions = { args: string[]; configPath?: string };
+
+type PreparedCliConfig = {
+  loaded?: LoadedStationConfig;
+  error?: unknown;
+};
+
+async function runParsedCli(
+  parsed: ParsedGlobalOptions,
+  options: CliRunOptions,
+  preparedConfig?: PreparedCliConfig,
+): Promise<CliRunResult> {
   const commandOptions = withCliComposition(options);
-  const { args, configPath } = parseGlobalOptions(argv);
+  const { args, configPath } = parsed;
   const help = renderCliHelpFromArgs(args);
   if (help !== undefined) {
     return { code: 0, output: help.text, outputFormat: "text" };
   }
   if (args.length === 1 && args[0] === "--version") {
-    return { code: 0, output: stationBuildInfo().version, outputFormat: "text" };
+    return {
+      code: 0,
+      output: options.updateDeps?.currentBuildInfo?.version ?? stationBuildInfo().version,
+      outputFormat: "text",
+    };
   }
   const command = args[0] ?? defaultCommand(defaultCommandEnv(commandOptions));
   const commandArgs = args[0] === undefined ? [] : args.slice(1);
@@ -51,11 +78,12 @@ export async function runCli(
   }
   let loaded: Awaited<ReturnType<typeof loadConfig>> | undefined;
   try {
-    loaded = route.requiresConfig
-      ? configPath === undefined
-        ? await loadConfig()
-        : await loadConfig(configPath)
-      : undefined;
+    if (route.requiresConfig) {
+      if (preparedConfig?.error !== undefined) throw preparedConfig.error;
+      loaded =
+        preparedConfig?.loaded ??
+        (configPath === undefined ? await loadConfig() : await loadConfig(configPath));
+    }
   } catch (error) {
     const handled = await handleCliCommandConfigError(route, error, {
       path: route.path,
@@ -95,38 +123,224 @@ function defaultCommandEnv(options: CliRunOptions): CliEnv {
 /**
  * ADAPTER
  *
- * Translates process arguments, output, and exit semantics around `runCli` while composing
- * process-owned provider-hook launcher and artifact-owner identity.
+ * Owns optional process tracing and best-effort failure finalization around registered CLI
+ * execution. Diagnostic writes never gate command side effects, replace output, alter exit status,
+ * or emit degradation warnings.
  */
 export async function runCliMain(
   argv: readonly string[] = process.argv.slice(2),
   options: CliRunOptions = {},
 ): Promise<void> {
-  const currentBuildInfo =
-    options.updateDeps?.currentBuildInfo ?? (options.updateDeps?.buildInfo ?? stationBuildInfo)();
-  const processOptions = withProcessComposition(options, currentBuildInfo);
-  let suppressOutput = false;
+  const processDeps = options.cliProcessDeps ?? {};
+  const clock = processDeps.clock ?? { now: () => new Date() };
+  const startedAt = safeNow(clock);
+  const invocationId = safeInvocationId(processDeps.randomUUID);
+  const stdoutWrite = processDeps.stdoutWrite ?? ((value: string) => process.stdout.write(value));
+  const stderrWrite = processDeps.stderrWrite ?? ((value: string) => process.stderr.write(value));
+  const exit = processDeps.exit ?? ((code: number) => process.exit(code));
+  const setExitCode =
+    processDeps.setExitCode ??
+    ((code: number) => {
+      process.exitCode = code;
+    });
+
+  let parsed: ParsedGlobalOptions | undefined;
+  let parseError: unknown;
   try {
-    suppressOutput = shouldSuppressCliProcessOutput(parseGlobalOptions([...argv]).args);
-  } catch {
-    suppressOutput = false;
+    parsed = parseGlobalOptions([...argv]);
+  } catch (error) {
+    parseError = error;
   }
+
+  const processEnv = defaultCommandEnv(options);
+  const helpRequested = parsed?.args.some(isCliHelpFlag) === true;
+  const versionRequested = parsed?.args.length === 1 && parsed.args[0] === "--version";
+  const command = parsed === undefined ? undefined : (parsed.args[0] ?? defaultCommand(processEnv));
+  const commandArgs =
+    parsed === undefined || parsed.args[0] === undefined ? [] : parsed.args.slice(1);
+  const route = command === undefined ? undefined : resolveCliCommandRoute(command, commandArgs);
+  const routePath = canonicalProcessRoute(
+    parsed,
+    route?.resolvedPath,
+    helpRequested,
+    versionRequested,
+  );
+  const requiresConfig =
+    parseError === undefined &&
+    !helpRequested &&
+    !versionRequested &&
+    route?.requiresConfig === true;
+  const preparedConfig = requiresConfig
+    ? await prepareCliConfig(parsed, processDeps.loadConfig)
+    : ({} satisfies PreparedCliConfig);
+
+  let currentBuildInfo: ReturnType<typeof stationBuildInfo> | undefined;
+  let buildError: unknown;
   try {
-    const result = await runCli([...argv], processOptions);
+    currentBuildInfo =
+      options.updateDeps?.currentBuildInfo ?? (options.updateDeps?.buildInfo ?? stationBuildInfo)();
+  } catch (error) {
+    buildError = error;
+  }
+
+  const diagnostics = prepareProcessDiagnostics({
+    options,
+    preparedConfig,
+    invocationId,
+    startedAt,
+    routePath,
+    argumentCount: parsed?.args.length ?? argv.length,
+    hasStdin: parsed?.args.includes("--stdin") ?? argv.includes("--stdin"),
+    processEnv,
+    ...(currentBuildInfo === undefined ? {} : { buildVersion: currentBuildInfo.version }),
+  });
+  diagnostics.start();
+
+  const suppressOutput = parsed === undefined ? false : shouldSuppressCliProcessOutput(parsed.args);
+  let correlation: CliRunResult["correlation"];
+  try {
+    if (parseError !== undefined) throw parseError;
+    if (parsed === undefined) {
+      throw new CliInputError("CLI_GLOBAL_PARSE_FAILED", "Global CLI parsing failed.");
+    }
+    if (buildError !== undefined) throw buildError;
+    if (currentBuildInfo === undefined)
+      throw new Error("Station build information is unavailable.");
+
+    const processOptions = withProcessComposition(options, currentBuildInfo);
+    const result = await runParsedCli(parsed, processOptions, preparedConfig);
+    correlation = result.correlation;
     if (!suppressOutput && result.output !== undefined) {
-      process.stdout.write(formatCliOutput(result));
+      stdoutWrite(formatCliOutput(result));
     }
     if (suppressOutput) {
       if (result.code !== 0 && result.output !== undefined) {
-        process.stderr.write(formatCliOutput(result));
+        stderrWrite(formatCliOutput(result));
       }
-      process.exit(result.code);
+      await diagnostics.outcome({
+        exitCode: result.code,
+        ...(result.correlation === undefined ? {} : { correlation: result.correlation }),
+        ...(preparedConfig.error === undefined ? {} : { error: preparedConfig.error }),
+      });
+      exit(result.code);
+      return;
     }
-    process.exitCode = result.code;
+    await diagnostics.outcome({
+      exitCode: result.code,
+      ...(result.correlation === undefined ? {} : { correlation: result.correlation }),
+      ...(preparedConfig.error === undefined ? {} : { error: preparedConfig.error }),
+    });
+    setExitCode(result.code);
   } catch (error) {
-    process.stderr.write(`${formatCliError(error)}\n`);
-    process.exitCode = 1;
+    try {
+      stderrWrite(`${formatCliError(error)}\n`);
+    } catch {
+      // Output failure must still retain the original command failure and exit status.
+    }
+    await diagnostics.outcome({
+      exitCode: 1,
+      ...(correlation === undefined ? {} : { correlation }),
+      error,
+      ...(ObserverLifecycleFailureSchema.safeParse(error).success
+        ? { observerStartupFailure: true }
+        : {}),
+    });
+    setExitCode(1);
   }
+}
+
+function prepareProcessDiagnostics(input: {
+  options: CliRunOptions;
+  preparedConfig: PreparedCliConfig;
+  invocationId: string;
+  startedAt: Date;
+  routePath: readonly string[];
+  argumentCount: number;
+  hasStdin: boolean;
+  processEnv: CliEnv;
+  buildVersion?: string;
+}): CliProcessDiagnostics {
+  const deps = input.options.cliProcessDeps ?? {};
+  try {
+    const paths = (deps.resolveObserverPaths ?? resolveObserverPaths)(
+      input.preparedConfig.loaded?.config,
+    );
+    return createCliProcessDiagnostics(
+      {
+        stateDir: paths.stateDir,
+        tracing: input.processEnv.STATION_CLI_TRACE === "1",
+        invocationId: input.invocationId,
+        startedAt: input.startedAt,
+        route: input.routePath,
+        argumentCount: input.argumentCount,
+        hasStdin: input.hasStdin,
+        callerClaims: {
+          tmux: nonEmptyEnvironmentValue(input.processEnv.TMUX),
+          tmuxPane: nonEmptyEnvironmentValue(input.processEnv.TMUX_PANE),
+        },
+        ...(input.buildVersion === undefined ? {} : { buildVersion: input.buildVersion }),
+      },
+      deps,
+    );
+  } catch {
+    return NOOP_PROCESS_DIAGNOSTICS;
+  }
+}
+
+const NOOP_PROCESS_DIAGNOSTICS: CliProcessDiagnostics = {
+  start: () => undefined,
+  outcome: async () => undefined,
+};
+
+async function prepareCliConfig(
+  parsed: ParsedGlobalOptions | undefined,
+  loader: NonNullable<CliRunOptions["cliProcessDeps"]>["loadConfig"],
+): Promise<PreparedCliConfig> {
+  if (parsed === undefined) {
+    return { error: new CliInputError("CLI_GLOBAL_PARSE_FAILED", "Global CLI parsing failed.") };
+  }
+  const load =
+    loader ??
+    (async (configPath?: string) =>
+      configPath === undefined ? loadConfig() : loadConfig(configPath));
+  try {
+    return { loaded: await load(parsed.configPath) };
+  } catch (error) {
+    return { error };
+  }
+}
+
+function canonicalProcessRoute(
+  parsed: ParsedGlobalOptions | undefined,
+  resolvedPath: readonly string[] | undefined,
+  helpRequested: boolean,
+  versionRequested: boolean,
+): readonly string[] {
+  if (versionRequested) return ["version"];
+  if (helpRequested) {
+    return resolvedPath ?? [parsed?.args.includes("--man") === true ? "man" : "help"];
+  }
+  return resolvedPath ?? [];
+}
+
+function safeNow(clock: { now(): Date }): Date {
+  try {
+    return clock.now();
+  } catch {
+    return new Date();
+  }
+}
+
+function safeInvocationId(create: (() => string) | undefined): string {
+  try {
+    return (create ?? randomUUID)();
+  } catch {
+    return randomUUID();
+  }
+}
+
+function nonEmptyEnvironmentValue(value: string | undefined): boolean {
+  return value !== undefined && value.length > 0;
 }
 
 function withProcessComposition(
@@ -226,7 +440,7 @@ function parseGlobalOptions(argv: string[]): { args: string[]; configPath?: stri
     if (arg === "--config") {
       const value = parseRequiredOptionValue(argv[index + 1], "--config");
       if (value.startsWith("--") || isTopLevelCommand(value)) {
-        throw new Error("--config requires a value.");
+        throw new CliInputError("CLI_CONFIG_VALUE_REQUIRED", "--config requires a value.");
       }
       configPath = value;
       index += 1;

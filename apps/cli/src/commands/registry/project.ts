@@ -1,8 +1,8 @@
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
+import { commandExecutionCorrelation } from "../command.js";
 import {
   type ProjectCommandOptions,
-  projectCommandAuditMetadata,
   projectCommandExitCode,
   runProjectCommand,
 } from "../project.js";
@@ -79,9 +79,19 @@ async function runProjectCliCommand(context: CliCommandRunContext) {
     projectOptions,
     context.options.observerDeps,
   );
-  return {
+  const cliResult = {
     code: projectCommandExitCode(result),
     output: result,
-    audit: projectCommandAuditMetadata(result),
+  };
+  if (result.action !== "add" && result.action !== "remove") return cliResult;
+  return {
+    ...cliResult,
+    correlation: commandExecutionCorrelation({
+      status: result.status,
+      receipt: result.receipt,
+      ...(result.status === "succeeded" || result.status === "failed"
+        ? { record: result.command }
+        : {}),
+    }),
   };
 }

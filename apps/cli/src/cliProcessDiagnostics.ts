@@ -88,7 +88,7 @@ export function createCliProcessDiagnostics(
     }
   }
 
-  function write(record: Omit<LogRecord, "component">): Promise<void> {
+  function write(record: Parameters<JsonlLogger["log"]>[0]): Promise<void> {
     const sink = resolveLogger();
     if (sink === undefined) return Promise.resolve();
     try {
@@ -111,7 +111,7 @@ export function createCliProcessDiagnostics(
     });
   }
 
-  async function outcome(input: CliProcessDiagnosticOutcome): Promise<void> {
+  async function persistOutcome(input: CliProcessDiagnosticOutcome): Promise<void> {
     if (finished) return;
     finished = true;
 
@@ -153,6 +153,14 @@ export function createCliProcessDiagnostics(
       ...correlation,
       attributes,
     });
+  }
+
+  async function outcome(input: CliProcessDiagnosticOutcome): Promise<void> {
+    try {
+      await persistOutcome(input);
+    } catch {
+      // Diagnostics are never part of command completion or process exit semantics.
+    }
   }
 
   return { start, outcome };

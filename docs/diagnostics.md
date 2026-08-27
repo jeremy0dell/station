@@ -73,8 +73,7 @@ error code, and error message facts. It does not infer a subsystem or handler.
 
 `stn debug logs` reads structured JSONL logs from the configured state
 directory without contacting the observer. It searches each selected component's
-active log and bounded rotated history, reports malformed, unreadable, and
-truncated evidence, and returns at most 500 records. By default it searches `observer`,
+active log and returns at most 500 records. By default it searches `observer`,
 `cli`, `tui`, and `station-host` logs, excludes noisy hook logs, and returns recent `warn`/`error`
 records when no query is supplied, and searches all levels when a query is
 supplied. Use `--component hook` or `--all-components` only when hook delivery
@@ -86,15 +85,22 @@ and detach reasons. Each record marks `componentRole` as
 establish the retained event as an observed proximate failure without
 establishing a deeper cause.
 
-Normal `stn` processes also write strict `cli.invocation.start` and
-`cli.invocation.outcome` witnesses to `logs/cli.jsonl`. Query one with
-`stn debug logs <invocationId> --component cli`. These records are redacted and
-bounded, and may correlate `invocationId -> traceId -> commandId`; they neither
-replace Observer command records nor establish current runtime state. Help,
-version, reads, and diagnostic recovery retain their command exit status when the
-audit sink fails but warn on stderr. Mutations refuse before effects when their
-start is not durable; a successful mutation whose outcome cannot be persisted
-returns nonzero and warns that the effect may already have completed.
+With tracing disabled, `runCliMain` writes one `cli.process.failure` only when a
+process/input/config/routing/output failure lacks adequate Observer command
+evidence; a rejected receipt writes `cli.command.rejected`. Successful reads and
+mutations, help, version, local mutation results, and terminal Observer command
+failures add no default process record. Existing Observer-startup lifecycle
+records are reused instead of duplicated.
+
+Exact `STATION_CLI_TRACE=1` enables `cli.process.trace.start` and
+`cli.process.trace.outcome` records for every CLI process, including help,
+version, and reads. Query their `invocationId` with
+`stn debug logs <invocationId> --component cli`. Records contain only canonical
+route shape, bounded process facts, fixed safe failure summaries, and available
+top-level `traceId`/`commandId` correlation. They never retain argv values,
+stdin, output, config paths, cwd, environment values, prompts, arbitrary error
+messages, causes, or resource payloads. Logging is best-effort: it never gates
+effects, changes output or exit status, or emits a degradation warning.
 
 Lifecycle child reports and boot tails are redacted before they cross the process
 boundary. Ordinary JavaScript errors retain only their redacted first message
@@ -305,15 +311,13 @@ max_bundles = 10
 max_days = 30
 ```
 
-CLI invocation writes rotate `cli.jsonl` before its configured per-file or
-component cap, keep the active file, and prune only rotated CLI logs using the
-configured age and per-component count/size caps after a short deletion grace.
-Other log and bundle writers apply their own documented retention behavior;
-`max_total_mb` is currently reporting evidence rather than a cross-component
-deletion authority. SQLite over-limit status is reported, but SQLite rows are not
-pruned by this retention pass. The SQLite age settings do not determine Doctor's
-top-level status, prune command-error rows, or filter those rows from
-`recentErrors`.
+Retention settings are currently policy and usage-limit evidence rather than a
+universal JSONL rotation, file-pruning, or SQLite-pruning mechanism. The CLI
+process writer appends only to the active `cli.jsonl`; it adds no rotation or
+pruning behavior. Provider-observation expiry and hook-spool cleanup retain their
+owner-specific semantics. SQLite over-limit status is reported, but the SQLite
+age settings do not determine Doctor's top-level status, prune command-error
+rows, or filter those rows from `recentErrors`.
 
 ## Redaction
 

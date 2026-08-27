@@ -3,7 +3,7 @@ import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import type { CommandCommandOptions } from "../command.js";
 import {
-  commandCommandAuditMetadata,
+  commandCommandCorrelation,
   commandCommandExitCode,
   runCommandCommand,
 } from "../command.js";
@@ -66,9 +66,10 @@ async function runCommandCliCommand(context: CliCommandRunContext) {
     commandOptions,
     context.options.observerDeps,
   );
-  return {
+  const cliResult = {
     code: commandCommandExitCode(result),
     output: result,
-    audit: commandCommandAuditMetadata(result),
   };
+  const correlation = commandCommandCorrelation(result);
+  return correlation === undefined ? cliResult : { ...cliResult, correlation };
 }
