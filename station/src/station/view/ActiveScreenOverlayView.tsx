@@ -2,7 +2,7 @@
 // The dashboard never reflows for overlays.
 import { tuiScreenBehavior } from "@station/dashboard-core/state";
 import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
-import type { ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
@@ -17,6 +17,7 @@ import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
 import { FreshStartSheetView } from "./sheets/FreshStartSheetView.js";
 import { CreateGroupSheetView } from "./sheets/CreateGroupSheetView.js";
 import { MoveToGroupSheetView } from "./sheets/MoveToGroupSheetView.js";
+import { SessionPickerSheetView } from "./sheets/SessionPickerSheetView.js";
 import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
 
 export type ActiveScreenOverlayViewProps = {
@@ -90,13 +91,27 @@ function renderActiveScreenOverlay({
     case "createGroup":
       return <CreateGroupSheetView screen={screen} columns={columns} rows={rows} />;
     case "moveToGroup":
-      return screen.step === "chooseSlot" ? null : (
-        <MoveToGroupSheetView
-          screen={screen}
-          snapshot={snapshot}
-          selection={selection}
+      if (screen.step === "chooseSlot") {
+        return (
+          <SessionPickerSheetView
+            title="Select session to move to a Group"
+            columns={columns}
+            rows={rows}
+          />
+        );
+      }
+      return (
+        <SessionPickerSheetView
+          title="Select session to move to a Group"
           columns={columns}
           rows={rows}
+          next={createElement(MoveToGroupSheetView, {
+            screen,
+            snapshot,
+            selection,
+            columns,
+            rows,
+          })}
         />
       );
     case "widgetSettings":
@@ -150,15 +165,41 @@ function renderActiveScreenOverlay({
         />
       );
     case "renameSession":
-      switch (screen.step) {
-        case "chooseSlot":
-          return null;
-        case "editName":
-          return <RenameSessionSheetView columns={columns} rows={rows} state={screen} />;
+      if (screen.step === "chooseSlot") {
+        return (
+          <SessionPickerSheetView
+            title="Select session to rename"
+            columns={columns}
+            rows={rows}
+          />
+        );
       }
-      return assertNever(screen);
+      return (
+        <SessionPickerSheetView
+          title="Select session to rename"
+          columns={columns}
+          rows={rows}
+          next={createElement(RenameSessionSheetView, { columns, rows, state: screen })}
+        />
+      );
     case "removeWorktree":
-      return <RemoveSessionSheetView columns={columns} rows={rows} screen={screen} />;
+      if (screen.step === "chooseSlot") {
+        return (
+          <SessionPickerSheetView
+            title="Select session to delete"
+            columns={columns}
+            rows={rows}
+          />
+        );
+      }
+      return (
+        <SessionPickerSheetView
+          title="Select session to delete"
+          columns={columns}
+          rows={rows}
+          next={createElement(RemoveSessionSheetView, { columns, rows, screen })}
+        />
+      );
     case "freshStart":
       return <FreshStartSheetView columns={columns} rows={rows} screen={screen} />;
     case "projectSettings":
@@ -182,7 +223,23 @@ function renderActiveScreenOverlay({
         />
       );
     case "fork":
-      return <ForkSessionSheetView columns={columns} rows={rows} screen={screen} />;
+      if (screen.step === "chooseSlot") {
+        return (
+          <SessionPickerSheetView
+            title="Select session to fork"
+            columns={columns}
+            rows={rows}
+          />
+        );
+      }
+      return (
+        <SessionPickerSheetView
+          title="Select session to fork"
+          columns={columns}
+          rows={rows}
+          next={createElement(ForkSessionSheetView, { columns, rows, screen })}
+        />
+      );
   }
   return assertNever(screen);
 }

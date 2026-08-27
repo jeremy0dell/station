@@ -8,38 +8,38 @@ exports[`ToastOverlayView actions renders a complete standard-size notice frame 
 └──────────────────────────────────────────────────────────────────────┘"
 `;
 
-exports[`ToastOverlayView actions keeps a wrapped prompt and notice in disjoint structural regions through resize 1`] = `
+exports[`ToastOverlayView actions keeps a notice in its structural region through resize without a command prompt 1`] = `
 "  ┌──────────────────────────────────┐
 FL│ needs attention        [copy][x] │
 ──│ Worktrunk failed to remove the   │─
   │ selected checkout because the    │
  ▼│ main worktree cannot be removed  │]
  [│ while Station is running there.  │
+ [│ Open a different linked          │
+ [│ checkout, select the session     │
+ [│ again, and retry after           │
 ▼ └──────────────────────────────────┘
-Rename: ↑↓ move · ↵ choose · 1-9/a-z
-or click
-
 ───────────────────────────────────────
 Esc:dismiss  Q:close
 "
 `;
 
-exports[`ToastOverlayView actions keeps a wrapped prompt and notice in disjoint structural regions through resize 2`] = `
+exports[`ToastOverlayView actions keeps a notice in its structural region through resize without a command prompt 2`] = `
 "  ┌────────────────┐
 FL│ need…[copy][x] │
 ──│ Worktrunk      │─
-  └────────────────┘…
-Rename: ↑↓ move · ↵
-
+  │ failed to      │…
+ ▼│ remove the     │]
+▼ └────────────────┘
 ─────────────────────
 Esc:dismiss  Q:close
 "
 `;
 
-exports[`ToastOverlayView actions keeps a wrapped prompt and notice in disjoint structural regions through resize 3`] = `
+exports[`ToastOverlayView actions keeps a notice in its structural region through resize without a command prompt 3`] = `
 "  │ need…[copy][x] │
-FL│ diagnostic dia │
-Rename: ↑↓ move · ↵
+FL│ _remove_123 |  │
+──│ diagnostic dia │─
 ─────────────────────
 Esc:dismiss  Q:close
 "

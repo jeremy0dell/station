@@ -131,7 +131,7 @@ describe("TUI screen transitions", () => {
     expect(committed.screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
   });
 
-  it("does not commit a pending-remove focused row on enter in the choose-row trio", () => {
+  it("does not commit a pending-remove focused row on enter in the shared choosers", () => {
     const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const withPending: typeof base = {
       ...base,
@@ -158,7 +158,7 @@ describe("TUI screen transitions", () => {
     expect(committed.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
   });
 
-  it("does not commit a collapsed (hidden) focused row on enter in the choose-row trio", () => {
+  it("does not commit a collapsed (hidden) focused row on enter in the shared choosers", () => {
     const base = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       collapsedProjectIds: ["api"],

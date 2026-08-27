@@ -7,12 +7,8 @@
  * mutation, lifecycle, or effects live here.
  */
 
-export type {
-  CommandPromptModel,
-  SnapshotLoadingContent,
-} from "../components/Dashboard/content.js";
+export type { SnapshotLoadingContent } from "../components/Dashboard/content.js";
 export {
-  commandPromptForScreen,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
   fleetCountsLabel,

@@ -170,7 +170,7 @@ export function moveDashboardCursorHorizontal(
   return sameCursor(moved, cursor) ? state : focusResolvedDashboardCursor(state, tree, moved);
 }
 
-/** Moves remove/rename/fork choice focus across selectable canonical sessions only. */
+/** Moves remove/rename/move/fork choice focus across selectable canonical sessions only. */
 export function moveDashboardChooserCursor(
   state: DashboardState,
   delta: -1 | 1,

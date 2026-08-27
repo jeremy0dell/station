@@ -12,9 +12,10 @@ import {
 } from "./parts.js";
 
 type RemoveScreen = Extract<DashboardScreenView, { name: "removeWorktree" }>;
+type RemoveDownstreamScreen = Exclude<RemoveScreen, { step: "chooseSlot" }>;
 
 export type RemoveSessionSheetViewProps = {
-  screen: RemoveScreen;
+  screen: RemoveDownstreamScreen;
   columns: number;
   rows: number;
 };
@@ -31,21 +32,6 @@ const CONFIRM_HELP = {
 export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionSheetViewProps) {
   const sheetWidth = removeSheetWidth(screen.step, columns);
   const contentWidth = bottomSheetContentWidth(sheetWidth);
-  if (screen.step === "chooseSlot") {
-    return (
-      <BottomSheetFrameView
-        columns={columns}
-        rows={rows}
-        width={sheetWidth}
-        title="Select session to delete"
-        bodyPaddingTop={1}
-        footer={<SheetFooter width={contentWidth}>Esc:cancel</SheetFooter>}
-      >
-        <SheetMessageLine width={contentWidth}>↑↓ move · ↵ choose · slot or click</SheetMessageLine>
-      </BottomSheetFrameView>
-    );
-  }
-
   if (screen.step === "unavailable") {
     return (
       <BottomSheetFrameView
@@ -124,7 +110,7 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
   );
 }
 
-function removeSheetWidth(step: RemoveScreen["step"], columns: number): number {
+function removeSheetWidth(step: RemoveDownstreamScreen["step"], columns: number): number {
   if (step !== "unavailable") {
     return compactSheetWidth(columns);
   }
