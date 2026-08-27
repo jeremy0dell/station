@@ -457,7 +457,7 @@ describe("FullscreenDashboard mouse composition", () => {
     const help = cellFor(setup.captureCharFrame(), "station help");
 
     await actOn(() => setup.mockMouse.click(help.col, help.row, MouseButtons.LEFT));
-    expect(fixture.runtime.state.getState().screen).toEqual({ name: "help" });
+    expect(fixture.runtime.state.getState().screen).toMatchObject({ name: "help" });
 
     await actOn(() => setup.mockMouse.click(0, 0, MouseButtons.LEFT));
     expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });

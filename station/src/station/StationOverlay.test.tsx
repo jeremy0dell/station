@@ -214,7 +214,7 @@ describe("StationOverlay", () => {
 
     await setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.RIGHT);
 
-    expect(store.state.getState().screen).toEqual({ name: "help" });
+    expect(store.state.getState().screen).toMatchObject({ name: "help" });
     expect(calls.at(-1)).toMatchObject({
       target: { kind: "station", target: { kind: "screenBackdrop" } },
       event: { type: "down", button: "right", rawButton: 2 },

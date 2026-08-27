@@ -16,6 +16,7 @@ import { copyToClipboard, DEFAULT_COPY_SINKS } from "../copy/clipboard.js";
 import { createOpenTuiSelectionCopyHandler } from "../copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "../copy/runtimeClipboard.js";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
+import { stationKeymapHelp } from "../input/keymap/stationBindings.js";
 import { DecMode } from "../terminal/protocol/decset.js";
 import { CsiCommand } from "../terminal/protocol/identifiers.js";
 import { VtPrefix } from "../terminal/protocol/syntax.js";
@@ -112,6 +113,7 @@ export async function runDashboardMain(): Promise<void> {
     service: client.service,
     capabilities,
     clientLabel: "station",
+    helpKeymapLineCount: stationKeymapHelp().length,
     initialState: {
       widgets: tuiConfig.config?.widgets ?? [],
       widgetsPersisted: tuiConfig.configPath !== undefined,

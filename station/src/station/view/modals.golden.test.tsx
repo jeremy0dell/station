@@ -123,6 +123,17 @@ const CASES: ModalCase[] = [
     ],
   },
   {
+    name: "help overlay scrolled",
+    keys: [
+      { input: "H" },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+    ],
+    expect: ["widgets", "delete session", "refresh", "╭", "╰"],
+  },
+  {
     name: "project menu",
     keys: [],
     prepare: (state) => openProjectMenu(state, "station"),

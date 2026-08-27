@@ -1,10 +1,34 @@
 import type { TuiHelpContentLine } from "../../state/keymap.js";
+import { scrollbarOffsetForTrackIndex, verticalScrollbarCells } from "../scrollbar.js";
 
 export type HelpPanelLayout = {
   left: number;
   top: number;
   width: number;
   height: number;
+};
+
+export type HelpPanelBorderLine = {
+  kind: "border";
+  text: string;
+};
+
+export type HelpPanelBodyLine = {
+  kind: "body";
+  prefix: string;
+  bar: string;
+  suffix: string;
+  trackIndex: number;
+  offset: number;
+};
+
+export type HelpPanelLine = HelpPanelBorderLine | HelpPanelBodyLine;
+
+export type HelpPanelModel = {
+  lines: HelpPanelLine[];
+  overflow: boolean;
+  bodyRows: number;
+  scrollOffset: number;
 };
 
 export type { TuiHelpContentLine };
@@ -22,9 +46,7 @@ export function helpPanelLayout(
   const availableRows = Math.max(1, rows);
   const desiredWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, availableColumns - 4));
   const width = Math.min(availableColumns, desiredWidth);
-  const desiredHeight = content.length + 2;
-  const maxHeight = availableRows >= 8 ? availableRows - 4 : availableRows;
-  const height = Math.min(maxHeight, desiredHeight);
+  const height = helpPanelHeight(availableRows, content.length);
   return {
     left: Math.max(0, Math.floor((availableColumns - width) / 2)),
     top: Math.max(0, Math.floor((availableRows - height) / 2)),
@@ -33,24 +55,93 @@ export function helpPanelLayout(
   };
 }
 
+export function helpPanelHeight(terminalRows: number, contentLength: number): number {
+  const availableRows = Math.max(1, terminalRows);
+  const desiredHeight = Math.max(0, Math.floor(contentLength)) + 2;
+  const maxHeight = availableRows >= 8 ? availableRows - 4 : availableRows;
+  return Math.min(maxHeight, desiredHeight);
+}
+
+export function helpPanelBodyRows(terminalRows: number, contentLength: number): number {
+  return Math.max(0, helpPanelHeight(terminalRows, contentLength) - 2);
+}
+
+export function clampHelpScrollOffset(
+  contentLength: number,
+  bodyRows: number,
+  offset: number,
+): number {
+  const viewport = Math.max(0, Math.floor(bodyRows));
+  const maxOffset = Math.max(0, Math.floor(contentLength) - viewport);
+  const requested = Number.isFinite(offset) ? Math.floor(offset) : 0;
+  return Math.min(Math.max(0, requested), maxOffset);
+}
+
+export function helpPanelModel(
+  width: number,
+  height: number,
+  content: readonly TuiHelpContentLine[],
+  scrollOffset = 0,
+): HelpPanelModel {
+  const panelWidth = Math.max(1, width);
+  const panelHeight = Math.max(1, height);
+  if (panelHeight === 1) {
+    return {
+      lines: [{ kind: "border", text: horizontalBorder(panelWidth) }],
+      overflow: content.length > 0,
+      bodyRows: 0,
+      scrollOffset: 0,
+    };
+  }
+
+  const bodyRows = Math.max(0, panelHeight - 2);
+  const overflow = content.length > bodyRows;
+  const offset = clampHelpScrollOffset(content.length, bodyRows, scrollOffset);
+  const bars = verticalScrollbarCells({
+    trackHeight: bodyRows,
+    contentLength: content.length,
+    viewportLength: bodyRows,
+    offset,
+  });
+  const lines: HelpPanelLine[] = [{ kind: "border", text: horizontalBorder(panelWidth) }];
+  for (let index = 0; index < bodyRows; index += 1) {
+    const bar = bars[index] ?? " ";
+    const parts = contentLineParts(panelWidth, content[offset + index], bar);
+    lines.push({
+      kind: "body",
+      prefix: parts.prefix,
+      bar: parts.bar,
+      suffix: parts.suffix,
+      trackIndex: index,
+      offset: scrollbarOffsetForTrackIndex({
+        trackHeight: bodyRows,
+        contentLength: content.length,
+        viewportLength: bodyRows,
+        offset,
+        trackIndex: index,
+      }),
+    });
+  }
+  lines.push({ kind: "border", text: bottomBorder(panelWidth) });
+  return {
+    lines,
+    overflow,
+    bodyRows,
+    scrollOffset: offset,
+  };
+}
+
 export function helpPanelLines(
   width: number,
   height: number,
   content: readonly TuiHelpContentLine[],
+  scrollOffset = 0,
 ): string[] {
-  const panelWidth = Math.max(1, width);
-  const panelHeight = Math.max(1, height);
-  if (panelHeight === 1) {
-    return [horizontalBorder(panelWidth)];
-  }
+  return helpPanelModel(width, height, content, scrollOffset).lines.map(joinHelpPanelLine);
+}
 
-  const bodyRows = Math.max(0, panelHeight - 2);
-  const lines = [horizontalBorder(panelWidth)];
-  for (let index = 0; index < bodyRows; index += 1) {
-    lines.push(contentLine(panelWidth, content[index]));
-  }
-  lines.push(bottomBorder(panelWidth));
-  return lines;
+export function joinHelpPanelLine(line: HelpPanelLine): string {
+  return line.kind === "border" ? line.text : `${line.prefix}${line.bar}${line.suffix}`;
 }
 
 function horizontalBorder(width: number): string {
@@ -73,15 +164,32 @@ function bottomBorder(width: number): string {
   return `╰${"─".repeat(width - 2)}╯`;
 }
 
-function contentLine(width: number, content: TuiHelpContentLine | undefined): string {
+function contentLineParts(
+  width: number,
+  content: TuiHelpContentLine | undefined,
+  barGlyph: string,
+): { prefix: string; bar: string; suffix: string } {
   if (width === 1) {
-    return "│";
+    return { prefix: "│", bar: "", suffix: "" };
+  }
+  if (width === 2) {
+    return { prefix: "│", bar: "", suffix: "│" };
   }
   const innerWidth = width - 2;
   const padding = horizontalPaddingFor(innerWidth);
   const contentWidth = Math.max(0, innerWidth - padding * 2);
   const body = formatContent(content, contentWidth);
-  return `│${" ".repeat(padding)}${body}${" ".repeat(padding)}│`;
+  const leftPad = " ".repeat(padding);
+  // The thumb lives in the last inner pad cell so ╭╮│╰╯ stay rounded chrome.
+  if (padding === 0) {
+    return { prefix: `│${body}`, bar: "", suffix: "│" };
+  }
+  const rightPad = " ".repeat(padding - 1);
+  return {
+    prefix: `│${leftPad}${body}${rightPad}`,
+    bar: barGlyph,
+    suffix: "│",
+  };
 }
 
 function formatContent(content: TuiHelpContentLine | undefined, width: number): string {

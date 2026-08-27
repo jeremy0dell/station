@@ -28,6 +28,8 @@ export type TuiTransition = {
 export type TuiRuntimeContext = {
   cwd: string;
   homeDir: string;
+  /** Station keymap Help lines prepended to the dashboard Help overlay copy. */
+  helpKeymapLineCount?: number;
 };
 
 export function handleTuiKey(

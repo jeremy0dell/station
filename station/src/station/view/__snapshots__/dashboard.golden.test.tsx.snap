@@ -5,22 +5,22 @@ exports[`dashboard golden frames renders many-projects at 80x24 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-overlay                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
-                                                                                
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-overlay                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
+                                                                               ▐
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -77,11 +77,11 @@ exports[`dashboard golden frames renders many-projects at 60x16 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown   
 ─────────────────────────────────────────────────────────── 
        SESSION                 AGENT     STATUS          PR 
-▼ station  5 sessions · 4 agents              [sh] [qs] [▾] 
- [1] ○ cli-help-man            codex     idle         #70 ✓ 
- [2] - docs-cleanup            codex     no agent           
- [3] ○ pty-buffer              codex     idle         #73 ✓ 
- [4] + session-resume          codex     starting           
+▼ station  5 sessions · 4 agents              [sh] [qs] [▾]▐
+ [1] ○ cli-help-man            codex     idle         #70 ✓▐
+ [2] - docs-cleanup            codex     no agent          ▐
+ [3] ○ pty-buffer              codex     idle         #73 ✓▐
+ [4] + session-resume          codex     starting          ▐
  [5] ⠋ station-overlay         codex     working      #76 … 
                                                             
 ▼ observer  3 sessions · 3 agents             [sh] [qs] [▾] 
@@ -97,7 +97,7 @@ exports[`dashboard golden frames renders many-projects at 40x12 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
        SESSION             STATUS       
-▼ station  5 sessions · … [sh] [qs] [▾] 
+▼ station  5 sessions · … [sh] [qs] [▾]▐
  [1] ○ cli-help-man        idle         
  [2] - docs-cleanup        no agent     
  [3] ○ pty-buffer          idle         
@@ -113,18 +113,18 @@ exports[`dashboard golden frames renders grouped-many-projects at 80x24 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                     AGENT     STATUS                 DIFF · PR   
-▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾] 
-╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮ 
-│ [3] ○ input-routing               codex     idle                      +27 -6│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮ 
-│ [4] ○ diagnostic-index            codex     idle                      +38 -7│ 
-│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
-│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
+▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾]▐
+╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮▐
+│ [3] ○ input-routing               codex     idle                      +27 -6│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮▐
+│ [4] ○ diagnostic-index            codex     idle                      +38 -7│▐
+│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│▐
+│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│▐
 ╰─────────────────────────────────────────────────────────────────────────────╯ 
 ╭▼ Post-launch 0 sessions─────────────────────────────────────────────[qs] [▾]╮ 
 ╰─────────────────────────────────────────────────────────────────────────────╯ 
@@ -185,9 +185,9 @@ exports[`dashboard golden frames renders grouped-many-projects at 60x16 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited    
 ─────────────────────────────────────────────────────────── 
        SESSION                 AGENT     STATUS             
-▼ station  12 sessions · 6 Groups · 11 agents [sh] [qs] [▾] 
-╭▼ Design refresh 2 sessions──────────────────────[qs] [▾]╮ 
-│ [1] ⠋ group-contracts         codex     working         │ 
+▼ station  12 sessions · 6 Groups · 11 agents [sh] [qs] [▾]▐
+╭▼ Design refresh 2 sessions──────────────────────[qs] [▾]╮▐
+│ [1] ⠋ group-contracts         codex     working         │▐
 │ [2] ○ group-keyboard          codex     idle            │ 
 ╰─────────────────────────────────────────────────────────╯ 
 ╭▼ Input parity and minimum-width interaction ve…─[qs] [▾]╮ 
@@ -205,7 +205,7 @@ exports[`dashboard golden frames renders grouped-many-projects at 40x12 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1      
 ─────────────────────────────────────── 
        SESSION                          
-▼ station  12 sessions ·… [sh] [qs] [▾] 
+▼ station  12 sessions ·… [sh] [qs] [▾]▐
 ╭▼ Design refresh 2 sessions──[qs] [▾]╮ 
 │ [1] ⠋ group-contracts               │ 
 │ [2] ○ group-keyboard                │ 
@@ -313,9 +313,9 @@ exports[`dashboard golden frames renders attention-and-failures at 40x12 1`] = `
 FLEET  ● 0 ready  ⠋ 1 working  ! 3      
 ─────────────────────────────────────── 
        SESSION                          
-▼ station  4 sessions · … [sh] [qs] [▾] 
- [1] ! hook-scope                       
- [2] ? metadata-refresh                 
+▼ station  4 sessions · … [sh] [qs] [▾]▐
+ [1] ! hook-scope                      ▐
+ [2] ? metadata-refresh                ▐
  [3] ! popup-latency                    
  [4] ⠋ pr-info                          
 ▼ 2 below · showing 4 of 6              
@@ -572,9 +572,9 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮ 
 │ [1] ○ diagnostic-index            codex     idle                      +38 -7│ 
 │ [2] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
-│ [3] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Post-launch 0 sessions─────────────────────────────────────────────[qs] [▾]╮ 
+│ [3] ⠋ trace-readiness             codex     working           +91 -22 #478 …│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭▼ Post-launch 0 sessions─────────────────────────────────────────────[qs] [▾]╮▐
 ╰─────────────────────────────────────────────────────────────────────────────╯ 
 ╭▼ Release train 3 sessions───────────────────────────────────────────[qs] [▾]╮ 
 │ [4] x asset-proof                 codex     exited                    +19 -2│ 
@@ -633,22 +633,22 @@ exports[`dashboard golden frames renders a recoverable zero-match persistent pre
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
 ▏ FILTER /no-such-session▏                                         0/10 matches 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-overlay                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
-                                                                                
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-overlay                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
+                                                                               ▐
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -661,14 +661,14 @@ exports[`dashboard golden frames renders an applied persistent summary at compac
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown   
 ─────────────────────────────────────────────────────────── 
 FILTER working · Status=Working                2/10 matches 
-▼ station  5 sessions · 4 agents              [sh] [qs] [▾] 
- [1] ⠋ station-overlay         codex     working      #76 … 
-                                                            
-▼ observer  3 sessions · 3 agents             [sh] [qs] [▾] 
- [2] ⠋ provider-hooks          opencode  working      #16 … 
-                                                            
-▼ scripts  2 sessions · 2 agents              [sh] [qs] [▾] 
-                                                            
+▼ station  5 sessions · 4 agents              [sh] [qs] [▾]▐
+ [1] ⠋ station-overlay         codex     working      #76 …▐
+                                                           ▐
+▼ observer  3 sessions · 3 agents             [sh] [qs] [▾]▐
+ [2] ⠋ provider-hooks          opencode  working      #16 …▐
+                                                           ▐
+▼ scripts  2 sessions · 2 agents              [sh] [qs] [▾]▐
+                                                           ▐
 ▼ empty-project  0 sessions                   [sh] [qs] [▾] 
                                                             
 ─────────────────────────────────────────────────────────── 
@@ -681,7 +681,7 @@ exports[`dashboard golden frames clips a long persistent draft at minimum dashbo
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
 ▏ FILTER /t-filter-draft▏  0/10 matches 
-▼ station  5 sessions · … [sh] [qs] [▾] 
+▼ station  5 sessions · … [sh] [qs] [▾]▐
  [1] ○ cli-help-man        idle         
  [2] - docs-cleanup        no agent     
  [3] ○ pty-buffer          idle         

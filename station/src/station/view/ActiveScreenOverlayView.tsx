@@ -104,7 +104,7 @@ function renderActiveScreenOverlay({
       );
     }
     case "help":
-      return <HelpOverlayView columns={columns} rows={rows} />;
+      return <HelpOverlayView screen={screen} columns={columns} rows={rows} />;
     case "projectMenu":
       return (
         <ProjectMenuView

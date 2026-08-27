@@ -44,6 +44,11 @@ function spanBgHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined
   return span?.bg === undefined ? undefined : rgbToHex(span.bg);
 }
 
+/** Drop the reserved last-column gutter so Group chrome assertions stay on ╮/│. */
+function withoutScrollGutter(line: string): string {
+  return line.length === 0 ? line : line.slice(0, -1);
+}
+
 const lightObservation = parseStationTerminalPaletteObservation(lightTerminalColors);
 if (lightObservation === null) {
   throw new Error("Expected a complete light terminal palette fixture.");
@@ -251,7 +256,7 @@ describe("dashboard golden frames", () => {
       .find((line) => line.includes("station-quick-group"));
 
     expect(pendingLine?.startsWith("│")).toBe(true);
-    expect(pendingLine?.trimEnd().endsWith("│")).toBe(true);
+    expect(withoutScrollGutter(pendingLine ?? "").trimEnd().endsWith("│")).toBe(true);
   });
 
   it("renders filtered Group counts and clips framed blocks as ordinary rows", async () => {
@@ -401,7 +406,9 @@ describe("dashboard golden frames", () => {
         expect(line?.includes("[qs]")).toBe(testCase.quickSession);
         expect(line?.includes("[▾]")).toBe(testCase.menu);
         if (!collapsed) {
-          expect(line?.trimEnd().endsWith(testCase.expandedSuffix)).toBe(true);
+          expect(withoutScrollGutter(line ?? "").trimEnd().endsWith(testCase.expandedSuffix)).toBe(
+            true,
+          );
           expect(line?.lastIndexOf("╮")).toBe(78);
         }
       }

@@ -1,88 +1,33 @@
 // OpenTUI port of apps/tui's HelpOverlay: centered box-drawn panel above the
 // dashboard (absolute + zIndex; the dashboard must never reflow for it).
 // Lines come from the shared panel generator over Station's visible help copy.
-import { DASHBOARD_FILTER_CONDITION_KEYS, helpPanelLayout, helpPanelLines } from "@station/dashboard-core/selectors";
 import {
-  dashboardBindingHelp,
-  type TuiDashboardBindingId,
-} from "@station/dashboard-core/state";
+  helpOverlayContent,
+  helpPanelLayout,
+  helpPanelModel,
+} from "@station/dashboard-core/selectors";
+import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { stationKeymapHelp } from "../../input/keymap/stationBindings.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
-const FILTER_CONDITION_KEY_HINT = DASHBOARD_FILTER_CONDITION_KEYS.join("/");
-
-function dashboardHelp(id: TuiDashboardBindingId): { key: string; description: string } {
-  const help = dashboardBindingHelp(id);
-  if (help === undefined) throw new Error(`Dashboard binding ${id} has no Help metadata.`);
-  return {
-    key: help.panelKeys ?? help.keys,
-    description: help.panelLabel ?? help.label,
-  };
-}
-
-function dashboardHelpGroup(
-  ids: readonly TuiDashboardBindingId[],
-): { key: string; description: string } {
-  const entries = ids.map(dashboardHelp);
-  return {
-    key: entries.map(({ key }) => key).join("/"),
-    description: [...new Set(entries.map(({ description }) => description))].join("/"),
-  };
-}
-
-function dashboardKeys(ids: readonly TuiDashboardBindingId[]): string {
-  return ids.map((id) => dashboardHelp(id).key).join(" ");
-}
-
-const navigation = dashboardHelpGroup(["tui.dashboard.focusUp", "tui.dashboard.focusDown"]);
-const helpAliases = dashboardHelpGroup(["tui.dashboard.help", "tui.dashboard.helpAlias"]);
-const refresh = dashboardHelp("tui.dashboard.refresh");
-
-const STATION_HELP_CONTENT = [
-  { text: "station help", align: "center" as const },
-  ...stationKeymapHelp(),
-  { text: "station project view", align: "center" as const },
-  { key: navigation.key, description: `${navigation.description} · wheel scroll` },
-  dashboardHelp("tui.dashboard.focusActivate"),
-  dashboardHelp("tui.dashboard.nextNeedsMe"),
-  dashboardHelpGroup(["tui.dashboard.quickGroup", "tui.dashboard.moveToGroup"]),
-  {
-    key: dashboardKeys([
-      "tui.dashboard.filter",
-      "tui.dashboard.focusActivate",
-      "tui.dashboard.dismissEsc",
-      "tui.dashboard.quit",
-    ]),
-    description: "edit/apply/cancel-clear/retain-close filter",
-  },
-  {
-    key: `Tab ${FILTER_CONDITION_KEY_HINT}`,
-    description: "build filter conditions · F applies builder",
-  },
-  dashboardHelp("tui.dashboard.slotActivate"),
-  dashboardHelpGroup([
-    "tui.dashboard.newSession",
-    "tui.dashboard.addProject",
-    "tui.dashboard.rename",
-    "tui.dashboard.collapse",
-    "tui.dashboard.fork",
-    "tui.dashboard.projectSettings",
-  ]),
-  dashboardHelp("tui.dashboard.widgetSettings"),
-  dashboardHelp("tui.dashboard.remove"),
-  {
-    key: helpAliases.key,
-    description: `${helpAliases.description} · ${refresh.key} ${refresh.description}`,
-  },
-] as const;
-
-export function HelpOverlayView({ columns, rows }: { columns: number; rows: number }) {
+export function HelpOverlayView({
+  screen,
+  columns,
+  rows,
+}: {
+  screen: Extract<DashboardScreenView, { name: "help" }>;
+  columns: number;
+  rows: number;
+}) {
   const theme = useStationTheme();
   const helpBackground = toOpenTuiOpaqueColor(theme.surfaces.help);
   const dispatch = useStationMouse();
-  const layout = helpPanelLayout(columns, rows, STATION_HELP_CONTENT);
-  const panelLines = helpPanelLines(layout.width, layout.height, STATION_HELP_CONTENT);
+  const content = helpOverlayContent(stationKeymapHelp());
+  const layout = helpPanelLayout(columns, rows, content);
+  const model = helpPanelModel(layout.width, layout.height, content, screen.scrollOffset);
+  const fg = toOpenTuiColor(theme.text.primary);
+  const barFg = toOpenTuiColor(theme.text.muted);
 
   return (
     <box
@@ -96,15 +41,37 @@ export function HelpOverlayView({ columns, rows }: { columns: number; rows: numb
       backgroundColor={helpBackground}
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      {panelLines.map((line, index) => (
-        <text
-          key={`${index}:${line}`}
-          fg={toOpenTuiColor(theme.text.primary)}
-          bg={helpBackground}
-        >
-          {line}
-        </text>
-      ))}
+      {model.lines.map((line, index) =>
+        line.kind === "border" ? (
+          <text key={`${index}:${line.text}`} fg={fg} bg={helpBackground}>
+            {line.text}
+          </text>
+        ) : (
+          <box key={`${index}:${line.prefix}`} flexDirection="row" height={1}>
+            <text fg={fg} bg={helpBackground}>
+              {line.prefix}
+            </text>
+            {line.bar === "" ? null : (
+              <text
+                fg={barFg}
+                bg={helpBackground}
+                {...(model.overflow
+                  ? stationMouseProps(dispatch, {
+                      kind: "scrollbar",
+                      surface: "help",
+                      offset: line.offset,
+                    })
+                  : {})}
+              >
+                {line.bar}
+              </text>
+            )}
+            <text fg={fg} bg={helpBackground}>
+              {line.suffix}
+            </text>
+          </box>
+        ),
+      )}
     </box>
   );
 }

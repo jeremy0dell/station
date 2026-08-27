@@ -115,7 +115,7 @@ describe("station overlay layer in the keymap stack", () => {
     const keymap = createStationKeymap(view);
 
     expect(routeKey("H", station.getState(), keymap)).toEqual({ kind: "swallowed" });
-    expect(view.state.getState().screen).toEqual({ name: "help" });
+    expect(view.state.getState().screen).toMatchObject({ name: "help" });
 
     // Esc in help mode closes the MODE, not the overlay.
     expect(routeKey("\x1b", station.getState(), keymap)).toEqual({ kind: "swallowed" });
@@ -412,7 +412,7 @@ describe("station input through the station runtime", () => {
       },
       LEFT_DOWN,
     );
-    expect(view.state.getState().screen).toEqual({ name: "help" });
+    expect(view.state.getState().screen).toMatchObject({ name: "help" });
     expect(view.state.getState().persistentFilter).toEqual({ query: "working" });
 
     runtime.handleSequence("\x1b");
@@ -538,7 +538,7 @@ describe("station input through the station runtime", () => {
     for (const target of [{ kind: "screenBackdrop" }, { kind: "sheetBackdrop" }] as const) {
       expect(runtime.dispatchMouse({ kind: "station", target }, RIGHT_DOWN)).toBe(true);
       expect(runtime.dispatchMouse({ kind: "station", target }, WHEEL_UP)).toBe(true);
-      expect(view.state.getState().screen).toEqual({ name: "help" });
+      expect(view.state.getState().screen).toMatchObject({ name: "help" });
       expect(station.getState().input.contextMenu).toBeNull();
     }
 

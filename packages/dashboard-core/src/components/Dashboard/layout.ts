@@ -21,12 +21,22 @@ export function dashboardFixedRows(): number {
 
 /** Shared absolute offset from the dashboard surface to its first projected tree row. */
 export function dashboardBodyTop(): number {
-  return (
+  return dashboardScrollGutterChrome({ hasFleetBar: true }).top;
+}
+
+/** Chrome rows above/below the body column, matching DashboardView's child list. */
+export function dashboardScrollGutterChrome(options: { hasFleetBar: boolean }): {
+  top: number;
+  bottom: number;
+} {
+  const top =
     DASHBOARD_FIXED_ROW_HEIGHTS.topSpacer +
-    DASHBOARD_FIXED_ROW_HEIGHTS.fleetBar +
+    (options.hasFleetBar ? DASHBOARD_FIXED_ROW_HEIGHTS.fleetBar : 0) +
     DASHBOARD_FIXED_ROW_HEIGHTS.topDivider +
-    DASHBOARD_FIXED_ROW_HEIGHTS.topScrollIndicator
-  );
+    DASHBOARD_FIXED_ROW_HEIGHTS.topScrollIndicator;
+  const bottom =
+    DASHBOARD_FIXED_ROW_HEIGHTS.bottomScrollIndicator + DASHBOARD_FIXED_ROW_HEIGHTS.bottomDivider;
+  return { top, bottom };
 }
 
 export function dashboardBodyRows(totalRows: number): number {

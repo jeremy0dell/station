@@ -5,7 +5,7 @@ import type { NewSessionActionId } from "../flows/newSession.js";
 import type { DashboardCellId, DashboardRowId } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
 import { activateDashboardCell } from "./dashboardCells.js";
-import { scrollDashboard } from "./dashboardScroll.js";
+import { scrollDashboard, scrollDashboardTo } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
 import { openDashboardRowShell } from "./rowActivation.js";
 import { tuiScreenBehavior } from "./screenBehavior.js";
@@ -16,6 +16,7 @@ import {
   handleForkSessionAction,
   openForkDetailsForRow,
 } from "./screens/fork.js";
+import { scrollHelpTo } from "./screens/help.js";
 import {
   openMoveToGroupCreate,
   openMoveToGroupForRow,
@@ -130,6 +131,8 @@ export type TuiSemanticAction =
 /** State-only dashboard events for focus, screen, selection, scrolling, and widget transitions. */
 export type DashboardStateAction =
   | { type: "dashboard.scroll"; delta: number }
+  | { type: "dashboard.scrollTo"; offset: number }
+  | { type: "help.scrollTo"; offset: number }
   | { type: "newSession.open"; projectId?: ProjectId; groupId?: SessionGroupId }
   | { type: "projectSettings.focusItem"; itemId: ProjectSettingsItemId }
   | { type: "addProject.selectRow"; index: number }
@@ -219,6 +222,10 @@ function handleDashboardStateAction(
   switch (action.type) {
     case "dashboard.scroll":
       return stateTransition(scrollDashboard(state, action.delta));
+    case "dashboard.scrollTo":
+      return stateTransition(scrollDashboardTo(state, action.offset));
+    case "help.scrollTo":
+      return stateTransition(scrollHelpTo(state, action.offset));
     case "newSession.open":
       return openNewSession(state, {
         ...(action.projectId === undefined ? {} : { projectId: action.projectId }),

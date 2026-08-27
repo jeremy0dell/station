@@ -21,7 +21,7 @@ import { applyAddProjectFolderRefreshed } from "./screens/addProjectScreen.js";
 import { applySnapshotSourceState } from "./sourceBridge.js";
 import { ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS } from "./timing.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
-import { handleTuiKey, type TuiTransition } from "./transition.js";
+import { handleTuiKey, type TuiRuntimeContext, type TuiTransition } from "./transition.js";
 import type { CreateInitialTuiStateOptions, DashboardState, DashboardStateView } from "./types.js";
 
 /**
@@ -50,6 +50,8 @@ export type DashboardRuntimeOptions = {
   initialState?: Omit<CreateInitialTuiStateOptions, "initialSnapshot">;
   folderService?: TuiFolderService;
   clientLabel?: string;
+  /** Station keymap Help lines prepended to the dashboard Help overlay copy. */
+  helpKeymapLineCount?: number;
 };
 
 /**
@@ -78,6 +80,7 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
   const folderService = options.folderService ?? createNodeFolderService();
   const source = options.source;
   const clientLabel = options.clientLabel ?? "TUI";
+  const helpKeymapLineCount = options.helpKeymapLineCount;
   const effectScope = createDashboardRuntimeEffectScope();
   let store: StoreApi<DashboardState>;
   const operations = createTuiLocalOperationRunner({
@@ -106,10 +109,11 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
         clientLabel,
         operations,
         effectScope,
-        handleTuiKey(store.getState(), key, {
-          cwd: folderService.cwd(),
-          homeDir: folderService.homeDir(),
-        }),
+        handleTuiKey(
+          store.getState(),
+          key,
+          dashboardRuntimeContext(folderService, helpKeymapLineCount),
+        ),
       );
     },
     dispatch: (action): void => {
@@ -120,10 +124,11 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
         clientLabel,
         operations,
         effectScope,
-        handleTuiAction(store.getState(), action, {
-          cwd: folderService.cwd(),
-          homeDir: folderService.homeDir(),
-        }),
+        handleTuiAction(
+          store.getState(),
+          action,
+          dashboardRuntimeContext(folderService, helpKeymapLineCount),
+        ),
       );
     },
     setTerminalRows: (rows): void => {
@@ -355,4 +360,18 @@ async function reconcileSnapshot(
       store.setState({ loading: false });
     });
   }
+}
+
+function dashboardRuntimeContext(
+  folderService: TuiFolderService,
+  helpKeymapLineCount: number | undefined,
+): TuiRuntimeContext {
+  const context: TuiRuntimeContext = {
+    cwd: folderService.cwd(),
+    homeDir: folderService.homeDir(),
+  };
+  if (helpKeymapLineCount !== undefined) {
+    context.helpKeymapLineCount = helpKeymapLineCount;
+  }
+  return context;
 }

@@ -48,6 +48,7 @@ export type StationMouseTarget =
     }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
+  | { kind: "scrollbar"; surface: "help" | "dashboard"; offset: number }
   | { kind: "toast" }
   | { kind: "sheetChoice"; choiceKey: string }
   | { kind: "removeWorktreeAction"; actionId: RemoveWorktreeActionId }
@@ -157,6 +158,13 @@ export function routeStationMouse(
           type: "dashboard.scroll",
           delta: target.direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS,
         });
+      }
+      return { kind: "handled" };
+    case "scrollbar":
+      if (target.surface === "help" && mode === "help") {
+        runtime.actions.dispatch({ type: "help.scrollTo", offset: target.offset });
+      } else if (target.surface === "dashboard" && ROW_INTERACTIVE_MODES.has(mode)) {
+        runtime.actions.dispatch({ type: "dashboard.scrollTo", offset: target.offset });
       }
       return { kind: "handled" };
     case "toast":
@@ -293,6 +301,18 @@ function routeStationWheel(
   runtime: DashboardMouseRuntime,
   mode: TuiInputMode,
 ): void {
+  if (mode === "help") {
+    if (
+      target.kind === "sheetBackdrop" ||
+      (target.kind === "scrollbar" && target.surface === "help")
+    ) {
+      runtime.actions.handleKey({
+        input: "",
+        mouseScroll: eventKind === "scroll-up" ? "up" : "down",
+      });
+    }
+    return;
+  }
   if (
     target.kind === "screenBackdrop" ||
     target.kind === "sheetBackdrop" ||
