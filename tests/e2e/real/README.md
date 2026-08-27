@@ -54,9 +54,9 @@ bun run test:e2e:real:local tests/e2e/real/real-native-tui-mouse.test.ts
 
 ## Isolation
 
-Each test uses a temporary local clone of this repository, a temporary station config, a temporary Worktrunk config, unique private tmux sessions, a unique observer socket, and a temporary SQLite state directory. Observer state and socket directories are created with exact `0700` permissions. Codex scenarios additionally own a private `CODEX_HOME`, and the native mouse test owns its attached PTY client and native Station process.
+Each generated config owns a separate short `0700` tmux endpoint root outside its temporary repository clone. Its wrapper adds only `-f /dev/null`; the config and fixture helpers select the private socket. Tests also use a temporary station config, Worktrunk config, observer socket, SQLite state directory, and local clone. Codex scenarios additionally own a private `CODEX_HOME`, and the native mouse test owns its attached PTY client and native Station process.
 
-The active checkout is never passed to Worktrunk as the project root. Cleanup kills the unique tmux sessions, stops the observer, removes created Worktrunk branches/worktrees where possible, and removes the temp clone. Product cleanup treats an already-absent terminal as retired while preserving unrelated provider failures; the scripted stale-pane scenario exercises both stale replacement and terminal-absent session close.
+The active checkout is never passed to Worktrunk as the project root. Cleanup kills only the explicit private tmux server, proves that endpoint unreachable, and then removes its root (including retained socket pathnames); uncertain endpoint failures retain the root for diagnosis. Observer, Worktrunk, and clone cleanup remain independent. Product cleanup treats an already-absent terminal as retired while preserving unrelated provider failures; the scripted stale-pane scenario exercises both stale replacement and terminal-absent session close.
 
 Set `STATION_REAL_E2E_KEEP_TEMP=1` while debugging a failure to leave the observer, tmux session, Worktrunk state, and temp clone in place. Clean those resources manually after inspection.
 

@@ -17,7 +17,7 @@ import {
   waitForSnapshot,
 } from "../../support/real-station/protocol";
 import { createRealTempRepo, uniqueBranch } from "../../support/real-station/repo";
-import { killTmuxSession, listTmuxWindows } from "../../support/real-station/tmux";
+import { closeRealTmuxEndpoint, listTmuxWindows } from "../../support/real-station/tmux";
 import { removeRealWorktrunkWorktree } from "../../support/real-station/worktrunk";
 
 const describeReal =
@@ -46,16 +46,13 @@ describeReal("real Claude session lifecycle", () => {
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
     const config = await writeRealStationConfig({ env, repo, harnessProvider: "claude" });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     cleanup.defer(async () => {
       await runStationJson(env, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
-    });
-
     const branch = uniqueBranch("claude-lifecycle-session-observability-rollout");
     cleanup.defer(async () => {
       await removeRealWorktrunkWorktree({ env, config, repo, branch });
@@ -122,7 +119,7 @@ describeReal("real Claude session lifecycle", () => {
         focusable: true,
         hasPrimaryAgentEndpoint: true,
       });
-      await expect(listTmuxWindows(env, config.tmuxSession)).resolves.toContain(
+      await expect(listTmuxWindows(config.tmuxEndpoint, config.tmuxSession)).resolves.toContain(
         expectedWindowName(config.projectId, branch, row.id, row.path),
       );
 

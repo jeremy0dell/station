@@ -12,7 +12,7 @@ import {
 } from "../../support/real-station/env";
 import { CleanupStack, runStationJson } from "../../support/real-station/process";
 import { createRealTempRepo } from "../../support/real-station/repo";
-import { killTmuxSession } from "../../support/real-station/tmux";
+import { closeRealTmuxEndpoint } from "../../support/real-station/tmux";
 
 const describeReal = realE2eEnabled() ? describe : describe.skip;
 
@@ -33,16 +33,13 @@ describeReal("real station process", () => {
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
     const config = await writeRealStationConfig({ env, repo });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     cleanup.defer(async () => {
       await runStationJson(env, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
-    });
-
     await expect(
       runStationJson(env, {
         configPath: config.configPath,

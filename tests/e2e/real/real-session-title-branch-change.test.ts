@@ -20,7 +20,7 @@ import {
 import { CleanupStack, runStationJson } from "../../support/real-station/process";
 import { createRealObserverClient, waitForSnapshot } from "../../support/real-station/protocol";
 import { createRealTempRepo, uniqueBranch } from "../../support/real-station/repo";
-import { killTmuxSession } from "../../support/real-station/tmux";
+import { closeRealTmuxEndpoint } from "../../support/real-station/tmux";
 import { removeRealWorktrunkWorktree } from "../../support/real-station/worktrunk";
 
 const describeReal = realE2eEnabled() ? describe : describe.skip;
@@ -55,17 +55,14 @@ describeReal("real session title branch change", () => {
       codexCommand: codex.codexCommand,
       installCodexHooks: true,
     });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     await codex.installHooks(config);
     cleanup.defer(async () => {
       await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(testEnv, config.tmuxSession);
-    });
-
     const originalBranch = uniqueBranch("title-original");
     const agentBranch = uniqueBranch("title-agent");
     cleanup.defer(async () => {

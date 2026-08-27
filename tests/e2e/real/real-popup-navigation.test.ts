@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { StationSnapshot } from "@station/contracts";
+import type { StationEvent, StationSnapshot } from "@station/contracts";
 import { buildWorkbenchWindowName } from "@station/tmux";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { findRowByBranch } from "../../support/real-station/assertions";
@@ -20,9 +20,10 @@ import {
 import { createRealTempRepo, uniqueBranch } from "../../support/real-station/repo";
 import {
   activeTmuxPane,
-  activeTmuxWindow,
+  closeRealTmuxEndpoint,
   displayStationPopupAndSendKey,
-  killTmuxSession,
+  inspectTmuxClient,
+  startAttachedTmuxPtyClient,
 } from "../../support/real-station/tmux";
 import {
   createRealWorktrunkWorktree,
@@ -55,17 +56,14 @@ describeReal("real tmux popup navigation", () => {
       codexCommand: codex.codexCommand,
       installCodexHooks: true,
     });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     await codex.installHooks(config);
     cleanup.defer(async () => {
       await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(testEnv, config.tmuxSession);
-    });
-
     const branch = uniqueBranch("popup");
     cleanup.defer(async () => {
       await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
@@ -109,28 +107,144 @@ describeReal("real tmux popup navigation", () => {
       120_000,
     );
     const agentRow = findRowByBranch(agentSnapshot, branch);
+    const sessionId = agentRow.agent?.sessionId;
+    if (sessionId === undefined) throw new Error("Popup agent did not expose a session id.");
     const windowName = expectedWindowName(config.projectId, branch, agentRow.id, agentRow.path);
-    const paneId = await activeTmuxPane(testEnv, `${config.tmuxSession}:${windowName}.0`);
+    const target = `${config.tmuxSession}:${windowName}.0`;
+    const paneId = await activeTmuxPane(config.tmuxEndpoint, target);
     const markerPath = join(repo.root, "popup-navigation.marker");
+    const tmuxClient = await startAttachedTmuxPtyClient({
+      endpoint: config.tmuxEndpoint,
+      sessionName: config.tmuxSession,
+    });
+    cleanup.defer(tmuxClient.close);
+    const events = client.subscribe({ type: ["command.accepted"] })[Symbol.asyncIterator]();
+    const startRead = (): Promise<IteratorResult<StationEvent>> => {
+      const read = events.next();
+      // Attach a handler immediately while preserving the original rejecting promise for the waiter.
+      void read.catch(() => undefined);
+      return read;
+    };
+    let pendingRead = startRead();
+    const waitForAccepted = async (
+      matches: (event: AcceptedEvent) => boolean,
+      timeoutMs: number,
+    ): Promise<AcceptedEvent | undefined> => {
+      const deadline = Date.now() + timeoutMs;
+      for (let seen = 0; seen < 32; seen += 1) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const next = await Promise.race([
+          pendingRead,
+          new Promise<undefined>((resolve) => {
+            timer = setTimeout(resolve, Math.max(1, deadline - Date.now()));
+          }),
+        ]).finally(() => clearTimeout(timer));
+        if (next === undefined) return undefined;
+        pendingRead = startRead();
+        if (next.done) throw new Error("Popup accepted-event stream ended.");
+        if (next.value.type === "command.accepted" && matches(next.value)) return next.value;
+        if (Date.now() >= deadline) return undefined;
+      }
+      return undefined;
+    };
+    cleanup.defer(async () => {
+      const returning = events.return?.();
+      if (returning === undefined) return;
+      void returning.catch(() => undefined);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        returning,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Popup event iterator did not close.")), 5_000);
+        }),
+      ]).finally(() => clearTimeout(timer));
+    });
+    const correlation = `${process.pid}-${Date.now().toString(36)}`;
+    const readinessDeadline = Date.now() + 15_000;
+    let subscriptionReady = false;
+    for (let attempt = 1; attempt <= 3 && !subscriptionReady; attempt += 1) {
+      const reason = `real-popup-subscription-ready-${correlation}-${attempt}`;
+      const readiness = await client.dispatch({
+        type: "observer.reconcile",
+        payload: { reason },
+      });
+      subscriptionReady =
+        (await waitForAccepted(
+          (event) =>
+            event.commandId === readiness.commandId &&
+            event.command.type === "observer.reconcile" &&
+            event.command.payload.reason === reason,
+          Math.min(5_000, Math.max(1, readinessDeadline - Date.now())),
+        )) !== undefined;
+    }
+    if (!subscriptionReady) throw new Error("Popup subscription missed three readiness commands.");
+    const focusAccepted = waitForAccepted(
+      (event) =>
+        event.command.type === "terminal.focus" &&
+        event.command.payload.sessionId === sessionId &&
+        event.command.payload.origin?.provider === "tmux" &&
+        event.command.payload.origin.clientId === tmuxClient.clientName,
+      60_000,
+    ).then((event) => {
+      if (event === undefined) {
+        throw new Error("Popup did not emit the correlated terminal.focus acceptance event.");
+      }
+      return event;
+    });
+    void focusAccepted.catch(() => undefined);
 
-    await displayStationPopupAndSendKey({
+    const popup = await displayStationPopupAndSendKey({
       env: testEnv,
+      endpoint: config.tmuxEndpoint,
+      client: tmuxClient,
       configPath: config.configPath,
-      target: `${config.tmuxSession}:${windowName}.0`,
+      target,
+      expectedWindowName: windowName,
+      expectedPaneId: paneId,
       key: "1",
       markerPath,
     });
+    cleanup.defer(() => popup.release(false));
 
-    await expect(readFile(markerPath, "utf8")).resolves.toContain("popup-started");
-    await expect(readFile(markerPath, "utf8")).resolves.toContain("key-sent");
-    await expect(activeTmuxWindow(testEnv, config.tmuxSession)).resolves.toBe(windowName);
-    await expect(activeTmuxPane(testEnv, config.tmuxSession)).resolves.toBe(paneId);
+    let causalSuccess = false;
+    let primaryFailure: unknown;
+    try {
+      const accepted = await focusAccepted;
+      await expect(
+        waitForCommandRecord(client, accepted.commandId, { timeoutMs: 60_000 }),
+      ).resolves.toMatchObject({ status: "succeeded" });
+      await expect(inspectTmuxClient(config.tmuxEndpoint, tmuxClient.clientName)).resolves.toBe(
+        `${tmuxClient.clientName}\t${tmuxClient.clientPid}\t${config.tmuxSession}\t${windowName}\t${paneId}`,
+      );
+      causalSuccess = true;
+    } catch (error) {
+      primaryFailure = error;
+    }
+    try {
+      await popup.release(causalSuccess);
+    } catch (cleanupFailure) {
+      if (primaryFailure !== undefined) {
+        throw new AggregateError(
+          [primaryFailure, cleanupFailure],
+          "popup proof and release failed",
+        );
+      }
+      throw cleanupFailure;
+    }
+    if (primaryFailure !== undefined) throw primaryFailure;
+
+    const marker = await readFile(markerPath, "utf8");
+    expect(marker).toContain("popup-started");
+    expect(marker).toContain("key-sent");
+    expect(marker).toContain("child-exit:0");
   }, 240_000);
 });
 
 function findMaybeRow(snapshot: StationSnapshot, branch: string) {
   return snapshot.rows.find((row) => row.branch === branch);
 }
+
+type AcceptedEvent = Extract<StationEvent, { type: "command.accepted" }>;
 
 function expectedWindowName(
   projectId: string,

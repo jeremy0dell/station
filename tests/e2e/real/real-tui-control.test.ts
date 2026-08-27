@@ -20,9 +20,10 @@ import {
 import { createRealTempRepo, uniqueBranch } from "../../support/real-station/repo";
 import {
   captureTmuxPane,
-  killTmuxSession,
+  closeRealTmuxEndpoint,
   killTmuxWindow,
   listTmuxWindows,
+  type RealTmuxEndpoint,
   sendTmuxKeys,
   startStationTuiInTmux,
 } from "../../support/real-station/tmux";
@@ -55,20 +56,15 @@ describeReal("real TUI stale-terminal recovery", () => {
       harnessProvider: "scripted",
       scriptedCommand: process.execPath,
     });
+    const endpoint = config.tmuxEndpoint;
+    cleanup.defer(() => closeRealTmuxEndpoint(endpoint));
     const tuiSession = uniqueTmuxSession("station-real-stale-tui");
     cleanup.defer(async () => {
       await runStationJson(env, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(env, tuiSession);
-    });
-    cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
-    });
-
     const branch = uniqueBranch("stale-tui");
     cleanup.defer(async () => {
       await removeRealWorktrunkWorktree({ env, config, repo, branch });
@@ -150,17 +146,18 @@ describeReal("real TUI stale-terminal recovery", () => {
       throw new Error("Grouped stale-session baseline was incomplete.");
     }
     const windowName = expectedWindowName(config.projectId, branch, staleRow.id, staleRow.path);
-    await expect(listTmuxWindows(env, config.tmuxSession)).resolves.toEqual([windowName]);
+    await expect(listTmuxWindows(endpoint, config.tmuxSession)).resolves.toEqual([windowName]);
 
     await startStationTuiInTmux({
       env,
+      endpoint,
       configPath: config.configPath,
       sessionName: tuiSession,
     });
-    await waitForTuiText(env, tuiSession, "Stale recovery");
-    await sendTmuxKeys({ env, target: tuiSession, keys: ["1"] });
-    await waitForTuiText(env, tuiSession, "Start fresh (Y)");
-    await sendTmuxKeys({ env, target: tuiSession, keys: ["y"] });
+    await waitForTuiText(endpoint, tuiSession, "Stale recovery");
+    await sendTmuxKeys({ endpoint, target: tuiSession, keys: ["1"] });
+    await waitForTuiText(endpoint, tuiSession, "Start fresh (Y)");
+    await sendTmuxKeys({ endpoint, target: tuiSession, keys: ["y"] });
     await waitForScriptedLaunchCount(config.stateDir, 2);
 
     const restarted = await waitForSnapshot(
@@ -195,10 +192,10 @@ describeReal("real TUI stale-terminal recovery", () => {
     expect(restarted.sessions.filter((session) => session.worktreeId === staleRow.id)).toHaveLength(
       1,
     );
-    await expect(listTmuxWindows(env, config.tmuxSession)).resolves.toEqual([windowName]);
+    await expect(listTmuxWindows(endpoint, config.tmuxSession)).resolves.toEqual([windowName]);
     await expect(scriptedLaunchCount(config.stateDir)).resolves.toBe(2);
 
-    await killTmuxWindow(env, `${config.tmuxSession}:${windowName}`);
+    await killTmuxWindow(endpoint, `${config.tmuxSession}:${windowName}`);
     await waitForSnapshot(
       client,
       (snapshot) => findMaybeRow(snapshot, branch)?.terminal === undefined,
@@ -236,14 +233,14 @@ describeReal("real TUI stale-terminal recovery", () => {
 });
 
 async function waitForTuiText(
-  env: RealE2eEnvironment,
+  endpoint: RealTmuxEndpoint,
   target: string,
   expected: string,
 ): Promise<void> {
   const deadline = Date.now() + 30_000;
   let captured = "";
   while (Date.now() <= deadline) {
-    captured = await captureTmuxPane({ env, target });
+    captured = await captureTmuxPane({ endpoint, target });
     if (captured.includes(expected)) {
       return;
     }
