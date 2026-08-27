@@ -60,6 +60,12 @@ const invalidCompletionTrace: SessionCreationOutcome<SessionCreateCommandResult>
   result: succeeded.result,
 };
 
+// @ts-expect-error resolved Group absence is distinct from an explicit undefined value.
+const invalidResolvedGroup: SessionCreateCommandResult = {
+  ...succeeded.result,
+  resolvedGroupId: undefined,
+};
+
 const absentConvergence: SessionCommandResult = {
   action: "create",
   outcome: succeeded,
@@ -76,5 +82,6 @@ void omittedCopyDirty;
 void explicitCopyDirty;
 void invalidCopyDirty;
 void invalidCompletionTrace;
+void invalidResolvedGroup;
 void absentConvergence;
 void invalidConvergence;

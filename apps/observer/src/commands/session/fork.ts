@@ -1,4 +1,8 @@
-import type { ProviderProjectConfig, WorktreeObservation } from "@station/contracts";
+import type {
+  ProviderProjectConfig,
+  SessionForkCommandResult,
+  WorktreeObservation,
+} from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import type {
   EventJournal,
@@ -56,8 +60,9 @@ export type CreateSessionForkHandlerOptions = {
  * branch, and atomically seeds its title with the source session's current Group when requested
  * before launching a fresh agent with pre-mutation placement authorization and
  * provider-side revalidation immediately before terminal mutation; cleanup
- * retires only fork-owned state after verified rollback. Success returns the
- * exact created identities and the provider-resolved placement projection.
+ * retires only fork-owned state after verified rollback. Success returns the exact
+ * created identities, transaction-resolved Group identity when grouped, and the
+ * provider-resolved placement projection.
  */
 export function createSessionForkHandler(
   options: CreateSessionForkHandlerOptions,
@@ -265,12 +270,14 @@ export function createSessionForkHandler(
       context,
       clock: options.clock,
     });
-    return {
+    const result: SessionForkCommandResult = {
       type: "session.fork",
       projectId: project.id,
       worktreeId: createdWorktree.id,
       sessionId,
       ...placementResult,
     };
+    if (groupProvenance !== undefined) result.resolvedGroupId = groupProvenance.groupId;
+    return result;
   };
 }

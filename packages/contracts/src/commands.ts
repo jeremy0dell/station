@@ -13,7 +13,9 @@ import {
   ImportRecoveryHandleCommandSchema,
   RenameSessionCommandSchema,
   ResumeAgentCommandSchema,
+  type SessionCreateCommandResult,
   SessionCreateCommandResultSchema,
+  type SessionForkCommandResult,
   SessionForkCommandResultSchema,
   StartAgentCommandSchema,
 } from "./commands/session.js";
@@ -96,15 +98,20 @@ export const StationCommandResultTypeSchema = z.enum([
 
 export type StationCommandResultType = z.infer<typeof StationCommandResultTypeSchema>;
 
+export type StationCommandResult =
+  | z.infer<typeof WorktreeCreateCommandResultSchema>
+  | z.infer<typeof WorktreeForkCommandResultSchema>
+  | SessionCreateCommandResult
+  | SessionForkCommandResult
+  | z.infer<typeof SessionGroupCreateCommandResultSchema>;
+
 export const StationCommandResultSchema = z.discriminatedUnion("type", [
   WorktreeCreateCommandResultSchema,
   WorktreeForkCommandResultSchema,
   SessionCreateCommandResultSchema,
   SessionForkCommandResultSchema,
   SessionGroupCreateCommandResultSchema,
-]);
-
-export type StationCommandResult = z.infer<typeof StationCommandResultSchema>;
+]) as z.ZodType<StationCommandResult>;
 export type StationCommandResultFor<TCommand extends StationCommand> = Extract<
   StationCommandResult,
   { type: TCommand["type"] }

@@ -55,6 +55,7 @@ import {
   RepositoryRemoteSchema,
   SafeErrorSchema,
   SessionCreateCommandResultSchema,
+  SessionForkCommandResultSchema,
   SessionGroupRepairSummarySchema,
   SessionGroupViewSchema,
   SessionMigrationJournalEntrySchema,
@@ -2347,6 +2348,7 @@ describe("contract schemas", () => {
     } as const;
     const sibling = {
       ...identity,
+      resolvedGroupId: "group_created",
       requestedPlacement: "sibling",
       resolvedPlacement: {
         provider: "tmux",
@@ -2356,6 +2358,9 @@ describe("contract schemas", () => {
       },
     } as const;
     expect(SessionCreateCommandResultSchema.safeParse(sibling).success).toBe(true);
+    expect(
+      SessionForkCommandResultSchema.safeParse({ ...sibling, type: "session.fork" }).success,
+    ).toBe(true);
     expect(
       SessionCreateCommandResultSchema.safeParse({
         ...sibling,

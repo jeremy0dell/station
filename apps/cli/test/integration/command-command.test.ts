@@ -174,7 +174,17 @@ describe("CLI command dispatch/get", () => {
     expect(result).toEqual({
       status: "succeeded",
       receipt: receipt("cmd_wait"),
-      command: completed,
+      command: {
+        id: "cmd_wait",
+        type: "worktree.create",
+        status: "succeeded",
+        createdAt: now,
+        startedAt: now,
+        finishedAt: now,
+        traceId: "trc_cli",
+        spanId: "spn_cli",
+        result: completed.result,
+      },
     });
   });
 
@@ -206,7 +216,17 @@ describe("CLI command dispatch/get", () => {
       output: {
         status: "failed",
         receipt: receipt("cmd_failed"),
-        command: failed,
+        command: {
+          id: "cmd_failed",
+          type: "observer.reconcile",
+          status: "failed",
+          createdAt: now,
+          startedAt: now,
+          finishedAt: now,
+          traceId: "trc_cli",
+          spanId: "spn_cli",
+          error: failed.error,
+        },
       },
     });
   });
@@ -240,7 +260,70 @@ describe("CLI command dispatch/get", () => {
           getCommand: async () => record,
         }),
       ),
-    ).resolves.toEqual({ command: record });
+    ).resolves.toEqual({
+      command: {
+        id: "cmd_get",
+        type: "worktree.create",
+        status: "succeeded",
+        createdAt: now,
+        startedAt: now,
+        finishedAt: now,
+        traceId: "trc_cli",
+        spanId: "spn_cli",
+        result: record.result,
+      },
+    });
+  });
+
+  it("omits prompt-bearing payloads and diagnostic internals from get and wait output", async () => {
+    const fixture = await createTempState();
+    const command = cursorCreateCommand();
+    const record = commandRecord("cmd_private", command, "succeeded");
+    record.diagnostics = [
+      {
+        type: "external_command",
+        provider: "cursor",
+        operation: "provider.cursor.launch",
+        command: "private diagnostic command",
+        cwd: "/private/customer/path",
+        exitCode: 1,
+        stderrSnippet: "private diagnostic error",
+        durationMs: 1,
+      },
+    ];
+
+    const getResult = await runCommandCommand(
+      ["get", "cmd_private"],
+      { config: fixture.config },
+      runningObserverDeps({
+        socketPath: fixture.socketPath,
+        getCommand: async () => record,
+      }),
+    );
+    const waitResult = await runCommandCommand(
+      ["dispatch", "--stdin", "--wait"],
+      { config: fixture.config, stdin: JSON.stringify(command) },
+      runningObserverDeps({
+        socketPath: fixture.socketPath,
+        dispatch: async () => receipt("cmd_private"),
+        waitForCommand: async () => record as TerminalCommandRecord,
+      }),
+    );
+
+    for (const result of [getResult, waitResult]) {
+      const output = JSON.stringify(result);
+      expect(output).not.toContain("Review the Cursor CLI dispatch path.");
+      expect(output).not.toContain("initialPrompt");
+      expect(output).not.toContain("private diagnostic command");
+      expect(output).not.toContain("/private/customer/path");
+      expect(output).not.toContain("private diagnostic error");
+    }
+    if (!("command" in getResult)) throw new Error("Expected a command lookup result.");
+    expect(getResult.command).not.toHaveProperty("command");
+    expect(getResult.command).not.toHaveProperty("diagnostics");
+    if (!("command" in waitResult)) throw new Error("Expected a completed command result.");
+    expect(waitResult.command).not.toHaveProperty("command");
+    expect(waitResult.command).not.toHaveProperty("diagnostics");
   });
 
   it("fails missing command records with a SafeError payload", async () => {

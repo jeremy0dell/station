@@ -32,7 +32,6 @@ import type {
 import {
   loadSessionCreationConvergence,
   type SessionCreationConvergenceExpectation,
-  type SessionCreationGroupExpectation,
 } from "./creationConvergence.js";
 import { runCurrentSessionCommand } from "./current.js";
 import type { SessionCommandOptions } from "./options.js";
@@ -126,7 +125,7 @@ async function runCreateSession(
     harnessProvider,
     terminalProvider,
     placement,
-    group.command,
+    group,
     initialPrompt,
   );
   const outcome = await executeTypedObserverCommand(
@@ -143,14 +142,7 @@ async function runCreateSession(
   }
   const result = parseCreateResult(command, outcome);
   const convergence = await loadSessionCreationConvergence(
-    convergenceExpectation(
-      "create",
-      parsed,
-      result,
-      harnessProvider,
-      terminalProvider,
-      group.expectation,
-    ),
+    convergenceExpectation("create", parsed, result, harnessProvider, terminalProvider),
     snapshotLoadOptions(options, timeoutMs),
     deps,
   );
@@ -183,7 +175,7 @@ async function runForkSession(
     harnessProvider,
     terminalProvider,
     placement,
-    group.command,
+    group,
     initialPrompt,
   );
   const outcome = await executeTypedObserverCommand(
@@ -200,14 +192,7 @@ async function runForkSession(
   }
   const result = parseForkResult(command, outcome);
   const convergence = await loadSessionCreationConvergence(
-    convergenceExpectation(
-      "fork",
-      parsed,
-      result,
-      harnessProvider,
-      terminalProvider,
-      group.expectation,
-    ),
+    convergenceExpectation("fork", parsed, result, harnessProvider, terminalProvider),
     snapshotLoadOptions(options, timeoutMs),
     deps,
   );
@@ -292,16 +277,10 @@ function resolveCreateGroup(
   snapshot: StationSnapshot,
   project: ProjectView,
   parsed: ParsedCreateSessionArgs,
-): {
-  command?: SessionGroupPlacementIntent;
-  expectation: SessionCreationGroupExpectation;
-} {
-  if (parsed.group.kind === "ungrouped") return { expectation: { kind: "ungrouped" } };
+): SessionGroupPlacementIntent | undefined {
+  if (parsed.group.kind === "ungrouped") return undefined;
   if (parsed.group.kind === "create") {
-    return {
-      command: { kind: "create", name: parsed.group.name },
-      expectation: { kind: "create", name: parsed.group.name },
-    };
+    return { kind: "create", name: parsed.group.name };
   }
   const selectedGroupId = parsed.group.groupId;
   const group = snapshot.sessionGroups.find((candidate) => candidate.id === selectedGroupId);
@@ -326,21 +305,15 @@ function resolveCreateGroup(
       { projectId: project.id },
     );
   }
-  return {
-    command: { kind: "existing", groupId: group.id },
-    expectation: { kind: "existing", groupId: group.id },
-  };
+  return { kind: "existing", groupId: group.id };
 }
 
 function resolveForkGroup(
   snapshot: StationSnapshot,
   parsed: ParsedForkSessionArgs,
   projectId: ProjectView["id"],
-): {
-  command?: SourceSessionGroupPlacementIntent;
-  expectation: SessionCreationGroupExpectation;
-} {
-  if (parsed.group === "ungrouped") return { expectation: { kind: "ungrouped" } };
+): SourceSessionGroupPlacementIntent | undefined {
+  if (parsed.group === "ungrouped") return undefined;
   const sourceGroup = snapshot.sessionGroups.find(
     (group) => group.projectId === projectId && group.sessionIds.includes(parsed.sourceSessionId),
   );
@@ -352,15 +325,12 @@ function resolveForkGroup(
         { projectId, sessionId: parsed.sourceSessionId },
       );
     }
-    return { expectation: { kind: "ungrouped" } };
+    return undefined;
   }
   return {
-    command: {
-      kind: "source",
-      sourceSessionId: parsed.sourceSessionId,
-      groupId: sourceGroup.id,
-    },
-    expectation: { kind: "source", groupId: sourceGroup.id },
+    kind: "source",
+    sourceSessionId: parsed.sourceSessionId,
+    groupId: sourceGroup.id,
   };
 }
 
@@ -371,16 +341,6 @@ function findAvailableProject(snapshot: StationSnapshot, projectId: string): Pro
       "SESSION_PROJECT_NOT_FOUND",
       "No configured project has the requested exact id.",
       { projectId },
-    );
-  }
-  if (project.health.status === "unavailable") {
-    throw (
-      project.health.lastError ??
-      sessionCliError(
-        "SESSION_PROJECT_UNAVAILABLE",
-        "The selected project's worktree provider is unavailable.",
-        { projectId, provider: project.health.providerId },
-      )
     );
   }
   return project;
@@ -425,16 +385,6 @@ function validateProviderHealth(
       { provider },
     );
   }
-  if (health?.status === "unavailable") {
-    throw (
-      health.lastError ??
-      sessionCliError(
-        "SESSION_PROVIDER_UNAVAILABLE",
-        `The selected ${expectedType} provider is unavailable.`,
-        { provider },
-      )
-    );
-  }
 }
 
 function parseCreateResult(
@@ -443,8 +393,29 @@ function parseCreateResult(
 ): SessionCreateCommandResult {
   const parsed = SessionCreateCommandResultSchema.safeParse(outcome.record.result);
   if (!parsed.success) throw missingSessionResultError("create", outcome.receipt);
-  assertMatchingCreationResult(command, parsed.data, outcome.receipt);
-  return parsed.data;
+  const result: SessionCreateCommandResult =
+    parsed.data.requestedPlacement === "sibling"
+      ? {
+          type: parsed.data.type,
+          projectId: parsed.data.projectId,
+          worktreeId: parsed.data.worktreeId,
+          sessionId: parsed.data.sessionId,
+          requestedPlacement: parsed.data.requestedPlacement,
+          resolvedPlacement: parsed.data.resolvedPlacement,
+        }
+      : {
+          type: parsed.data.type,
+          projectId: parsed.data.projectId,
+          worktreeId: parsed.data.worktreeId,
+          sessionId: parsed.data.sessionId,
+          requestedPlacement: parsed.data.requestedPlacement,
+          resolvedPlacement: parsed.data.resolvedPlacement,
+        };
+  if (parsed.data.resolvedGroupId !== undefined) {
+    result.resolvedGroupId = parsed.data.resolvedGroupId;
+  }
+  assertMatchingCreationResult(command, result, outcome.receipt);
+  return result;
 }
 
 function parseForkResult(
@@ -453,8 +424,29 @@ function parseForkResult(
 ): SessionForkCommandResult {
   const parsed = SessionForkCommandResultSchema.safeParse(outcome.record.result);
   if (!parsed.success) throw missingSessionResultError("fork", outcome.receipt);
-  assertMatchingCreationResult(command, parsed.data, outcome.receipt);
-  return parsed.data;
+  const result: SessionForkCommandResult =
+    parsed.data.requestedPlacement === "sibling"
+      ? {
+          type: parsed.data.type,
+          projectId: parsed.data.projectId,
+          worktreeId: parsed.data.worktreeId,
+          sessionId: parsed.data.sessionId,
+          requestedPlacement: parsed.data.requestedPlacement,
+          resolvedPlacement: parsed.data.resolvedPlacement,
+        }
+      : {
+          type: parsed.data.type,
+          projectId: parsed.data.projectId,
+          worktreeId: parsed.data.worktreeId,
+          sessionId: parsed.data.sessionId,
+          requestedPlacement: parsed.data.requestedPlacement,
+          resolvedPlacement: parsed.data.resolvedPlacement,
+        };
+  if (parsed.data.resolvedGroupId !== undefined) {
+    result.resolvedGroupId = parsed.data.resolvedGroupId;
+  }
+  assertMatchingCreationResult(command, result, outcome.receipt);
+  return result;
 }
 
 function assertMatchingCreationResult(
@@ -465,14 +457,26 @@ function assertMatchingCreationResult(
   if (
     result.projectId !== command.payload.projectId ||
     result.requestedPlacement !== command.payload.placement.intent ||
-    result.resolvedPlacement.provider !== command.payload.terminal.provider
+    result.resolvedPlacement.provider !== command.payload.terminal.provider ||
+    !creationGroupResultMatches(command, result)
   ) {
     throw correlatedSessionError(
       `SESSION_${command.type === "session.create" ? "CREATE" : "FORK"}_RESULT_MISMATCH`,
-      "The durable creation result does not match the dispatched project or terminal placement.",
+      "The durable creation result does not match the dispatched project, Group, or terminal placement.",
       receipt,
     );
   }
+}
+
+function creationGroupResultMatches(
+  command: CreateSessionCommand | ForkSessionCommand,
+  result: SessionCreateCommandResult | SessionForkCommandResult,
+): boolean {
+  const group = command.payload.group;
+  if (group === undefined) return result.resolvedGroupId === undefined;
+  if (command.type === "session.fork") return true;
+  if (group.kind === "existing") return result.resolvedGroupId === group.groupId;
+  return result.resolvedGroupId !== undefined;
 }
 
 function failedCreationOutcome<TCommand extends CreateSessionCommand | ForkSessionCommand>(
@@ -507,12 +511,10 @@ function convergenceExpectation(
   result: SessionCreateCommandResult | SessionForkCommandResult,
   harnessProvider: ProviderId,
   terminalProvider: ProviderId,
-  group: SessionCreationGroupExpectation,
 ): SessionCreationConvergenceExpectation {
   return {
     action,
     branch: parsed.branch,
-    group,
     harnessProvider,
     result,
     terminalProvider,

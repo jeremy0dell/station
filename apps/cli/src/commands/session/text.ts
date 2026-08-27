@@ -6,7 +6,10 @@ import type {
   SessionProjectionState,
   SessionWorktreeProjectionState,
 } from "./convergence.js";
-import type { SessionCreationConvergence } from "./creationConvergence.js";
+import type {
+  SessionCreationConvergence,
+  SessionCreationProjectionState,
+} from "./creationConvergence.js";
 import type { SessionCommandResult } from "./result.js";
 import type { SessionFilters, SessionSummary } from "./summary.js";
 
@@ -201,8 +204,11 @@ function renderConvergence(
   return lines;
 }
 
-function renderSessionProjectionState(state: SessionProjectionState): string[] {
+function renderSessionProjectionState(
+  state: SessionProjectionState | SessionCreationProjectionState,
+): string[] {
   if (state.state !== "present") return [`Session state: ${state.state}`];
+  if (!("value" in state)) return ["Session state: present"];
   return ["Session state: present", renderSessionSummary(state.value)];
 }
 

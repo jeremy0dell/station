@@ -1,4 +1,8 @@
-import type { ProviderProjectConfig, WorktreeObservation } from "@station/contracts";
+import type {
+  ProviderProjectConfig,
+  SessionCreateCommandResult,
+  WorktreeObservation,
+} from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import type {
   EventJournal,
@@ -52,8 +56,8 @@ export type CreateSessionCreateHandlerOptions = {
  * seeds its independent title with optional atomic root Group placement or inline Group creation,
  * and launches its primary agent only after explicit placement authorization before
  * worktree mutation and revalidation before terminal mutation; rollback removes
- * only state owned by this command. Success returns the exact created identities
- * and the provider-resolved placement projection.
+ * only state owned by this command. Success returns the exact created identities,
+ * resolved Group identity when grouped, and provider-resolved placement projection.
  */
 export function createSessionCreateHandler(
   options: CreateSessionCreateHandlerOptions,
@@ -226,12 +230,14 @@ export function createSessionCreateHandler(
       context,
       clock: options.clock,
     });
-    return {
+    const result: SessionCreateCommandResult = {
       type: "session.create",
       projectId: project.id,
       worktreeId: createdWorktree.id,
       sessionId,
       ...placementResult,
     };
+    if (groupProvenance !== undefined) result.resolvedGroupId = groupProvenance.groupId;
+    return result;
   };
 }

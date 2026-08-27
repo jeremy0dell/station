@@ -21,7 +21,7 @@ export type {
 } from "./commands/session/convergence.js";
 export type {
   SessionCreationConvergence,
-  SessionCreationGroupExpectation,
+  SessionCreationProjectionState,
 } from "./commands/session/creationConvergence.js";
 export type { SessionCommandDeps, SessionCommandOptions } from "./commands/session/options.js";
 export * from "./commands/session/result.js";

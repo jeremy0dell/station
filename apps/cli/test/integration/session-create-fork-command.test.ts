@@ -50,7 +50,7 @@ describe("session create and fork commands", () => {
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const initial = creationSnapshot();
     const commands: StationCommand[] = [];
-    const result = detachedCreateResult();
+    const result = detachedCreateResult("group_root");
     try {
       const cliResult = await runCli(
         [
@@ -64,7 +64,7 @@ describe("session create and fork commands", () => {
           "--terminal",
           "tmux",
           "--title",
-          "CLI review",
+          "  CLI review  ",
           "--base",
           "main",
           "--harness",
@@ -122,6 +122,12 @@ describe("session create and fork commands", () => {
       });
       expect(JSON.stringify(cliResult)).not.toContain(promptSecret.trim());
       expect(JSON.stringify(cliResult)).not.toContain("initialPrompt");
+      expect(JSON.stringify(cliResult.output)).not.toContain("/projects/web/");
+      expect(JSON.stringify(cliResult.output)).not.toContain("The created harness is starting.");
+      const text = renderSessionCommandText(cliResult.output as never);
+      expect(text).not.toContain("/projects/web/");
+      expect(text).not.toContain("The created harness is starting.");
+      expect(text).not.toContain("CLI review");
     } finally {
       await fixture.cleanup();
     }
@@ -189,6 +195,103 @@ describe("session create and fork commands", () => {
         outcome: { status: "succeeded", result },
         convergence: { status: "confirmed" },
       });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("confirms fork inheritance against the Observer's transaction-resolved Group", async () => {
+    const fixture = await createTempState();
+    const initial = creationSnapshot();
+    const commands: StationCommand[] = [];
+    const result = siblingForkResult("group_transaction");
+    try {
+      const commandResult = await runSessionCommand(
+        ["fork", "ses_source", "--branch", "feature/moved-group", "--from-current"],
+        { config: fixture.config },
+        creationObserverDeps(fixture.socketPath, [], {
+          getSnapshot: creationSnapshotSequence(initial, commands, result),
+          dispatch: async (command) => {
+            commands.push(command);
+            return acceptedReceipt("cmd_moved_group");
+          },
+          waitForCommand: async () =>
+            succeededRecord("cmd_moved_group", firstCommand(commands), result),
+        }),
+      );
+
+      const command = firstCommand(commands);
+      if (command.type !== "session.fork") throw new Error("Expected session.fork.");
+      expect(command.payload.group).toMatchObject({ groupId: "group_source" });
+      expect(commandResult).toMatchObject({
+        outcome: { status: "succeeded", result: { resolvedGroupId: "group_transaction" } },
+        convergence: { status: "confirmed", session: { state: "present" } },
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("warns when a duplicate-named Group does not match the durable resolved Group", async () => {
+    const fixture = await createTempState();
+    const initial = creationSnapshot();
+    const commands: StationCommand[] = [];
+    const result = detachedCreateResult("group_inline");
+    let snapshotCalls = 0;
+    try {
+      const commandResult = await runSessionCommand(
+        [
+          "create",
+          "web",
+          "--branch",
+          "feature/duplicate-group",
+          "--terminal",
+          "tmux",
+          "--new-group",
+          "Duplicate",
+        ],
+        { config: fixture.config },
+        creationObserverDeps(fixture.socketPath, [], {
+          getSnapshot: async () => {
+            snapshotCalls += 1;
+            if (snapshotCalls === 1) return initial;
+            const refreshed = createdSnapshot(initial, commands, result);
+            return StationSnapshotSchema.parse({
+              ...refreshed,
+              sessionGroups: [
+                ...refreshed.sessionGroups.map((group) =>
+                  group.id === "group_inline" ? { ...group, sessionIds: [] } : group,
+                ),
+                {
+                  id: "group_duplicate",
+                  projectId: "web",
+                  name: "Duplicate",
+                  sessionIds: [result.sessionId],
+                  version: 1,
+                  createdAt: now,
+                  updatedAt: now,
+                },
+              ],
+            });
+          },
+          dispatch: async (command) => {
+            commands.push(command);
+            return acceptedReceipt("cmd_duplicate_group");
+          },
+          waitForCommand: async () =>
+            succeededRecord("cmd_duplicate_group", firstCommand(commands), result),
+        }),
+      );
+
+      expect(commandResult).toMatchObject({
+        outcome: { status: "succeeded", result: { resolvedGroupId: "group_inline" } },
+        convergence: {
+          status: "warning",
+          session: { state: "present" },
+          warning: { code: "SESSION_CREATE_CONVERGENCE_STALE" },
+        },
+      });
+      expect(sessionCommandExitCode(commandResult)).toBe(0);
     } finally {
       await fixture.cleanup();
     }
@@ -331,6 +434,30 @@ describe("session create and fork commands", () => {
         "provider-dsl",
       ]),
     ).toThrow("--layout must be default, agent-only, or agent-build-shell");
+    expect(() =>
+      parseSessionArgs([
+        "create",
+        "web",
+        "--branch",
+        "feature/x",
+        "--terminal",
+        "tmux",
+        "--title",
+        "   ",
+      ]),
+    ).toThrow("--title requires a non-empty title");
+    expect(
+      parseSessionArgs([
+        "create",
+        "web",
+        "--branch",
+        "feature/x",
+        "--terminal",
+        "tmux",
+        "--title",
+        "  Normalized  ",
+      ]),
+    ).toMatchObject({ title: "Normalized" });
   });
 
   it("rejects empty, oversized, or missing prompt stdin before Observer startup", async () => {
@@ -345,6 +472,13 @@ describe("session create and fork commands", () => {
           { spawnObserver },
         ),
       ).rejects.toMatchObject({ code: "CLI_SESSION_PROMPT_STDIN_REQUIRED" });
+      await expect(
+        runSessionCommand(
+          ["create", "web", "--branch", "feature/title", "--terminal", "tmux", "--title", "   "],
+          { config: fixture.config },
+          { spawnObserver },
+        ),
+      ).rejects.toMatchObject({ code: "CLI_SESSION_CREATE_INPUT_INVALID" });
       for (const stdin of ["", " \n\t"]) {
         await expect(
           runCli(
@@ -387,9 +521,9 @@ describe("session create and fork commands", () => {
     }
   });
 
-  it("rejects unavailable facts, nested Groups, and explicit inheritance from Ungrouped", async () => {
+  it("rejects invalid Groups but treats cached provider health as advisory", async () => {
     const fixture = await createTempState();
-    const dispatch = vi.fn();
+    const dispatch = vi.fn(async () => rejectedReceipt("cmd_cached_health"));
     try {
       await expect(
         runSessionCommand(
@@ -424,22 +558,29 @@ describe("session create and fork commands", () => {
       ).rejects.toMatchObject({ code: "SESSION_FORK_SOURCE_GROUP_MISSING" });
       const unavailable = StationSnapshotSchema.parse({
         ...creationSnapshot(),
+        projects: creationSnapshot().projects.map((project) => ({
+          ...project,
+          health: { ...project.health, status: "unavailable" },
+        })),
         providerHealth: {
           ...creationSnapshot().providerHealth,
           tmux: {
             ...creationSnapshot().providerHealth.tmux,
             status: "unavailable",
           },
+          codex: {
+            ...creationSnapshot().providerHealth.codex,
+            status: "unavailable",
+          },
         },
       });
-      await expect(
-        runSessionCommand(
-          ["create", "web", "--branch", "feature/no-tmux", "--terminal", "tmux"],
-          { config: fixture.config },
-          creationObserverDeps(fixture.socketPath, [unavailable], { dispatch }),
-        ),
-      ).rejects.toMatchObject({ code: "SESSION_PROVIDER_UNAVAILABLE" });
-      expect(dispatch).not.toHaveBeenCalled();
+      const result = await runSessionCommand(
+        ["create", "web", "--branch", "feature/recovered", "--terminal", "tmux"],
+        { config: fixture.config },
+        creationObserverDeps(fixture.socketPath, [unavailable], { dispatch }),
+      );
+      expect(result).toMatchObject({ action: "create", outcome: { status: "rejected" } });
+      expect(dispatch).toHaveBeenCalledTimes(1);
     } finally {
       await fixture.cleanup();
     }
@@ -592,6 +733,37 @@ describe("session create and fork commands", () => {
       ).rejects.toMatchObject({
         code: "SESSION_CREATE_RESULT_MISMATCH",
         commandId: "cmd_mismatch_result",
+      });
+      commands.length = 0;
+      await expect(
+        runSessionCommand(
+          [
+            "create",
+            "web",
+            "--branch",
+            "feature/group-mismatch",
+            "--terminal",
+            "tmux",
+            "--group",
+            "group_root",
+          ],
+          { config: fixture.config },
+          creationObserverDeps(fixture.socketPath, [creationSnapshot()], {
+            dispatch: async (command) => {
+              commands.push(command);
+              return acceptedReceipt("cmd_group_mismatch");
+            },
+            waitForCommand: async () =>
+              succeededRecord(
+                "cmd_group_mismatch",
+                firstCommand(commands),
+                detachedCreateResult("group_source"),
+              ),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "SESSION_CREATE_RESULT_MISMATCH",
+        commandId: "cmd_group_mismatch",
       });
     } finally {
       await fixture.cleanup();
@@ -791,8 +963,10 @@ function failedRecord(id: string, command: StationCommand): TerminalCommandRecor
   } as TerminalCommandRecord;
 }
 
-function detachedCreateResult(): SessionCreateCommandResult {
-  return {
+function detachedCreateResult(
+  resolvedGroupId?: SessionCreateCommandResult["resolvedGroupId"],
+): SessionCreateCommandResult {
+  const result: SessionCreateCommandResult = {
     type: "session.create",
     projectId: "web",
     worktreeId: "wt_created",
@@ -805,10 +979,14 @@ function detachedCreateResult(): SessionCreateCommandResult {
       presentation: "detached",
     },
   };
+  if (resolvedGroupId !== undefined) result.resolvedGroupId = resolvedGroupId;
+  return result;
 }
 
-function siblingForkResult(): SessionForkCommandResult {
-  return {
+function siblingForkResult(
+  resolvedGroupId: SessionForkCommandResult["resolvedGroupId"] = "group_source",
+): SessionForkCommandResult {
+  const result: SessionForkCommandResult = {
     type: "session.fork",
     projectId: "web",
     worktreeId: "wt_forked",
@@ -821,6 +999,8 @@ function siblingForkResult(): SessionForkCommandResult {
       presentation: "presented",
     },
   };
+  if (resolvedGroupId !== undefined) result.resolvedGroupId = resolvedGroupId;
+  return result;
 }
 
 function firstCommand(commands: readonly StationCommand[]): StationCommand {
@@ -841,21 +1021,38 @@ function createdSnapshot(
   const title = command.payload.title ?? command.payload.branch;
   const harnessProvider = command.payload.harness?.provider ?? "codex";
   const group = command.payload.group;
+  const sourceSessionId = group?.kind === "source" ? group.sourceSessionId : undefined;
   const groups = initial.sessionGroups.map((candidate) => {
-    if (group?.kind === "existing" && candidate.id === group.groupId) {
-      return { ...candidate, sessionIds: [...candidate.sessionIds, result.sessionId] };
+    const retainedSessionIds = candidate.sessionIds.filter(
+      (sessionId) =>
+        sessionId !== result.sessionId &&
+        (sourceSessionId === undefined ||
+          candidate.id === result.resolvedGroupId ||
+          sessionId !== sourceSessionId),
+    );
+    if (candidate.id !== result.resolvedGroupId) {
+      return { ...candidate, sessionIds: retainedSessionIds };
     }
-    if (group?.kind === "source" && candidate.id === group.groupId) {
-      return { ...candidate, sessionIds: [...candidate.sessionIds, result.sessionId] };
-    }
-    return candidate;
+    return {
+      ...candidate,
+      sessionIds: [
+        ...new Set([
+          ...retainedSessionIds,
+          ...(sourceSessionId === undefined ? [] : [sourceSessionId]),
+          result.sessionId,
+        ]),
+      ],
+    };
   });
-  if (group?.kind === "create") {
+  if (
+    result.resolvedGroupId !== undefined &&
+    !groups.some((candidate) => candidate.id === result.resolvedGroupId)
+  ) {
     groups.push({
-      id: "group_inline",
+      id: result.resolvedGroupId,
       projectId: result.projectId,
-      name: group.name,
-      sessionIds: [result.sessionId],
+      name: group?.kind === "create" ? group.name : "Transaction Group",
+      sessionIds: [...(sourceSessionId === undefined ? [] : [sourceSessionId]), result.sessionId],
       version: 1,
       createdAt: now,
       updatedAt: now,

@@ -17,6 +17,7 @@ import {
   SessionIdSchema,
   SessionOriginSchema,
   SessionTerminalCommandOptionsSchema,
+  userFacingTitleSchema,
 } from "@station/contracts";
 import { CliInputError, parsePositiveIntegerOption, parseRequiredOptionValue } from "../../args.js";
 import type { SessionFilters } from "./summary.js";
@@ -196,7 +197,7 @@ function parseCreationOptions(args: string[], action: "create" | "fork"): Parsed
     }
     if (option === "--title") {
       claimOption(seen, option, command);
-      title = parseSessionOptionValue(args[index + 1], option);
+      title = parseSessionTitle(args[index + 1], action);
       index += 1;
       continue;
     }
@@ -509,6 +510,12 @@ function parseSessionGroupName(
 ): string {
   const parsed = SessionGroupNameSchema.safeParse(parseSessionOptionValue(value, option));
   if (!parsed.success) throw creationInputError(action, `${option} requires a non-empty name.`);
+  return parsed.data;
+}
+
+function parseSessionTitle(value: string | undefined, action: "create" | "fork"): string {
+  const parsed = userFacingTitleSchema.safeParse(parseSessionOptionValue(value, "--title"));
+  if (!parsed.success) throw creationInputError(action, "--title requires a non-empty title.");
   return parsed.data;
 }
 

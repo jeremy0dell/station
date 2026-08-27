@@ -16,9 +16,10 @@ import { filterSessionSummaries, findSessionSummary, summarizeSessions } from ".
  *
  * Collects provider-bound current-session evidence, projects exact session/create/fork facts from
  * one current snapshot, and translates exact CLI intent into recorded typed commands. Sibling
- * creation consumes only fresh public placement authority; durable results remain authoritative
- * when the best-effort refreshed projection has not converged. Provider-specific claims and
- * placement mechanics remain outside this adapter.
+ * creation consumes only fresh public placement authority; durable created and resolved Group
+ * identities remain authoritative when the best-effort refreshed projection has not converged.
+ * Creation convergence exposes state only. Provider-specific claims and placement mechanics
+ * remain outside this adapter.
  */
 export async function runSessionCommand(
   args: string[] | ParsedSessionArgs,

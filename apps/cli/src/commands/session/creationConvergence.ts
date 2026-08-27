@@ -3,34 +3,30 @@ import type {
   SafeError,
   SessionCreateCommandResult,
   SessionForkCommandResult,
-  SessionGroupId,
   StationSnapshot,
 } from "@station/contracts";
 import { publicSafeErrorFromUnknown } from "@station/runtime";
 import type { ObserverProcessDeps } from "../../observerProcess.js";
 import { loadObserverSnapshot, type ObserverSnapshotLoadOptions } from "../snapshot.js";
-import type { SessionProjectionState } from "./convergence.js";
 import { findOptionalSessionSummary, type SessionSummary } from "./summary.js";
-
-export type SessionCreationGroupExpectation =
-  | { kind: "ungrouped" }
-  | { kind: "existing"; groupId: SessionGroupId }
-  | { kind: "create"; name: string }
-  | { kind: "source"; groupId: SessionGroupId };
 
 export type SessionCreationConvergenceExpectation = {
   action: "create" | "fork";
   branch: string;
-  group: SessionCreationGroupExpectation;
   harnessProvider: ProviderId;
   result: SessionCreateCommandResult | SessionForkCommandResult;
   terminalProvider: ProviderId;
   title: string;
 };
 
+export type SessionCreationProjectionState =
+  | { state: "present" }
+  | { state: "missing" }
+  | { state: "unknown" };
+
 export type SessionCreationConvergence = {
   status: "confirmed" | "warning";
-  session: SessionProjectionState;
+  session: SessionCreationProjectionState;
   warning?: SafeError;
 };
 
@@ -53,14 +49,14 @@ export async function loadSessionCreationConvergence(
     if (!sessionIdentityConverged(session, expectation) || !groupConverged(snapshot, expectation)) {
       return warningConvergence(
         expectation,
-        { state: "present", value: session },
+        { state: "present" },
         `SESSION_${expectation.action.toUpperCase()}_CONVERGENCE_STALE`,
         `The session ${expectation.action} command succeeded, but the refreshed snapshot does not preserve the expected identity and relationships.`,
       );
     }
     return {
       status: "confirmed",
-      session: { state: "present", value: session },
+      session: { state: "present" },
     };
   } catch (error) {
     const warning = publicSafeErrorFromUnknown(error, {
@@ -97,30 +93,19 @@ function groupConverged(
   snapshot: StationSnapshot,
   expectation: SessionCreationConvergenceExpectation,
 ): boolean {
-  const assigned = snapshot.sessionGroups.find((group) =>
+  const assignedGroups = snapshot.sessionGroups.filter((group) =>
     group.sessionIds.includes(expectation.result.sessionId),
   );
-  switch (expectation.group.kind) {
-    case "ungrouped":
-      return assigned === undefined;
-    case "existing":
-      return assigned?.id === expectation.group.groupId;
-    case "create":
-      return assigned?.name === expectation.group.name && assigned.parentGroupId === undefined;
-    case "source": {
-      if (assigned?.id === expectation.group.groupId) return true;
-      const sourceGroupId = expectation.group.groupId;
-      const sourceGroupStillExists = snapshot.sessionGroups.some(
-        (group) => group.id === sourceGroupId,
-      );
-      return assigned === undefined && !sourceGroupStillExists;
-    }
+  if (expectation.result.resolvedGroupId === undefined) return assignedGroups.length === 0;
+  if (assignedGroups.length !== 1 || assignedGroups[0]?.id !== expectation.result.resolvedGroupId) {
+    return false;
   }
+  return expectation.action === "fork" || assignedGroups[0].parentGroupId === undefined;
 }
 
 function warningConvergence(
   expectation: SessionCreationConvergenceExpectation,
-  session: SessionProjectionState,
+  session: SessionCreationProjectionState,
   code: string,
   message: string,
 ): SessionCreationConvergence {
