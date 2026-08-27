@@ -3,10 +3,18 @@ import { selectDashboardTree } from "../selectors/dashboardTree.js";
 import type { DashboardState } from "./types.js";
 
 export function scrollDashboard(state: DashboardState, delta: number): DashboardState {
-  return clampDashboardStateScroll({
+  return scrollDashboardTo(state, state.scrollOffset + delta);
+}
+
+export function scrollDashboardTo(state: DashboardState, offset: number): DashboardState {
+  const next = clampDashboardStateScroll({
     ...state,
-    scrollOffset: state.scrollOffset + delta,
+    scrollOffset: offset,
   });
+  if (next.scrollOffset === state.scrollOffset) {
+    return state;
+  }
+  return next;
 }
 
 export function clampDashboardStateScroll(state: DashboardState): DashboardState {

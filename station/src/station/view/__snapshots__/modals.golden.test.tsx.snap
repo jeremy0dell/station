@@ -4,24 +4,52 @@ exports[`modal flow golden frames renders the help overlay 1`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ────────╭──────────────────────────────────────────────────────────────╮─────── 
-       S│                         station help                         │FF · PR 
-▼ statio│  Ctrl-O     open/close project view                          │qs] [▾] 
- [1] ○ c│  Ctrl-Q     quit Station                                     │6 #70 ✓ 
- [2] - d│  Ctrl-\\     split pane right                                 │        
- [3] ○ p│  Ctrl-^     split pane below (Ctrl-6)                        │  #73 ✓ 
- [4] + s│  Ctrl-]     focus next pane                                  │        
- [5] ⠋ s│  Ctrl-/     close split pane (Ctrl-_)                        │6 #76 … 
-        │  Enter/Sp   open project view on welcome                     │        
-▼ observ│  Esc/↑↓     context menu close/move                          │qs] [▾] 
- [6] x b│  Enter/Sp   context menu select                              │   #8 ✓ 
- [7] ⠋ p│                     station project view                     │8 #16 … 
- [8] ○ t│  ↑/↓        move cursor · wheel scroll                       │-1 #4 ✓ 
-        │  ↵          open focused session                             │        
-▼ script│  tab        next session needing you                         │qs] [▾] 
- [9] ○ a│  G/M        quick group/move to group                        │6 #5 x1 
- [a] ? m│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter      │ -1 #10 
-        │  Tab S/P/A  build filter conditions · F applies builder      │        
+       S│                         station help                        ▐│FF · PR 
+▼ statio│  Ctrl-O     open/close project view                         ▐│qs] [▾]▐
+ [1] ○ c│  Ctrl-Q     quit Station                                    ▐│6 #70 ✓▐
+ [2] - d│  Ctrl-\\     split pane right                                ▐│       ▐
+ [3] ○ p│  Ctrl-^     split pane below (Ctrl-6)                       ▐│  #73 ✓▐
+ [4] + s│  Ctrl-]     focus next pane                                 ▐│       ▐
+ [5] ⠋ s│  Ctrl-/     close split pane (Ctrl-_)                       ▐│6 #76 …▐
+        │  Enter/Sp   open project view on welcome                    ▐│       ▐
+▼ observ│  Esc/↑↓     context menu close/move                         ▐│qs] [▾]▐
+ [6] x b│  Enter/Sp   context menu select                             ▐│   #8 ✓▐
+ [7] ⠋ p│                     station project view                    ▐│8 #16 …▐
+ [8] ○ t│  ↑/↓        move cursor · wheel scroll                      ▐│-1 #4 ✓▐
+        │  ↵          open focused session                            ▐│       ▐
+▼ script│  tab        next session needing you                        ▐│qs] [▾]▐
+ [9] ○ a│  G/M        quick group/move to group                       ▐│6 #5 x1▐
+ [a] ? m│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter      │ -1 #10▐
+        │  Tab S/P/A  build filter conditions · F applies builder      │       ▐
 ▼ empty-│  1-9/a-z    open visible session or toggle condition         │qs] [▾] 
+        ╰──────────────────────────────────────────────────────────────╯        
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`modal flow golden frames renders the help overlay scrolled 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
+────────╭──────────────────────────────────────────────────────────────╮─────── 
+       S│  Ctrl-^     split pane below (Ctrl-6)                        │FF · PR 
+▼ statio│  Ctrl-]     focus next pane                                  │qs] [▾]▐
+ [1] ○ c│  Ctrl-/     close split pane (Ctrl-_)                        │6 #70 ✓▐
+ [2] - d│  Enter/Sp   open project view on welcome                    ▐│       ▐
+ [3] ○ p│  Esc/↑↓     context menu close/move                         ▐│  #73 ✓▐
+ [4] + s│  Enter/Sp   context menu select                             ▐│       ▐
+ [5] ⠋ s│                     station project view                    ▐│6 #76 …▐
+        │  ↑/↓        move cursor · wheel scroll                      ▐│       ▐
+▼ observ│  ↵          open focused session                            ▐│qs] [▾]▐
+ [6] x b│  tab        next session needing you                        ▐│   #8 ✓▐
+ [7] ⠋ p│  G/M        quick group/move to group                       ▐│8 #16 …▐
+ [8] ○ t│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter     ▐│-1 #4 ✓▐
+        │  Tab S/P/A  build filter conditions · F applies builder     ▐│       ▐
+▼ script│  1-9/a-z    open visible session or toggle condition        ▐│qs] [▾]▐
+ [9] ○ a│  N/A/R/C/F/P  new/add/rename/fold/fork/settings             ▐│6 #5 x1▐
+ [a] ? m│  W          widgets                                         ▐│ -1 #10▐
+        │  X          delete session                                  ▐│       ▐
+▼ empty-│  H/?        help · Z refresh                                ▐│qs] [▾] 
         ╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
@@ -33,22 +61,22 @@ exports[`modal flow golden frames renders the project menu 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
  [1] ○ cli-help-man                       codex     idle┌──────────────────────┐
  [2] - docs-cleanup                       codex     no a│ Quick Group          │
  [3] ○ pty-buffer                         codex     idle│ New Group…           │
  [4] + session-resume                     codex     star│ Set default agent    │
  [5] ⠋ station-XXXXXXy                    codex     work│ Project settings…    │
                                                         └──────────────────────┘
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
-                                                                                
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
+                                                                               ▐
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -73,19 +101,19 @@ exports[`modal flow golden frames renders the create group sheet 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Group                                                                 │
 │  Name (N)    Release work                                                    │
@@ -101,11 +129,11 @@ exports[`modal flow golden frames renders the move to group destination sheet 1`
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                     AGENT     STATUS                 DIFF · PR   
-▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾] 
-╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
+▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾]▐
+╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Move to Group                                                                │
 │ Session    group-contracts                                                   │
@@ -129,18 +157,18 @@ exports[`modal flow golden frames renders the move to group create sheet 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                     AGENT     STATUS                 DIFF · PR   
-▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾] 
-╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮ 
-│ [3] ○ input-routing               codex     idle                      +27 -6│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮ 
-│ [4] ○ diagnostic-index            codex     idle                      +38 -7│ 
-│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
-│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
+▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾]▐
+╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮▐
+│ [3] ○ input-routing               codex     idle                      +27 -6│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮▐
+│ [4] ○ diagnostic-index            codex     idle                      +38 -7│▐
+│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│▐
+│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Group                                                                 │
 │ Session    group-contracts                                                   │
@@ -157,22 +185,22 @@ exports[`modal flow golden frames renders the persistent filter header editor 1`
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
 ▏ FILTER /api▏                                                       1/10 match 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
-                                                                                
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
+                                                                               ▐
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -185,22 +213,22 @@ exports[`modal flow golden frames renders the persistent filter condition field 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
 ▏ FILTER /▏                                                       10/10 matches 
-┌────────────────────────────────┐                                [sh] [qs] [▾] 
-│ FILTER CONDITIONS           [×]│        codex     idle           +14 -6 #70 ✓ 
-│▸ S Status                 Any ›│        codex     no agent                    
-│  P Project                Any ›│        codex     idle                  #73 ✓ 
-│  A Agent                  Any ›│        codex     starting                    
-│                                │        codex     working      +412 -96 #76 … 
-│  Apply filter (F)              │                                              
-└────────────────────────────────┘                                [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
-                                                                                
+┌────────────────────────────────┐                                [sh] [qs] [▾]▐
+│ FILTER CONDITIONS           [×]│        codex     idle           +14 -6 #70 ✓▐
+│▸ S Status                 Any ›│        codex     no agent                   ▐
+│  P Project                Any ›│        codex     idle                  #73 ✓▐
+│  A Agent                  Any ›│        codex     starting                   ▐
+│                                │        codex     working      +412 -96 #76 …▐
+│  Apply filter (F)              │                                             ▐
+└────────────────────────────────┘                                [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
+                                                                               ▐
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -213,22 +241,22 @@ exports[`modal flow golden frames renders the persistent filter status condition
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
 ▏ FILTER /▏ Status=Working                                         2/10 matches 
-┌────────────────────────────────┐                                [sh] [qs] [▾] 
-│[←] STATUS CONDITION         [×]│        codex     idle           +14 -6 #70 ✓ 
-│  1 [ ] Needs attention         │        codex     no agent                    
-│  2 [ ] Stuck                   │        codex     idle                  #73 ✓ 
-│▸ 3 [✓] Working                 │        codex     starting                    
-│  4 [ ] Starting                │        codex     working      +412 -96 #76 … 
-│  5 [ ] Idle                    │                                              
-│  6 [ ] Exited                  │                                [sh] [qs] [▾] 
-│  7 [ ] No agent                │        opencode  exited                 #8 ✓ 
-│  8 [ ] Unknown                 │        opencode  working        +32 -8 #16 … 
-│  Done (Enter)                  │        opencode  idle             +1 -1 #4 ✓ 
-└────────────────────────────────┘                                              
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
-                                                                                
+┌────────────────────────────────┐                                [sh] [qs] [▾]▐
+│[←] STATUS CONDITION         [×]│        codex     idle           +14 -6 #70 ✓▐
+│  1 [ ] Needs attention         │        codex     no agent                   ▐
+│  2 [ ] Stuck                   │        codex     idle                  #73 ✓▐
+│▸ 3 [✓] Working                 │        codex     starting                   ▐
+│  4 [ ] Starting                │        codex     working      +412 -96 #76 …▐
+│  5 [ ] Idle                    │                                             ▐
+│  6 [ ] Exited                  │                                [sh] [qs] [▾]▐
+│  7 [ ] No agent                │        opencode  exited                 #8 ✓▐
+│  8 [ ] Unknown                 │        opencode  working        +32 -8 #16 …▐
+│  Done (Enter)                  │        opencode  idle             +1 -1 #4 ✓▐
+└────────────────────────────────┘                                             ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
+                                                                               ▐
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -241,7 +269,7 @@ exports[`modal flow golden frames renders the persistent filter condition values
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
 ▏ FILTER /▏               10/10 matches 
-┌────────────────────────────────┐] [▾] 
+┌────────────────────────────────┐] [▾]▐
 │[←] STATUS CONDITION ↑5      [×]│      
 │  6 [ ] Exited                  │t     
 │▸ 7 [ ] No agent                │      
@@ -257,16 +285,16 @@ exports[`modal flow golden frames renders the collapse project sheet 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
 ───────────────────────────────────────────────────────────────────────────────
        SESSION                            AGENT     STATUS            DIFF · PR
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       codex     no agent
- [3] ○ pty-buffer                         codex     idle                  #73 ✓
- [4] + session-resume                     codex     starting
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …
-
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]
- [6] x batch-export                       opencode  exited                 #8 ✓
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Collapse Project                                                             │
 │                                                                              │
@@ -313,16 +341,16 @@ exports[`modal flow golden frames renders the project settings picker sheet 1`] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
 ───────────────────────────────────────────────────────────────────────────────
        SESSION                            AGENT     STATUS            DIFF · PR
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       codex     no agent
- [3] ○ pty-buffer                         codex     idle                  #73 ✓
- [4] + session-resume                     codex     starting
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …
-
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]
- [6] x batch-export                       opencode  exited                 #8 ✓
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Project Settings                                                             │
 │                                                                              │
@@ -341,22 +369,22 @@ exports[`modal flow golden frames renders the project settings panel 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ───┌────────────────────────────────────────────────────────────────────────┐── 
    │ Project settings                                                       │PR 
-▼ s│ station                  │ Default agent                               │▾] 
- [1│▸ Default agent           │✓1 codex ● update v0.3.0 → v0.4.0            │ ✓ 
- [2│  Remove project          │ 2 opencode unknown                          │   
- [3│                          │                                             │ ✓ 
- [4│                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
- [5│                          │                                             │ … 
-   │                          │                                             │   
-▼ o│                          │                                             │▾] 
- [6│                          │                                             │ ✓ 
- [7│                          │                                             │ … 
- [8│                          │                                             │ ✓ 
-   │                          │                                             │   
-▼ s│                          │                                             │▾] 
- [9│                          │                                             │x1 
- [a│                          │                                             │10 
-   │                          │                                             │   
+▼ s│ station                  │ Default agent                               │▾]▐
+ [1│▸ Default agent           │✓1 codex ● update v0.3.0 → v0.4.0            │ ✓▐
+ [2│  Remove project          │ 2 opencode unknown                          │  ▐
+ [3│                          │                                             │ ✓▐
+ [4│                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │  ▐
+ [5│                          │                                             │ …▐
+   │                          │                                             │  ▐
+▼ o│                          │                                             │▾]▐
+ [6│                          │                                             │ ✓▐
+ [7│                          │                                             │ …▐
+ [8│                          │                                             │ ✓▐
+   │                          │                                             │  ▐
+▼ s│                          │                                             │▾]▐
+ [9│                          │                                             │x1▐
+ [a│                          │                                             │10▐
+   │                          │                                             │  ▐
 ▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾] 
    └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -369,22 +397,22 @@ exports[`modal flow golden frames renders the project settings remove pane 1`] =
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ───┌────────────────────────────────────────────────────────────────────────┐── 
    │ Project settings                                                       │PR 
-▼ s│ station                  │ Remove project                              │▾] 
- [1│  Default agent           │ Removes it from Station.                    │ ✓ 
- [2│▸ Remove project          │ Worktrees & files stay on disk.             │   
- [3│                          │                                             │ ✓ 
- [4│                          │ Type "delete station" to confirm            │   
- [5│                          │ ▸ |delete station                           │ … 
-   │                          │                                             │   
-▼ o│                          │ [ Remove project (R) ]                      │▾] 
- [6│                          │                                             │ ✓ 
- [7│                          │                                             │ … 
- [8│                          │                                             │ ✓ 
-   │                          │                                             │   
-▼ s│                          │                                             │▾] 
- [9│                          │                                             │x1 
- [a│                          │                                             │10 
-   │                          │                                             │   
+▼ s│ station                  │ Remove project                              │▾]▐
+ [1│  Default agent           │ Removes it from Station.                    │ ✓▐
+ [2│▸ Remove project          │ Worktrees & files stay on disk.             │  ▐
+ [3│                          │                                             │ ✓▐
+ [4│                          │ Type "delete station" to confirm            │  ▐
+ [5│                          │ ▸ |delete station                           │ …▐
+   │                          │                                             │  ▐
+▼ o│                          │ [ Remove project (R) ]                      │▾]▐
+ [6│                          │                                             │ ✓▐
+ [7│                          │                                             │ …▐
+ [8│                          │                                             │ ✓▐
+   │                          │                                             │  ▐
+▼ s│                          │                                             │▾]▐
+ [9│                          │                                             │x1▐
+ [a│                          │                                             │10▐
+   │                          │                                             │  ▐
 ▼ e│ ←/esc back                                                             │▾] 
    └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -397,22 +425,22 @@ exports[`modal flow golden frames renders the project settings optimistic defaul
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ───┌────────────────────────────────────────────────────────────────────────┐── 
    │ Project settings                                                       │PR 
-▼ s│ station                  │ Default agent                               │▾] 
- [1│▸ Default agent           │ 1 codex ● update v0.3.0 → v0.4.0            │ ✓ 
- [2│  Remove project          │✓2 opencode unknown                 updating…│   
- [3│                          │                                             │ ✓ 
- [4│                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
- [5│                          │                                             │ … 
-   │                          │                                             │   
-▼ o│                          │                                             │▾] 
- [6│                          │                                             │ ✓ 
- [7│                          │                                             │ … 
- [8│                          │                                             │ ✓ 
-   │                          │                                             │   
-▼ s│                          │                                             │▾] 
- [9│                          │                                             │x1 
- [a│                          │                                             │10 
-   │                          │                                             │   
+▼ s│ station                  │ Default agent                               │▾]▐
+ [1│▸ Default agent           │ 1 codex ● update v0.3.0 → v0.4.0            │ ✓▐
+ [2│  Remove project          │✓2 opencode unknown                 updating…│  ▐
+ [3│                          │                                             │ ✓▐
+ [4│                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │  ▐
+ [5│                          │                                             │ …▐
+   │                          │                                             │  ▐
+▼ o│                          │                                             │▾]▐
+ [6│                          │                                             │ ✓▐
+ [7│                          │                                             │ …▐
+ [8│                          │                                             │ ✓▐
+   │                          │                                             │  ▐
+▼ s│                          │                                             │▾]▐
+ [9│                          │                                             │x1▐
+ [a│                          │                                             │10▐
+   │                          │                                             │  ▐
 ▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾] 
    └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -425,22 +453,22 @@ exports[`modal flow golden frames renders the remove slot sheet 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
-┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
-│ Select session to delete                   │code  unknown           +3 -1 #10 
-│                                            │                                  
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1▐
+│ Select session to delete                   │code  unknown           +3 -1 #10▐
+│                                            │                                 ▐
 │ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
@@ -453,22 +481,22 @@ exports[`modal flow golden frames renders the remove confirm sheet 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-┌────────────────────────────────────────────┐                                  
-│ Delete session?                            │                    [sh] [qs] [▾] 
-│ Session  cli-help-man                      │code  idle           +14 -6 #5 x1 
-│ Removes agent, worktree, and panes.        │code  unknown           +3 -1 #10 
-│                                            │                                  
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+┌────────────────────────────────────────────┐                                 ▐
+│ Delete session?                            │                    [sh] [qs] [▾]▐
+│ Session  cli-help-man                      │code  idle           +14 -6 #5 x1▐
+│ Removes agent, worktree, and panes.        │code  unknown           +3 -1 #10▐
+│                                            │                                 ▐
 │  Delete (Y)  ▸ Keep session (N)            │                    [sh] [qs] [▾] 
 │ ←→ choose · Enter activate · Esc cancel    │                                  
 │                                            │───────────────────────────────── 
@@ -481,22 +509,22 @@ exports[`modal flow golden frames renders the remove confirm delete focus 1`] = 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-┌────────────────────────────────────────────┐                                  
-│ Delete session?                            │                    [sh] [qs] [▾] 
-│ Session  cli-help-man                      │code  idle           +14 -6 #5 x1 
-│ Removes agent, worktree, and panes.        │code  unknown           +3 -1 #10 
-│                                            │                                  
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+┌────────────────────────────────────────────┐                                 ▐
+│ Delete session?                            │                    [sh] [qs] [▾]▐
+│ Session  cli-help-man                      │code  idle           +14 -6 #5 x1▐
+│ Removes agent, worktree, and panes.        │code  unknown           +3 -1 #10▐
+│                                            │                                 ▐
 │▸ Delete (Y)    Keep session (N)            │                    [sh] [qs] [▾] 
 │ ←→ choose · Enter activate · Esc cancel    │                                  
 │                                            │───────────────────────────────── 
@@ -509,9 +537,9 @@ exports[`modal flow golden frames renders the remove confirm narrow 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
        SESSION             STATUS       
-▼ station  5 sessions · … [sh] [qs] [▾] 
- [1] ○ cli-help-man        idle         
- [2] - docs-cleanup        no agent     
+▼ station  5 sessions · … [sh] [qs] [▾]▐
+ [1] ○ cli-help-man        idle        ▐
+ [2] - docs-cleanup        no agent    ▐
 ┌──────────────────────────────────────┐
 │ Delete session?                      │
 │ Session  cli-help-man                │
@@ -529,22 +557,22 @@ exports[`modal flow golden frames renders the external agent removal information
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
 ───────────────────────────────────────────────────────────────────────────────
        SESSION                            AGENT     STATUS            DIFF · PR
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       codex     no agent
- [3] ○ pty-buffer                         codex     idle                  #73 ✓
- [4] + session-resume                     codex     starting
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …
-
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]
- [6] x batch-export                       opencode  exited                 #8 ✓
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓
-┌──────────────────────────────────────────────────────────────────┐
-│ Cannot delete worktree                                           │h] [qs] [▾]
-│ Station cannot stop the active agent.                            │14 -6 #5 x1
-│ Stop it in its terminal before deleting the worktree.            │  +3 -1 #10
-│                                                                  │
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+┌──────────────────────────────────────────────────────────────────┐           ▐
+│ Cannot delete worktree                                           │h] [qs] [▾]▐
+│ Station cannot stop the active agent.                            │14 -6 #5 x1▐
+│ Stop it in its terminal before deleting the worktree.            │  +3 -1 #10▐
+│                                                                  │           ▐
 │                                                                  │h] [qs] [▾]
 │                                                                  │
 │ Esc/Enter:close                                                  │───────────
@@ -557,22 +585,22 @@ exports[`modal flow golden frames renders the rename slot prompt 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
-                                                                                
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
+                                                                               ▐
 Rename: ↑↓ move · ↵ choose · 1-9/a-z or click                     [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -613,22 +641,22 @@ exports[`modal flow golden frames renders the fork slot sheet 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
-┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
-│ Select session to fork                     │code  unknown           +3 -1 #10 
-│                                            │                                  
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1▐
+│ Select session to fork                     │code  unknown           +3 -1 #10▐
+│                                            │                                 ▐
 │ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
@@ -641,22 +669,22 @@ exports[`modal flow golden frames renders the fork details sheet 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
-┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓ 
-│ Fork Session                               │                                  
-│ Source   station · cli-help-man            │                    [sh] [qs] [▾] 
-│▸ Name   Hexagonal PT 12|                   │code  idle           +14 -6 #5 x1 
-│  Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10 
-│ Source keeps running — copy is read-only.  │                                  
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓▐
+│ Fork Session                               │                                 ▐
+│ Source   station · cli-help-man            │                    [sh] [qs] [▾]▐
+│▸ Name   Hexagonal PT 12|                   │code  idle           +14 -6 #5 x1▐
+│  Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10▐
+│ Source keeps running — copy is read-only.  │                                 ▐
 │                                            │                    [sh] [qs] [▾] 
 │  Fork (enter)                              │                                  
 │ ↑↓ focus · Enter fork · Esc back           │───────────────────────────────── 
@@ -669,22 +697,22 @@ exports[`modal flow golden frames renders the fork details copy focus 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
-┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓ 
-│ Fork Session                               │                                  
-│ Source   station · cli-help-man            │                    [sh] [qs] [▾] 
-│  Name   cli-help-man-fork                  │code  idle           +14 -6 #5 x1 
-│▸ Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10 
-│ Source keeps running — copy is read-only.  │                                  
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓▐
+│ Fork Session                               │                                 ▐
+│ Source   station · cli-help-man            │                    [sh] [qs] [▾]▐
+│  Name   cli-help-man-fork                  │code  idle           +14 -6 #5 x1▐
+│▸ Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10▐
+│ Source keeps running — copy is read-only.  │                                 ▐
 │                                            │                    [sh] [qs] [▾] 
 │  Fork (enter)                              │                                  
 │ Space/Enter toggle · ↑↓ focus · Esc back   │───────────────────────────────── 
@@ -697,22 +725,22 @@ exports[`modal flow golden frames renders the fork details submit focus 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
-┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓ 
-│ Fork Session                               │                                  
-│ Source   station · cli-help-man            │                    [sh] [qs] [▾] 
-│  Name   cli-help-man-fork                  │code  idle           +14 -6 #5 x1 
-│  Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10 
-│ Source keeps running — copy is read-only.  │                                  
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓▐
+│ Fork Session                               │                                 ▐
+│ Source   station · cli-help-man            │                    [sh] [qs] [▾]▐
+│  Name   cli-help-man-fork                  │code  idle           +14 -6 #5 x1▐
+│  Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10▐
+│ Source keeps running — copy is read-only.  │                                 ▐
 │                                            │                    [sh] [qs] [▾] 
 │▸ Fork (enter)                              │                                  
 │ ↑↓ focus · Enter fork · Esc back           │───────────────────────────────── 
@@ -725,8 +753,8 @@ exports[`modal flow golden frames renders the fork details narrow copy focus 1`]
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
        SESSION             STATUS       
-▼ station  5 sessions · … [sh] [qs] [▾] 
- [1] ○ cli-help-man        idle         
+▼ station  5 sessions · … [sh] [qs] [▾]▐
+ [1] ○ cli-help-man        idle        ▐
 ┌──────────────────────────────────────┐
 │ Fork Session                         │
 │ Source   station · cli-help-man      │
@@ -745,17 +773,17 @@ exports[`modal flow golden frames renders the new session review 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
@@ -773,17 +801,17 @@ exports[`modal flow golden frames renders the new session review project focus 1
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │▸ Project (P) station                                                         │
@@ -801,17 +829,17 @@ exports[`modal flow golden frames renders the new session review name focus 1`] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
@@ -829,17 +857,17 @@ exports[`modal flow golden frames renders the new session review agent focus 1`]
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
@@ -857,17 +885,17 @@ exports[`modal flow golden frames renders the new session review Group focus 1`]
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
@@ -885,17 +913,17 @@ exports[`modal flow golden frames renders the new session healthy agent 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
@@ -913,17 +941,17 @@ exports[`modal flow golden frames renders the new session degraded agent 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
@@ -941,17 +969,17 @@ exports[`modal flow golden frames renders the new session unavailable agent 1`] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
@@ -969,18 +997,18 @@ exports[`modal flow golden frames renders the new session edit name 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Set Session Name                                                             │
 │ Project      station                                                         │
@@ -997,18 +1025,18 @@ exports[`modal flow golden frames renders the new session edit name save focus 1
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Set Session Name                                                             │
 │ Project      station                                                         │
@@ -1025,18 +1053,18 @@ exports[`modal flow golden frames renders the new session edit name back focus 1
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Set Session Name                                                             │
 │ Project      station                                                         │
@@ -1053,9 +1081,9 @@ exports[`modal flow golden frames renders the new session narrow review 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
        SESSION             STATUS       
-▼ station  5 sessions · … [sh] [qs] [▾] 
- [1] ○ cli-help-man        idle         
- [2] - docs-cleanup        no agent     
+▼ station  5 sessions · … [sh] [qs] [▾]▐
+ [1] ○ cli-help-man        idle        ▐
+ [2] - docs-cleanup        no agent    ▐
 ┌──────────────────────────────────────┐
 │ Create Session                       │
 │  Project (P) station                 │
@@ -1073,16 +1101,16 @@ exports[`modal flow golden frames renders the new session pick project 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Choose Project                                                               │
 │                                                                              │
@@ -1101,18 +1129,18 @@ exports[`modal flow golden frames renders the new session pick agent 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Choose Agent                                                                 │
 │                                                                              │
@@ -1129,12 +1157,12 @@ exports[`modal flow golden frames renders the new session pick Group 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                     AGENT     STATUS                 DIFF · PR   
-▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾] 
-╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮ 
+▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾]▐
+╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Choose Group                                                                 │
 │                                                                              │
@@ -1157,18 +1185,18 @@ exports[`modal flow golden frames renders the new session edit inline Group 1`] 
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                     AGENT     STATUS                 DIFF · PR   
-▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾] 
-╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮ 
-│ [3] ○ input-routing               codex     idle                      +27 -6│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮ 
-│ [4] ○ diagnostic-index            codex     idle                      +38 -7│ 
-│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
-│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
+▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾]▐
+╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮▐
+│ [3] ○ input-routing               codex     idle                      +27 -6│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮▐
+│ [4] ○ diagnostic-index            codex     idle                      +38 -7│▐
+│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│▐
+│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Group                                                                 │
 │ Project      station                                                         │
@@ -1185,17 +1213,17 @@ exports[`modal flow golden frames renders the new session creating progress 1`] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       codex     no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
- [4] + session-resume                     codex     starting                    
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
- [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
@@ -1213,18 +1241,18 @@ exports[`modal flow golden frames renders the project default agent picker 1`] =
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
 ───────────────────────────────────────────────────────────────────────────────
        SESSION                            AGENT     STATUS            DIFF · PR
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       codex     no agent
- [3] ○ pty-buffer                         codex     idle                  #73 ✓
- [4] + session-resume                     codex     starting
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …
-
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]
- [6] x batch-export                       opencode  exited                 #8 ✓
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓
-
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▐
+                                                                               ▐
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾]▐
+ [6] x batch-export                       opencode  exited                 #8 ✓▐
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 …▐
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓▐
+                                                                               ▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Select default agent for station                                             │
 │                                                                              │
@@ -1241,8 +1269,8 @@ exports[`modal flow golden frames renders the add project sheet 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Add Project                                                                  │
 │ Start location                                                               │
@@ -1297,8 +1325,8 @@ exports[`modal flow golden frames renders the add project folder actions 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Choose Project Folder                                                        │
 │ Folder  /Users/example/Developer                                             │
@@ -1325,8 +1353,8 @@ exports[`modal flow golden frames renders the add project review actions 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Add Project: Review                                                          │
 │ Selected folder /Users/example/Developer/station                             │
@@ -1353,8 +1381,8 @@ exports[`modal flow golden frames renders the add project Git recovery 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Add Project: Review                                                          │
 │ Selected folder /Users/example/Developer/station                             │
@@ -1381,8 +1409,8 @@ exports[`modal flow golden frames renders the add project id editor actions 1`] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Add Project: Review                                                          │
 │ Selected folder /Users/example/Developer/station                             │
@@ -1409,8 +1437,8 @@ exports[`modal flow golden frames renders the add project success action 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Project Added                                                                │
 │ Project         Station                                                      │
@@ -1437,8 +1465,8 @@ exports[`modal flow golden frames renders the add project failure actions 1`] = 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Add Project Failed                                                           │
 │ Could not add this project.                                                  │
@@ -1485,22 +1513,22 @@ exports[`modal flow golden frames renders the widget settings panel 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
 ───────────────────────────────────────────────────────────────────────────────
        SESSION                            AGENT     STATUS            DIFF · PR
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       codex     no agent
- [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓
- [4] + session-r│ widgets                                      │
- [5] ⠋ station-o│ saved to config.toml                         │ +412 -96 #76 …
-                │ ▸ [on ] time                               × │
-▼ observer  3 se│   [off] weather NYC                        × │  [sh] [qs] [▾]
- [6] x batch-exp│   [on ] moon                               × │           #8 ✓
- [7] ⠋ provider-│   [ + add widget ]                           │   +32 -8 #16 …
- [8] ○ trace-bun│ ↵ toggle   [ ] reorder   x remove   a add   e│     +1 -1 #4 ✓
-                └──────────────────────────────────────────────┘
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10
-
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓▐
+ [4] + session-r│ widgets                                      │               ▐
+ [5] ⠋ station-o│ saved to config.toml                         │ +412 -96 #76 …▐
+                │ ▸ [on ] time                               × │               ▐
+▼ observer  3 se│   [off] weather NYC                        × │  [sh] [qs] [▾]▐
+ [6] x batch-exp│   [on ] moon                               × │           #8 ✓▐
+ [7] ⠋ provider-│   [ + add widget ]                           │   +32 -8 #16 …▐
+ [8] ○ trace-bun│ ↵ toggle   [ ] reorder   x remove   a add   e│     +1 -1 #4 ✓▐
+                └──────────────────────────────────────────────┘               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
+                                                                               ▐
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾]
 
 ───────────────────────────────────────────────────────────────────────────────
@@ -1513,22 +1541,22 @@ exports[`modal flow golden frames renders the widget settings picker 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
 ───────────────────────────────────────────────────────────────────────────────
        SESSION                            AGENT     STATUS            DIFF · PR
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       codex     no agent
- [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓
- [4] + session-r│ add widget                                   │
- [5] ⠋ station-o│ weather and tz require config.toml           │ +412 -96 #76 …
-                │ ▸ time                                       │
-▼ observer  3 se│   fleet                                      │  [sh] [qs] [▾]
- [6] x batch-exp│   open PRs                                   │           #8 ✓
- [7] ⠋ provider-│   moon                                       │   +32 -8 #16 …
- [8] ○ trace-bun│ ↵ add   esc back                             │     +1 -1 #4 ✓
-                └──────────────────────────────────────────────┘
-▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10
-
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]▐
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓▐
+ [4] + session-r│ add widget                                   │               ▐
+ [5] ⠋ station-o│ weather and tz require config.toml           │ +412 -96 #76 …▐
+                │ ▸ time                                       │               ▐
+▼ observer  3 se│   fleet                                      │  [sh] [qs] [▾]▐
+ [6] x batch-exp│   open PRs                                   │           #8 ✓▐
+ [7] ⠋ provider-│   moon                                       │   +32 -8 #16 …▐
+ [8] ○ trace-bun│ ↵ add   esc back                             │     +1 -1 #4 ✓▐
+                └──────────────────────────────────────────────┘               ▐
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]▐
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
+                                                                               ▐
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾]
 
 ───────────────────────────────────────────────────────────────────────────────

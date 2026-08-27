@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { helpOverlayLineCount } from "../../../src/components/HelpOverlay/content.js";
 import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import { selectDashboardViewport } from "../../../src/selectors/dashboardViewport.js";
 import { deriveTuiInputMode } from "../../../src/state/keymap.js";
@@ -77,6 +78,54 @@ describe("TUI screen transitions", () => {
 
     const dismissedError = handleTuiKey(closedHelp.state, { input: "", escape: true });
     expect(dismissedError.state.toasts).toEqual([]);
+  });
+
+  it("scrolls and clamps the help overlay without closing it", () => {
+    const state = createInitialTuiState({
+      initialSnapshot: createDashboardSnapshot(),
+      terminalRows: 8,
+    });
+    const opened = handleTuiKey(state, { input: "H" }).state;
+    expect(opened.screen).toEqual({
+      name: "help",
+      scrollOffset: 0,
+      contentLength: helpOverlayLineCount(0),
+    });
+
+    const down = handleTuiKey(opened, { input: "", downArrow: true }).state;
+    expect(down.screen).toMatchObject({ name: "help", scrollOffset: 1 });
+    const wheel = handleTuiKey(down, { input: "", mouseScroll: "down" }).state;
+    expect(wheel.screen).toMatchObject({ name: "help", scrollOffset: 2 });
+    const up = handleTuiKey(wheel, { input: "", upArrow: true }).state;
+    expect(up.screen).toMatchObject({ name: "help", scrollOffset: 1 });
+
+    let clamped = opened;
+    for (let index = 0; index < 40; index += 1) {
+      clamped = handleTuiKey(clamped, { input: "", downArrow: true }).state;
+    }
+    expect(clamped.screen).toMatchObject({ name: "help" });
+    if (clamped.screen.name !== "help") {
+      throw new Error("expected help screen");
+    }
+    const stillClamped = handleTuiKey(clamped, { input: "", downArrow: true }).state;
+    expect(stillClamped.screen).toEqual(clamped.screen);
+
+    expect(handleTuiKey(clamped, { input: "", escape: true }).state.screen).toEqual({
+      name: "dashboard",
+    });
+  });
+
+  it("counts Station keymap lines when opening Help through runtime context", () => {
+    const opened = handleTuiKey(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      { input: "H" },
+      { cwd: "/workspace", homeDir: "/home", helpKeymapLineCount: 9 },
+    ).state;
+    expect(opened.screen).toEqual({
+      name: "help",
+      scrollOffset: 0,
+      contentLength: helpOverlayLineCount(9),
+    });
   });
 
   it("opens remove session slot selection from the dashboard", () => {

@@ -86,7 +86,7 @@ const screenBehaviorCases: readonly [
     },
     "present",
   ],
-  ["help", { name: "help" }, "present"],
+  ["help", { name: "help", scrollOffset: 0, contentLength: 0 }, "present"],
   ["project menu", { name: "projectMenu", projectId: "web", focus: "quickGroup" }, "present"],
   [
     "create group",

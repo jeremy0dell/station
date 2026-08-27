@@ -7,6 +7,7 @@ import { createDashboardRuntime } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities, DashboardRuntime, TuiFolderService } from "@station/dashboard-core/runtime";
 import type { DashboardGroupHeaderActionVisibility } from "@station/dashboard-core/state";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
+import { stationKeymapHelp } from "../../input/keymap/stationBindings.js";
 import type { StationClient } from "../../sources/types.js";
 
 export type StationDashboardRuntime = DashboardRuntime & {
@@ -55,6 +56,9 @@ export function createStationDashboardRuntime(
     initialState.groupHeaderActionVisibility = options.groupHeaderActionVisibility;
   }
   runtimeOptions.initialState = initialState;
-  const runtime = createDashboardRuntime(runtimeOptions);
+  const runtime = createDashboardRuntime({
+    ...runtimeOptions,
+    helpKeymapLineCount: stationKeymapHelp().length,
+  });
   return { ...runtime, clientState: client.state };
 }

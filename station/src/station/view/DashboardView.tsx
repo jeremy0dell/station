@@ -11,7 +11,13 @@ import {
  } from "@station/dashboard-core/selectors";
 import { layoutWorktreeRowGrid, textSegment, truncateCells } from "@station/dashboard-core/selectors";
 import type { RowGridLayout, RowGridRowInput } from "@station/dashboard-core/selectors";
-import { selectDashboardViewport, selectFleetSummary } from "@station/dashboard-core/selectors";
+import {
+  dashboardScrollGutterChrome,
+  scrollbarOffsetForTrackIndex,
+  selectDashboardViewport,
+  selectFleetSummary,
+  verticalScrollbarCells,
+} from "@station/dashboard-core/selectors";
 import type {
   DashboardRowId,
   DashboardTreeRow,
@@ -68,34 +74,45 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
       ? {}
       : { persistentFilter: viewport.persistentFilter }),
   });
+  const gutterChrome = dashboardScrollGutterChrome({ hasFleetBar: !firstRun });
+  const treeRowCount = viewport.hiddenAbove + viewport.rows.length + viewport.hiddenBelow;
   return (
-    <box
-      width="100%"
-      flexGrow={1}
-      flexDirection="column"
-      paddingRight={1}
-      onMouseScroll={stationMouseProps(dispatch, { kind: "body" }).onMouseScroll}
-    >
-      <text> </text>
-      {firstRun ? null : (
-        <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
-      )}
-      <Divider columns={contentColumns} />
-      <DashboardTableHeaderView model={tableHeader} />
-      {firstRun ? (
-        <box flexDirection="column" flexGrow={1}>
-          <FirstProjectButton columns={contentColumns} />
-        </box>
-      ) : (
-        <DashboardBody
-          columns={contentColumns}
-          rows={viewport.rows}
-          rowById={viewport.rowById}
-          layoutByItem={layoutByItem}
-        />
-      )}
-      <DashboardScrollIndicatorView direction="below" overflow={viewport.sessionOverflow} />
-      <Divider columns={contentColumns} />
+    <box width="100%" flexGrow={1} flexDirection="row">
+      <box
+        flexGrow={1}
+        flexDirection="column"
+        overflow="hidden"
+        onMouseScroll={stationMouseProps(dispatch, { kind: "body" }).onMouseScroll}
+      >
+        <text> </text>
+        {firstRun ? null : (
+          <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
+        )}
+        <Divider columns={contentColumns} />
+        <DashboardTableHeaderView model={tableHeader} />
+        {firstRun ? (
+          <box flexDirection="column" flexGrow={1}>
+            <FirstProjectButton columns={contentColumns} />
+          </box>
+        ) : (
+          <DashboardBody
+            columns={contentColumns}
+            rows={viewport.rows}
+            rowById={viewport.rowById}
+            layoutByItem={layoutByItem}
+          />
+        )}
+        <DashboardScrollIndicatorView direction="below" overflow={viewport.sessionOverflow} />
+        <Divider columns={contentColumns} />
+      </box>
+      <DashboardScrollGutter
+        chromeTop={gutterChrome.top}
+        chromeBottom={gutterChrome.bottom}
+        trackHeight={viewport.bodyRows}
+        contentLength={treeRowCount}
+        viewportLength={viewport.bodyRows}
+        offset={viewport.clampedScrollOffset}
+      />
     </box>
   );
 }
@@ -198,6 +215,66 @@ function dashboardRowLayouts(
       .map((layout) => [layout.id, layout]),
   );
   return { headerLayout, layoutByItem };
+}
+
+/** Sibling 1-col gutter outside Group frames; empty when the tree fits. */
+function DashboardScrollGutter({
+  chromeTop,
+  chromeBottom,
+  trackHeight,
+  contentLength,
+  viewportLength,
+  offset,
+}: {
+  chromeTop: number;
+  chromeBottom: number;
+  trackHeight: number;
+  contentLength: number;
+  viewportLength: number;
+  offset: number;
+}) {
+  const dispatch = useStationMouse();
+  const theme = useStationTheme();
+  const overflow = contentLength > viewportLength && trackHeight > 0;
+  const cells = verticalScrollbarCells({
+    trackHeight,
+    contentLength,
+    viewportLength,
+    offset,
+  });
+  return (
+    <box width={1} flexDirection="column" flexShrink={0}>
+      {Array.from({ length: chromeTop }, (_, index) => (
+        <text key={`top-${index}`}> </text>
+      ))}
+      <box flexGrow={1} flexDirection="column">
+        {cells.map((glyph, index) => (
+          <text
+            key={index}
+            fg={toOpenTuiColor(theme.text.muted)}
+            {...(overflow
+              ? stationMouseProps(dispatch, {
+                  kind: "scrollbar",
+                  surface: "dashboard",
+                  offset: scrollbarOffsetForTrackIndex({
+                    trackHeight,
+                    contentLength,
+                    viewportLength,
+                    offset,
+                    trackIndex: index,
+                  }),
+                })
+              : {})}
+          >
+            {glyph}
+          </text>
+        ))}
+      </box>
+      {Array.from({ length: chromeBottom }, (_, index) => (
+        <text key={`bottom-${index}`}> </text>
+      ))}
+    </box>
+  );
 }
 
 function DashboardBody({

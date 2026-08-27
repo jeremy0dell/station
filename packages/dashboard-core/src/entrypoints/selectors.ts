@@ -33,7 +33,7 @@ export type {
   DashboardFooterModel,
 } from "../components/Dashboard/footer.js";
 export { dashboardFooterModel } from "../components/Dashboard/footer.js";
-export { dashboardBodyTop } from "../components/Dashboard/layout.js";
+export { dashboardBodyTop, dashboardScrollGutterChrome } from "../components/Dashboard/layout.js";
 export { dashboardRowGridInput } from "../components/Dashboard/rowGridInput.js";
 export type {
   DashboardFilterHeaderModel,
@@ -57,19 +57,35 @@ export type {
 export { createGroupSheetContent } from "../components/GroupCreateSheet/content.js";
 
 export {
+  helpOverlayContent,
+  helpOverlayLineCount,
+} from "../components/HelpOverlay/content.js";
+export type {
+  HelpPanelBodyLine,
+  HelpPanelLine,
+  HelpPanelModel,
+} from "../components/HelpOverlay/helpPanel.js";
+export {
+  clampHelpScrollOffset,
+  helpPanelBodyRows,
   helpPanelLayout,
   helpPanelLines,
+  helpPanelModel,
+  joinHelpPanelLine,
 } from "../components/HelpOverlay/helpPanel.js";
-
 export {
   newSessionEditGroupDraftContent,
   newSessionEditNameContent,
   newSessionReviewContent,
 } from "../components/NewSessionBottomSheet/content.js";
-
 export { newSessionContentRowCount } from "../components/NewSessionBottomSheet/layout.js";
-
 export { projectSettingsPanelLayout } from "../components/ProjectSettingsPanel/layout.js";
+export {
+  scrollbarOffsetForTrackIndex,
+  VERTICAL_SCROLLBAR_EMPTY,
+  VERTICAL_SCROLLBAR_THUMB,
+  verticalScrollbarCells,
+} from "../components/scrollbar.js";
 
 export { textMatchSegments } from "../components/TextMatch/segments.js";
 export type { ToastBorderColorName } from "../components/ToastOverlay/content.js";

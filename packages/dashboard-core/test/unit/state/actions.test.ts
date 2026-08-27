@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import type { DashboardStateAction } from "../../../src/state/actions.js";
 import { handleTuiAction } from "../../../src/state/actions.js";
-import { scrollDashboard } from "../../../src/state/dashboardScroll.js";
+import { scrollDashboard, scrollDashboardTo } from "../../../src/state/dashboardScroll.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
 import { tuiScreenBehavior } from "../../../src/state/screenBehavior.js";
 import {
@@ -10,6 +10,7 @@ import {
   openAddProject,
   selectAddProjectRow,
 } from "../../../src/state/screens/addProjectScreen.js";
+import { scrollHelpTo } from "../../../src/state/screens/help.js";
 import { openProjectDefaultAgentPicker } from "../../../src/state/screens/projectDefaultAgent.js";
 import {
   focusProjectSettingsItem,
@@ -49,6 +50,18 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
     action: { type: "dashboard.scroll", delta: 5 },
     state: scrollingDashboardState,
     reduce: (state) => scrollDashboard(state, 5),
+  },
+  {
+    name: "dashboard.scrollTo",
+    action: { type: "dashboard.scrollTo", offset: 3 },
+    state: scrollingDashboardState,
+    reduce: (state) => scrollDashboardTo(state, 3),
+  },
+  {
+    name: "help.scrollTo",
+    action: { type: "help.scrollTo", offset: 2 },
+    state: helpOverflowState,
+    reduce: (state) => scrollHelpTo(state, 2),
   },
   {
     name: "projectSettings.focusItem",
@@ -129,6 +142,8 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
 ];
 
 const STALE_STATE_ACTIONS: readonly DashboardStateAction[] = [
+  { type: "dashboard.scrollTo", offset: 4 },
+  { type: "help.scrollTo", offset: 2 },
   { type: "projectSettings.focusItem", itemId: "agent" },
   { type: "addProject.selectRow", index: 0 },
   { type: "screen.clickAway" },
@@ -535,6 +550,14 @@ function dashboardState(): DashboardState {
 
 function scrollingDashboardState(): DashboardState {
   return { ...dashboardState(), terminalRows: 8 };
+}
+
+function helpOverflowState(): DashboardState {
+  return {
+    ...dashboardState(),
+    terminalRows: 8,
+    screen: { name: "help", scrollOffset: 0, contentLength: 20 },
+  };
 }
 
 function projectSettingsState(): DashboardState {

@@ -14,6 +14,7 @@ import type {
   TuiFolderService,
  } from "@station/dashboard-core/runtime";
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
+import { stationKeymapHelp } from "../../../input/keymap/stationBindings.js";
 import { FakeStationSource } from "./fakeStationSource.js";
 import { FakeTuiObserverService } from "./fakeObserverService.js";
 
@@ -83,6 +84,7 @@ export function createStationTestDashboardRuntime(
     ...runtimeOptions,
     source: clientState,
     capabilities: resolvedCapabilities,
+    helpKeymapLineCount: runtimeOptions.helpKeymapLineCount ?? stationKeymapHelp().length,
   });
   return { ...runtime, clientState };
 }

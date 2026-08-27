@@ -139,7 +139,7 @@ export type TuiObserverConnectionStatus =
 
 export type TuiScreen =
   | { name: "dashboard" }
-  | { name: "help" }
+  | { name: "help"; scrollOffset: number; contentLength: number }
   | { name: "projectMenu"; projectId: ProjectId; focus: ProjectMenuActionId }
   | {
       name: "createGroup";

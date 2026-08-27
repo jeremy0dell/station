@@ -400,7 +400,7 @@ describe("routeStationMouse", () => {
       LEFT_DOWN,
       store,
     );
-    expect(store.state.getState().screen).toEqual({ name: "help" });
+    expect(store.state.getState().screen).toMatchObject({ name: "help" });
     expect(store.state.getState().persistentFilter).toEqual({ query: "working" });
 
     store.actions.handleKey({ input: "", escape: true });
@@ -649,13 +649,34 @@ describe("routeStationMouse", () => {
       expect(routeStationMouse({ kind: "screenBackdrop" }, event, store)).toEqual({
         kind: "handled",
       });
-      expect(store.state.getState().screen).toEqual({ name: "help" });
+      expect(store.state.getState().screen).toMatchObject({ name: "help" });
     }
 
     expect(routeStationMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store)).toEqual({
       kind: "handled",
     });
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+  });
+
+  it("scrolls help on wheel over the panel and on help-scrollbar clicks", () => {
+    const store = makeStore();
+    store.actions.handleKey({ input: "H" });
+
+    routeStationMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
+    expect(store.state.getState().screen).toMatchObject({ name: "help", scrollOffset: 1 });
+
+    routeStationMouse({ kind: "scrollbar", surface: "help", offset: 3 }, LEFT_DOWN, store);
+    expect(store.state.getState().screen).toMatchObject({ name: "help", scrollOffset: 3 });
+
+    routeStationMouse({ kind: "scrollbar", surface: "dashboard", offset: 4 }, LEFT_DOWN, store);
+    expect(store.state.getState().screen).toMatchObject({ name: "help", scrollOffset: 3 });
+    expect(store.state.getState().scrollOffset).toBe(0);
+  });
+
+  it("scrolls the dashboard from the outside-group gutter", () => {
+    const store = makeStore();
+    routeStationMouse({ kind: "scrollbar", surface: "dashboard", offset: 4 }, LEFT_DOWN, store);
+    expect(store.state.getState().scrollOffset).toBeGreaterThan(0);
   });
 
   it("keeps stale screen and sheet backdrop wheel events from scrolling after dismissal", () => {
@@ -974,7 +995,7 @@ describe("routeStationMouse", () => {
         modal,
       ),
     ).toEqual({ kind: "handled" });
-    expect(modal.state.getState().screen).toEqual({ name: "help" });
+    expect(modal.state.getState().screen).toMatchObject({ name: "help" });
     expect(modal.state.getState().dashboardFocus).toBeUndefined();
   });
 
