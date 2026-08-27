@@ -18,7 +18,7 @@ import { createTestObserver } from "../support/testObserver";
 const now = "2026-07-14T12:00:00.000Z";
 
 describe("observer reconcile with Cursor harness", () => {
-  it("keeps foreign Stops diagnostic and notifies once for the bound native execution", async () => {
+  it("idles the pane when Cursor stop uses a different conversation id than tool hooks", async () => {
     const clock = { now: () => new Date(now) };
     const { sqlite, persistence, eventBus, core, api } = createTestObserver({
       config,
@@ -62,8 +62,8 @@ describe("observer reconcile with Cursor harness", () => {
         api,
         eventBus,
         cursorReport({
-          reportId: "report_cursor_a_working",
-          nativeSessionId: "cursor_a",
+          reportId: "report_cursor_tool_runner_working",
+          nativeSessionId: "77af7844-ad25-40e1-8cea-e8aac8c7ad84",
           event: "preToolUse",
           observedAt: "2026-07-14T12:00:01.000Z",
         }),
@@ -73,60 +73,44 @@ describe("observer reconcile with Cursor harness", () => {
         harness: "cursor",
         state: "working",
       });
-      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
-        expect.objectContaining({ nativeSessionId: "cursor_a", state: "working" }),
-      ]);
 
       await reportAndReconcile(
         api,
         eventBus,
         cursorReport({
-          reportId: "report_cursor_b_stop",
-          nativeSessionId: "cursor_b",
+          reportId: "report_cursor_conversation_stop",
+          nativeSessionId: "57b2db94-a290-4e8a-b165-f8ed7e9c68f1",
           event: "stop",
           observedAt: "2026-07-14T12:00:02.000Z",
         }),
       );
       await waitFor(() => reconcileProbeCalls.length === 2);
-      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({ state: "working" });
-      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
-      expect(notificationCalls).toHaveLength(0);
-
-      await reportAndReconcile(
-        api,
-        eventBus,
-        cursorReport({
-          reportId: "report_cursor_a_stop",
-          nativeSessionId: "cursor_a",
-          event: "stop",
-          observedAt: "2026-07-14T12:00:03.000Z",
-        }),
-      );
-      await waitFor(() => reconcileProbeCalls.length === 3);
       await waitFor(() => notificationCalls.length === 1);
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
         state: "idle",
         turnReadiness: {
           state: "ready_to_read",
-          token: "report_cursor_a_stop",
+          token: "report_cursor_conversation_stop",
         },
       });
       await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
-        expect.objectContaining({ token: "report_cursor_a_stop" }),
+        expect.objectContaining({ token: "report_cursor_conversation_stop" }),
       ]);
-      expect(parseNotificationReportId(notificationCalls[0]?.stdin)).toBe("report_cursor_a_stop");
+      expect(parseNotificationReportId(notificationCalls[0]?.stdin)).toBe(
+        "report_cursor_conversation_stop",
+      );
 
       await reportAndReconcile(
         api,
         eventBus,
         cursorReport({
-          reportId: "report_cursor_a_new_work",
-          nativeSessionId: "cursor_a",
+          reportId: "report_cursor_new_work",
+          nativeSessionId: "77af7844-ad25-40e1-8cea-e8aac8c7ad84",
           event: "preToolUse",
-          observedAt: "2026-07-14T12:00:04.000Z",
+          observedAt: "2026-07-14T12:00:03.000Z",
         }),
       );
-      await waitFor(() => reconcileProbeCalls.length === 4);
+      await waitFor(() => reconcileProbeCalls.length === 3);
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({ state: "working" });
       expect(notificationCalls).toHaveLength(1);
     } finally {

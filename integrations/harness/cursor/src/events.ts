@@ -2,7 +2,11 @@
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Keep the parsed payload shape in sync with upstream.
 import type { HarnessEventReport, ObservedStatus } from "@station/contracts";
-import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
+import {
+  HarnessEventReportSchema,
+  harnessRunIdForTerminalTarget,
+  STATION_SCHEMA_VERSION,
+} from "@station/contracts";
 import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
 import { z } from "zod";
 import { compactCursorProviderHookPayload } from "./compaction.js";
@@ -139,10 +143,7 @@ function reportCorrelationFromCursorEvent(
     worktreeId: event.station_worktree_id,
     sessionId: event.station_session_id,
     terminalTargetId: event.station_terminal_target_id,
-    harnessRunId:
-      event.station_terminal_target_id === undefined
-        ? undefined
-        : `cursor:${event.station_terminal_target_id}`,
+    harnessRunId: cursorHarnessRunId(event),
   });
 }
 
@@ -163,8 +164,16 @@ function cursorEventCwd(event: CursorProviderHookPayload): string | undefined {
   return event.cwd ?? event.station_worktree_path ?? event.workspace_roots?.[0];
 }
 
+function cursorHarnessRunId(event: CursorProviderHookPayload): string | undefined {
+  if (event.station_terminal_target_id === undefined) return undefined;
+  return harnessRunIdForTerminalTarget("cursor", event.station_terminal_target_id);
+}
+
 function cursorNativeSessionId(event: CursorProviderHookPayload): string | undefined {
-  return event.session_id ?? event.conversation_id;
+  // Cursor prompt/stop hooks and tool hooks disagree on session_id/conversation_id
+  // for one user turn (they share generation_id). Station-launched panes are one
+  // execution, so native identity follows the terminal run rather than those ids.
+  return cursorHarnessRunId(event) ?? event.session_id ?? event.conversation_id;
 }
 
 function turnFromCursorProviderHookPayload(
@@ -233,8 +242,9 @@ export function statusFromCursorProviderHookPayload(
     };
   }
   if (eventName === "sessionEnd") {
+    // Cursor sessionEnd ends a composer conversation, not the Station pane process.
     return {
-      value: "exited",
+      value: "idle",
       confidence: "high",
       reason: "Cursor session ended.",
       source: "harness_event",

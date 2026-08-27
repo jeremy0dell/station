@@ -483,6 +483,16 @@ function sessionRecoveryHandleFromReport(
 
   // Provider adapters normalize native ids/files into correlation fields, so
   // observer ingestion never scrapes providerData for recovery metadata.
+  // Pane-scoped native identity (`nativeSessionId` equal to `harnessRunId`) is
+  // the Station run id, not a provider resume target.
+  if (
+    correlation.nativeSessionFile === undefined &&
+    correlation.nativeSessionId !== undefined &&
+    correlation.harnessRunId !== undefined &&
+    correlation.nativeSessionId === correlation.harnessRunId
+  ) {
+    return undefined;
+  }
   const target =
     correlation.nativeSessionFile !== undefined
       ? ({ kind: "session-file", path: correlation.nativeSessionFile } as const)
