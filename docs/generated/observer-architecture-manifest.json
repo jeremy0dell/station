@@ -17533,7 +17533,7 @@
       "declaration": "StationTerminalProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle, opaque attachment identity, and reconciled tri-state attachment evidence. Native presentation remains locally owned by Station and is never externally focusable. Attachment evidence is false for UI-owned targets, true only when the latest Host listing applies, and absent for cached Host targets after an uncertain read. Deterministic targets are released only when their current Station session and, for managed launch attempts, opaque binding generation match.",
+      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle, opaque attachment identity, and reconciled tri-state attachment evidence. Native presentation remains locally owned by Station and is never externally focusable. Attachment evidence is false for UI-owned targets, true only when the latest Host listing applies, and absent for cached Host targets after an uncertain read. Reconcile-aware discovery declares cached fallback indeterminate so it cannot masquerade as current debug evidence. Deterministic targets are released only when their current Station session and, for managed launch attempts, opaque binding generation match.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -17723,7 +17723,7 @@
       "declaration": "TerminalProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies ordinary terminal topology and lifecycle through provider-owned target identities without exposing provider mechanics. Target focusability describes external provider control, not whether a particular renderer can reveal or attach to the target. Caller-relative placement is a separate optional role.",
+      "purpose": "Supplies ordinary terminal topology and lifecycle through provider-owned target identities without exposing provider mechanics. Target focusability describes external provider control, not whether a particular renderer can reveal or attach to the target. A reconcile-specific read may refuse adapter-retained targets that remain available to other callers; refused evidence is excluded from both the current graph and debug projection. Caller-relative placement is a separate optional role.",
       "dependencies": []
     },
     {

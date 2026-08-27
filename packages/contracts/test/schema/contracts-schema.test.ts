@@ -649,7 +649,6 @@ describe("contract schemas", () => {
       state: "open",
       focusable: true,
       closeable: true,
-      hasManagedAttachment: false,
       hasWorkspace: true,
       hasPrimaryAgentEndpoint: true,
       confidence: "high",
@@ -734,22 +733,10 @@ describe("contract schemas", () => {
     );
 
     expect(TerminalAttachmentSchema.parse(attachment)).not.toHaveProperty("hasManagedAttachment");
-    expect(
-      TerminalAttachmentSchema.parse({
-        ...attachment,
-        hasManagedAttachment: false,
-      }),
-    ).toMatchObject({ hasManagedAttachment: false });
-    expect(
-      TerminalAttachmentSchema.parse({
-        ...attachment,
-        hasManagedAttachment: true,
-      }),
-    ).toMatchObject({ hasManagedAttachment: true });
     expectFails(
       TerminalAttachmentSchema,
-      { ...attachment, hasManagedAttachment: "unknown" },
-      "terminal attachment with non-boolean managed attachment evidence",
+      { ...attachment, hasManagedAttachment: false },
+      "canonical terminal attachment with provider-only managed attachment evidence",
     );
   });
 

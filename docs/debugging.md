@@ -48,8 +48,10 @@ Use the narrowest tool that can answer the question:
 ### Terminal Reconcile Evidence
 
 Use `stn snapshot --json --include-debug` when the current question is what terminal
-evidence the latest completed reconcile actually observed. Ordinary snapshots omit this
-diagnostic envelope. Under `debug.terminal`:
+evidence the latest reconcile attempt successfully committed. Ordinary snapshots omit this
+diagnostic envelope. The envelope is also absent before the first successful reconcile, while a
+newer reconcile is running, and after a failed attempt; use health and logs for the failure. Under
+`debug.terminal`:
 
 - `reconciledAt` identifies the reconcile generation represented by the evidence.
 - `providerReads` records each terminal provider as `complete` or `indeterminate`; an
@@ -57,9 +59,14 @@ diagnostic envelope. Under `debug.terminal`:
 - `targets` contains sanitized current targets only from complete provider reads, including
   normalized identity, state, control evidence, confidence, reason, and observation time.
 
-`hasManagedAttachment` is optional tri-state evidence on a target: `true` means the provider
+An adapter may retain cached targets for its own non-reconcile callers, but its reconcile-specific
+read refuses them; an indeterminate result therefore excludes those targets from both the normalized
+graph and this envelope.
+
+`hasManagedAttachment` is optional tri-state debug evidence on a target: `true` means the provider
 could issue an opaque managed attachment at observation time, `false` means it definitively
-reported none, and absence means unknown or inapplicable. `focusable` concerns external
+reported none, and absence means unknown or inapplicable. It is not part of canonical session or
+row terminal attachments. `focusable` concerns external
 provider focus. Neither field proves that the current renderer can open or reveal the target,
 and this envelope must not be used as terminal-mutation authority. Activation resolves any
 managed attachment afresh.

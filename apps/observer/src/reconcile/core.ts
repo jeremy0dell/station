@@ -126,6 +126,9 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
   return {
     reconcile: async (reason = "manual") => {
       const run = async (): Promise<StationSnapshot> => {
+        // Once a newer reconcile starts, the previous terminal evidence no longer
+        // represents the latest attempt. A failed run therefore leaves no debug projection.
+        snapshotDebug = undefined;
         const result = await runReconcileOnce({
           reason,
           observer,

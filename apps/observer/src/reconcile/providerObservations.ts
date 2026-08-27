@@ -231,7 +231,7 @@ export async function readTerminalTargetObservations(input: {
             provider: provider.id,
           },
         },
-        () => provider.listTargets(),
+        () => provider.listTargetsForReconcile?.() ?? provider.listTargets(),
       );
       if (result.ok) {
         targetsByProvider[index] = result.value;

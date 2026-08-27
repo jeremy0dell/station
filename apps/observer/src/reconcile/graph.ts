@@ -422,9 +422,6 @@ function terminalAttachment(
   const control = terminalControlEvidence(terminal, capabilities);
   if (control.focusable !== undefined) attachment.focusable = control.focusable;
   if (control.closeable !== undefined) attachment.closeable = control.closeable;
-  if (terminal.hasManagedAttachment !== undefined) {
-    attachment.hasManagedAttachment = terminal.hasManagedAttachment;
-  }
   if (terminal.worktreeId !== undefined) attachment.hasWorkspace = true;
   if (hasPrimaryAgentEndpoint(terminal, harnessRun)) {
     attachment.hasPrimaryAgentEndpoint = true;

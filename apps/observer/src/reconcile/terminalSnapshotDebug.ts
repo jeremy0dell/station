@@ -15,12 +15,15 @@ export function buildTerminalSnapshotDebug(input: {
   providerReads: readonly TerminalProviderReadOutcome[];
   providerHealth: Readonly<Record<string, ProviderHealth>>;
 }): SnapshotTerminalDebug {
+  const completeProviders = new Set(
+    input.providerReads.filter((read) => read.status === "complete").map((read) => read.providerId),
+  );
   return {
     reconciledAt: input.reconciledAt,
     providerReads: input.providerReads.map(snapshotProviderRead),
-    targets: input.targets.map((target) =>
-      snapshotTerminalTarget(target, input.providerHealth[target.provider]),
-    ),
+    targets: input.targets
+      .filter((target) => completeProviders.has(target.provider))
+      .map((target) => snapshotTerminalTarget(target, input.providerHealth[target.provider])),
   };
 }
 

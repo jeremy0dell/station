@@ -996,7 +996,7 @@ describe("observer graph derivation", () => {
     expect(terminalAttachment?.provider).toBe("fake-terminal");
     expect(terminalAttachment?.focusable).toBe(false);
     expect(terminalAttachment?.closeable).toBe(false);
-    expect(terminalAttachment?.hasManagedAttachment).toBe(true);
+    expect(terminalAttachment).not.toHaveProperty("hasManagedAttachment");
     expect(StationSnapshotSchema.parse(snapshot)).toEqual(snapshot);
   });
 

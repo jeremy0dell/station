@@ -453,8 +453,10 @@ export interface WorktreeProvider {
  *
  * Supplies ordinary terminal topology and lifecycle through provider-owned target identities
  * without exposing provider mechanics. Target focusability describes external provider control,
- * not whether a particular renderer can reveal or attach to the target. Caller-relative placement
- * is a separate optional role.
+ * not whether a particular renderer can reveal or attach to the target. A reconcile-specific read
+ * may refuse adapter-retained targets that remain available to other callers; refused evidence is
+ * excluded from both the current graph and debug projection. Caller-relative placement is a
+ * separate optional role.
  */
 export interface TerminalProvider {
   id: ProviderId;
@@ -462,6 +464,7 @@ export interface TerminalProvider {
   health(): Promise<ProviderHealth>;
   doctorChecks?(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]>;
   listTargets(): Promise<TerminalTargetObservation[]>;
+  listTargetsForReconcile?(): Promise<TerminalTargetObservation[]>;
   openWorkspace(request: OpenWorkspaceRequest): Promise<OpenWorkspaceResult>;
   launchProcess?(request: TerminalLaunchProcessRequest): Promise<TerminalLaunchProcessResult>;
   focusTarget(targetId: TerminalTargetId, context?: TerminalFocusContext): Promise<void>;

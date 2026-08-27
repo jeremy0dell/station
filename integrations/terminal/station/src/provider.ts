@@ -11,6 +11,7 @@ import type {
   ProviderHealth,
   ProviderId,
   ReleaseManagedTerminalTargetRequest,
+  SafeError,
   SessionId,
   TerminalCapabilities,
   TerminalIdentityBinding,
@@ -56,6 +57,10 @@ type PreviousTargetBinding = {
   hostBacked: boolean;
 };
 
+type TerminalTargetListResult =
+  | { status: "complete"; targets: TerminalTargetObservation[] }
+  | { status: "indeterminate"; targets: TerminalTargetObservation[]; error: SafeError };
+
 /**
  * ADAPTER
  *
@@ -65,6 +70,8 @@ type PreviousTargetBinding = {
  * Station and is never externally focusable.
  * Attachment evidence is false for UI-owned targets, true only when the latest
  * Host listing applies, and absent for cached Host targets after an uncertain read.
+ * Reconcile-aware discovery declares cached fallback indeterminate so it cannot
+ * masquerade as current debug evidence.
  * Deterministic targets are released only when their current Station session and,
  * for managed launch attempts, opaque binding generation match.
  */
@@ -158,8 +165,20 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
    * drop dead host targets, and dedupe by deterministic station target id.
    */
   async listTargets(): Promise<TerminalTargetObservation[]> {
+    return (await this.#listTargetsWithOutcome()).targets;
+  }
+
+  async listTargetsForReconcile(): Promise<TerminalTargetObservation[]> {
+    const result = await this.#listTargetsWithOutcome();
+    if (result.status === "indeterminate") {
+      throw result.error;
+    }
+    return result.targets;
+  }
+
+  async #listTargetsWithOutcome(): Promise<TerminalTargetListResult> {
     if (this.#host === undefined) {
-      return this.#listedTargets();
+      return { status: "complete", targets: this.#listedTargets() };
     }
     this.#listRequestSequence += 1;
     const requestSequence = this.#listRequestSequence;
@@ -182,12 +201,34 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       if (recoveredOrphans) {
         throw error;
       }
-      return this.#listedTargets();
+      const targets = this.#listedTargets();
+      if (this.#hasCurrentHostEvidence()) {
+        return { status: "complete", targets };
+      }
+      return {
+        status: "indeterminate",
+        targets,
+        error: safeErrorFromUnknown(
+          error,
+          stationHostSafeError("HOST_UNREACHABLE", "Station host target listing failed."),
+        ),
+      };
     }
     // A response cannot overwrite a target rebound, released, or host-backed
     // after this request began; a newer list request also supersedes this view.
     if (requestSequence !== this.#listRequestSequence || targetRevision !== this.#targetRevision) {
-      return this.#listedTargets();
+      const targets = this.#listedTargets();
+      if (this.#hasCurrentHostEvidence()) {
+        return { status: "complete", targets };
+      }
+      return {
+        status: "indeterminate",
+        targets,
+        error: stationHostSafeError(
+          "HOST_REQUEST_FAILED",
+          "Station host target listing was superseded before it could be applied.",
+        ),
+      };
     }
     const aliveById = new Map<string, HostListEntry>();
     for (const entry of live) {
@@ -221,13 +262,18 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       }
     }
     this.#appliedHostListSequence = requestSequence;
-    return this.#listedTargets();
+    return { status: "complete", targets: this.#listedTargets() };
+  }
+
+  #hasCurrentHostEvidence(): boolean {
+    return (
+      this.#appliedHostListSequence !== undefined &&
+      this.#appliedHostListSequence === this.#listRequestSequence
+    );
   }
 
   #listedTargets(): TerminalTargetObservation[] {
-    const hasCurrentHostEvidence =
-      this.#appliedHostListSequence !== undefined &&
-      this.#appliedHostListSequence === this.#listRequestSequence;
+    const hasCurrentHostEvidence = this.#hasCurrentHostEvidence();
     return [...this.#targets.values()].map((target) => {
       const observation: TerminalTargetObservation = { ...target };
       if (!this.#hostBackedTargets.has(target.id)) {

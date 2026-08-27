@@ -824,6 +824,9 @@ describe("StationTerminalProvider (host-backed)", () => {
     );
     const opened = await provider.openWorkspace(openRequest());
 
+    await expect(provider.listTargetsForReconcile()).rejects.toMatchObject({
+      code: "HOST_UNREACHABLE",
+    });
     await expect(provider.listTargets()).resolves.toMatchObject([
       {
         id: opened.target.targetId,
@@ -868,20 +871,21 @@ describe("StationTerminalProvider (host-backed)", () => {
     };
     const provider = new StationTerminalProvider({ clock, host });
 
-    const current = await provider.listTargets();
-    expect(current[0]).toMatchObject({ hasManagedAttachment: true });
+    const current = await provider.listTargetsForReconcile();
+    expect(current).toMatchObject([expect.objectContaining({ hasManagedAttachment: true })]);
 
-    const superseded = provider.listTargets();
+    const superseded = provider.listTargetsForReconcile();
     await delayedListStarted.promise;
     const failed = await provider.listTargets();
     expect(failed[0]).not.toHaveProperty("hasManagedAttachment");
 
     delayedList.resolve([liveEntry()]);
-    const supersededResult = await superseded;
-    expect(supersededResult[0]).not.toHaveProperty("hasManagedAttachment");
+    await expect(superseded).rejects.toMatchObject({
+      code: "HOST_REQUEST_FAILED",
+    });
 
-    const restored = await provider.listTargets();
-    expect(restored[0]).toMatchObject({ hasManagedAttachment: true });
+    const restored = await provider.listTargetsForReconcile();
+    expect(restored).toMatchObject([expect.objectContaining({ hasManagedAttachment: true })]);
   });
 
   it("surfaces multiple live host-backed agent targets independently", async () => {

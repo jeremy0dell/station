@@ -386,15 +386,13 @@ reattach; pane borders and neighboring panes must remain unlinked.
   source Group until canonical membership replaces it. Deliberate grouped creation first appears
   from a canonical snapshot with membership.
 - `terminal.focusable` describes external dashboard control, not native Station
-  interaction. Optional `terminal.hasManagedAttachment` is observation-time evidence:
-  true means the provider can currently issue an opaque attachment, false means it
-  definitively reports none, and absence means unknown or inapplicable. Neither field
-  defines renderer-relative openability. Native row activation resolves an advertised
-  managed attachment afresh and creates or reveals the local pane without dispatching
-  `terminal.focus`; no attachment leaves the overlay open with an actionable notice.
+  interaction, and does not define renderer-relative openability. Native row activation
+  resolves a managed attachment afresh and creates or reveals the local pane without
+  dispatching `terminal.focus`; no attachment leaves the overlay open with an actionable notice.
 - `debug.terminal` is operator-facing reconcile evidence. Dashboard filtering,
   grouping, and actions must not consume it as canonical state or synthesize an `openable`
-  field from it; local pane and attachment availability remain renderer-owned.
+  field from it. Optional debug target `hasManagedAttachment` is observation-time evidence only;
+  local pane and attachment availability remain renderer-owned.
 - Dashboard row click, focused Enter, and `1-9/a-z` row jump are the explicit
   authorization to relaunch a proven-exited managed pane. Pane clicks, pane
   cycling, overlay close, PTY exit, reconcile, restore, and HMR never relaunch;

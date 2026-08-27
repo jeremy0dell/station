@@ -81,11 +81,6 @@ export const TerminalAttachmentSchema = z
     /** Effective external provider-focus evidence; renderer-local opening routes are separate. */
     focusable: z.boolean().optional(),
     closeable: z.boolean().optional(),
-    /**
-     * Managed attachment: true currently issuable, false definitively absent;
-     * omitted when unknown or inapplicable.
-     */
-    hasManagedAttachment: z.boolean().optional(),
     hasWorkspace: z.boolean().optional(),
     hasPrimaryAgentEndpoint: z.boolean().optional(),
     confidence: ConfidenceSchema.optional(),

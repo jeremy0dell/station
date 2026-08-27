@@ -87,4 +87,38 @@ describe("terminal snapshot debug evidence", () => {
     expect(debug.targets[0]).not.toHaveProperty("harnessBinding");
     expect(debug.targets[0]).not.toHaveProperty("harnessRunId");
   });
+
+  it("omits retained targets from indeterminate provider reads", () => {
+    const target: TerminalTargetObservation = {
+      id: "term_native_cached",
+      provider: "native",
+      state: "open",
+      hasManagedAttachment: true,
+      confidence: "high",
+      reason: "Station previously listed the target.",
+      observedAt,
+    };
+
+    const debug = buildTerminalSnapshotDebug({
+      reconciledAt,
+      targets: [target],
+      providerReads: [
+        {
+          providerId: "native",
+          providerType: "terminal",
+          status: "indeterminate",
+          failureCode: "HOST_UNREACHABLE",
+        },
+      ],
+      providerHealth: {},
+    });
+
+    expect(debug).toEqual({
+      reconciledAt,
+      providerReads: [
+        { provider: "native", status: "indeterminate", failureCode: "HOST_UNREACHABLE" },
+      ],
+      targets: [],
+    });
+  });
 });
