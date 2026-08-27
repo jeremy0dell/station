@@ -13632,6 +13632,30 @@
   ],
   "controlledDeclarations": [
     {
+      "path": "apps/cli/src/cliExecution.ts",
+      "declaration": "runCli",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates CLI arguments and loaded configuration into registered command execution, exposing only a non-rendered command-correlation seam to the process owner. Direct calls never persist process diagnostics.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/cliProcess.ts",
+      "declaration": "runCliMain",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Owns optional process tracing and best-effort failure finalization around registered CLI execution. Diagnostic writes never gate command side effects, replace output, alter exit status, or emit degradation warnings.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/cliProcessDiagnostics.ts",
+          "declaration": "createCliProcessDiagnostics",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/cliProcessDiagnostics.ts",
       "declaration": "createCliProcessDiagnostics",
       "kind": "function",
@@ -14437,45 +14461,6 @@
         {
           "path": "packages/protocol/src/client.ts",
           "declaration": "createObserverClient",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/cli/src/main.ts",
-      "declaration": "runCli",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Translates CLI arguments and loaded configuration into registered command execution, exposing only a non-rendered command-correlation seam to the process owner. Direct calls never persist process diagnostics.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/observerProviders.ts",
-          "declaration": "probeHarnessHooksStatus",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/cli/src/main.ts",
-      "declaration": "runCliMain",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Owns optional process tracing and best-effort failure finalization around registered CLI execution. Diagnostic writes never gate command side effects, replace output, alter exit status, or emit degradation warnings.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/cliProcessDiagnostics.ts",
-          "declaration": "createCliProcessDiagnostics",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProviders.ts",
-          "declaration": "probeHarnessHooksStatus",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"

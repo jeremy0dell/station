@@ -1,44 +1,29 @@
-import type { LoadedStationConfig, ObserverPaths } from "@station/config";
-import type { CommandId, LogRecord } from "@station/contracts";
-import {
-  type CreateJsonlLoggerOptions,
-  componentLogPath,
-  createJsonlLogger,
-  type JsonlLogger,
-} from "@station/observability";
+import { resolveObserverPaths, type StationConfig } from "@station/config";
+import type { LogRecord } from "@station/contracts";
+import { componentLogPath, createJsonlLogger, type JsonlLogger } from "@station/observability";
 import { safeErrorFromUnknown } from "@station/runtime";
-
-export type CliRunCorrelation = {
-  commandId: CommandId;
-  traceId?: string;
-  status: "accepted" | "rejected" | "succeeded" | "failed";
-};
-
-export type CliProcessDeps = {
-  randomUUID?: () => string;
-  clock?: { now(): Date };
-  loadConfig?: (configPath?: string) => Promise<LoadedStationConfig>;
-  resolveObserverPaths?: (config: LoadedStationConfig["config"] | undefined) => ObserverPaths;
-  createLogger?: (options: CreateJsonlLoggerOptions) => JsonlLogger;
-  stdoutWrite?: (value: string) => void;
-  stderrWrite?: (value: string) => void;
-  exit?: (code: number) => void;
-  setExitCode?: (code: number) => void;
-};
+import type { CliProcessDeps } from "./cliProcessTypes.js";
+import type { CliRunCorrelation } from "./cliTypes.js";
+import type { CliEnv } from "./env.js";
 
 export type CliProcessDiagnosticContext = {
-  stateDir: string;
-  tracing: boolean;
+  config?: StationConfig;
+  env: CliEnv;
   invocationId: string;
   startedAt: Date;
   route: readonly string[];
   argumentCount: number;
   hasStdin: boolean;
+  buildVersion?: string;
+};
+
+type ResolvedCliProcessDiagnosticContext = Omit<CliProcessDiagnosticContext, "config" | "env"> & {
+  stateDir: string;
+  tracing: boolean;
   callerClaims: {
     tmux: boolean;
     tmuxPane: boolean;
   };
-  buildVersion?: string;
 };
 
 export type CliProcessDiagnosticOutcome = {
@@ -65,7 +50,35 @@ const MAX_ERROR_ID_LENGTH = 96;
  */
 export function createCliProcessDiagnostics(
   context: CliProcessDiagnosticContext,
-  deps: Pick<CliProcessDeps, "clock" | "createLogger"> = {},
+  deps: Pick<CliProcessDeps, "clock" | "createLogger" | "resolveObserverPaths"> = {},
+): CliProcessDiagnostics {
+  try {
+    const paths = (deps.resolveObserverPaths ?? resolveObserverPaths)(context.config);
+    return createResolvedCliProcessDiagnostics(
+      {
+        stateDir: paths.stateDir,
+        tracing: context.env.STATION_CLI_TRACE === "1",
+        invocationId: context.invocationId,
+        startedAt: context.startedAt,
+        route: context.route,
+        argumentCount: context.argumentCount,
+        hasStdin: context.hasStdin,
+        callerClaims: {
+          tmux: hasEnvironmentValue(context.env.TMUX),
+          tmuxPane: hasEnvironmentValue(context.env.TMUX_PANE),
+        },
+        ...(context.buildVersion === undefined ? {} : { buildVersion: context.buildVersion }),
+      },
+      deps,
+    );
+  } catch {
+    return NOOP_PROCESS_DIAGNOSTICS;
+  }
+}
+
+function createResolvedCliProcessDiagnostics(
+  context: ResolvedCliProcessDiagnosticContext,
+  deps: Pick<CliProcessDeps, "clock" | "createLogger">,
 ): CliProcessDiagnostics {
   const clock = deps.clock ?? { now: () => new Date() };
   let logger: JsonlLogger | undefined;
@@ -167,7 +180,16 @@ export function createCliProcessDiagnostics(
   return { start, outcome };
 }
 
-function sharedAttributes(context: CliProcessDiagnosticContext): Record<string, unknown> {
+const NOOP_PROCESS_DIAGNOSTICS: CliProcessDiagnostics = {
+  start: () => undefined,
+  outcome: async () => undefined,
+};
+
+function hasEnvironmentValue(value: string | undefined): boolean {
+  return value !== undefined && value.length > 0;
+}
+
+function sharedAttributes(context: ResolvedCliProcessDiagnosticContext): Record<string, unknown> {
   const attributes: Record<string, unknown> = {
     invocationId: context.invocationId,
     route: [...context.route],
@@ -183,7 +205,7 @@ function sharedAttributes(context: CliProcessDiagnosticContext): Record<string, 
 }
 
 function outcomeAttributes(
-  context: CliProcessDiagnosticContext,
+  context: ResolvedCliProcessDiagnosticContext,
   exitCode: number,
   durationMs: number,
 ): Record<string, unknown> {

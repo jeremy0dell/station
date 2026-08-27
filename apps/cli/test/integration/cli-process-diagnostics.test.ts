@@ -5,7 +5,7 @@ import { LogRecordSchema } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
-import type { CliProcessDeps } from "../../src/cliProcessDiagnostics.js";
+import type { CliProcessDeps } from "../../src/cliProcessTypes.js";
 import type { CliRunOptions } from "../../src/cliTypes.js";
 import { runCli, runCliMain } from "../../src/main.js";
 

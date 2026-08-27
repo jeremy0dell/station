@@ -8,6 +8,7 @@ import type {
   CommandRecord,
   FailedCommandRecord,
   ObserverApi,
+  RejectedCommandReceipt,
   SafeError,
   StationCommand,
   SucceededCommandRecord,
@@ -16,7 +17,7 @@ import { CommandIdSchema, StationCommandSchema } from "@station/contracts";
 import { createObserverClient, type ObserverClient } from "@station/protocol";
 import { isSafeError, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { CliInputError, parsePositiveIntegerOption } from "../args.js";
-import type { CliRunCorrelation } from "../cliProcessDiagnostics.js";
+import type { CliRunCorrelation } from "../cliTypes.js";
 import {
   assertObserverRunning,
   type ObserverProcessDeps,
@@ -38,23 +39,34 @@ export type TypedObserverCommandOptions = {
   waitForCompletion?: boolean;
 };
 
-export type CommandDispatchAcceptedResult = {
-  status: "accepted" | "rejected";
-  receipt: CommandReceipt;
-};
+export type CommandDispatchReceiptResult =
+  | {
+      status: "accepted";
+      receipt: AcceptedCommandReceipt;
+    }
+  | {
+      status: "rejected";
+      receipt: RejectedCommandReceipt;
+    };
 
-export type CommandDispatchCompletedResult = {
-  status: "succeeded" | "failed";
-  receipt: CommandReceipt;
-  command: CommandRecord;
-};
+export type CommandDispatchCompletedResult =
+  | {
+      status: "succeeded";
+      receipt: AcceptedCommandReceipt;
+      command: SucceededCommandRecord;
+    }
+  | {
+      status: "failed";
+      receipt: AcceptedCommandReceipt;
+      command: FailedCommandRecord;
+    };
 
 export type CommandGetResult = {
   command: CommandRecord;
 };
 
 export type CommandCommandResult =
-  | CommandDispatchAcceptedResult
+  | CommandDispatchReceiptResult
   | CommandDispatchCompletedResult
   | CommandGetResult;
 
@@ -147,10 +159,7 @@ export async function runCommandCommand(
   const executionOptions = typedObserverCommandOptions(options, timeoutMs, parsed.wait);
   const outcome = await executeTypedObserverCommand(command, executionOptions, deps);
   if (outcome.status === "accepted" || outcome.status === "rejected") {
-    return {
-      status: outcome.status,
-      receipt: outcome.receipt,
-    };
+    return outcome;
   }
   return {
     status: outcome.status,
@@ -173,40 +182,49 @@ export function commandCommandCorrelation(
   result: CommandCommandResult,
 ): CliRunCorrelation | undefined {
   if (!("receipt" in result)) return undefined;
-  return commandExecutionCorrelation({
-    status: result.status,
-    receipt: result.receipt,
-    ...(result.status === "succeeded" || result.status === "failed"
-      ? { record: result.command }
-      : {}),
-  });
+  switch (result.status) {
+    case "accepted":
+    case "rejected":
+      return commandExecutionCorrelation(result);
+    case "succeeded":
+      return commandExecutionCorrelation({
+        status: "succeeded",
+        receipt: result.receipt,
+        record: result.command,
+      });
+    case "failed":
+      return commandExecutionCorrelation({
+        status: "failed",
+        receipt: result.receipt,
+        record: result.command,
+      });
+  }
 }
 
-export function commandExecutionCorrelation(input: {
-  status: CliRunCorrelation["status"];
-  receipt: CommandReceipt;
-  record?: CommandRecord;
-}): CliRunCorrelation {
-  const receiptRejected = !input.receipt.accepted;
-  if (
-    (input.status === "rejected") !== receiptRejected ||
-    (input.record !== undefined && input.record.id !== input.receipt.commandId) ||
-    (input.record !== undefined &&
-      input.record.status !== input.status &&
-      (input.status === "succeeded" || input.status === "failed")) ||
-    (input.record?.traceId !== undefined &&
-      input.receipt.traceId !== undefined &&
-      input.record.traceId !== input.receipt.traceId)
-  ) {
-    throw commandCompletionMismatchError(input.receipt);
+export function commandExecutionCorrelation(outcome: CommandExecutionOutcome): CliRunCorrelation {
+  let traceId = outcome.receipt.traceId;
+  if (outcome.status === "succeeded" || outcome.status === "failed") {
+    assertMatchingCorrelation(outcome.receipt, outcome.record);
+    traceId ??= outcome.record.traceId;
   }
+
   const correlation: CliRunCorrelation = {
-    status: input.status,
-    commandId: input.receipt.commandId,
+    status: outcome.status,
+    commandId: outcome.receipt.commandId,
   };
-  const traceId = input.receipt.traceId ?? input.record?.traceId;
   if (traceId !== undefined) correlation.traceId = traceId;
   return correlation;
+}
+
+function assertMatchingCorrelation(receipt: AcceptedCommandReceipt, record: CommandRecord): void {
+  if (
+    record.id !== receipt.commandId ||
+    (record.traceId !== undefined &&
+      receipt.traceId !== undefined &&
+      record.traceId !== receipt.traceId)
+  ) {
+    throw commandCompletionMismatchError(receipt);
+  }
 }
 
 async function getCommand(client: ObserverApi, commandId: CommandId): Promise<CommandGetResult> {

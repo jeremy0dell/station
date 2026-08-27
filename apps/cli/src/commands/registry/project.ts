@@ -3,9 +3,12 @@ import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.j
 import { commandExecutionCorrelation } from "../command.js";
 import {
   type ProjectCommandOptions,
+  type ProjectCommandResult,
   projectCommandExitCode,
   runProjectCommand,
 } from "../project.js";
+
+type ProjectMutationResult = Extract<ProjectCommandResult, { action: "add" | "remove" }>;
 
 export const projectCliCommand: CliCommandNode = {
   name: "project",
@@ -86,12 +89,25 @@ async function runProjectCliCommand(context: CliCommandRunContext) {
   if (result.action !== "add" && result.action !== "remove") return cliResult;
   return {
     ...cliResult,
-    correlation: commandExecutionCorrelation({
-      status: result.status,
-      receipt: result.receipt,
-      ...(result.status === "succeeded" || result.status === "failed"
-        ? { record: result.command }
-        : {}),
-    }),
+    correlation: projectCommandCorrelation(result),
   };
+}
+
+function projectCommandCorrelation(result: ProjectMutationResult) {
+  switch (result.status) {
+    case "rejected":
+      return commandExecutionCorrelation(result);
+    case "succeeded":
+      return commandExecutionCorrelation({
+        status: "succeeded",
+        receipt: result.receipt,
+        record: result.command,
+      });
+    case "failed":
+      return commandExecutionCorrelation({
+        status: "failed",
+        receipt: result.receipt,
+        record: result.command,
+      });
+  }
 }

@@ -163,13 +163,7 @@ async function runSessionCliCommand(context: CliCommandRunContext) {
   const code = sessionCommandExitCode(result);
   const correlation =
     result.action === "rename" || result.action === "close"
-      ? commandExecutionCorrelation({
-          status: result.outcome.status,
-          receipt: result.outcome.receipt,
-          ...(result.outcome.status === "succeeded" || result.outcome.status === "failed"
-            ? { record: result.outcome.record }
-            : {}),
-        })
+      ? commandExecutionCorrelation(result.outcome)
       : undefined;
   if (parsed.outputFormat === "json") {
     return correlation === undefined

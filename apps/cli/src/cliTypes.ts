@@ -1,5 +1,5 @@
-import type { ProviderHookArtifactOwner } from "@station/contracts";
-import type { CliProcessDeps, CliRunCorrelation } from "./cliProcessDiagnostics.js";
+import type { CommandId, ProviderHookArtifactOwner } from "@station/contracts";
+import type { CliProcessDeps } from "./cliProcessTypes.js";
 import type { HostCommandDeps } from "./commands/host/index.js";
 import type { NotifyCommandDeps } from "./commands/notify.js";
 import type { ObserveCommandDeps } from "./commands/observe/index.js";
@@ -10,6 +10,12 @@ import type { TuiCommandDeps } from "./commands/tui.js";
 import type { UpdateCommandDeps } from "./commands/update.js";
 import type { CliEnv } from "./env.js";
 import type { ObserverProcessDeps } from "./observerProcess.js";
+
+export type CliRunCorrelation = {
+  commandId: CommandId;
+  traceId?: string;
+  status: "accepted" | "rejected" | "succeeded" | "failed";
+};
 
 export type CliRunResult = {
   code: number;
