@@ -11,6 +11,7 @@ describe("dashboard row chooser", () => {
   it.each([
     "removeWorktree",
     "renameSession",
+    "moveToGroup",
     "fork",
   ] as const)("%s arrows enter only selectable canonical sessions", (name) => {
     const snapshot = createDashboardSnapshot();

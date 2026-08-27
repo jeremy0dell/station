@@ -132,6 +132,18 @@ const screenBehaviorCases: readonly [
   ],
   ["rename choose-row", { name: "renameSession", step: "chooseSlot" }, "absent"],
   ["rename details", renameEdit, "present"],
+  ["move choose-row", { name: "moveToGroup", step: "chooseSlot" }, "absent"],
+  [
+    "move destination",
+    {
+      name: "moveToGroup",
+      step: "chooseDestination",
+      sessionId: "ses_wt_web_idle",
+      sessionTitle: "web",
+      submitting: false,
+    },
+    "present",
+  ],
   ["fork choose-row", { name: "fork", step: "chooseSlot" }, "absent"],
   ["fork details", forkDetails, "present"],
   ["add project start", { name: "addProject", flow: addStart }, "present"],

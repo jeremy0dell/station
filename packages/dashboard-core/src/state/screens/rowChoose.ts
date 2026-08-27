@@ -9,7 +9,7 @@ import type { TuiTransition } from "../transition.js";
 import type { DashboardState } from "../types.js";
 
 /**
- * The shared choose-a-session step behind remove/rename/fork. Arrows move the
+ * The shared choose-a-session step behind remove/rename/move/fork. Arrows move the
  * session-only cursor, ↵ commits the focused session, and a slot key commits a
  * renderer-visible session — all three converge on `commit(state, id)`.
  * Esc is handled by each screen's own reducer. Reuses the dashboard's cursor

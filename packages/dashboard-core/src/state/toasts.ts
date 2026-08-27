@@ -80,10 +80,7 @@ export function activeTuiToast(
 }
 
 export function isTuiToastHiddenByScreen(screen: DashboardScreenView): boolean {
-  if (screen.name === "dashboard") {
-    return false;
-  }
-  return screen.name !== "renameSession" || screen.step === "editName";
+  return screen.name !== "dashboard";
 }
 
 export function nextTuiToastExpiry(state: Pick<DashboardStateView, "toasts">): number | undefined {

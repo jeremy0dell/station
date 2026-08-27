@@ -61,11 +61,10 @@ describe("ToastOverlayView actions", () => {
     expect(golden).toMatchSnapshot();
   });
 
-  it("keeps a wrapped prompt and notice in disjoint structural regions through resize", async () => {
+  it("keeps a notice in its structural region through resize without a command prompt", async () => {
     const { runtime } = makeStationTestRuntime({ snapshot: manyProjectsSnapshot() });
     const copied: string[] = [];
     runtime.start();
-    runtime.actions.handleKey({ input: "R" });
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
         <ResponsiveDashboardRoot
@@ -84,13 +83,12 @@ describe("ToastOverlayView actions", () => {
     });
     await setup.flush();
 
-    const prompt = setup.renderer.root.findDescendantById("station-command-prompt");
     const controls = setup.renderer.root.findDescendantById("station-dashboard-controls");
     const noticeRegion = setup.renderer.root.findDescendantById(
       "station-dashboard-notice-region",
     );
     const toast = setup.renderer.root.findDescendantById("station-toast-surface");
-    expect(prompt?.height).toBeGreaterThan(1);
+    expect(setup.renderer.root.findDescendantById("station-command-prompt")).toBeUndefined();
     expect(controls).toBeDefined();
     expect(noticeRegion).toBeDefined();
     expect(toast).toBeDefined();
@@ -109,7 +107,6 @@ describe("ToastOverlayView actions", () => {
     await setup.renderOnce();
     expect(toast.y).toBeGreaterThanOrEqual(noticeRegion.y);
     expect(toast.y + toast.height).toBeLessThanOrEqual(controls.y);
-    expect(setup.captureCharFrame()).toContain("Rename:");
     expect(compactGolden(setup.captureCharFrame())).toMatchSnapshot();
     const toastBody = setup.renderer.root.findDescendantById(
       "station-toast-body",
@@ -154,6 +151,39 @@ describe("ToastOverlayView actions", () => {
       await setup.mockMouse.click(copy.col, copy.row, MouseButtons.LEFT);
     });
     expect(copied).toEqual([COPY_TEXT]);
+  });
+
+  it("hides a toast for a session picker and refreshes its expiry on dashboard return", async () => {
+    const fixture = await renderNotice();
+    const initialExpiry = fixture.runtime.state.getState().toasts.at(-1)?.expiresAt;
+    expect(initialExpiry).toBeDefined();
+    expect(fixture.setup.renderer.root.findDescendantById("station-toast-surface")).toBeDefined();
+
+    await act(async () => {
+      fixture.runtime.actions.handleKey({ input: "R" });
+      await Promise.resolve();
+    });
+    await fixture.setup.flush();
+
+    expect(fixture.frame()).toContain("Select session to rename");
+    expect(fixture.frame()).not.toContain("Worktrunk failed");
+    expect(fixture.setup.renderer.root.findDescendantById("station-toast-surface")).toBeUndefined();
+    expect(fixture.runtime.state.getState().toasts).toHaveLength(1);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await act(async () => {
+      fixture.runtime.actions.handleKey({ input: "", escape: true });
+      await Promise.resolve();
+    });
+    await fixture.setup.flush();
+
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.frame()).toContain("Worktrunk failed");
+    expect(fixture.frame()).not.toContain("Select session to rename");
+    expect(fixture.setup.renderer.root.findDescendantById("station-toast-surface")).toBeDefined();
+    expect(fixture.runtime.state.getState().toasts.at(-1)?.expiresAt).toBeGreaterThan(
+      initialExpiry ?? 0,
+    );
   });
 
   it("keeps drag selection inert and copies the complete readable notice explicitly", async () => {

@@ -17,11 +17,10 @@ import {
   SheetMessageLine,
 } from "./parts.js";
 
-type ForkScreen = Extract<DashboardScreenView, { name: "fork" }>;
-type ForkDetailsScreen = Extract<ForkScreen, { step: "details" }>;
+type ForkDetailsScreen = Extract<DashboardScreenView, { name: "fork"; step: "details" }>;
 
 export type ForkSessionSheetViewProps = {
-  screen: ForkScreen;
+  screen: ForkDetailsScreen;
   columns: number;
   rows: number;
 };
@@ -59,20 +58,6 @@ const SOURCE_RUNNING_MESSAGE = {
 export function ForkSessionSheetView({ screen, columns, rows }: ForkSessionSheetViewProps) {
   const sheetWidth = compactSheetWidth(columns);
   const contentWidth = bottomSheetContentWidth(sheetWidth);
-  if (screen.step === "chooseSlot") {
-    return (
-      <BottomSheetFrameView
-        columns={columns}
-        rows={rows}
-        width={sheetWidth}
-        title="Select session to fork"
-        bodyPaddingTop={1}
-        footer={<SheetFooter width={contentWidth}>Esc:cancel</SheetFooter>}
-      >
-        <SheetMessageLine width={contentWidth}>↑↓ move · ↵ choose · slot or click</SheetMessageLine>
-      </BottomSheetFrameView>
-    );
-  }
   return (
     <ForkDetails
       screen={screen}

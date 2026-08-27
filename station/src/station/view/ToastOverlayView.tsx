@@ -46,7 +46,7 @@ export function ToastOverlayView({
   const geometry = toastSurfaceGeometry(columns);
   const header = toastHeaderModel(geometry.width, toastTitle(toast));
   const bodyIds = detail === undefined ? ["toast:message"] : ["toast:message", "toast:detail"];
-  // Below eight terminal rows, prompt and controls can leave too little room for two horizontal edges.
+  // Below eight terminal rows, dashboard controls can leave too little room for two horizontal edges.
   const border: true | BorderSides[] =
     Math.max(1, Math.floor(rows)) >= 8 ? true : ["left", "right"];
 

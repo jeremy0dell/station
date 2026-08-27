@@ -258,15 +258,22 @@ as `ContextMenuItemId`; ordered keyboard movement resolves a new ID without
 persisting an array position.
 
 `DashboardRoot` composes a flexible notice region above intrinsic dashboard controls.
-The prompt, divider, and footer are ordinary children of `DashboardControlsView`;
+The divider and footer are ordinary children of `DashboardControlsView`;
 the toast owns an intrinsic action header and a semantic scroll body inside that
-region, growing upward without reserving prompt/footer rows or stretching to fill
+region, growing upward without reserving footer rows or stretching to fill
 unused space. Its vertical frame keeps copy and dismiss reachable when there is no
 room for top/bottom border cells, and copying still exposes the complete notice when
 the body is clipped. Optional table headers and overflow indicators are absent when
 they have no semantic content; blank renderables never reserve their space.
 Active screens share one overlay layer and do not force the dashboard to reflow.
 Native and standalone renderers use this same composition.
+
+`SessionPickerSheetView` owns the visible chooser chrome shared by Delete, Fork,
+Move, and Rename while dashboard-core retains session traversal and commit behavior.
+Its optional `next` element is an exclusive stage replacement: before selection it
+renders the common title, chooser instructions, and cancel footer; after selection it
+returns only the action's downstream sheet. Direct context-menu actions continue to
+open that downstream stage without replaying the chooser.
 
 ## Intentional terminal-cell boundaries
 

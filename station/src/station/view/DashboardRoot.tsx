@@ -107,7 +107,7 @@ export function DashboardRoot({
           <DashboardNoticeRegion overlay={toastOverlay}>
             <DashboardLoadingContentView content={content} />
           </DashboardNoticeRegion>
-          <DashboardControlsView state={state} screen={screen} columns={contentColumns} />
+          <DashboardControlsView state={state} columns={contentColumns} />
         </StationHoverProvider>
       </box>
     );
@@ -136,7 +136,7 @@ export function DashboardRoot({
             menuHoverEnabled={hoverEnabled}
           />
         </DashboardNoticeRegion>
-        <DashboardControlsView state={state} screen={screen} columns={contentColumns} />
+        <DashboardControlsView state={state} columns={contentColumns} />
       </StationHoverProvider>
       <ActiveScreenOverlayView
         snapshot={snapshot}

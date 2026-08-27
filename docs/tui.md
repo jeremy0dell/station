@@ -494,8 +494,8 @@ the footer is a visually explicit bounded `FILTER` helper; the nested panel uses
 The nested panel stores the focused field/action or value ID; arrows derive adjacent
 order transiently, while pointer selection and scroll-follow retain the same identity.
 Draft and applied summaries use one syntax-colored order—free text, Status, Project, Agent—and the
-applied summary truncates as one line. Persistent filtering never uses the absolute
-`CommandPromptView` overlay. Sheets, Help, snapshot replacement, and warm popup reopen preserve the
+applied summary truncates as one line. Persistent filtering remains inside its header and condition
+panel rather than adding another dashboard-control row. Sheets, Help, snapshot replacement, and warm popup reopen preserve the
 applied filter; covered footer targets remain inert outside dashboard mode.
 
 | Verification | Behavior |
@@ -538,15 +538,19 @@ runtime composition. Omitted actions have no rendered target and are invalid sem
 identity toggles collapse; Group quick session launches through the same pointer/focused activation
 contract, and the Group menu control opens its anchored action menu while preserving the cell for
 safe return. Up/Down leaves any header segment immediately, and Left/Right on a
-session row or empty-project action is inert. Remove, rename, move-to-Group, and fork row choosers retain a separate
-visible, selectable canonical-session traversal with `▸` as its keyboard cursor; slots and Enter
-resolve through that same chooser policy. Next-needs-me uses its own canonical-session policy. `N` continues to open the session flow
+session row or empty-project action is inert. Remove, rename, move-to-Group, and fork all render the
+same visible session-picker sheet over a selectable canonical-session traversal with `▸` as its
+keyboard cursor. The sheet exposes `↑↓ move · ↵ choose · slot or click` and `Esc:cancel`; arrows,
+Enter, slots, clicks, and Escape retain one shared chooser policy. Next-needs-me uses its own
+canonical-session policy. `N` continues to open the session flow
 without changing dashboard focus, while uppercase `G` creates a Quick Group for the focused row's
 owning Project (or the first canonical Project when nothing valid is focused). Lowercase `g` remains
 a visible-session slot. Gaps and optimistic create rows remain non-focusable.
 
-Uppercase `M` opens the shared session chooser, then a Move to Group sheet. Native right-click on a
-session opens the same destination step directly. The sheet marks canonical current membership with
+Uppercase `M` visibly opens **Select session to move to a Group**, then replaces it with the Move to
+Group destination sheet after selection. Native right-click on a session opens that destination step
+directly. Delete, Fork, and Rename use the same two-stage renderer composition with action-specific
+picker titles. The destination sheet marks canonical current membership with
 `✓`, while its independent `▸` keyboard cursor selects Ungrouped, same-Project root Groups, or Create
 new Group; the two markers may appear on different rows, and externally nested membership is read-only. Slots, arrows plus Enter, pointer rows, `U`, and
 `N` converge on one dashboard-core reassignment operation. Moving to a Group submits one
@@ -635,7 +639,7 @@ backdrop and background-hover suppression without knowing whether cancellation c
 backs up one step, or clears nested state. Active-screen controls retain hover, and individual
 sheets continue swallowing inside input;
 non-primary buttons, mouse-up, and wheel input remain consumed without dismissing or reaching the
-dashboard. Remove, rename, and fork choose-row modes expose no click-away behavior so row clicks
+dashboard. Remove, rename, move-to-Group, and fork choose-row modes expose no click-away behavior so row clicks
 and hover keep selecting; the filter and the dashboard likewise remain unchanged. In native Station,
 the inner screen receives the click before the outer popup backdrop, so one click closes only the
 topmost safe surface.
