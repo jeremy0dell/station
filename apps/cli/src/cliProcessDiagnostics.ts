@@ -132,6 +132,18 @@ export function createCliProcessDiagnostics(
       return;
     }
 
+    if (input.error !== undefined && input.observerStartupFailure !== true) {
+      const attributes = outcomeAttributes(context, input.exitCode, durationMs);
+      attributes.error = diagnosticError(input.error, input.correlation);
+      await write({
+        level: "error",
+        message: "cli.process.failure",
+        ...correlation,
+        attributes,
+      });
+      return;
+    }
+
     if (input.correlation?.status === "rejected") {
       const attributes = outcomeAttributes(context, input.exitCode, durationMs);
       attributes.error = diagnosticError(undefined, input.correlation);
@@ -141,18 +153,7 @@ export function createCliProcessDiagnostics(
         ...correlation,
         attributes,
       });
-      return;
     }
-
-    if (input.error === undefined || input.observerStartupFailure === true) return;
-    const attributes = outcomeAttributes(context, input.exitCode, durationMs);
-    attributes.error = diagnosticError(input.error, input.correlation);
-    await write({
-      level: "error",
-      message: "cli.process.failure",
-      ...correlation,
-      attributes,
-    });
   }
 
   async function outcome(input: CliProcessDiagnosticOutcome): Promise<void> {

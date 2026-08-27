@@ -293,6 +293,35 @@ describe("CLI process diagnostics", () => {
       },
     });
 
+    const outputFailureRecords: LogRecord[] = [];
+    const outputFailureCapture = processCapture();
+    await runCliMain(["--config", configPath, "command", "dispatch", "--stdin"], {
+      stdin: JSON.stringify(reconcileCommand("rejected-output-failure")),
+      observerDeps: runningObserverDeps(fixture.socketPath, async () => rejectedReceipt()),
+      updateDeps: { currentBuildInfo: buildInfo },
+      cliProcessDeps: {
+        ...outputFailureCapture.deps,
+        stdoutWrite: () => {
+          throw new Error("rejected output failed");
+        },
+        createLogger: () => memoryLogger(outputFailureRecords),
+      },
+    });
+
+    expect(outputFailureRecords).toHaveLength(1);
+    expect(outputFailureRecords[0]).toMatchObject({
+      message: "cli.process.failure",
+      commandId: "cmd_rejected",
+      traceId: "trc_process",
+      attributes: {
+        error: {
+          tag: "CliProcessError",
+          code: "CLI_PROCESS_FAILURE",
+          message: "CLI process failed.",
+        },
+      },
+    });
+
     const failedRecords: LogRecord[] = [];
     const failedCapture = processCapture();
     const command = reconcileCommand("failed");

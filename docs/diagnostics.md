@@ -88,8 +88,8 @@ establishing a deeper cause.
 With tracing disabled, `runCliMain` writes one `cli.process.failure` only when a
 process/input/config/routing/output failure lacks adequate Observer command
 evidence; a rejected receipt writes `cli.command.rejected`. Successful reads and
-mutations, help, version, local mutation results, and terminal Observer command
-failures add no default process record. Existing Observer-startup lifecycle
+mutations, help, version, successful local mutations, and terminal Observer
+command failures add no default process record. Existing Observer-startup lifecycle
 records are reused instead of duplicated.
 
 Exact `STATION_CLI_TRACE=1` enables `cli.process.trace.start` and
