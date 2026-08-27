@@ -193,8 +193,14 @@ export const TerminalTargetObservationSchema = z
     sessionId: SessionIdSchema.optional(),
     harnessRunId: HarnessRunIdSchema.optional(),
     state: TerminalStateSchema,
+    /** External provider-focus evidence; renderer-local opening routes are separate. */
     focusable: z.boolean().optional(),
     closeable: z.boolean().optional(),
+    /**
+     * Managed attachment: true currently issuable, false definitively absent;
+     * omitted when unknown or inapplicable.
+     */
+    hasManagedAttachment: z.boolean().optional(),
     cwd: nonEmptyStringSchema.optional(),
     pid: z.number().int().positive().optional(),
     title: nonEmptyStringSchema.optional(),

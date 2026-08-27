@@ -35,8 +35,23 @@ describe("protocol client/server", () => {
     const commands = new Map<string, CommandRecord>();
     const currentCallers: TerminalCallerContextRequest[] = [];
     const snapshot = emptySnapshot();
+    const snapshotOptions: Array<{ includeDebug?: boolean } | undefined> = [];
+    const debugSnapshot = {
+      ...snapshot,
+      debug: {
+        terminal: {
+          reconciledAt: protocolTestNow,
+          providerReads: [],
+          targets: [],
+        },
+      },
+    };
     const api = createFakeObserverApi({
       snapshot,
+      getSnapshot: async (options) => {
+        snapshotOptions.push(options);
+        return options?.includeDebug === true ? debugSnapshot : snapshot;
+      },
       getSessionRecoveryInventory: async () => ({
         schemaVersion: 1,
         sessions: [
@@ -130,6 +145,10 @@ describe("protocol client/server", () => {
       schemaVersion: STATION_SCHEMA_VERSION,
       counts: { projects: 0 },
     });
+    await expect(client.getSnapshot({ includeDebug: true })).resolves.toMatchObject({
+      debug: { terminal: { reconciledAt: protocolTestNow, providerReads: [], targets: [] } },
+    });
+    expect(snapshotOptions).toEqual([undefined, { includeDebug: true }]);
     await expect(client.getSessionRecoveryReadiness()).resolves.toEqual({
       resumeEnabled: true,
       canonicalTitleImport: true,
@@ -990,7 +1009,7 @@ describe("protocol client/server", () => {
     };
     const previousLifecycleRequestSchema = z
       .object({
-        schemaVersion: z.literal("0.10.0"),
+        schemaVersion: z.literal("0.11.0"),
         jsonrpc: z.literal("2.0"),
         id: z.string().min(1),
         method: z.enum(["observer.health", "observer.stop"]),
@@ -1006,7 +1025,7 @@ describe("protocol client/server", () => {
         if (connectionCount === 1) {
           const currentRequest = ProtocolRequestSchema.parse(firstRequest);
           connection.send({
-            schemaVersion: "0.10.0",
+            schemaVersion: "0.11.0",
             jsonrpc: "2.0",
             id: currentRequest.id,
             error: {
@@ -1021,11 +1040,11 @@ describe("protocol client/server", () => {
         const healthRequest = previousLifecycleRequestSchema.parse(firstRequest);
         expect(healthRequest.method).toBe("observer.health");
         connection.send({
-          schemaVersion: "0.10.0",
+          schemaVersion: "0.11.0",
           jsonrpc: "2.0",
           id: healthRequest.id,
           result: {
-            schemaVersion: "0.10.0",
+            schemaVersion: "0.11.0",
             status: "healthy",
             ...expectedObserverIdentity,
           },
@@ -1034,10 +1053,10 @@ describe("protocol client/server", () => {
         const stopRequest = previousLifecycleRequestSchema.parse((await iterator.next()).value);
         expect(stopRequest.method).toBe("observer.stop");
         connection.send({
-          schemaVersion: "0.10.0",
+          schemaVersion: "0.11.0",
           jsonrpc: "2.0",
           id: stopRequest.id,
-          result: { schemaVersion: "0.10.0", stopped: true, at: protocolTestNow },
+          result: { schemaVersion: "0.11.0", stopped: true, at: protocolTestNow },
         });
       },
     });
@@ -1488,7 +1507,7 @@ describe("protocol client/server", () => {
         tag: "ProtocolError",
         code: "PROTOCOL_SCHEMA_MISMATCH",
         message:
-          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.11.0.",
+          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.12.0.",
         hint: expect.stringContaining("A different STATION checkout"),
       });
     } finally {

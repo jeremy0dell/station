@@ -197,7 +197,7 @@ ownership even where current ownership is still a deviation.
 | Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Fresh list evidence and mutations only; Observer snapshots own current session selection, callers supply project context for mutation, and adapters retain no second worktree inventory. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | Ordinary topology and lifecycle are provider-owned; implementing this port does not advertise placement support. |
 | Terminal placement | Driven | `TerminalPlacementPort` | tmux and test adapters | Explicit companion role registered only beside the same ordinary terminal id. Caller fields are untrusted claims; tmux proves one configured endpoint, socket/server/pane/process identity, and bounded ancestry, mints a ten-minute one-shot authority, and revalidates immediately before mutation. Sibling and detached never fall back to a current, recent, focused, or alternate-server target. Station registers no placement role. |
-| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
+| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. Target observations may report `hasManagedAttachment` as true, false, or absent for currently issuable, definitively absent, or unknown/inapplicable attachment evidence; activation still resolves the opaque attachment afresh. |
 | Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports: discovery returns provider-normalized current run status; `hookHealth()` returns strict read-only hook evidence; `reconcileHooks()` delegates mutation and post-write verification to the integration; separate hook adapters own event parsing; and harness providers retain compatibility admission and exact recovery-artifact location. Unsupported capabilities remain explicit provider-neutral outcomes. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `SessionGroupStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. `SessionStore.readRecoveryInventory` returns retained sessions and recovery handles from one coherent read transaction without classifying their eligibility. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |
@@ -269,7 +269,7 @@ No single layer owns all truth.
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, processToken, version, socketPath}` identity published by the process that successfully bound the socket. The UUID v4 `processToken` identifies one launch and `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. They corroborate process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the eight persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
-| `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership; and required `sessionGroups` carries normalized organizational state for configured projects. Reconcile replaces the base projection; unavailable sessions remain absent during degraded reads even when their durable Group assignments are preserved. Recorded Group mutations refresh only their project through the same serialized writer, and accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
+| `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership; and required `sessionGroups` carries normalized organizational state for configured projects. Reconcile replaces the base projection; unavailable sessions remain absent during degraded reads even when their durable Group assignments are preserved. Recorded Group mutations refresh only their project through the same serialized writer, and accepted harness reports can project status and readiness between reconciles. An opt-in `debug.terminal` envelope retains sanitized evidence from the latest completed reconcile; ordinary reads omit it. The snapshot is derived and not a durable replay log; its debug envelope is non-authoritative diagnostic evidence. |
 | Current provider context | The exact correlated worktree and terminal arrays from the last committed reconcile generation, held only in Observer core for harness-hook normalization. It commits with the snapshot, is never reconstructed from durable observation history, and strips terminal-private provider data before crossing the provider boundary. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
@@ -604,8 +604,12 @@ current health projection, and then publishes `provider.healthChanged` without a
 full provider scan. Readiness persistence and application happen after its base
 commit and revalidate the live snapshot. A successful reconcile commits its exact
 correlated worktree and terminal context in the same synchronous writer step as
-the snapshot; harness-hook normalization reads that generation directly rather
-than querying expiring observation history.
+the snapshot. The same commit replaces the opt-in `debug.terminal` projection:
+`reconciledAt` identifies the reconcile generation, `providerReads` records each
+terminal provider as complete or indeterminate, and `targets` contains only sanitized
+current targets from complete reads. An indeterminate read therefore retains its failure
+evidence without carrying forward prior target or managed-attachment claims. Harness-hook
+normalization reads the committed context directly rather than querying expiring observation history.
 The scheduler debounces and coalesces reasons while ensuring only one scheduled
 run is active. Startup-compatible requests may join the startup flight; other
 direct requests retain the rule that their scan starts at or after the request.
@@ -693,7 +697,11 @@ provider-backed graph truth.
 
 ### Snapshot And Event Delivery
 
-`getSnapshot` returns the current in-memory graph. `subscribe` registers a
+`getSnapshot` returns the current in-memory graph. Ordinary calls omit debug evidence;
+`getSnapshot({ includeDebug: true })` adds the latest committed `debug.terminal` envelope
+when one exists. Its provider-read completeness, target identities, controls, confidence,
+reasons, and timestamps support diagnosis only. They neither authorize terminal mutation nor
+state whether a renderer currently has a usable pane or opening route. `subscribe` registers a
 future-only filtered event stream. Publishing does not persist automatically;
 the producing use case owns whether the event is also durable and its ordering
 relative to publication. Callers must not assume persist-before-publish unless

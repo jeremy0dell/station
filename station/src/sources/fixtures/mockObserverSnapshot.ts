@@ -15,7 +15,7 @@ const harnessCapabilities = {
 };
 
 export const mockObserverSnapshot = {
-  schemaVersion: "0.11.0",
+  schemaVersion: "0.12.0",
   generatedAt: fixtureNow,
   observer: {
     pid: 4242,

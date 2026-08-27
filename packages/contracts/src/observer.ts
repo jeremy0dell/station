@@ -409,13 +409,15 @@ export type WorktreeCancelRemovalResult = z.infer<typeof WorktreeCancelRemovalRe
 /**
  * DRIVING PORT
  *
- * Exposes Observer state, recovery-readiness, coherent recovery-inventory, read-only
- * recovery-assessment, and transient current-session queries, plus handshakes, ingress reports,
+ * Exposes Observer state, including opt-in noncanonical evidence from the latest completed
+ * terminal reconcile, recovery-readiness, coherent recovery-inventory, read-only recovery
+ * assessment, and transient current-session queries, plus handshakes, ingress reports,
  * maintenance, and lifecycle operations to external actors.
  */
 export type ObserverApi = {
   health(): Promise<ObserverHealth>;
   stop(): Promise<ObserverStopReceipt>;
+  /** Ordinary reads omit debug evidence; the option requests the latest retained projection. */
   getSnapshot(options?: { includeDebug?: boolean }): Promise<StationSnapshot>;
   getSessionRecoveryReadiness(): Promise<SessionRecoveryReadiness>;
   getSessionRecoveryInventory(): Promise<ObserverRecoveryInventory>;

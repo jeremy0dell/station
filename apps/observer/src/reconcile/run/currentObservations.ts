@@ -27,6 +27,7 @@ import {
   readRepositoryProviderHealth,
   readTerminalTargetObservations,
   readWorktreeObservations,
+  type TerminalProviderReadOutcome,
 } from "../providerObservations.js";
 import { worktreesWithCachedMetadata } from "../worktreeMetadataOverlay.js";
 
@@ -38,6 +39,7 @@ export type CurrentReconcileObservations = {
   projectsScanned: number;
   terminalTargets: TerminalTargetObservation[];
   terminalTargetsRead: number;
+  terminalProviderReadOutcomes: TerminalProviderReadOutcome[];
   harnessRuns: HarnessRunObservation[];
   harnessCapabilities: Record<string, HarnessCapabilities>;
   worktreesForSnapshot: WorktreeObservation[];
@@ -133,6 +135,7 @@ export async function readCurrentReconcileObservations(input: {
     projectsScanned: worktreeResult.projectsScanned,
     terminalTargets,
     terminalTargetsRead: terminalResult.terminalTargets.length,
+    terminalProviderReadOutcomes: terminalResult.outcomes,
     harnessRuns,
     harnessCapabilities: harnessResult.harnessCapabilities,
     worktreesForSnapshot,

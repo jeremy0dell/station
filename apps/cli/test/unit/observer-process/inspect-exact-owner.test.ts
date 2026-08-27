@@ -28,7 +28,7 @@ const processEntry = {
   executableProvenance: "exact" as const,
 };
 const health = {
-  schemaVersion: "0.11.0",
+  schemaVersion: "0.12.0",
   status: "healthy",
   pid: processIdentity.pid,
   startedAt: "2026-08-24T12:00:00.000Z",

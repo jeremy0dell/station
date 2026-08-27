@@ -238,7 +238,7 @@ describe("provider hook ingress correlation", () => {
     );
 
     expect(receipt).toEqual({
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       hookId,
       provider,
       event: expectedEvent,
@@ -395,7 +395,7 @@ describe("provider hook ingress correlation", () => {
     );
 
     expect(receipt).toEqual({
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       hookId: "hook_logging_failure",
       provider: "cursor",
       event: "beforeShellExecution",

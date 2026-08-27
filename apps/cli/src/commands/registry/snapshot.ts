@@ -7,15 +7,19 @@ export const snapshotCliCommand: CliCommandNode = {
   description: "Print the current observer graph snapshot.",
   requiresConfig: true,
   run: runSnapshotCliCommand,
-  usage: ["stn snapshot [--json] [--require-running]"],
+  usage: ["stn snapshot [--json] [--include-debug] [--require-running]"],
   options: [
     { name: "--json", description: "Print the raw snapshot JSON." },
+    {
+      name: "--include-debug",
+      description: "Include the latest reconciled diagnostic evidence.",
+    },
     {
       name: "--require-running",
       description: "Refuse instead of starting a missing Observer.",
     },
   ],
-  examples: ["stn snapshot --json --require-running"],
+  examples: ["stn snapshot --json --include-debug --require-running"],
 };
 
 async function runSnapshotCliCommand(context: CliCommandRunContext) {

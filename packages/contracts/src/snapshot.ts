@@ -78,8 +78,14 @@ export const TerminalAttachmentSchema = z
   .object({
     provider: ProviderIdSchema,
     state: TerminalStateSchema,
+    /** Effective external provider-focus evidence; renderer-local opening routes are separate. */
     focusable: z.boolean().optional(),
     closeable: z.boolean().optional(),
+    /**
+     * Managed attachment: true currently issuable, false definitively absent;
+     * omitted when unknown or inapplicable.
+     */
+    hasManagedAttachment: z.boolean().optional(),
     hasWorkspace: z.boolean().optional(),
     hasPrimaryAgentEndpoint: z.boolean().optional(),
     confidence: ConfidenceSchema.optional(),
@@ -273,6 +279,97 @@ export const OrphanedRuntimeStateSchema = z
 
 export type OrphanedRuntimeState = z.infer<typeof OrphanedRuntimeStateSchema>;
 
+const SnapshotTerminalProviderReadCompleteSchema = z
+  .object({
+    provider: ProviderIdSchema,
+    status: z.literal("complete"),
+  })
+  .strict();
+
+const SnapshotTerminalProviderReadIndeterminateSchema = z
+  .object({
+    provider: ProviderIdSchema,
+    status: z.literal("indeterminate"),
+    failureCode: nonEmptyStringSchema,
+  })
+  .strict();
+
+export const SnapshotTerminalProviderReadSchema = z.discriminatedUnion("status", [
+  SnapshotTerminalProviderReadCompleteSchema,
+  SnapshotTerminalProviderReadIndeterminateSchema,
+]);
+
+export type SnapshotTerminalProviderRead = z.infer<typeof SnapshotTerminalProviderReadSchema>;
+
+export const SnapshotTerminalTargetDebugSchema = z
+  .object({
+    id: TerminalTargetIdSchema,
+    provider: ProviderIdSchema,
+    projectId: ProjectIdSchema.optional(),
+    worktreeId: WorktreeIdSchema.optional(),
+    sessionId: SessionIdSchema.optional(),
+    state: TerminalStateSchema,
+    focusable: z.boolean().optional(),
+    closeable: z.boolean().optional(),
+    hasManagedAttachment: z.boolean().optional(),
+    confidence: ConfidenceSchema,
+    reason: nonEmptyStringSchema,
+    observedAt: TimestampSchema,
+  })
+  .strict();
+
+export type SnapshotTerminalTargetDebug = z.infer<typeof SnapshotTerminalTargetDebugSchema>;
+
+export const SnapshotTerminalDebugSchema = z
+  .object({
+    /** Completion time of the provider-read generation represented by this evidence. */
+    reconciledAt: TimestampSchema,
+    providerReads: z.array(SnapshotTerminalProviderReadSchema),
+    targets: z.array(SnapshotTerminalTargetDebugSchema),
+  })
+  .strict()
+  .superRefine((terminal, context) => {
+    const readsByProvider = new Map<string, SnapshotTerminalProviderRead>();
+    for (const [index, read] of terminal.providerReads.entries()) {
+      if (readsByProvider.has(read.provider)) {
+        context.addIssue({
+          code: "custom",
+          message: "Terminal provider reads must be unique by provider.",
+          path: ["providerReads", index, "provider"],
+        });
+        continue;
+      }
+      readsByProvider.set(read.provider, read);
+    }
+
+    for (const [index, target] of terminal.targets.entries()) {
+      const read = readsByProvider.get(target.provider);
+      if (read === undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "Terminal debug targets require a provider read from the same reconcile.",
+          path: ["targets", index, "provider"],
+        });
+      } else if (read.status !== "complete") {
+        context.addIssue({
+          code: "custom",
+          message: "Indeterminate terminal provider reads cannot publish current targets.",
+          path: ["targets", index, "provider"],
+        });
+      }
+    }
+  });
+
+export type SnapshotTerminalDebug = z.infer<typeof SnapshotTerminalDebugSchema>;
+
+export const StationSnapshotDebugSchema = z
+  .object({
+    terminal: SnapshotTerminalDebugSchema,
+  })
+  .strict();
+
+export type StationSnapshotDebug = z.infer<typeof StationSnapshotDebugSchema>;
+
 export const StationSnapshotSchema = z
   .object({
     schemaVersion: SchemaVersionSchema,
@@ -306,6 +403,8 @@ export const StationSnapshotSchema = z
     alerts: z.array(StationAlertSchema),
     featureFlags: ClientFeatureFlagsSchema.optional(),
     orphans: z.array(OrphanedRuntimeStateSchema).optional(),
+    /** Opt-in, noncanonical evidence from the latest completed terminal reconcile. */
+    debug: StationSnapshotDebugSchema.optional(),
   })
   .strict()
   .superRefine((snapshot, context) => {

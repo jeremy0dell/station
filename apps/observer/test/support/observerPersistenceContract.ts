@@ -693,6 +693,7 @@ export function observerPersistenceContract(
             id: "term_observation",
             projectId: "web",
             worktreeId: worktree.id,
+            hasManagedAttachment: false,
             now,
             providerData: { socketPath: "/tmp/private.sock" },
           });
@@ -763,10 +764,58 @@ export function observerPersistenceContract(
           expect(observations[1]?.entityKind).toBe("terminal_target");
           if (observations[1]?.entityKind === "terminal_target") {
             expect(observations[1].payload).not.toHaveProperty("providerData");
+            expect(observations[1].payload.hasManagedAttachment).toBe(false);
           }
           expect(observations[4]).toMatchObject({
             payload: { providerId: "fake-harness", status: "healthy" },
           });
+        });
+      });
+
+      it("does not coalesce managed attachment true, unknown, and false evidence", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          const hostBacked = createFakeTerminalTarget({
+            id: "term_attachment_evidence",
+            projectId: "web",
+            worktreeId: "wt_attachment_evidence",
+            hasManagedAttachment: true,
+            now,
+          });
+          const unknown = createFakeTerminalTarget({
+            id: hostBacked.id,
+            projectId: "web",
+            worktreeId: "wt_attachment_evidence",
+            now: later,
+          });
+          const local = createFakeTerminalTarget({
+            id: hostBacked.id,
+            projectId: "web",
+            worktreeId: "wt_attachment_evidence",
+            hasManagedAttachment: false,
+            now: latest,
+          });
+
+          for (const target of [hostBacked, unknown, local]) {
+            await persistence.recordProviderObservation({
+              provider: target.provider,
+              providerType: "terminal",
+              entityKind: "terminal_target",
+              entityKey: target.id,
+              payload: target,
+              observedAt: target.observedAt,
+              coalesceUnchanged: true,
+            });
+          }
+
+          const observations = await persistence.listProviderObservations({
+            entityKind: "terminal_target",
+            includeExpired: true,
+            now: latest,
+          });
+          expect(observations).toHaveLength(3);
+          expect(observations[0]?.payload).toMatchObject({ hasManagedAttachment: true });
+          expect(observations[1]?.payload).not.toHaveProperty("hasManagedAttachment");
+          expect(observations[2]?.payload).toMatchObject({ hasManagedAttachment: false });
         });
       });
 

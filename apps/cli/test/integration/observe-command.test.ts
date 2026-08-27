@@ -265,7 +265,7 @@ describe("CLI observe command", () => {
                       tag: "ProtocolError",
                       code: "PROTOCOL_SCHEMA_MISMATCH",
                       message:
-                        "Observer protocol schema mismatch: the observer responded with schema 0.3.0, but this CLI expects schema 0.11.0.",
+                        "Observer protocol schema mismatch: the observer responded with schema 0.3.0, but this CLI expects schema 0.12.0.",
                       hint: "A different STATION checkout may own the observer socket.",
                     };
                   },
@@ -298,7 +298,7 @@ function runningObserverDeps(options: {
     clientFactory: (socketPath: string) =>
       ({
         health: async () => ({
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,
@@ -311,7 +311,7 @@ function runningObserverDeps(options: {
           return options.events;
         },
         reconcile: async (reason?: string): Promise<ReconcileReceipt> => ({
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           reason: reason ?? "manual",
           reconciledAt: now,
           snapshot: options.snapshot ?? snapshotFixture(),
@@ -385,7 +385,7 @@ async function sleep(ms: number): Promise<void> {
 
 function snapshotFixture(): StationSnapshot {
   return {
-    schemaVersion: "0.11.0",
+    schemaVersion: "0.12.0",
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
     providerHealth: {},

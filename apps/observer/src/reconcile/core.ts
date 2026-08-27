@@ -6,6 +6,7 @@ import type {
   SessionGroupView,
   StationEvent,
   StationSnapshot,
+  StationSnapshotDebug,
   WorktreeRow,
 } from "@station/contracts";
 import { ProviderProjectConfigSchema } from "@station/contracts";
@@ -61,7 +62,7 @@ export type ObserverCore = {
   clearTurnReadiness(input: { sessionId: string; token: string }): StationEvent | undefined;
   updateConfig(config: StationConfig): void;
   getProjects(): readonly ProviderProjectConfig[];
-  getSnapshot(): StationSnapshot;
+  getSnapshot(options?: { includeDebug?: boolean }): StationSnapshot;
   getHealth(): ObserverCoreHealth;
 };
 
@@ -97,6 +98,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
   let snapshotWriterChain: Promise<void> = Promise.resolve();
   let providerHealth: Record<string, ProviderHealth> = {};
   let lastReconcile: ReconcileTiming | undefined;
+  let snapshotDebug: StationSnapshotDebug | undefined;
   let snapshot = buildInitialSnapshot({
     generatedAt: startedAt,
     observer: { pid, startedAt, version },
@@ -141,6 +143,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         providerHealth = result.providerHealth;
         lastReconcile = result.lastReconcile;
         snapshot = result.snapshot;
+        snapshotDebug = result.debug;
         return snapshot;
       };
 
@@ -311,7 +314,12 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       projects = providerProjectsFromConfig(nextConfig);
     },
     getProjects: () => projects,
-    getSnapshot: () => snapshot,
+    getSnapshot: (options) => {
+      if (options?.includeDebug !== true || snapshotDebug === undefined) {
+        return snapshot;
+      }
+      return { ...snapshot, debug: snapshotDebug };
+    },
     getHealth: () => ({
       status: snapshot.observer.healthy ? "healthy" : "degraded",
       startedAt,

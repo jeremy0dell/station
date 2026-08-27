@@ -164,6 +164,7 @@ describe("StationTerminalProvider", () => {
       state: "open",
       focusable: false,
       closeable: false,
+      hasManagedAttachment: false,
       projectId: "web",
       worktreeId: "wt_web_feature",
       sessionId: "ses_web_feature",
@@ -364,7 +365,11 @@ describe("StationTerminalProvider (host-backed)", () => {
     const provider = new StationTerminalProvider({ clock, host });
 
     await expect(provider.listTargets()).resolves.toMatchObject([
-      { id: stationTargetId(worktree.id), sessionId: "ses_web_feature" },
+      {
+        id: stationTargetId(worktree.id),
+        sessionId: "ses_web_feature",
+        hasManagedAttachment: true,
+      },
     ]);
     expect(recoverOrphanedTargets).toHaveBeenCalledOnce();
   });
@@ -790,12 +795,22 @@ describe("StationTerminalProvider (host-backed)", () => {
     await provider.openWorkspace(openRequest());
 
     await expect(provider.listTargets()).resolves.toMatchObject([
-      { id: stationTargetId(worktree.id), focusable: false, closeable: false },
+      {
+        id: stationTargetId(worktree.id),
+        focusable: false,
+        closeable: false,
+        hasManagedAttachment: false,
+      },
     ]);
 
     live = [liveEntry()];
     await expect(provider.listTargets()).resolves.toMatchObject([
-      { id: stationTargetId(worktree.id), focusable: false, closeable: true },
+      {
+        id: stationTargetId(worktree.id),
+        focusable: false,
+        closeable: true,
+        hasManagedAttachment: true,
+      },
     ]);
   });
 
@@ -810,9 +825,63 @@ describe("StationTerminalProvider (host-backed)", () => {
     const opened = await provider.openWorkspace(openRequest());
 
     await expect(provider.listTargets()).resolves.toMatchObject([
-      { id: opened.target.targetId, focusable: false, closeable: false },
+      {
+        id: opened.target.targetId,
+        focusable: false,
+        closeable: false,
+        hasManagedAttachment: false,
+      },
     ]);
     await expect(provider.attachmentForTarget(opened.target.targetId)).resolves.toBeUndefined();
+  });
+
+  it("omits cached Host attachment evidence after failed and superseded reads, then restores it", async () => {
+    const delayedList = deferred<HostListEntry[]>();
+    const delayedListStarted = deferred<void>();
+    let listCall = 0;
+    const client = fakeHostClient({
+      list: async () => {
+        listCall += 1;
+        if (listCall === 1) {
+          return [liveEntry()];
+        }
+        if (listCall === 2) {
+          delayedListStarted.resolve();
+          return await delayedList.promise;
+        }
+        if (listCall === 3) {
+          throw new Error("host down");
+        }
+        return [liveEntry()];
+      },
+    });
+    const host: StationHostController = {
+      socketPath: "/tmp/station-host-evidence-race.sock",
+      client: () => client,
+      ensure: async () => ({
+        status: "running",
+        socketPath: "/tmp/station-host-evidence-race.sock",
+        client,
+        ensuredBy: "reuse",
+      }),
+      recoverOrphanedTargets: async () => false,
+    };
+    const provider = new StationTerminalProvider({ clock, host });
+
+    const current = await provider.listTargets();
+    expect(current[0]).toMatchObject({ hasManagedAttachment: true });
+
+    const superseded = provider.listTargets();
+    await delayedListStarted.promise;
+    const failed = await provider.listTargets();
+    expect(failed[0]).not.toHaveProperty("hasManagedAttachment");
+
+    delayedList.resolve([liveEntry()]);
+    const supersededResult = await superseded;
+    expect(supersededResult[0]).not.toHaveProperty("hasManagedAttachment");
+
+    const restored = await provider.listTargets();
+    expect(restored[0]).toMatchObject({ hasManagedAttachment: true });
   });
 
   it("surfaces multiple live host-backed agent targets independently", async () => {
