@@ -94,6 +94,7 @@ export type CreateFakeTerminalTargetInput = {
   state?: TerminalState;
   focusable?: boolean;
   closeable?: boolean;
+  hasManagedAttachment?: boolean;
   confidence?: Confidence;
   reason?: string;
   now?: FakeProviderClock;
@@ -267,6 +268,9 @@ export function createFakeTerminalTarget(
     state,
     ...(input.focusable === undefined ? {} : { focusable: input.focusable }),
     ...(input.closeable === undefined ? {} : { closeable: input.closeable }),
+    ...(input.hasManagedAttachment === undefined
+      ? {}
+      : { hasManagedAttachment: input.hasManagedAttachment }),
     confidence: input.confidence ?? (state === "unknown" ? "low" : "high"),
     reason: input.reason ?? "Fake provider listed the terminal target.",
     observedAt: resolveNow(input.now),

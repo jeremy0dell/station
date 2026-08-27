@@ -147,6 +147,16 @@ describe("Observer API composition with in-memory persistence", () => {
         },
       ],
     });
+    await expect(api.getSnapshot()).resolves.not.toHaveProperty("debug");
+    await expect(api.getSnapshot({ includeDebug: true })).resolves.toMatchObject({
+      debug: {
+        terminal: {
+          reconciledAt: now,
+          providerReads: [{ provider: "fake-terminal", status: "complete" }],
+          targets: [expect.objectContaining({ id: "term_web_task" })],
+        },
+      },
+    });
     await initialEvents.return?.();
     await waitFor(() => worktreeChangeSource.requests.length > 0);
     expect(worktreeChangeSource.requests[0]?.target).toMatchObject({

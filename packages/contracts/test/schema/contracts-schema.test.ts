@@ -62,6 +62,7 @@ import {
   SessionMigrationSealSchema,
   SessionRecoveryReadinessSchema,
   SessionRescueManifestSchema,
+  SnapshotTerminalDebugSchema,
   STATION_SCHEMA_VERSION,
   StationBuildIdentitySchema,
   StationCommandResultSchema,
@@ -69,6 +70,7 @@ import {
   StationCommandTypeSchema,
   StationEventSchema,
   StationHookIdentityPayloadSchema,
+  StationSnapshotDebugSchema,
   StationSnapshotSchema,
   stationEventCommandId,
   stationEventTimestamp,
@@ -180,7 +182,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.11.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.12.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -686,6 +688,168 @@ describe("contract schemas", () => {
     }
     row.terminal.primaryAgentTargetId = "term_agent";
     expectFails(StationSnapshotSchema, snapshot, "snapshot row terminal with target id");
+  });
+
+  it("preserves exact optional managed terminal attachment evidence", () => {
+    const observation = {
+      id: "native:wt_terminal_evidence",
+      provider: "native",
+      projectId: "web",
+      worktreeId: "wt_terminal_evidence",
+      sessionId: "ses_terminal_evidence",
+      state: "open",
+      focusable: false,
+      closeable: true,
+      confidence: "high",
+      reason: "Station listed the managed terminal target.",
+      observedAt: "2026-05-20T12:00:00.000Z",
+    };
+    const attachment = {
+      provider: "native",
+      state: "open",
+      focusable: false,
+      closeable: true,
+    };
+
+    expect(TerminalTargetObservationSchema.parse(observation)).not.toHaveProperty(
+      "hasManagedAttachment",
+    );
+    expect(
+      TerminalTargetObservationSchema.parse({
+        ...observation,
+        hasManagedAttachment: false,
+      }),
+    ).toMatchObject({ hasManagedAttachment: false });
+    expect(
+      TerminalTargetObservationSchema.parse({
+        ...observation,
+        hasManagedAttachment: true,
+      }),
+    ).toMatchObject({ hasManagedAttachment: true });
+    expectFails(
+      TerminalTargetObservationSchema,
+      { ...observation, hasManagedAttachment: "unknown" },
+      "terminal target with non-boolean managed attachment evidence",
+    );
+
+    expect(TerminalAttachmentSchema.parse(attachment)).not.toHaveProperty("hasManagedAttachment");
+    expectFails(
+      TerminalAttachmentSchema,
+      { ...attachment, hasManagedAttachment: false },
+      "canonical terminal attachment with provider-only managed attachment evidence",
+    );
+  });
+
+  it("validates coherent opt-in terminal debug evidence", async () => {
+    const target = {
+      id: "native:wt_web_idle",
+      provider: "native",
+      projectId: "web",
+      worktreeId: "wt_web_idle",
+      sessionId: "ses_web_idle",
+      state: "open",
+      focusable: false,
+      closeable: true,
+      hasManagedAttachment: true,
+      confidence: "high",
+      reason: "Station listed the Host-backed target.",
+      observedAt: "2026-05-20T12:00:00.000Z",
+    };
+    const terminalDebug = {
+      reconciledAt: "2026-05-20T12:00:01.000Z",
+      providerReads: [
+        { provider: "native", status: "complete" },
+        {
+          provider: "tmux",
+          status: "indeterminate",
+          failureCode: "TERMINAL_LIST_FAILED",
+        },
+      ],
+      targets: [target],
+    };
+    const snapshotDebug = { terminal: terminalDebug };
+
+    expectParses(SnapshotTerminalDebugSchema, terminalDebug, "terminal debug evidence");
+    expectParses(StationSnapshotDebugSchema, snapshotDebug, "snapshot debug evidence");
+
+    const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const base = snapshots.idleAgent;
+    if (base === undefined) throw new Error("idleAgent fixture is required.");
+    expectParses(
+      StationSnapshotSchema,
+      { ...base, debug: snapshotDebug },
+      "snapshot with terminal debug evidence",
+    );
+
+    const invalidTerminalDebug: Array<{ label: string; value: unknown }> = [
+      {
+        label: "duplicate provider reads",
+        value: {
+          ...terminalDebug,
+          providerReads: [
+            { provider: "native", status: "complete" },
+            { provider: "native", status: "complete" },
+          ],
+        },
+      },
+      {
+        label: "target without a provider read",
+        value: { ...terminalDebug, providerReads: [] },
+      },
+      {
+        label: "target from an indeterminate provider read",
+        value: {
+          ...terminalDebug,
+          providerReads: [
+            {
+              provider: "native",
+              status: "indeterminate",
+              failureCode: "TERMINAL_LIST_FAILED",
+            },
+          ],
+        },
+      },
+      {
+        label: "complete provider read with a failure code",
+        value: {
+          ...terminalDebug,
+          providerReads: [
+            { provider: "native", status: "complete", failureCode: "TERMINAL_LIST_FAILED" },
+          ],
+        },
+      },
+      {
+        label: "indeterminate provider read without a failure code",
+        value: {
+          ...terminalDebug,
+          providerReads: [{ provider: "native", status: "indeterminate" }],
+          targets: [],
+        },
+      },
+      {
+        label: "target with provider-private data",
+        value: {
+          ...terminalDebug,
+          targets: [{ ...target, providerData: { ptyId: "private" } }],
+        },
+      },
+      {
+        label: "terminal debug with an unknown field",
+        value: { ...terminalDebug, current: true },
+      },
+    ];
+    for (const invalid of invalidTerminalDebug) {
+      expectFails(SnapshotTerminalDebugSchema, invalid.value, invalid.label);
+    }
+
+    expectFails(
+      StationSnapshotDebugSchema,
+      { terminal: terminalDebug, terminalTargets: [target] },
+      "snapshot debug with a legacy flat target list",
+    );
   });
 
   it("accepts production feature flags, rejects unknown flags, and excludes TUI flags from clients", () => {

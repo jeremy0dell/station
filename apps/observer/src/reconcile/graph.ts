@@ -29,6 +29,7 @@ import { harnessRunCanActivateSession, terminalCanActivateSession } from "../ses
 import { sessionRecoveryEligibility } from "../sessionRecoveryEligibility.js";
 import { selectNewestSessionRecoveryCandidate } from "../sessionRecoverySelection.js";
 import { countsForSnapshot } from "./snapshotCounts.js";
+import { terminalControlEvidence } from "./terminalControlEvidence.js";
 
 export type ObserverGraphInput = {
   generatedAt: string;
@@ -418,26 +419,9 @@ function terminalAttachment(
     provider: terminal.provider,
     state: terminal.state,
   };
-  // Gate on the provider's capabilities: an externally-hosted provider (e.g.
-  // "station") reports canFocusTarget/canCloseTarget false, so its agents are
-  // not focusable/closeable from the dashboard even when the state allows it.
-  // Unknown capabilities fail open (the prior state-only behavior).
-  const focusable =
-    terminal.focusable ??
-    (capabilities?.canFocusTarget !== false && isFocusableTerminalState(terminal.state));
-  const closeable =
-    terminal.closeable ??
-    (capabilities?.canCloseTarget !== false && isCloseableTerminalState(terminal.state));
-  if (focusable) {
-    attachment.focusable = true;
-  } else if (terminal.focusable === false || capabilities?.canFocusTarget === false) {
-    attachment.focusable = false;
-  }
-  if (closeable) {
-    attachment.closeable = true;
-  } else if (terminal.closeable === false || capabilities?.canCloseTarget === false) {
-    attachment.closeable = false;
-  }
+  const control = terminalControlEvidence(terminal, capabilities);
+  if (control.focusable !== undefined) attachment.focusable = control.focusable;
+  if (control.closeable !== undefined) attachment.closeable = control.closeable;
   if (terminal.worktreeId !== undefined) attachment.hasWorkspace = true;
   if (hasPrimaryAgentEndpoint(terminal, harnessRun)) {
     attachment.hasPrimaryAgentEndpoint = true;
@@ -725,14 +709,6 @@ function compareSessionRecency(
     Date.parse(left.createdAt) - Date.parse(right.createdAt) ||
     left.id.localeCompare(right.id)
   );
-}
-
-function isFocusableTerminalState(state: TerminalTargetObservation["state"]): boolean {
-  return state === "open" || state === "detached" || state === "unknown";
-}
-
-function isCloseableTerminalState(state: TerminalTargetObservation["state"]): boolean {
-  return state === "open" || state === "detached" || state === "unknown" || state === "stale";
 }
 
 function hasPrimaryAgentEndpoint(

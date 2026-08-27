@@ -39,7 +39,7 @@ describe("observer diagnostics collector", () => {
       };
 
       await expect(collectDiagnosticSnapshot(deps)).resolves.toMatchObject({
-        schemaVersion: "0.11.0",
+        schemaVersion: "0.12.0",
         observerHealth: {
           stateDir: "memory://state",
           socketPath: "memory://observer-socket",

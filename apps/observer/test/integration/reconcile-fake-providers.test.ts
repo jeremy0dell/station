@@ -8,11 +8,12 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createObserverCore, ProviderRegistry } from "../../src/internal";
 import { createTestObserverCore } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
+const later = "2026-05-20T12:01:00.000Z";
 
 const config: StationConfig = {
   schemaVersion: 1,
@@ -91,6 +92,7 @@ describe("observer reconcile with fake providers", () => {
             worktreeId: "wt_web_idle",
             sessionId: "ses_web_idle",
             harnessRunId: "run_web_idle",
+            hasManagedAttachment: false,
             now,
           }),
           createFakeTerminalTarget({
@@ -164,11 +166,13 @@ describe("observer reconcile with fake providers", () => {
       },
     });
 
+    expect(core.getSnapshot({ includeDebug: true })).not.toHaveProperty("debug");
     await providers.healthCache.refreshAll();
     const snapshot = await core.reconcile("integration-test");
     const health = core.getHealth();
 
     expect(StationSnapshotSchema.parse(snapshot)).toEqual(snapshot);
+    expect(snapshot).not.toHaveProperty("debug");
     expect(snapshot.projects.map((project) => project.id)).toEqual(["web", "api", "mobile"]);
     expect(snapshot.projects.find((project) => project.id === "mobile")?.counts.worktrees).toBe(0);
     expect(snapshot.rows.map((row) => row.id)).toEqual([
@@ -191,6 +195,22 @@ describe("observer reconcile with fake providers", () => {
     expect(snapshot.providerHealth["fake-terminal"]?.status).toBe("healthy");
     expect(snapshot.providerHealth["fake-harness"]?.status).toBe("healthy");
     expect(snapshot.harnesses).toEqual([{ id: "fake-harness", label: "fake-harness" }]);
+    expect(
+      snapshot.sessions.find((session) => session.id === "ses_web_idle")?.terminal,
+    ).not.toHaveProperty("hasManagedAttachment");
+    const terminalDebug = core.getSnapshot({ includeDebug: true }).debug?.terminal;
+    expect(terminalDebug).toMatchObject({
+      reconciledAt: now,
+      providerReads: [{ provider: "fake-terminal", status: "complete" }],
+    });
+    expect(terminalDebug?.targets).toHaveLength(4);
+    expect(terminalDebug?.targets.find((target) => target.id === "term_web_idle")).toMatchObject({
+      provider: "fake-terminal",
+      focusable: true,
+      closeable: true,
+      hasManagedAttachment: false,
+    });
+    expect(terminalDebug?.targets[0]).not.toHaveProperty("providerData");
     expect(health.lastReconcile).toMatchObject({
       reason: "integration-test",
       projectsScanned: 3,
@@ -409,6 +429,38 @@ describe("observer reconcile with fake providers", () => {
     });
   });
 
+  it("keeps terminal evidence time distinct from later snapshot-only projections", async () => {
+    let currentTime = now;
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+    });
+    const core = createObserverCore({
+      config,
+      providers,
+      clock: {
+        now: () => new Date(currentTime),
+      },
+    });
+
+    await core.reconcile("terminal-evidence-generation");
+    currentTime = later;
+    await core.commitSessionGroupMutation("web", async () => []);
+
+    expect(core.getSnapshot()).toMatchObject({ generatedAt: later });
+    expect(core.getSnapshot({ includeDebug: true })).toMatchObject({
+      generatedAt: later,
+      debug: {
+        terminal: {
+          reconciledAt: now,
+          providerReads: [{ provider: "fake-terminal", status: "complete" }],
+          targets: [],
+        },
+      },
+    });
+  });
+
   it("maps provider failures into health and keeps a valid snapshot", async () => {
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({
@@ -423,6 +475,20 @@ describe("observer reconcile with fake providers", () => {
         },
       }),
       terminal: new FakeTerminalProvider({ now }),
+      terminals: [
+        new FakeTerminalProvider({
+          id: "broken-terminal",
+          now,
+          failures: {
+            listTargets: {
+              tag: "TerminalProviderError",
+              code: "FAKE_TERMINAL_LIST_FAILED",
+              message: "The fake terminal provider failed to list targets.",
+              provider: "broken-terminal",
+            },
+          },
+        }),
+      ],
       harnesses: [new FakeHarnessProvider({ now })],
     });
     const core = createObserverCore({
@@ -443,13 +509,194 @@ describe("observer reconcile with fake providers", () => {
         code: "FAKE_WORKTREE_LIST_FAILED",
       },
     });
+    expect(core.getSnapshot({ includeDebug: true }).debug?.terminal).toMatchObject({
+      providerReads: [
+        { provider: "fake-terminal", status: "complete" },
+        {
+          provider: "broken-terminal",
+          status: "indeterminate",
+          failureCode: "FAKE_TERMINAL_LIST_FAILED",
+        },
+      ],
+      targets: [],
+    });
     expect(snapshot.alerts).toEqual([
       expect.objectContaining({
         severity: "error",
         code: "FAKE_WORKTREE_LIST_FAILED",
         provider: "fake-worktree",
       }),
+      expect.objectContaining({
+        severity: "error",
+        code: "FAKE_TERMINAL_LIST_FAILED",
+        provider: "broken-terminal",
+      }),
     ]);
+  });
+
+  it("drops prior positive terminal evidence when the next provider read is indeterminate", async () => {
+    const terminal = new FakeTerminalProvider({
+      now,
+      targets: [
+        createFakeTerminalTarget({
+          id: "term_managed_then_indeterminate",
+          projectId: "web",
+          sessionId: "ses_managed_then_indeterminate",
+          hasManagedAttachment: true,
+          now,
+        }),
+      ],
+    });
+    const successfulList = terminal.listTargets.bind(terminal);
+    let listIsIndeterminate = false;
+    terminal.listTargets = async () => {
+      if (listIsIndeterminate) {
+        throw {
+          tag: "TerminalProviderError",
+          code: "FAKE_TERMINAL_LIST_FAILED",
+          message: "The fake terminal provider failed to refresh targets.",
+          provider: terminal.id,
+        };
+      }
+      return successfulList();
+    };
+    const core = createObserverCore({
+      config,
+      providers: new ProviderRegistry({
+        worktree: new FakeWorktreeProvider({ now }),
+        terminal,
+        harnesses: [new FakeHarnessProvider({ now })],
+      }),
+      clock: {
+        now: () => new Date(now),
+      },
+    });
+
+    await core.reconcile("terminal-read-complete");
+    expect(core.getSnapshot({ includeDebug: true }).debug?.terminal).toMatchObject({
+      providerReads: [{ provider: terminal.id, status: "complete" }],
+      targets: [
+        expect.objectContaining({
+          id: "term_managed_then_indeterminate",
+          hasManagedAttachment: true,
+        }),
+      ],
+    });
+
+    listIsIndeterminate = true;
+    await core.reconcile("terminal-read-indeterminate");
+
+    expect(core.getSnapshot({ includeDebug: true }).debug?.terminal).toEqual({
+      reconciledAt: now,
+      providerReads: [
+        {
+          provider: terminal.id,
+          status: "indeterminate",
+          failureCode: "FAKE_TERMINAL_LIST_FAILED",
+        },
+      ],
+      targets: [],
+    });
+  });
+
+  it("excludes cached targets from the graph and debug when their current read is indeterminate", async () => {
+    const cachedTarget = createFakeTerminalTarget({
+      id: "term_cached_native",
+      provider: "native",
+      projectId: "web",
+      worktreeId: "wt_web_cached_native",
+      sessionId: "ses_cached_native",
+      hasManagedAttachment: true,
+      now,
+    });
+    const terminal = Object.assign(new FakeTerminalProvider({ id: "native", now }), {
+      listTargets: async () => [cachedTarget],
+      listTargetsForReconcile: async () => {
+        throw {
+          tag: "TerminalProviderError",
+          code: "HOST_UNREACHABLE",
+          message: "Station host target listing failed.",
+          provider: "native",
+        };
+      },
+    });
+    const core = createObserverCore({
+      config,
+      providers: new ProviderRegistry({
+        worktree: new FakeWorktreeProvider({
+          now,
+          worktrees: [
+            createFakeWorktree({
+              id: "wt_web_cached_native",
+              projectId: "web",
+              now,
+            }),
+          ],
+        }),
+        terminal,
+        harnesses: [new FakeHarnessProvider({ now })],
+      }),
+      clock: { now: () => new Date(now) },
+    });
+
+    const snapshot = await core.reconcile("cached-terminal-read-indeterminate");
+
+    expect(snapshot.rows[0]?.terminal).toBeUndefined();
+    expect(snapshot.providerHealth.native).toMatchObject({
+      status: "unavailable",
+      lastError: { code: "HOST_UNREACHABLE" },
+    });
+    expect(core.getSnapshot({ includeDebug: true }).debug?.terminal).toEqual({
+      reconciledAt: now,
+      providerReads: [
+        { provider: "native", status: "indeterminate", failureCode: "HOST_UNREACHABLE" },
+      ],
+      targets: [],
+    });
+  });
+
+  it("withholds prior debug evidence while a newer reconcile is running or after it fails", async () => {
+    const terminal = new FakeTerminalProvider({ now });
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers: new ProviderRegistry({
+        worktree: new FakeWorktreeProvider({ now }),
+        terminal,
+        harnesses: [new FakeHarnessProvider({ now })],
+      }),
+      clock: { now: () => new Date(now) },
+    });
+    await core.reconcile("debug-current");
+    expect(core.getSnapshot({ includeDebug: true })).toHaveProperty("debug");
+
+    let markListStarted: (() => void) | undefined;
+    const listStarted = new Promise<void>((resolve) => {
+      markListStarted = resolve;
+    });
+    let releaseList: (() => void) | undefined;
+    const listRelease = new Promise<void>((resolve) => {
+      releaseList = resolve;
+    });
+    const originalList = terminal.listTargets.bind(terminal);
+    terminal.listTargets = async () => {
+      markListStarted?.();
+      await listRelease;
+      return originalList();
+    };
+
+    const pending = core.reconcile("debug-in-flight");
+    await listStarted;
+    expect(core.getSnapshot({ includeDebug: true })).not.toHaveProperty("debug");
+    releaseList?.();
+    await pending;
+    expect(core.getSnapshot({ includeDebug: true })).toHaveProperty("debug");
+
+    vi.spyOn(persistence, "persistReconcileResult").mockRejectedValueOnce(
+      new Error("persistence unavailable"),
+    );
+    await expect(core.reconcile("debug-failed")).rejects.toThrow("persistence unavailable");
+    expect(core.getSnapshot({ includeDebug: true })).not.toHaveProperty("debug");
+    sqlite.close();
   });
 
   it("times out hung provider reads and records degraded provider health", async () => {
