@@ -8,7 +8,7 @@ import type {
   StationSnapshot,
   TerminalCallerContextRequest,
 } from "@station/contracts";
-import { StationSnapshotSchema } from "@station/contracts";
+import { STATION_SCHEMA_VERSION, StationSnapshotSchema } from "@station/contracts";
 import type { TerminalCommandRecord } from "@station/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
@@ -852,7 +852,7 @@ function creationObserverDeps(
     clientFactory: (requestedSocketPath: string) =>
       ({
         health: async () => ({
-          schemaVersion: "0.11.0",
+          schemaVersion: STATION_SCHEMA_VERSION,
           status: "healthy",
           pid: 1234,
           startedAt: now,
@@ -1121,7 +1121,7 @@ function createdSnapshot(
 
 function creationSnapshot(): StationSnapshot {
   return StationSnapshotSchema.parse({
-    schemaVersion: "0.11.0",
+    schemaVersion: STATION_SCHEMA_VERSION,
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
     providerHealth: {
