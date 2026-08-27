@@ -984,6 +984,7 @@ describe("observer graph derivation", () => {
     const target = terminal("term_idle", "wt_web_idle", "run_idle");
     target.focusable = false;
     target.closeable = false;
+    target.hasManagedAttachment = true;
 
     const snapshot = build({
       worktrees: [worktree("wt_web_idle", "web", "idle")],
@@ -995,6 +996,7 @@ describe("observer graph derivation", () => {
     expect(terminalAttachment?.provider).toBe("fake-terminal");
     expect(terminalAttachment?.focusable).toBe(false);
     expect(terminalAttachment?.closeable).toBe(false);
+    expect(terminalAttachment).not.toHaveProperty("hasManagedAttachment");
     expect(StationSnapshotSchema.parse(snapshot)).toEqual(snapshot);
   });
 

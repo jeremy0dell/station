@@ -889,7 +889,7 @@ describe("exact Observer convergence lifecycle", () => {
     const incumbent = exactEvidence(command);
     const successor = newGeneration(incumbent);
     const stop = vi.fn(async () => ({
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       stopped: true,
       at: "2026-08-24T12:00:01.000Z",
     }));
@@ -1269,6 +1269,6 @@ function runningStatus(evidence: ExactEvidence) {
   return {
     status: "running" as const,
     paths: dependencies({}).paths,
-    health: { schemaVersion: "0.11.0" as const, ...evidence.health },
+    health: { schemaVersion: "0.12.0" as const, ...evidence.health },
   };
 }

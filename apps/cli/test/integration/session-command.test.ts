@@ -912,7 +912,7 @@ function runningObserverDeps(
     clientFactory: (requestedSocketPath: string) =>
       ({
         health: async () => ({
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,
@@ -958,7 +958,7 @@ function snapshotObserverDeps(
     clientFactory: (requestedSocketPath: string) =>
       ({
         health: async () => ({
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,
@@ -1063,7 +1063,7 @@ function harnessCapabilities() {
 
 function sessionSnapshot(): StationSnapshot {
   return StationSnapshotSchema.parse({
-    schemaVersion: "0.11.0",
+    schemaVersion: "0.12.0",
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
     providerHealth: {},

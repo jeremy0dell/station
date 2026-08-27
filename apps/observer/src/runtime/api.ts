@@ -280,7 +280,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
         stopProviderHealthPublication,
         clock,
       ),
-    getSnapshot: async () => options.core.getSnapshot(),
+    getSnapshot: async (snapshotOptions) => options.core.getSnapshot(snapshotOptions),
     getSessionRecoveryReadiness: async () => sessionRecoveryReadiness(options),
     getSessionRecoveryInventory: (): Promise<ObserverRecoveryInventory> =>
       inspectObserverRecoveryInventory({

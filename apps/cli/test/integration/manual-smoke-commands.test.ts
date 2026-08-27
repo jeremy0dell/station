@@ -63,7 +63,7 @@ describe("CLI manual-smoke commands", () => {
     const reconciles: Array<string | undefined> = [];
     const clientRequests: ObserverClientRequest[] = [];
     const receipt: ReconcileReceipt = {
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       reason: "manual-smoke",
       reconciledAt: now,
       snapshot: snapshotFixture(),
@@ -169,6 +169,16 @@ describe("CLI manual-smoke commands", () => {
 
     expect(result).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(result)).toContain("Usage:\n  stn doctor [--project <id>]");
+  });
+
+  it("advertises opt-in snapshot diagnostic evidence", async () => {
+    const result = await runCli(["snapshot", "--help"]);
+
+    expect(result).toMatchObject({ code: 0, outputFormat: "text" });
+    const text = textOutput(result);
+    expect(text).toContain("Usage:\n  stn snapshot [--json] [--include-debug] [--require-running]");
+    expect(text).toContain("--include-debug");
+    expect(text).toContain("latest reconciled diagnostic evidence");
   });
 
   it("ignores command options and operands when resolving help topics", async () => {
@@ -406,7 +416,7 @@ function runningObserverDeps(options: {
       options.onClient?.(socketPath, clientOptions);
       const client = createObserverClient({ socketPath });
       client.health = async () => ({
-        schemaVersion: "0.11.0",
+        schemaVersion: "0.12.0",
         status: "healthy",
         pid: 1234,
         startedAt: now,
@@ -417,7 +427,7 @@ function runningObserverDeps(options: {
       client.reconcile =
         options.reconcile ??
         (async (reason?: string) => ({
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           reason: reason ?? "manual",
           reconciledAt: now,
           snapshot: options.snapshot ?? snapshotFixture(),
@@ -430,7 +440,7 @@ function runningObserverDeps(options: {
 
 function snapshotFixture(): StationSnapshot {
   return {
-    schemaVersion: "0.11.0",
+    schemaVersion: "0.12.0",
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
     providerHealth: {},

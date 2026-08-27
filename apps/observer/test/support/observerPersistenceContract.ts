@@ -763,6 +763,7 @@ export function observerPersistenceContract(
           expect(observations[1]?.entityKind).toBe("terminal_target");
           if (observations[1]?.entityKind === "terminal_target") {
             expect(observations[1].payload).not.toHaveProperty("providerData");
+            expect(observations[1].payload).not.toHaveProperty("hasManagedAttachment");
           }
           expect(observations[4]).toMatchObject({
             payload: { providerId: "fake-harness", status: "healthy" },

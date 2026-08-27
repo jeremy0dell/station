@@ -11,6 +11,7 @@ import type {
   ProviderHealth,
   ProviderId,
   ReleaseManagedTerminalTargetRequest,
+  SafeError,
   SessionId,
   TerminalCapabilities,
   TerminalIdentityBinding,
@@ -56,12 +57,21 @@ type PreviousTargetBinding = {
   hostBacked: boolean;
 };
 
+type TerminalTargetListResult =
+  | { status: "complete"; targets: TerminalTargetObservation[] }
+  | { status: "indeterminate"; targets: TerminalTargetObservation[]; error: SafeError };
+
 /**
  * ADAPTER
  *
  * Station terminal provider: UI-hosted mode is a registration shim; host-backed
- * mode supplies process lifecycle and opaque attachment identity. Native
- * presentation remains locally owned by Station and is never externally focusable.
+ * mode supplies process lifecycle, opaque attachment identity, and reconciled
+ * tri-state attachment evidence. Native presentation remains locally owned by
+ * Station and is never externally focusable.
+ * Attachment evidence is false for UI-owned targets, true only when the latest
+ * Host listing applies, and absent for cached Host targets after an uncertain read.
+ * Reconcile-aware discovery declares cached fallback indeterminate so it cannot
+ * masquerade as current debug evidence.
  * Deterministic targets are released only when their current Station session and,
  * for managed launch attempts, opaque binding generation match.
  */
@@ -80,6 +90,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   #pendingOrphanRecovery: Promise<boolean> | undefined;
   #targetRevision = 0;
   #listRequestSequence = 0;
+  #appliedHostListSequence: number | undefined;
   #bindingSequence = 0;
 
   constructor(options: StationTerminalProviderOptions = {}) {
@@ -154,8 +165,20 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
    * drop dead host targets, and dedupe by deterministic station target id.
    */
   async listTargets(): Promise<TerminalTargetObservation[]> {
+    return (await this.#listTargetsWithOutcome()).targets;
+  }
+
+  async listTargetsForReconcile(): Promise<TerminalTargetObservation[]> {
+    const result = await this.#listTargetsWithOutcome();
+    if (result.status === "indeterminate") {
+      throw result.error;
+    }
+    return result.targets;
+  }
+
+  async #listTargetsWithOutcome(): Promise<TerminalTargetListResult> {
     if (this.#host === undefined) {
-      return [...this.#targets.values()];
+      return { status: "complete", targets: this.#listedTargets() };
     }
     this.#listRequestSequence += 1;
     const requestSequence = this.#listRequestSequence;
@@ -178,12 +201,34 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       if (recoveredOrphans) {
         throw error;
       }
-      return [...this.#targets.values()];
+      const targets = this.#listedTargets();
+      if (this.#hasCurrentHostEvidence()) {
+        return { status: "complete", targets };
+      }
+      return {
+        status: "indeterminate",
+        targets,
+        error: safeErrorFromUnknown(
+          error,
+          stationHostSafeError("HOST_UNREACHABLE", "Station host target listing failed."),
+        ),
+      };
     }
     // A response cannot overwrite a target rebound, released, or host-backed
     // after this request began; a newer list request also supersedes this view.
     if (requestSequence !== this.#listRequestSequence || targetRevision !== this.#targetRevision) {
-      return [...this.#targets.values()];
+      const targets = this.#listedTargets();
+      if (this.#hasCurrentHostEvidence()) {
+        return { status: "complete", targets };
+      }
+      return {
+        status: "indeterminate",
+        targets,
+        error: stationHostSafeError(
+          "HOST_REQUEST_FAILED",
+          "Station host target listing was superseded before it could be applied.",
+        ),
+      };
     }
     const aliveById = new Map<string, HostListEntry>();
     for (const entry of live) {
@@ -216,7 +261,28 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
         this.#previousBindings.delete(targetId);
       }
     }
-    return [...this.#targets.values()];
+    this.#appliedHostListSequence = requestSequence;
+    return { status: "complete", targets: this.#listedTargets() };
+  }
+
+  #hasCurrentHostEvidence(): boolean {
+    return (
+      this.#appliedHostListSequence !== undefined &&
+      this.#appliedHostListSequence === this.#listRequestSequence
+    );
+  }
+
+  #listedTargets(): TerminalTargetObservation[] {
+    const hasCurrentHostEvidence = this.#hasCurrentHostEvidence();
+    return [...this.#targets.values()].map((target) => {
+      const observation: TerminalTargetObservation = { ...target };
+      if (!this.#hostBackedTargets.has(target.id)) {
+        observation.hasManagedAttachment = false;
+      } else if (hasCurrentHostEvidence) {
+        observation.hasManagedAttachment = true;
+      }
+      return observation;
+    });
   }
 
   /**

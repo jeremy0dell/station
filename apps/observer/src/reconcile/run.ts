@@ -7,6 +7,7 @@ import type {
   SafeError,
   SessionGroupRepairSummary,
   StationSnapshot,
+  StationSnapshotDebug,
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
@@ -34,6 +35,7 @@ import { type ReconcileSnapshotInputs, readReconcileSnapshotInputs } from "./run
 import { decideSessionGroupRepairAuthority } from "./sessionGroupRepairAuthority.js";
 import { reconcileSessionGroups } from "./sessionGroups.js";
 import { harnessesFromRegistry } from "./snapshotSeed.js";
+import { buildTerminalSnapshotDebug } from "./terminalSnapshotDebug.js";
 
 type ReconcileOnceInput = {
   reason: string;
@@ -57,6 +59,7 @@ type ReconcileOnceInput = {
 
 type ReconcileOnceResult = {
   snapshot: StationSnapshot;
+  debug: StationSnapshotDebug;
   providerHealth: Record<string, ProviderHealth>;
   lastReconcile: ReconcileTiming;
 };
@@ -66,8 +69,8 @@ type ReconcileOnceResult = {
  *
  * Orchestrates provider reads and their completeness evidence, relationship correlation, durable
  * harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and
- * projection, snapshot assembly, and atomic session persistence. The same resolved title records
- * feed snapshot composition and atomic reconcile persistence.
+ * projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session
+ * persistence. The same resolved title records feed snapshot composition and persistence.
  */
 export async function runReconcileOnce(input: ReconcileOnceInput): Promise<ReconcileOnceResult> {
   const started = toIsoTimestamp(input.read.clock.now());
@@ -145,6 +148,14 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     generatedAt: finishedAt,
     errors,
   });
+  const debug: StationSnapshotDebug = {
+    terminal: buildTerminalSnapshotDebug({
+      reconciledAt: observations.observedAt,
+      targets: observations.terminalTargets,
+      providerReads: observations.terminalProviderReadOutcomes,
+      providerHealth,
+    }),
+  };
 
   lastReconcile.eventsEmitted = await persistReconcileResult({
     ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
@@ -173,6 +184,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
 
   return {
     snapshot,
+    debug,
     providerHealth,
     lastReconcile,
   };

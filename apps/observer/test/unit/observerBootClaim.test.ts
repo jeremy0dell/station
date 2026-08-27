@@ -371,7 +371,7 @@ describe("observer boot claim", () => {
             startupPolicy: "preserve-incumbent",
             incumbentLifecycle: {
               health: vi.fn(async () => ({
-                schemaVersion: "0.11.0",
+                schemaVersion: "0.12.0",
                 status: "healthy",
                 pid: 4321,
                 startedAt: "2026-08-19T12:00:00.000Z",
@@ -410,7 +410,7 @@ describe("observer boot claim", () => {
             startupPolicy: "preserve-incumbent",
             incumbentLifecycle: {
               health: vi.fn(async () => ({
-                schemaVersion: "0.11.0",
+                schemaVersion: "0.12.0",
                 status: "healthy",
                 pid: 4321,
                 startedAt: "2026-08-19T12:00:00.000Z",
@@ -456,7 +456,7 @@ describe("observer boot claim", () => {
                 expect(startupListener).toBeDefined();
                 startupListener?.();
                 return {
-                  schemaVersion: "0.11.0",
+                  schemaVersion: "0.12.0",
                   status: "healthy",
                   pid: 4321,
                   startedAt: "2026-08-19T12:00:00.000Z",
