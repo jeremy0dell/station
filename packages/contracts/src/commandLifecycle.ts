@@ -85,6 +85,50 @@ type CommandSubtypeFor<TCommand extends StationCommand> = Extract<
   { type: TCommand["type"] }
 >;
 
+export type PublicCommandRecord = {
+  id: CommandRecord["id"];
+  type: CommandRecord["type"];
+  status: CommandRecord["status"];
+  createdAt: CommandRecord["createdAt"];
+  startedAt?: Exclude<CommandRecord["startedAt"], undefined>;
+  finishedAt?: Exclude<CommandRecord["finishedAt"], undefined>;
+  traceId?: Exclude<CommandRecord["traceId"], undefined>;
+  spanId?: Exclude<CommandRecord["spanId"], undefined>;
+  error?: Exclude<CommandRecord["error"], undefined>;
+  result?: Exclude<CommandRecord["result"], undefined>;
+};
+
+export const PublicCommandRecordSchema = z
+  .object({
+    id: CommandIdSchema,
+    type: StationCommandTypeSchema,
+    status: z.enum(["accepted", "started", "succeeded", "failed"]),
+    createdAt: TimestampSchema,
+    startedAt: TimestampSchema.optional(),
+    finishedAt: TimestampSchema.optional(),
+    traceId: nonEmptyStringSchema.optional(),
+    spanId: nonEmptyStringSchema.optional(),
+    error: SafeErrorSchema.optional(),
+    result: StationCommandResultSchema.optional(),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (record.result !== undefined && record.status !== "succeeded") {
+      context.addIssue({
+        code: "custom",
+        message: "Only a succeeded public command record may contain a result.",
+        path: ["result"],
+      });
+    }
+    if (record.result !== undefined && record.result.type !== record.type) {
+      context.addIssue({
+        code: "custom",
+        message: "Public command result type must match the command type.",
+        path: ["result", "type"],
+      });
+    }
+  }) as z.ZodType<PublicCommandRecord>;
+
 export type SucceededCommandRecord<TCommand extends StationCommand = StationCommand> =
   CommandRecordFor<CommandSubtypeFor<TCommand>> & { status: "succeeded" };
 export type FailedCommandRecord<TCommand extends StationCommand = StationCommand> =

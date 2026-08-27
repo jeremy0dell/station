@@ -3,9 +3,9 @@ import { mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CommandReceiptSchema,
-  type CommandRecord,
-  CommandRecordSchema,
   ObserverStopReceiptSchema,
+  type PublicCommandRecord,
+  PublicCommandRecordSchema,
   StationSnapshotSchema,
 } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
@@ -40,7 +40,7 @@ describe("production Observer SQLite smoke", () => {
     const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1_000 });
     const databasePath = join(fixture.stateDir, "observer.sqlite");
     const projectId = "sqlite-smoke";
-    let durableCreate: CommandRecord | undefined;
+    let durableCreate: PublicCommandRecord | undefined;
 
     try {
       expect(
@@ -72,7 +72,7 @@ describe("production Observer SQLite smoke", () => {
           ),
         );
         expect(created.status).toBe("succeeded");
-        const createdRecord = CommandRecordSchema.parse(created.command);
+        const createdRecord = PublicCommandRecordSchema.parse(created.command);
         expect(createdRecord).toMatchObject({
           status: "succeeded",
           result: {
@@ -109,15 +109,14 @@ describe("production Observer SQLite smoke", () => {
       );
       expect(dispatchedOutput.status).toBe("succeeded");
       const receipt = CommandReceiptSchema.parse(dispatchedOutput.receipt);
-      const command = CommandRecordSchema.parse(dispatchedOutput.command);
+      const command = PublicCommandRecordSchema.parse(dispatchedOutput.command);
       expect(receipt).toMatchObject({ accepted: true, status: "accepted" });
       expect(command).toMatchObject({
+        type: "sessionGroup.reparent",
         status: "succeeded",
-        command: {
-          type: "sessionGroup.reparent",
-          payload: { projectId, groupId: child.id, parentGroupId: parent.id },
-        },
       });
+      expect(command).not.toHaveProperty("command");
+      expect(command).not.toHaveProperty("diagnostics");
       expect(
         StationSnapshotSchema.parse(runStnJson(["--config", configPath, "snapshot", "--json"], env))
           .sessionGroups,
@@ -159,7 +158,7 @@ describe("production Observer SQLite smoke", () => {
       const reloaded = jsonObject(
         runStnJson(["--config", configPath, "command", "get", durableCreate.id], env),
       );
-      expect(CommandRecordSchema.parse(reloaded.command)).toEqual(durableCreate);
+      expect(PublicCommandRecordSchema.parse(reloaded.command)).toEqual(durableCreate);
       expect(
         StationSnapshotSchema.parse(runStnJson(["--config", configPath, "snapshot", "--json"], env))
           .sessionGroups,

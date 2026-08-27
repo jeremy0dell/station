@@ -8,6 +8,7 @@ import type {
   CommandRecord,
   FailedCommandRecord,
   ObserverApi,
+  PublicCommandRecord,
   RejectedCommandReceipt,
   SafeError,
   StationCommand,
@@ -60,19 +61,6 @@ export type CommandDispatchCompletedResult =
       receipt: AcceptedCommandReceipt;
       command: PublicCommandRecord;
     };
-
-export type PublicCommandRecord = {
-  id: CommandRecord["id"];
-  type: CommandRecord["type"];
-  status: CommandRecord["status"];
-  createdAt: CommandRecord["createdAt"];
-  startedAt?: Exclude<CommandRecord["startedAt"], undefined>;
-  finishedAt?: Exclude<CommandRecord["finishedAt"], undefined>;
-  traceId?: Exclude<CommandRecord["traceId"], undefined>;
-  spanId?: Exclude<CommandRecord["spanId"], undefined>;
-  error?: SafeError;
-  result?: Exclude<CommandRecord["result"], undefined>;
-};
 
 export type CommandGetResult = {
   command: PublicCommandRecord;
