@@ -9,6 +9,7 @@ import {
 import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { stationKeymapHelp } from "../../input/keymap/stationBindings.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
+import { StationScrollBarView } from "./StationScrollBarView.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
 export function HelpOverlayView({
@@ -27,7 +28,10 @@ export function HelpOverlayView({
   const layout = helpPanelLayout(columns, rows, content);
   const model = helpPanelModel(layout.width, layout.height, content, screen.scrollOffset);
   const fg = toOpenTuiColor(theme.text.primary);
-  const barFg = toOpenTuiColor(theme.text.muted);
+  const body = model.lines.flatMap((line) => (line.kind === "body" ? [line] : []));
+  const top = model.lines[0];
+  const bottom = model.lines.at(-1);
+  const barColumn = body[0]?.bar.length === 1;
 
   return (
     <box
@@ -41,37 +45,49 @@ export function HelpOverlayView({
       backgroundColor={helpBackground}
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      {model.lines.map((line, index) =>
-        line.kind === "border" ? (
-          <text key={`${index}:${line.text}`} fg={fg} bg={helpBackground}>
-            {line.text}
-          </text>
-        ) : (
-          <box key={`${index}:${line.prefix}`} flexDirection="row" height={1}>
-            <text fg={fg} bg={helpBackground}>
-              {line.prefix}
-            </text>
-            {line.bar === "" ? null : (
-              <text
-                fg={barFg}
-                bg={helpBackground}
-                {...(model.overflow
-                  ? stationMouseProps(dispatch, {
-                      kind: "scrollbar",
-                      surface: "help",
-                      offset: line.offset,
-                    })
-                  : {})}
-              >
-                {line.bar}
+      {top?.kind === "border" ? (
+        <text fg={fg} bg={helpBackground}>
+          {top.text}
+        </text>
+      ) : null}
+      {model.bodyRows > 0 ? (
+        <box flexDirection="row" height={model.bodyRows}>
+          <box flexDirection="column" flexShrink={0}>
+            {body.map((line, index) => (
+              <text key={`prefix:${index}`} fg={fg} bg={helpBackground}>
+                {line.prefix}
               </text>
-            )}
-            <text fg={fg} bg={helpBackground}>
-              {line.suffix}
-            </text>
+            ))}
           </box>
-        ),
-      )}
+          {barColumn ? (
+            <box width={1} height={model.bodyRows} flexShrink={0}>
+              {model.overflow ? (
+                <StationScrollBarView
+                  surface="help"
+                  contentLength={content.length}
+                  viewportLength={model.bodyRows}
+                  offset={model.scrollOffset}
+                  trackBackground={helpBackground}
+                  thumbColor={toOpenTuiColor(theme.text.muted)}
+                  height={model.bodyRows}
+                />
+              ) : null}
+            </box>
+          ) : null}
+          <box flexDirection="column" width={1} flexShrink={0}>
+            {body.map((line, index) => (
+              <text key={`suffix:${index}`} fg={fg} bg={helpBackground}>
+                {line.suffix}
+              </text>
+            ))}
+          </box>
+        </box>
+      ) : null}
+      {bottom?.kind === "border" && model.lines.length > 1 ? (
+        <text fg={fg} bg={helpBackground}>
+          {bottom.text}
+        </text>
+      ) : null}
     </box>
   );
 }

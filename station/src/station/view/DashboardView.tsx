@@ -13,10 +13,8 @@ import { layoutWorktreeRowGrid, textSegment, truncateCells } from "@station/dash
 import type { RowGridLayout, RowGridRowInput } from "@station/dashboard-core/selectors";
 import {
   dashboardScrollGutterChrome,
-  scrollbarOffsetForTrackIndex,
   selectDashboardViewport,
   selectFleetSummary,
-  verticalScrollbarCells,
 } from "@station/dashboard-core/selectors";
 import type {
   DashboardRowId,
@@ -38,7 +36,8 @@ import { ProjectHeaderView } from "./ProjectHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
 import { FLEET_STATUS_ORDER, STATION_STATUS_UI } from "../statusUi.js";
-import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
+import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
+import { StationScrollBarView } from "./StationScrollBarView.js";
 import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
 export type DashboardViewProps = {
@@ -217,7 +216,7 @@ function dashboardRowLayouts(
   return { headerLayout, layoutByItem };
 }
 
-/** Sibling 1-col gutter outside Group frames; empty when the tree fits. */
+/** Sibling 1-col gutter outside Group frames; OpenTUI paints the body thumb. */
 function DashboardScrollGutter({
   chromeTop,
   chromeBottom,
@@ -233,45 +232,31 @@ function DashboardScrollGutter({
   viewportLength: number;
   offset: number;
 }) {
-  const dispatch = useStationMouse();
   const theme = useStationTheme();
-  const overflow = contentLength > viewportLength && trackHeight > 0;
-  const cells = verticalScrollbarCells({
-    trackHeight,
-    contentLength,
-    viewportLength,
-    offset,
-  });
   return (
     <box width={1} flexDirection="column" flexShrink={0}>
       {Array.from({ length: chromeTop }, (_, index) => (
-        <text key={`top-${index}`}> </text>
+        <text key={`top-${index}`} height={1}>
+          {" "}
+        </text>
       ))}
-      <box flexGrow={1} flexDirection="column">
-        {cells.map((glyph, index) => (
-          <text
-            key={index}
-            fg={toOpenTuiColor(theme.text.muted)}
-            {...(overflow
-              ? stationMouseProps(dispatch, {
-                  kind: "scrollbar",
-                  surface: "dashboard",
-                  offset: scrollbarOffsetForTrackIndex({
-                    trackHeight,
-                    contentLength,
-                    viewportLength,
-                    offset,
-                    trackIndex: index,
-                  }),
-                })
-              : {})}
-          >
-            {glyph}
-          </text>
-        ))}
+      <box width={1} height={trackHeight} flexShrink={0}>
+        {trackHeight > 0 ? (
+          <StationScrollBarView
+            surface="dashboard"
+            contentLength={contentLength}
+            viewportLength={viewportLength}
+            offset={offset}
+            trackBackground={toOpenTuiOpaqueColor(theme.surfaces.canvas)}
+            thumbColor={toOpenTuiColor(theme.text.muted)}
+            height={trackHeight}
+          />
+        ) : null}
       </box>
       {Array.from({ length: chromeBottom }, (_, index) => (
-        <text key={`bottom-${index}`}> </text>
+        <text key={`bottom-${index}`} height={1}>
+          {" "}
+        </text>
       ))}
     </box>
   );

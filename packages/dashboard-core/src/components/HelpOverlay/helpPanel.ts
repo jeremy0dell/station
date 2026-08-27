@@ -1,5 +1,5 @@
 import type { TuiHelpContentLine } from "../../state/keymap.js";
-import { scrollbarOffsetForTrackIndex, verticalScrollbarCells } from "../scrollbar.js";
+import { scrollbarOffsetForTrackIndex } from "../scrollbar.js";
 
 export type HelpPanelLayout = {
   left: number;
@@ -97,16 +97,10 @@ export function helpPanelModel(
   const bodyRows = Math.max(0, panelHeight - 2);
   const overflow = content.length > bodyRows;
   const offset = clampHelpScrollOffset(content.length, bodyRows, scrollOffset);
-  const bars = verticalScrollbarCells({
-    trackHeight: bodyRows,
-    contentLength: content.length,
-    viewportLength: bodyRows,
-    offset,
-  });
+  // Reserve the last inner pad cell as a space; OpenTUI paints █/▀/▄ on top.
   const lines: HelpPanelLine[] = [{ kind: "border", text: horizontalBorder(panelWidth) }];
   for (let index = 0; index < bodyRows; index += 1) {
-    const bar = bars[index] ?? " ";
-    const parts = contentLineParts(panelWidth, content[offset + index], bar);
+    const parts = contentLineParts(panelWidth, content[offset + index], " ");
     lines.push({
       kind: "body",
       prefix: parts.prefix,

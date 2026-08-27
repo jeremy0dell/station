@@ -120,6 +120,7 @@ const CASES: ModalCase[] = [
       "edit/apply/cancel-clear/retain-close filter",
       "╭",
       "╰",
+      "█",
     ],
   },
   {
@@ -131,7 +132,7 @@ const CASES: ModalCase[] = [
       { input: "", downArrow: true },
       { input: "", downArrow: true },
     ],
-    expect: ["widgets", "delete session", "refresh", "╭", "╰"],
+    expect: ["widgets", "delete session", "refresh", "╭", "╰", "█"],
   },
   {
     name: "project menu",
