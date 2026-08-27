@@ -274,6 +274,7 @@ No single layer owns all truth.
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
 | Hook spool | Durable delivery fallback while ingress cannot reach the observer. A queued record is pending evidence, not current graph truth. Its stable spool identity drives replay completion after primary dedupe, and the filesystem record remains until all derived durable work finishes. |
+| CLI process diagnostics | Best-effort redacted failures, plus exact-opt-in start/outcome traces, in `logs/cli.jsonl`. They may carry `invocationId`, `traceId`, and `commandId` correlation, but never grant execution, retry, recovery, or command-completion authority. |
 | JSONL logs and debug bundles | Diagnostic evidence. They never outrank config, provider reads, current observer state, or command records. |
 | Observer recovery inventory | Point-in-time retained-session and redacted recovery-handle evidence. It never classifies recovery eligibility or grants mutation authority. |
 | Observer recovery assessment | Point-in-time classification over one recovery inventory and one separately captured graph. It may select an opaque Observer handle for downstream policy but never launches it or grants mutation authority; public update reports omit that handle identity. |
@@ -292,11 +293,30 @@ state after terminal completion without changing Observer mutation or publicatio
 Dashboard projection subscribes to that state and never constructs a second client
 runtime.
 
+## CLI Process Diagnostics
+
+Observer command records remain the sole default evidence for mutations accepted
+through the Observer. When no adequate command record exists, `runCliMain`
+best-effort appends one bounded `cli.process.failure` record; rejected receipts use
+`cli.command.rejected`. Successful reads and mutations, local mutation results,
+terminal command failures, help, and version add no default process record.
+Observer-startup lifecycle evidence already retained by the startup adapter is not
+duplicated at the process boundary.
+
+Only exact `STATION_CLI_TRACE=1` enables a per-process
+`cli.process.trace.start` / `cli.process.trace.outcome` pair, including for help,
+version, and reads. The pair has an `invocationId` and may carry top-level
+`traceId` and `commandId`; it is redacted, allowlisted, non-authoritative, and may
+be incomplete after abrupt termination or filesystem failure. CLI diagnostics
+never block effects, alter output or exit status, warn about logging degradation,
+fall back from a configured state directory, or introduce command, retry, or
+recovery authority.
+
 ## Runtime Lifecycle
 
 ### Startup
 
-Normal CLI and provider-hook startup is attach-or-spawn through one CLI lifecycle;
+Normal CLI and provider-hook startup is attach-or-spawn through one Observer lifecycle owned by CLI composition;
 provider-hook delivery adds only its cross-process spawn throttle and shared deadline. Runtime composition
 owns the singleton lifecycle through the process-evidence and incumbent-lifecycle
 ports plus local socket, pidfile, boot-claim, and ownership-watcher adapters. Under

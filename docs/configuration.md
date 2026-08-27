@@ -435,6 +435,13 @@ Nested retention tables:
 See [diagnostics.md](./diagnostics.md) for current enforcement notes; some SQLite
 limits are reported through diagnostics before pruning is implemented.
 
+CLI process diagnostics add no configuration key. A route that already requires
+config writes any best-effort process record under the successfully loaded
+Observer state directory. Help, version, global parsing, unknown routes, and
+config-load failures use the documented default state directory without loading
+config for diagnostics. An unavailable configured sink never falls back to
+another directory, and logging failure does not change command behavior.
+
 ### `[feature_flags]` — temporary behavior gates (optional)
 
 Strict boolean record. Unknown flag names are rejected.
@@ -543,6 +550,7 @@ Advanced development/demo overrides:
 | `STATION_BUN` | Source/development Station host launches | Bun executable path/name for source/development host launches; fallback is `bun`. |
 | `STATION_HOST_ENTRY` | Source/development Station host launches | Non-standard source/development override for the host entry file. Usually leave unset. |
 | `STATION_HOST_HANDOFF` | Native Station TUI build-upgrade launch | Only exact `1` opts a busy same-protocol older Host into negotiated handoff with fixed `processes` fidelity, followed by warm pane reattach. There is no prompt, launcher flag, or config key; absent, empty, `true`, and every other value preserve the existing visible refusal. |
+| `STATION_CLI_TRACE` | `stn` process diagnostics | Only exact `1` enables one best-effort start/outcome trace pair for each `runCliMain` process. Unset, empty, `true`, and every other value leave tracing disabled. |
 | `STATION_INGRESS_BIN` | Generated Pi/OpenCode hook transport | Station sets this to the canonical absolute `stn-ingress` launcher for Pi launches and generated hook/plugin artifacts; manual extension/plugin runs fall back to the PATH name `stn-ingress`. |
 | `STATION_DASHBOARD_COMMAND` | CLI TUI launcher | Explicit command override for the observer-backed, command-capable, pane-free dashboard renderer. Development/testing only. |
 | `STATION_TUI_COMMAND` / `STATION_TUI_SESSION_NAME` | tmux popup registry | Development popup routing overrides. |

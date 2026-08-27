@@ -1,5 +1,6 @@
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
+import { commandExecutionCorrelation } from "../command.js";
 import { parseSessionArgs } from "../session/args.js";
 import { runSessionCommand } from "../session/command.js";
 import { sessionCommandExitCode } from "../session/result.js";
@@ -160,8 +161,19 @@ async function runSessionCliCommand(context: CliCommandRunContext) {
     return { code: 0, output: result.context };
   }
   const code = sessionCommandExitCode(result);
+  const correlation =
+    result.action === "rename" || result.action === "close"
+      ? commandExecutionCorrelation(result.outcome)
+      : undefined;
   if (parsed.outputFormat === "json") {
-    return { code, output: result };
+    return correlation === undefined
+      ? { code, output: result }
+      : { code, output: result, correlation };
   }
-  return { code, output: renderSessionCommandText(result), outputFormat: "text" as const };
+  const cliResult = {
+    code,
+    output: renderSessionCommandText(result),
+    outputFormat: "text" as const,
+  };
+  return correlation === undefined ? cliResult : { ...cliResult, correlation };
 }

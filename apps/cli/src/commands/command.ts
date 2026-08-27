@@ -8,6 +8,7 @@ import type {
   CommandRecord,
   FailedCommandRecord,
   ObserverApi,
+  RejectedCommandReceipt,
   SafeError,
   StationCommand,
   SucceededCommandRecord,
@@ -15,7 +16,8 @@ import type {
 import { CommandIdSchema, StationCommandSchema } from "@station/contracts";
 import { createObserverClient, type ObserverClient } from "@station/protocol";
 import { isSafeError, runRuntimeBoundaryWithTimeout } from "@station/runtime";
-import { parsePositiveIntegerOption } from "../args.js";
+import { CliInputError, parsePositiveIntegerOption } from "../args.js";
+import type { CliRunCorrelation } from "../cliTypes.js";
 import {
   assertObserverRunning,
   type ObserverProcessDeps,
@@ -37,23 +39,34 @@ export type TypedObserverCommandOptions = {
   waitForCompletion?: boolean;
 };
 
-export type CommandDispatchAcceptedResult = {
-  status: "accepted" | "rejected";
-  receipt: CommandReceipt;
-};
+export type CommandDispatchReceiptResult =
+  | {
+      status: "accepted";
+      receipt: AcceptedCommandReceipt;
+    }
+  | {
+      status: "rejected";
+      receipt: RejectedCommandReceipt;
+    };
 
-export type CommandDispatchCompletedResult = {
-  status: "succeeded" | "failed";
-  receipt: CommandReceipt;
-  command: CommandRecord;
-};
+export type CommandDispatchCompletedResult =
+  | {
+      status: "succeeded";
+      receipt: AcceptedCommandReceipt;
+      command: SucceededCommandRecord;
+    }
+  | {
+      status: "failed";
+      receipt: AcceptedCommandReceipt;
+      command: FailedCommandRecord;
+    };
 
 export type CommandGetResult = {
   command: CommandRecord;
 };
 
 export type CommandCommandResult =
-  | CommandDispatchAcceptedResult
+  | CommandDispatchReceiptResult
   | CommandDispatchCompletedResult
   | CommandGetResult;
 
@@ -75,7 +88,8 @@ type ParsedCommandArgs =
  *
  * Starts or selects the pinned Observer, dispatches one typed Station command, and optionally
  * reloads its durable terminal outcome through the race-safe protocol completion wait.
- * Post-dispatch wait failures retain the accepted command and trace correlation.
+ * Post-dispatch waits preserve receipt command/trace correlation, including timeouts, and reject
+ * conflicting terminal completion evidence.
  */
 export async function executeTypedObserverCommand<TCommand extends StationCommand>(
   command: TCommand,
@@ -101,13 +115,13 @@ export async function executeTypedObserverCommand<TCommand extends StationComman
   let record: CommandRecord;
   try {
     record = await waitForCommand(client, receipt.commandId, timeoutMs);
+    if (record.status !== "succeeded" && record.status !== "failed") {
+      throw commandWaitTimeoutError();
+    }
+    assertMatchingCommandCompletion(command, receipt, record);
   } catch (error) {
-    throw correlateCommandWaitError(error, receipt);
+    throw correlatedCommandWaitError(error, receipt);
   }
-  if (record.status !== "succeeded" && record.status !== "failed") {
-    throw correlateCommandWaitError(commandWaitTimeoutError(), receipt);
-  }
-  assertMatchingCommandCompletion(command, receipt, record);
   if (record.status === "succeeded") {
     return {
       status: "succeeded",
@@ -125,7 +139,8 @@ export async function executeTypedObserverCommand<TCommand extends StationComman
 /**
  * ADAPTER
  *
- * Translates raw CLI argv and stdin JSON into typed Observer command execution or record lookup.
+ * Parses raw CLI input once, executes typed Observer commands or record lookup, and projects only
+ * typed command receipt/record correlation for the process boundary.
  */
 export async function runCommandCommand(
   args: string[],
@@ -144,10 +159,7 @@ export async function runCommandCommand(
   const executionOptions = typedObserverCommandOptions(options, timeoutMs, parsed.wait);
   const outcome = await executeTypedObserverCommand(command, executionOptions, deps);
   if (outcome.status === "accepted" || outcome.status === "rejected") {
-    return {
-      status: outcome.status,
-      receipt: outcome.receipt,
-    };
+    return outcome;
   }
   return {
     status: outcome.status,
@@ -164,6 +176,55 @@ export function commandCommandExitCode(result: CommandCommandResult): number {
     return 1;
   }
   return 0;
+}
+
+export function commandCommandCorrelation(
+  result: CommandCommandResult,
+): CliRunCorrelation | undefined {
+  if (!("receipt" in result)) return undefined;
+  switch (result.status) {
+    case "accepted":
+    case "rejected":
+      return commandExecutionCorrelation(result);
+    case "succeeded":
+      return commandExecutionCorrelation({
+        status: "succeeded",
+        receipt: result.receipt,
+        record: result.command,
+      });
+    case "failed":
+      return commandExecutionCorrelation({
+        status: "failed",
+        receipt: result.receipt,
+        record: result.command,
+      });
+  }
+}
+
+export function commandExecutionCorrelation(outcome: CommandExecutionOutcome): CliRunCorrelation {
+  let traceId = outcome.receipt.traceId;
+  if (outcome.status === "succeeded" || outcome.status === "failed") {
+    assertMatchingCorrelation(outcome.receipt, outcome.record);
+    traceId ??= outcome.record.traceId;
+  }
+
+  const correlation: CliRunCorrelation = {
+    status: outcome.status,
+    commandId: outcome.receipt.commandId,
+  };
+  if (traceId !== undefined) correlation.traceId = traceId;
+  return correlation;
+}
+
+function assertMatchingCorrelation(receipt: AcceptedCommandReceipt, record: CommandRecord): void {
+  if (
+    record.id !== receipt.commandId ||
+    (record.traceId !== undefined &&
+      receipt.traceId !== undefined &&
+      record.traceId !== receipt.traceId)
+  ) {
+    throw commandCompletionMismatchError(receipt);
+  }
 }
 
 async function getCommand(client: ObserverApi, commandId: CommandId): Promise<CommandGetResult> {
@@ -281,13 +342,18 @@ function assertMatchingCommandCompletion<TCommand extends StationCommand>(
     record.id !== receipt.commandId ||
     record.type !== command.type ||
     record.command.type !== command.type ||
-    !isDeepStrictEqual(record.command, command)
+    !isDeepStrictEqual(record.command, command) ||
+    (receipt.traceId !== undefined &&
+      record.traceId !== undefined &&
+      receipt.traceId !== record.traceId)
   ) {
     throw commandCompletionMismatchError(receipt);
   }
 }
 
-function commandCompletionMismatchError(receipt: AcceptedCommandReceipt): SafeError {
+function commandCompletionMismatchError(
+  receipt: Pick<CommandReceipt, "commandId" | "traceId">,
+): SafeError {
   const error: SafeError = {
     tag: "CommandCliError",
     code: "COMMAND_COMPLETION_MISMATCH",
@@ -307,9 +373,17 @@ function commandWaitTimeoutError(): SafeError {
   };
 }
 
-function correlateCommandWaitError(error: unknown, receipt: AcceptedCommandReceipt): unknown {
-  if (!isSafeError(error)) {
-    return error;
+function correlatedCommandWaitError(error: unknown, receipt: AcceptedCommandReceipt): never {
+  if (!isSafeError(error)) throw error;
+  if (error.commandId !== undefined && error.commandId !== receipt.commandId) {
+    throw commandCompletionMismatchError(receipt);
+  }
+  if (
+    error.traceId !== undefined &&
+    receipt.traceId !== undefined &&
+    error.traceId !== receipt.traceId
+  ) {
+    throw commandCompletionMismatchError(receipt);
   }
   const correlated: SafeError = {
     ...error,
@@ -318,7 +392,7 @@ function correlateCommandWaitError(error: unknown, receipt: AcceptedCommandRecei
   if (receipt.traceId !== undefined) {
     correlated.traceId = receipt.traceId;
   }
-  return correlated;
+  throw correlated;
 }
 
 function mapCommandWaitError(error: unknown): never {
@@ -330,22 +404,27 @@ function mapCommandWaitError(error: unknown): never {
 
 function parseCommandFromStdin(stdin: string | undefined, requiresStdin: boolean): StationCommand {
   if (requiresStdin && (stdin === undefined || stdin.trim().length === 0)) {
-    throw new Error("command dispatch --stdin requires JSON on stdin.");
+    throw new CliInputError(
+      "CLI_COMMAND_STDIN_REQUIRED",
+      "command dispatch --stdin requires JSON on stdin.",
+    );
   }
   if (stdin === undefined) {
-    throw new Error("command dispatch requires --stdin.");
+    throw new CliInputError("CLI_COMMAND_STDIN_REQUIRED", "command dispatch requires --stdin.");
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(stdin);
   } catch (cause) {
-    throw new Error("Invalid command JSON.", { cause });
+    throw new CliInputError("CLI_COMMAND_JSON_INVALID", "Invalid command JSON.", { cause });
   }
 
   const result = StationCommandSchema.safeParse(parsed);
   if (!result.success) {
-    throw new Error(`Invalid command JSON: ${result.error.message}`);
+    throw new CliInputError("CLI_COMMAND_JSON_INVALID", "Invalid command JSON.", {
+      cause: result.error,
+    });
   }
   return result.data;
 }
