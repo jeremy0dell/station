@@ -21,7 +21,7 @@ import {
   waitForSnapshot,
 } from "../../support/real-station/protocol";
 import { createRealTempRepo, uniqueBranch } from "../../support/real-station/repo";
-import { killTmuxSession, listTmuxWindows } from "../../support/real-station/tmux";
+import { closeRealTmuxEndpoint, listTmuxWindows } from "../../support/real-station/tmux";
 import { removeRealWorktrunkWorktree } from "../../support/real-station/worktrunk";
 
 const describeReal = realE2eEnabled() ? describe : describe.skip;
@@ -56,17 +56,14 @@ describeReal("real Codex session lifecycle", () => {
       codexCommand: codex.codexCommand,
       installCodexHooks: true,
     });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     await codex.installHooks(config);
     cleanup.defer(async () => {
       await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(testEnv, config.tmuxSession);
-    });
-
     const branch = uniqueBranch(
       "codex-lifecycle-customer-account-permissions-rollout-for-enterprise-alpha",
     );
@@ -135,7 +132,7 @@ describeReal("real Codex session lifecycle", () => {
         focusable: true,
         hasPrimaryAgentEndpoint: true,
       });
-      await expect(listTmuxWindows(testEnv, config.tmuxSession)).resolves.toContain(
+      await expect(listTmuxWindows(config.tmuxEndpoint, config.tmuxSession)).resolves.toContain(
         expectedWindowName(config.projectId, branch, row.id, row.path),
       );
 

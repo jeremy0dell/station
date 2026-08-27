@@ -19,7 +19,8 @@ import { createRealTempRepo, uniqueBranch } from "../../support/real-station/rep
 import {
   activeTmuxPane,
   captureTmuxPane,
-  killTmuxSession,
+  closeRealTmuxEndpoint,
+  type RealTmuxEndpoint,
   sendTmuxKeys,
 } from "../../support/real-station/tmux";
 import { removeRealWorktrunkWorktree } from "../../support/real-station/worktrunk";
@@ -55,6 +56,7 @@ describeReal("real Claude hook ingestion", () => {
       harnessProvider: "claude",
       installClaudeHooks: true,
     });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     await installClaudeHookProjectConfig({
       env,
       repo,
@@ -64,12 +66,8 @@ describeReal("real Claude hook ingestion", () => {
       await runStationJson(env, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
-    });
-
     const branch = uniqueBranch("claude-hooks");
     cleanup.defer(async () => {
       await removeRealWorktrunkWorktree({ env, config, repo, branch });
@@ -109,7 +107,7 @@ describeReal("real Claude hook ingestion", () => {
         branch,
         timeoutMs: 90_000,
       });
-      await continuePastClaudeTrustDialog(env, config.tmuxSession, row);
+      await continuePastClaudeTrustDialog(config.tmuxEndpoint, config.tmuxSession, row);
       await waitForClaudeSentinel(sentinel, { rootPath: row.path, timeoutMs: 240_000 });
       const idleRow = await waitForRowAgentState({
         env,
@@ -210,12 +208,12 @@ async function waitForRowTerminalAttachment(input: {
 }
 
 async function continuePastClaudeTrustDialog(
-  env: RealE2eEnvironment,
+  endpoint: RealTmuxEndpoint,
   tmuxSession: string,
   row: StationSnapshot["rows"][number],
 ): Promise<void> {
   const target = await activeTmuxPane(
-    env,
+    endpoint,
     `${tmuxSession}:${buildWorkbenchWindowName({
       projectId: row.projectId,
       branch: row.branch,
@@ -225,9 +223,9 @@ async function continuePastClaudeTrustDialog(
   );
   const deadline = Date.now() + 30_000;
   while (Date.now() <= deadline) {
-    const captured = await captureTmuxPane({ env, target });
+    const captured = await captureTmuxPane({ endpoint, target });
     if (captured.includes("Yes, I trust this folder")) {
-      await sendTmuxKeys({ env, target, keys: ["Enter"] });
+      await sendTmuxKeys({ endpoint, target, keys: ["Enter"] });
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 500));

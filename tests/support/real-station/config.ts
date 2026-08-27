@@ -3,12 +3,14 @@ import { dirname, join } from "node:path";
 import type { RealE2eEnvironment } from "./env";
 import { requireToolPath } from "./env";
 import type { RealTempRepo } from "./repo";
+import { closeRealTmuxEndpoint, createRealTmuxEndpoint, type RealTmuxEndpoint } from "./tmux";
 
 export type RealStationConfigFixture = {
   configPath: string;
   stateDir: string;
   socketPath: string;
   worktrunkConfigPath: string;
+  tmuxEndpoint: RealTmuxEndpoint;
   tmuxSession: string;
   projectId: string;
 };
@@ -45,9 +47,12 @@ export async function writeRealStationConfig(
   const worktrunkConfigPath = join(options.repo.root, "worktrunk", "config.toml");
   const configPath = join(options.repo.root, "station.config.toml");
   const tmuxSession = options.tmuxSession ?? uniqueTmuxSession();
+  const worktrunkCommand = requireToolPath(options.env, "worktrunk");
+  const harnessLines = harnessConfigLines(options, harnessProvider);
   await ensurePrivateDirectory(stateDir);
   await ensurePrivateDirectory(dirname(socketPath));
   await mkdir(join(options.repo.root, "worktrunk"), { recursive: true });
+  const tmuxEndpoint = await createRealTmuxEndpoint(options.env);
 
   const lines = [
     "schema_version = 1",
@@ -64,15 +69,17 @@ export async function writeRealStationConfig(
     'layout = "agent-shell"',
     "",
     "[worktree.worktrunk]",
-    `command = ${tomlString(requireToolPath(options.env, "worktrunk"))}`,
+    `command = ${tomlString(worktrunkCommand)}`,
     `config_path = ${tomlString(worktrunkConfigPath)}`,
     `use_lifecycle_hooks = ${options.useLifecycleHooks === true ? "true" : "false"}`,
     `hook_mode = ${tomlString(options.useLifecycleHooks === true ? "required-for-mvp" : "disabled")}`,
     "",
     "[terminal.tmux]",
+    `command = ${tomlString(tmuxEndpoint.wrapperPath)}`,
+    `workbench_socket_path = ${tomlString(tmuxEndpoint.socketPath)}`,
     `workbench_session = ${tomlString(tmuxSession)}`,
     "",
-    ...harnessConfigLines(options, harnessProvider),
+    ...harnessLines,
     ...eventHookConfigLines(options),
     "[[projects]]",
     `id = ${tomlString(projectId)}`,
@@ -93,12 +100,22 @@ export async function writeRealStationConfig(
     "include_external = false",
     "",
   ];
-  await writeFile(configPath, lines.join("\n"), "utf8");
+  try {
+    await writeFile(configPath, lines.join("\n"), "utf8");
+  } catch (error) {
+    try {
+      await closeRealTmuxEndpoint(tmuxEndpoint);
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], "config write and tmux cleanup failed");
+    }
+    throw error;
+  }
 
   return {
     configPath,
     stateDir,
     socketPath,
+    tmuxEndpoint,
     worktrunkConfigPath,
     tmuxSession,
     projectId,

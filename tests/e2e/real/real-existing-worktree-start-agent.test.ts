@@ -15,7 +15,7 @@ import {
 } from "../../support/real-station/env";
 import { CleanupStack, runStationJson } from "../../support/real-station/process";
 import { createRealTempRepo, uniqueBranch } from "../../support/real-station/repo";
-import { killTmuxSession } from "../../support/real-station/tmux";
+import { closeRealTmuxEndpoint } from "../../support/real-station/tmux";
 import {
   createRealWorktrunkWorktree,
   removeRealWorktrunkWorktree,
@@ -53,17 +53,14 @@ describeReal("real existing Worktrunk worktree start-agent", () => {
       codexCommand: codex.codexCommand,
       installCodexHooks: true,
     });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     await codex.installHooks(config);
     cleanup.defer(async () => {
       await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(testEnv, config.tmuxSession);
-    });
-
     const branch = uniqueBranch("existing");
     cleanup.defer(async () => {
       await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });

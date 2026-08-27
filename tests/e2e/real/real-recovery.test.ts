@@ -12,7 +12,7 @@ import {
 } from "../../support/real-station/env";
 import { CleanupStack, runStationJson } from "../../support/real-station/process";
 import { createRealTempRepo, uniqueBranch } from "../../support/real-station/repo";
-import { killTmuxSession } from "../../support/real-station/tmux";
+import { closeRealTmuxEndpoint, killTmuxSession } from "../../support/real-station/tmux";
 import {
   createRealWorktrunkWorktree,
   removeRealWorktrunkWorktree,
@@ -49,16 +49,13 @@ describeReal("real observer recovery", () => {
       repo,
       codexCommand: codex.codexCommand,
     });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     cleanup.defer(async () => {
       await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(testEnv, config.tmuxSession);
-    });
-
     const branch = uniqueBranch("recovery");
     cleanup.defer(async () => {
       await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
@@ -100,17 +97,14 @@ describeReal("real observer recovery", () => {
       codexCommand: codex.codexCommand,
       installCodexHooks: true,
     });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     await codex.installHooks(config);
     cleanup.defer(async () => {
       await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(testEnv, config.tmuxSession);
-    });
-
     const branch = uniqueBranch("stale-tmux");
     cleanup.defer(async () => {
       await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
@@ -143,7 +137,7 @@ describeReal("real observer recovery", () => {
     });
     expect(started.status).toBe("succeeded");
 
-    await killTmuxSession(testEnv, config.tmuxSession);
+    await killTmuxSession(config.tmuxEndpoint, config.tmuxSession);
     await runStationJson(testEnv, {
       configPath: config.configPath,
       args: ["reconcile", "--reason", "real-stale-tmux-after-kill"],
