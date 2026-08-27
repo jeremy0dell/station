@@ -46,9 +46,6 @@ export function StationScrollBarView({
         foregroundColor: thumbColor,
       }}
       onPositionChange={(position) => {
-        if (position === offset) {
-          return;
-        }
         dispatch({ kind: "scrollbar", surface, offset: position }, SCROLLBAR_ACTIVATE_EVENT);
       }}
       onMouseScroll={
