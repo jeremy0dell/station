@@ -1,9 +1,12 @@
+import { CliInputError } from "../../args.js";
+import { defaultStdinMaxBytes, readStdinIfAvailable } from "../../stdin.js";
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import { commandExecutionCorrelation } from "../command.js";
 import { parseSessionArgs } from "../session/args.js";
 import { runSessionCommand } from "../session/command.js";
-import { sessionCommandExitCode } from "../session/result.js";
+import type { SessionCommandOptions } from "../session/options.js";
+import { sessionCommandExitCode, sessionCreationCorrelation } from "../session/result.js";
 import { renderSessionCommandText } from "../session/text.js";
 
 const currentExamples = ["stn session current"] as const;
@@ -11,7 +14,7 @@ const currentNotes = [
   "Current validates the invoking terminal's live topology and returns a placement source as strict JSON.",
   "Normal execution loads configuration and may start or contact the Observer.",
   "tmux is currently the only placement-capable terminal provider.",
-  "The returned source is short-lived, one-shot bearer input for raw sibling session.create or session.fork dispatch through stn command dispatch --stdin --wait; do not persist or log it.",
+  "The returned source is short-lived, one-shot bearer input used by session create/fork --from-current or by raw sibling dispatch; do not persist or log it.",
   "Detached placement is source-free and does not use stn session current.",
 ] as const;
 
@@ -26,13 +29,15 @@ const mutationTimeoutNote =
 
 export const sessionCliCommand: CliCommandNode = {
   name: "session",
-  description: "Discover or operate on one exact current session.",
+  description: "Discover, create, fork, or operate on exact sessions.",
   requiresConfig: true,
   run: runSessionCliCommand,
   usage: [
     "stn session current",
     "stn session list [filters]",
     "stn session get <sessionId> [--json] [--require-running]",
+    "stn session create <projectId> --branch <branch> (--from-current | --terminal tmux) [options]",
+    "stn session fork <sourceSessionId> --branch <branch> (--from-current | --terminal tmux) [options]",
     "stn session rename <sessionId> <title> [--json] [--timeout-ms <ms>]",
     "stn session close <sessionId> --mode <harness|terminal|all> [--force] [--json] [--timeout-ms <ms>]",
   ],
@@ -99,6 +104,107 @@ export const sessionCliCommand: CliCommandNode = {
       notes: [exactSelectionNote, outputNote, startupNote],
     },
     {
+      name: "create",
+      description: "Create one complete Observer-managed tmux session.",
+      usage: [
+        "stn session create <projectId> --branch <branch> (--from-current | --terminal tmux) [--title <title>] [--base <ref>] [--harness <providerId>] [--layout <default|agent-only|agent-build-shell>] [--group <groupId> | --new-group <name> | --ungrouped] [--prompt-stdin] [--timeout-ms <ms>] [--json]",
+      ],
+      options: [
+        { name: "--branch <branch>", description: "Set the exact new worktree branch." },
+        {
+          name: "--from-current",
+          description: "Create as a sibling of the invoking tmux pane using fresh authority.",
+        },
+        {
+          name: "--terminal tmux",
+          description: "Create a source-free detached tmux workbench target.",
+        },
+        { name: "--title <title>", description: "Set a display title independent from branch." },
+        { name: "--base <ref>", description: "Override the worktree creation base." },
+        { name: "--harness <providerId>", description: "Override the project harness default." },
+        {
+          name: "--layout <layout>",
+          description: "Override layout with default, agent-only, or agent-build-shell.",
+        },
+        { name: "--group <groupId>", description: "Place the session in one exact root Group." },
+        { name: "--new-group <name>", description: "Create a new root Group atomically." },
+        { name: "--ungrouped", description: "Explicitly create without Group membership." },
+        { name: "--prompt-stdin", description: "Read the initial prompt from bounded stdin." },
+        {
+          name: "--timeout-ms <ms>",
+          description: "Override snapshot, dispatch, completion, current, and refresh timeout.",
+        },
+        { name: "--json", description: "Print the prompt-safe structured result." },
+      ],
+      examples: [
+        "stn session create web --branch feature/review --from-current",
+        "printf 'Review the change.\\n' | stn session create web --branch feature/review --terminal tmux --prompt-stdin --json",
+        "stn session create --man",
+      ],
+      notes: [
+        outputNote,
+        mutationTimeoutNote,
+        "Exactly one placement option is required. Detached placement never consults current or focused state.",
+        "Create defaults to Ungrouped. Existing placement accepts only an exact same-project root Group; inline creation is atomic.",
+        "Omitted harness and layout use the exact project defaults. No terminal provider is inferred, and no target is focused implicitly.",
+        "Prompt content never enters argv, create output, or CLI process diagnostics; it remains part of the durable Observer command used for launch.",
+        "A succeeded command followed by a stale or unavailable refresh exits successfully with a visible convergence warning.",
+      ],
+    },
+    {
+      name: "fork",
+      description: "Fork one exact session into a complete Observer-managed tmux session.",
+      usage: [
+        "stn session fork <sourceSessionId> --branch <branch> (--from-current | --terminal tmux) [--title <title>] [--base <ref>] [--harness <providerId>] [--layout <default|agent-only|agent-build-shell>] [--inherit-group | --ungrouped] [--copy-dirty | --no-copy-dirty] [--prompt-stdin] [--timeout-ms <ms>] [--json]",
+      ],
+      options: [
+        { name: "--branch <branch>", description: "Set the exact forked worktree branch." },
+        {
+          name: "--from-current",
+          description: "Place beside the invoking tmux pane, independently of the code source.",
+        },
+        {
+          name: "--terminal tmux",
+          description: "Create a source-free detached tmux workbench target.",
+        },
+        { name: "--title <title>", description: "Set a display title independent from branch." },
+        { name: "--base <ref>", description: "Override the source branch base." },
+        { name: "--harness <providerId>", description: "Override the source harness provider." },
+        {
+          name: "--layout <layout>",
+          description: "Override layout with default, agent-only, or agent-build-shell.",
+        },
+        {
+          name: "--inherit-group",
+          description: "Explicitly inherit the source session's current Group.",
+        },
+        { name: "--ungrouped", description: "Opt out of source Group inheritance." },
+        { name: "--copy-dirty", description: "Explicitly copy source working-tree changes." },
+        {
+          name: "--no-copy-dirty",
+          description: "Explicitly leave source working-tree changes behind.",
+        },
+        { name: "--prompt-stdin", description: "Read the initial prompt from bounded stdin." },
+        {
+          name: "--timeout-ms <ms>",
+          description: "Override snapshot, dispatch, completion, current, and refresh timeout.",
+        },
+        { name: "--json", description: "Print the prompt-safe structured result." },
+      ],
+      examples: ["stn session fork --man"],
+      notes: [
+        exactSelectionNote,
+        outputNote,
+        mutationTimeoutNote,
+        "A grouped source inherits its transaction-current Group by default; --ungrouped opts out, and deletion before seed commit succeeds Ungrouped.",
+        "Omitting both copy flags preserves Observer's copy-dirty default as a distinct third state.",
+        "The exact source session supplies project, worktree, and default harness. Placement may independently come from another invoking tmux pane.",
+        "No project override, provider fallback, implicit focus, native placement, or new-container mode is available.",
+        "Prompt content never enters argv, fork output, or CLI process diagnostics; it remains part of the durable Observer command used for launch.",
+        "A succeeded command followed by a stale or unavailable refresh exits successfully with a visible convergence warning.",
+      ],
+    },
+    {
       name: "rename",
       description: "Rename the worktree-scoped name for one exact session.",
       usage: ["stn session rename <sessionId> <title> [--timeout-ms <ms>] [--json]"],
@@ -152,19 +258,23 @@ export const sessionCliCommand: CliCommandNode = {
 
 async function runSessionCliCommand(context: CliCommandRunContext) {
   const parsed = parseSessionArgs(context.args);
-  const result = await runSessionCommand(
-    parsed,
-    { ...loadedCommandOptions(context), ...context.options.sessionDeps },
-    context.options.observerDeps,
-  );
+  const prompt = await readSessionPrompt(parsed, context);
+  const options: SessionCommandOptions = {
+    ...loadedCommandOptions(context),
+    ...context.options.sessionDeps,
+  };
+  if (prompt !== undefined) options.initialPrompt = prompt;
+  const result = await runSessionCommand(parsed, options, context.options.observerDeps);
   if (result.action === "current") {
     return { code: 0, output: result.context };
   }
   const code = sessionCommandExitCode(result);
   const correlation =
-    result.action === "rename" || result.action === "close"
-      ? commandExecutionCorrelation(result.outcome)
-      : undefined;
+    result.action === "create" || result.action === "fork"
+      ? sessionCreationCorrelation(result.outcome)
+      : result.action === "rename" || result.action === "close"
+        ? commandExecutionCorrelation(result.outcome)
+        : undefined;
   if (parsed.outputFormat === "json") {
     return correlation === undefined
       ? { code, output: result }
@@ -176,4 +286,36 @@ async function runSessionCliCommand(context: CliCommandRunContext) {
     outputFormat: "text" as const,
   };
   return correlation === undefined ? cliResult : { ...cliResult, correlation };
+}
+
+async function readSessionPrompt(
+  parsed: ReturnType<typeof parseSessionArgs>,
+  context: CliCommandRunContext,
+): Promise<string | undefined> {
+  if ((parsed.action !== "create" && parsed.action !== "fork") || !parsed.promptStdin) {
+    return undefined;
+  }
+  let stdin: string | undefined;
+  try {
+    stdin = context.options.stdin ?? (await readStdinIfAvailable());
+  } catch (cause) {
+    throw new CliInputError(
+      "CLI_SESSION_PROMPT_STDIN_TOO_LARGE",
+      "The prompt on stdin exceeded the supported size limit.",
+      { cause },
+    );
+  }
+  if (stdin === undefined || stdin.trim().length === 0) {
+    throw new CliInputError(
+      "CLI_SESSION_PROMPT_STDIN_REQUIRED",
+      "--prompt-stdin requires a non-empty prompt on stdin.",
+    );
+  }
+  if (Buffer.byteLength(stdin) > defaultStdinMaxBytes) {
+    throw new CliInputError(
+      "CLI_SESSION_PROMPT_STDIN_TOO_LARGE",
+      "The prompt on stdin exceeded the supported size limit.",
+    );
+  }
+  return stdin;
 }

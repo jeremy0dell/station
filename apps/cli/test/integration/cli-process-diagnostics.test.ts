@@ -518,6 +518,51 @@ describe("CLI process diagnostics", () => {
     expect(JSON.stringify(outputRecords)).not.toContain(sentinel);
   });
 
+  it("never retains session prompt stdin in default failures or exact opt-in traces", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const sentinel = "SESSION_PROMPT_SECRET_VALUE";
+
+    for (const tracing of [false, true]) {
+      const records: LogRecord[] = [];
+      const capture = processCapture();
+      await runCliMain(
+        [
+          "--config",
+          configPath,
+          "session",
+          "create",
+          "web",
+          "--branch",
+          "feature/prompt-diagnostic",
+          "--prompt-stdin",
+        ],
+        {
+          stdin: sentinel,
+          env: tracing ? { STATION_CLI_TRACE: "1" } : {},
+          updateDeps: { currentBuildInfo: buildInfo },
+          observerDeps: { spawnObserver: vi.fn() },
+          cliProcessDeps: {
+            ...capture.deps,
+            createLogger: () => memoryLogger(records),
+          },
+        },
+      );
+
+      expect(capture.code()).toBe(1);
+      expect(JSON.stringify(records)).not.toContain(sentinel);
+      expect(records.map((record) => record.message)).toEqual(
+        tracing
+          ? ["cli.process.trace.start", "cli.process.trace.outcome"]
+          : ["cli.process.failure"],
+      );
+      expect(records[0]?.attributes).toMatchObject({
+        route: ["session", "create"],
+        hasStdin: false,
+      });
+    }
+  });
+
   it("reuses Observer startup lifecycle evidence without a duplicate process failure", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);

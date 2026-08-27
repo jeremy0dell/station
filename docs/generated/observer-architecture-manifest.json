@@ -13931,7 +13931,7 @@
       "declaration": "runSessionCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Collects provider-bound current-session evidence, projects exact sessions from one current snapshot, and translates exact rename or close CLI intent into recorded typed commands. Current-session collection remains independent of provider-specific claim keys.",
+      "purpose": "Collects provider-bound current-session evidence, projects exact session/create/fork facts from one current snapshot, and translates exact CLI intent into recorded typed commands. Sibling creation consumes only fresh public placement authority; durable results remain authoritative when the best-effort refreshed projection has not converged. Provider-specific claims and placement mechanics remain outside this adapter.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/command.ts",

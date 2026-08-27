@@ -5,6 +5,7 @@ import { loadObserverSnapshot, type ObserverSnapshotLoadOptions } from "../snaps
 import type { ParsedSessionArgs } from "./args.js";
 import { parseSessionArgs } from "./args.js";
 import { loadCloseSessionConvergence, loadRenameSessionConvergence } from "./convergence.js";
+import { runCreateOrForkSessionCommand, sessionCreationPrompt } from "./createFork.js";
 import { runCurrentSessionCommand } from "./current.js";
 import type { SessionCommandOptions } from "./options.js";
 import type { SessionCommandResult } from "./result.js";
@@ -13,9 +14,11 @@ import { filterSessionSummaries, findSessionSummary, summarizeSessions } from ".
 /**
  * ADAPTER
  *
- * Collects provider-bound current-session evidence, projects exact sessions from one current
- * snapshot, and translates exact rename or close CLI intent into recorded typed commands.
- * Current-session collection remains independent of provider-specific claim keys.
+ * Collects provider-bound current-session evidence, projects exact session/create/fork facts from
+ * one current snapshot, and translates exact CLI intent into recorded typed commands. Sibling
+ * creation consumes only fresh public placement authority; durable results remain authoritative
+ * when the best-effort refreshed projection has not converged. Provider-specific claims and
+ * placement mechanics remain outside this adapter.
  */
 export async function runSessionCommand(
   args: string[] | ParsedSessionArgs,
@@ -50,8 +53,15 @@ export async function runSessionCommand(
     };
   }
 
+  const initialPrompt =
+    parsed.action === "create" || parsed.action === "fork"
+      ? sessionCreationPrompt(parsed, options)
+      : undefined;
   const timeoutMs = parsed.timeoutMs ?? options.timeoutMs ?? 30_000;
   const snapshot = await loadObserverSnapshot(snapshotLoadOptions(options, false, timeoutMs), deps);
+  if (parsed.action === "create" || parsed.action === "fork") {
+    return runCreateOrForkSessionCommand(parsed, snapshot, initialPrompt, timeoutMs, options, deps);
+  }
   if (parsed.action === "rename") {
     const target = findSessionSummary(snapshot, parsed.command.payload.sessionId);
     const outcome = await executeTypedObserverCommand(

@@ -6,6 +6,7 @@ export type SessionCommandOptions = {
   config?: StationConfig;
   configPath?: string;
   timeoutMs?: number;
+  initialPrompt?: string;
   caller?: () => TerminalCallerContextRequest;
   processEvidence?: ProcessEvidence;
   environment?: Readonly<Record<string, string | undefined>>;

@@ -6,6 +6,7 @@ import type {
   SessionProjectionState,
   SessionWorktreeProjectionState,
 } from "./convergence.js";
+import type { SessionCreationConvergence } from "./creationConvergence.js";
 import type { SessionCommandResult } from "./result.js";
 import type { SessionFilters, SessionSummary } from "./summary.js";
 
@@ -14,6 +15,9 @@ type RenderableSessionCommandResult = Exclude<SessionCommandResult, { action: "c
 export function renderSessionCommandText(result: RenderableSessionCommandResult): string {
   if (result.action === "list") return renderSessionList(result.filters, result.sessions);
   if (result.action === "get") return renderSessionSummary(result.session);
+  if (result.action === "create" || result.action === "fork") {
+    return renderSessionCreation(result);
+  }
 
   const lines = [
     `Session ${result.action}: ${escapeTerminalBytes(result.target.sessionId)}`,
@@ -21,6 +25,41 @@ export function renderSessionCommandText(result: RenderableSessionCommandResult)
     `Worktree: ${escapeTerminalBytes(result.target.worktreeId)}`,
     ...renderOutcome(result.outcome),
   ];
+  if (result.convergence !== undefined) {
+    lines.push("", ...renderConvergence(result.convergence));
+  }
+  return lines.join("\n");
+}
+
+function renderSessionCreation(
+  result: Extract<SessionCommandResult, { action: "create" | "fork" }>,
+): string {
+  const lines = [
+    `Session ${result.action}: ${escapeTerminalBytes(result.outcome.status)}`,
+    `Command: ${escapeTerminalBytes(result.outcome.receipt.commandId)}`,
+  ];
+  const traceId =
+    result.outcome.receipt.traceId ??
+    (result.outcome.status === "rejected" ? undefined : result.outcome.completion.traceId);
+  if (traceId !== undefined) lines.push(`Trace: ${escapeTerminalBytes(traceId)}`);
+
+  if (result.outcome.status === "rejected" && result.outcome.receipt.error !== undefined) {
+    lines.push(...renderWarning("Error", result.outcome.receipt.error));
+  } else if (result.outcome.status === "failed" && result.outcome.completion.error !== undefined) {
+    lines.push(...renderWarning("Error", result.outcome.completion.error));
+  } else if (result.outcome.status === "succeeded") {
+    const created = result.outcome.result;
+    lines.push(
+      `Project: ${escapeTerminalBytes(created.projectId)}`,
+      `Worktree: ${escapeTerminalBytes(created.worktreeId)}`,
+      `Session: ${escapeTerminalBytes(created.sessionId)}`,
+      `Requested placement: ${escapeTerminalBytes(created.requestedPlacement)}`,
+      `Terminal provider: ${escapeTerminalBytes(created.resolvedPlacement.provider)}`,
+      `Terminal target: ${escapeTerminalBytes(created.resolvedPlacement.targetId)}`,
+      `Terminal generation: ${escapeTerminalBytes(created.resolvedPlacement.generation)}`,
+      `Presentation: ${escapeTerminalBytes(created.resolvedPlacement.presentation)}`,
+    );
+  }
   if (result.convergence !== undefined) {
     lines.push("", ...renderConvergence(result.convergence));
   }
@@ -147,7 +186,7 @@ function renderOutcome(
 }
 
 function renderConvergence(
-  convergence: RenameSessionConvergence | CloseSessionConvergence,
+  convergence: RenameSessionConvergence | CloseSessionConvergence | SessionCreationConvergence,
 ): string[] {
   const lines = [
     `Convergence: ${escapeTerminalBytes(convergence.status)}`,

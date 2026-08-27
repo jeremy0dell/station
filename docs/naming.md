@@ -170,6 +170,15 @@ unselected terminal target, not the absence of a terminal. Use *source* for
 validated authority and *claim* only for raw environment/process hints that an
 adapter has not yet proved.
 
+For `stn session fork`, keep **code source** and **placement source** distinct.
+The exact source session selects the project, source worktree, and default
+harness. `--from-current` independently selects where the new tmux target is
+placed, so it may name another caller pane. `stn session create` starts
+Ungrouped unless an existing or inline-created root Group is requested. Fork
+inherits a grouped source's transaction-current Group by default, while
+`--ungrouped` explicitly opts out; `--inherit-group` requires the source to be
+grouped at initial resolution.
+
 Three lifecycle units are easy to conflate. Keep them distinct in names, commands, and UX: a session runs inside a worktree, and a pane tree is how one worktree row is drawn in the TUI.
 
 ### Session

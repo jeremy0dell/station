@@ -481,6 +481,16 @@ event only as a wake-up signal and reload the terminal record; events never copy
 the result. Successful legacy and result-less records remain valid, while failed
 records never carry a result.
 
+The first-class CLI create/fork adapter loads one initial snapshot, resolves
+exact project, source-session, provider, and Group facts, and dispatches these
+same recorded `session.create` or `session.fork` commands. `--from-current`
+obtains a fresh public tmux placement source; explicit `--terminal tmux` is
+source-free detached placement and never inspects current or focused state. A
+fork's code source remains the selected source session even when placement comes
+from another caller pane. The CLI accepts only a command-correlated durable
+result, then performs one best-effort refresh whose failure cannot rewrite a
+succeeded command.
+
 Terminal target resolution follows operation intent. Focus accepts only live
 provider targets, while close may select a provider-reported stale target so
 the adapter can retire it. A genuinely missing target remains an honest

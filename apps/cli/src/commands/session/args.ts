@@ -2,6 +2,7 @@ import type {
   AgentState,
   ProjectId,
   ProviderId,
+  SessionGroupId,
   SessionId,
   StationCommand,
 } from "@station/contracts";
@@ -11,15 +12,56 @@ import {
   ProjectIdSchema,
   ProviderIdSchema,
   RenameSessionCommandSchema,
+  SessionGroupIdSchema,
+  SessionGroupNameSchema,
   SessionIdSchema,
   SessionOriginSchema,
+  SessionTerminalCommandOptionsSchema,
 } from "@station/contracts";
-import { parsePositiveIntegerOption, parseRequiredOptionValue } from "../../args.js";
+import { CliInputError, parsePositiveIntegerOption, parseRequiredOptionValue } from "../../args.js";
 import type { SessionFilters } from "./summary.js";
 
 export type RenameSessionCommand = Extract<StationCommand, { type: "session.rename" }>;
 export type CloseSessionCommand = Extract<StationCommand, { type: "session.close" }>;
 export type SessionOutputFormat = "json" | "text";
+
+export type SessionPlacementOption =
+  | { kind: "from-current" }
+  | { kind: "terminal"; provider: "tmux" };
+
+export type CreateSessionGroupOption =
+  | { kind: "ungrouped" }
+  | { kind: "existing"; groupId: SessionGroupId }
+  | { kind: "create"; name: string };
+
+export type ForkSessionGroupOption = "default" | "inherit" | "ungrouped";
+
+type SessionCreationArgs = {
+  branch: string;
+  outputFormat: SessionOutputFormat;
+  placement: SessionPlacementOption;
+  promptStdin: boolean;
+  base?: string;
+  harness?: ProviderId;
+  layout?: "default" | "agent-only" | "agent-build-shell";
+  timeoutMs?: number;
+  title?: string;
+};
+
+export type ParsedCreateSessionArgs = SessionCreationArgs & {
+  action: "create";
+  group: CreateSessionGroupOption;
+  projectId: ProjectId;
+};
+
+export type ParsedForkSessionArgs = SessionCreationArgs & {
+  action: "fork";
+  copyDirty?: boolean;
+  group: ForkSessionGroupOption;
+  sourceSessionId: SessionId;
+};
+
+export type ParsedCreateOrForkSessionArgs = ParsedCreateSessionArgs | ParsedForkSessionArgs;
 
 export type ParsedSessionArgs =
   | { action: "current"; outputFormat: "json" }
@@ -29,6 +71,8 @@ export type ParsedSessionArgs =
       outputFormat: SessionOutputFormat;
       requireRunning: boolean;
     }
+  | ParsedCreateSessionArgs
+  | ParsedForkSessionArgs
   | {
       action: "get";
       outputFormat: SessionOutputFormat;
@@ -56,9 +100,203 @@ export function parseSessionArgs(args: string[]): ParsedSessionArgs {
   if (action === "current") return parseCurrentArgs(args.slice(1));
   if (action === "list") return parseListArgs(args.slice(1));
   if (action === "get") return parseGetArgs(args.slice(1));
+  if (action === "create") return parseCreateArgs(args.slice(1));
+  if (action === "fork") return parseForkArgs(args.slice(1));
   if (action === "rename") return parseRenameArgs(args.slice(1));
   if (action === "close") return parseCloseArgs(args.slice(1));
   throw new Error(`Unknown session command: ${action}. Use: stn session --help.`);
+}
+
+function parseCreateArgs(args: string[]): ParsedCreateSessionArgs {
+  const projectId = parseProjectId(args[0], "session create");
+  const common = parseCreationOptions(args.slice(1), "create");
+  const groupOptions = common.groupOptions;
+  let group: CreateSessionGroupOption = { kind: "ungrouped" };
+  if (groupOptions.existing !== undefined) {
+    group = { kind: "existing", groupId: groupOptions.existing };
+  } else if (groupOptions.create !== undefined) {
+    group = { kind: "create", name: groupOptions.create };
+  }
+  return {
+    action: "create",
+    projectId,
+    group,
+    ...common.values,
+  };
+}
+
+function parseForkArgs(args: string[]): ParsedForkSessionArgs {
+  const sourceSessionId = parseSessionId(args[0], "session fork");
+  const common = parseCreationOptions(args.slice(1), "fork");
+  const { inherit, ungrouped } = common.groupOptions;
+  const group: ForkSessionGroupOption = ungrouped ? "ungrouped" : inherit ? "inherit" : "default";
+  const parsed: ParsedForkSessionArgs = {
+    action: "fork",
+    sourceSessionId,
+    group,
+    ...common.values,
+  };
+  if (common.copyDirty !== undefined) parsed.copyDirty = common.copyDirty;
+  return parsed;
+}
+
+type ParsedCreationOptions = {
+  values: SessionCreationArgs;
+  groupOptions: {
+    create?: string;
+    existing?: SessionGroupId;
+    inherit: boolean;
+    ungrouped: boolean;
+  };
+  copyDirty?: boolean;
+};
+
+function parseCreationOptions(args: string[], action: "create" | "fork"): ParsedCreationOptions {
+  const command = `session ${action}`;
+  const seen = new Set<string>();
+  const groupOptions: ParsedCreationOptions["groupOptions"] = {
+    inherit: false,
+    ungrouped: false,
+  };
+  let branch: string | undefined;
+  let outputFormat: SessionOutputFormat = "text";
+  let placement: SessionPlacementOption | undefined;
+  let promptStdin = false;
+  let base: string | undefined;
+  let harness: ProviderId | undefined;
+  let layout: SessionCreationArgs["layout"];
+  let timeoutMs: number | undefined;
+  let title: string | undefined;
+  let copyDirty: boolean | undefined;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const option = args[index];
+    if (option === "--branch") {
+      claimOption(seen, option, command);
+      branch = parseSessionOptionValue(args[index + 1], option);
+      index += 1;
+      continue;
+    }
+    if (option === "--from-current") {
+      claimOption(seen, option, command);
+      if (placement !== undefined) throw creationInputError(action, "Placement options conflict.");
+      placement = { kind: "from-current" };
+      continue;
+    }
+    if (option === "--terminal") {
+      claimOption(seen, option, command);
+      if (placement !== undefined) throw creationInputError(action, "Placement options conflict.");
+      const provider = parseSessionOptionValue(args[index + 1], option);
+      if (provider !== "tmux") {
+        throw creationInputError(action, "--terminal must be tmux for session create or fork.");
+      }
+      placement = { kind: "terminal", provider };
+      index += 1;
+      continue;
+    }
+    if (option === "--title") {
+      claimOption(seen, option, command);
+      title = parseSessionOptionValue(args[index + 1], option);
+      index += 1;
+      continue;
+    }
+    if (option === "--base") {
+      claimOption(seen, option, command);
+      base = parseSessionOptionValue(args[index + 1], option);
+      index += 1;
+      continue;
+    }
+    if (option === "--harness") {
+      claimOption(seen, option, command);
+      harness = parseProviderId(args[index + 1], option);
+      index += 1;
+      continue;
+    }
+    if (option === "--layout") {
+      claimOption(seen, option, command);
+      layout = parseSessionLayout(args[index + 1], action);
+      index += 1;
+      continue;
+    }
+    if (option === "--prompt-stdin") {
+      claimOption(seen, option, command);
+      promptStdin = true;
+      continue;
+    }
+    if (option === "--timeout-ms") {
+      claimOption(seen, option, command);
+      timeoutMs = parsePositiveIntegerOption(args[index + 1], option);
+      index += 1;
+      continue;
+    }
+    if (option === "--json") {
+      claimOption(seen, option, command);
+      outputFormat = "json";
+      continue;
+    }
+    if (option === "--group") {
+      ensureCreateOption(action, option);
+      claimOption(seen, option, command);
+      groupOptions.existing = parseSessionGroupId(args[index + 1], option, action);
+      index += 1;
+      continue;
+    }
+    if (option === "--new-group") {
+      ensureCreateOption(action, option);
+      claimOption(seen, option, command);
+      groupOptions.create = parseSessionGroupName(args[index + 1], option, action);
+      index += 1;
+      continue;
+    }
+    if (option === "--inherit-group") {
+      ensureForkOption(action, option);
+      claimOption(seen, option, command);
+      groupOptions.inherit = true;
+      continue;
+    }
+    if (option === "--ungrouped") {
+      claimOption(seen, option, command);
+      groupOptions.ungrouped = true;
+      continue;
+    }
+    if (option === "--copy-dirty" || option === "--no-copy-dirty") {
+      ensureForkOption(action, option);
+      claimOption(seen, option, command);
+      if (copyDirty !== undefined) {
+        throw creationInputError(action, "Copy-dirty options conflict.");
+      }
+      copyDirty = option === "--copy-dirty";
+      continue;
+    }
+    throw creationInputError(action, `Unknown ${command} option: ${option ?? ""}`);
+  }
+
+  if (branch === undefined) throw creationInputError(action, `${command} requires --branch.`);
+  if (placement === undefined) {
+    throw creationInputError(action, `${command} requires --from-current or --terminal tmux.`);
+  }
+  const groupSelectionCount = [
+    groupOptions.existing !== undefined,
+    groupOptions.create !== undefined,
+    groupOptions.inherit,
+    groupOptions.ungrouped,
+  ].filter(Boolean).length;
+  if (groupSelectionCount > 1) throw creationInputError(action, "Group options conflict.");
+
+  const values: SessionCreationArgs = {
+    branch,
+    outputFormat,
+    placement,
+    promptStdin,
+  };
+  if (base !== undefined) values.base = base;
+  if (harness !== undefined) values.harness = harness;
+  if (layout !== undefined) values.layout = layout;
+  if (timeoutMs !== undefined) values.timeoutMs = timeoutMs;
+  if (title !== undefined) values.title = title;
+  const parsed: ParsedCreationOptions = { values, groupOptions };
+  if (copyDirty !== undefined) parsed.copyDirty = copyDirty;
+  return parsed;
 }
 
 function parseCurrentArgs(args: string[]): Extract<ParsedSessionArgs, { action: "current" }> {
@@ -254,6 +492,39 @@ function parseProviderId(value: string | undefined, option: string): ProviderId 
   return parsed.data;
 }
 
+function parseSessionGroupId(
+  value: string | undefined,
+  option: string,
+  action: "create" | "fork",
+): SessionGroupId {
+  const parsed = SessionGroupIdSchema.safeParse(parseSessionOptionValue(value, option));
+  if (!parsed.success) throw creationInputError(action, `${option} requires an exact Group id.`);
+  return parsed.data;
+}
+
+function parseSessionGroupName(
+  value: string | undefined,
+  option: string,
+  action: "create" | "fork",
+): string {
+  const parsed = SessionGroupNameSchema.safeParse(parseSessionOptionValue(value, option));
+  if (!parsed.success) throw creationInputError(action, `${option} requires a non-empty name.`);
+  return parsed.data;
+}
+
+function parseSessionLayout(
+  value: string | undefined,
+  action: "create" | "fork",
+): "default" | "agent-only" | "agent-build-shell" {
+  const parsed = SessionTerminalCommandOptionsSchema.shape.layout.safeParse(
+    parseSessionOptionValue(value, "--layout"),
+  );
+  if (!parsed.success || parsed.data === undefined) {
+    throw creationInputError(action, "--layout must be default, agent-only, or agent-build-shell.");
+  }
+  return parsed.data;
+}
+
 function parseAgentState(value: string | undefined, option: string): AgentState {
   const parsed = AgentStateSchema.safeParse(parseSessionOptionValue(value, option));
   if (!parsed.success) {
@@ -287,4 +558,16 @@ function claimOption(seen: Set<string>, option: string, command: string): void {
     throw new Error(`Duplicate ${command} option: ${option}.`);
   }
   seen.add(option);
+}
+
+function ensureCreateOption(action: "create" | "fork", option: string): void {
+  if (action !== "create") throw creationInputError(action, `${option} is create-only.`);
+}
+
+function ensureForkOption(action: "create" | "fork", option: string): void {
+  if (action !== "fork") throw creationInputError(action, `${option} is fork-only.`);
+}
+
+function creationInputError(action: "create" | "fork", message: string): CliInputError {
+  return new CliInputError(`CLI_SESSION_${action.toUpperCase()}_INPUT_INVALID`, message);
 }
