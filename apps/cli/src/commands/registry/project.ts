@@ -1,10 +1,14 @@
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
+import { commandExecutionCorrelation } from "../command.js";
 import {
   type ProjectCommandOptions,
+  type ProjectCommandResult,
   projectCommandExitCode,
   runProjectCommand,
 } from "../project.js";
+
+type ProjectMutationResult = Extract<ProjectCommandResult, { action: "add" | "remove" }>;
 
 export const projectCliCommand: CliCommandNode = {
   name: "project",
@@ -78,5 +82,32 @@ async function runProjectCliCommand(context: CliCommandRunContext) {
     projectOptions,
     context.options.observerDeps,
   );
-  return { code: projectCommandExitCode(result), output: result };
+  const cliResult = {
+    code: projectCommandExitCode(result),
+    output: result,
+  };
+  if (result.action !== "add" && result.action !== "remove") return cliResult;
+  return {
+    ...cliResult,
+    correlation: projectCommandCorrelation(result),
+  };
+}
+
+function projectCommandCorrelation(result: ProjectMutationResult) {
+  switch (result.status) {
+    case "rejected":
+      return commandExecutionCorrelation(result);
+    case "succeeded":
+      return commandExecutionCorrelation({
+        status: "succeeded",
+        receipt: result.receipt,
+        record: result.command,
+      });
+    case "failed":
+      return commandExecutionCorrelation({
+        status: "failed",
+        receipt: result.receipt,
+        record: result.command,
+      });
+  }
 }

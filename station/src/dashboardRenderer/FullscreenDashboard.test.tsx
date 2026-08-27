@@ -236,7 +236,7 @@ describe("FullscreenDashboard surface ownership", () => {
   });
 
   for (const testCase of [
-    { name: "prompt", keys: ["R"], needle: "Rename:" },
+    { name: "session picker", keys: ["R"], needle: "Select session to rename" },
     { name: "bottom sheet", keys: ["C"], needle: "Collapse Project" },
     { name: "Help overlay", keys: ["H"], needle: "station help" },
     { name: "widget settings", keys: ["W"], needle: "saved to config.toml" },

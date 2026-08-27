@@ -1,6 +1,7 @@
-// Golden frames for the modal flows: every overlay/prompt/sheet view from
+// Golden frames for the modal flows: every overlay and sheet view from
 // the parity checklist, reached by driving the real machine with real keys,
-// rendered over the dashboard at 80x24. Snapshots live in __snapshots__.
+// rendered over the dashboard at 80x24. Independently timed throbbers are
+// normalized before snapshots so renderer load cannot change structural goldens.
 import { afterEach, describe, expect, it } from "bun:test";
 import {
   rgbToHex,
@@ -58,6 +59,12 @@ import { StationMouseProvider } from "./stationMouseContext.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 
 const SIZE = { width: 80, height: 24 };
+const BRAILLE_THROBBER_FRAME = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/gu;
+
+function stableGoldenFrame(frame: string): string {
+  return frame.replace(BRAILLE_THROBBER_FRAME, "⠋");
+}
+
 const lightObservation = parseStationTerminalPaletteObservation(lightTerminalColors);
 if (lightObservation === null) {
   throw new Error("Expected a complete light terminal palette fixture.");
@@ -266,6 +273,20 @@ const CASES: ModalCase[] = [
       "Create Group (C)",
       "Cancel (Esc)",
     ],
+  },
+  {
+    name: "move slot sheet",
+    keys: [{ input: "M" }],
+    expect: [
+      "Select session to move to a Group",
+      "↑↓ move · ↵ choose · slot or click",
+      "Esc:cancel",
+    ],
+  },
+  {
+    name: "move destination sheet selected from the shared picker",
+    keys: [{ input: "M" }, { input: "1" }],
+    expect: ["Move to Group", "Session", "cli-help-man", "U Ungrouped", "N create"],
   },
   {
     name: "move to group destination sheet",
@@ -621,9 +642,9 @@ const CASES: ModalCase[] = [
     reject: ["Delete (Y)", "Keep session (N)"],
   },
   {
-    name: "rename slot prompt",
+    name: "rename slot sheet",
     keys: [{ input: "R" }],
-    expect: ["Rename: ↑↓ move · ↵ choose · 1-9/a-z or click"],
+    expect: ["Select session to rename", "↑↓ move · ↵ choose · slot or click", "Esc:cancel"],
   },
   {
     name: "rename sheet",
@@ -1069,9 +1090,9 @@ describe("modal flow golden frames", () => {
       await setup.flush();
       // The generated session name is uuid-seeded (stableNameHash over a
       // random token); scrub it so the goldens stay deterministic.
-      const capturedFrame = setup
-        .captureCharFrame()
-        .replace(/station-[0-9a-z]{6}/g, "station-XXXXXX");
+      const capturedFrame = stableGoldenFrame(
+        setup.captureCharFrame().replace(/station-[0-9a-z]{6}/g, "station-XXXXXX"),
+      );
       const frame =
         modal.trimSnapshotTrailingWhitespace === true
           ? capturedFrame.replace(/[ \t]+$/gm, "")
@@ -1108,7 +1129,7 @@ describe("modal flow golden frames", () => {
     await setup.flush();
 
     const fields = conditionPanelGeometry(setup.renderer.root);
-    expect(setup.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(setup.captureCharFrame())).toMatchSnapshot();
 
     await act(async () => {
       store.actions.handleKey({ input: "S" });
@@ -1118,7 +1139,7 @@ describe("modal flow golden frames", () => {
     const values = conditionPanelGeometry(setup.renderer.root);
     expect(values).toMatchObject({ x: fields.x, y: fields.y, width: fields.width });
     expect(values.height).toBeGreaterThan(fields.height);
-    expect(setup.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(setup.captureCharFrame())).toMatchSnapshot();
 
     await act(async () => {
       store.actions.handleKey({ input: "", leftArrow: true });
@@ -1126,10 +1147,10 @@ describe("modal flow golden frames", () => {
     });
     await setup.flush();
     expect(conditionPanelGeometry(setup.renderer.root)).toEqual(fields);
-    expect(setup.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(setup.captureCharFrame())).toMatchSnapshot();
   });
 
-  it("renders Help, sheets, settings, and prompts with opaque adaptive light roles", async () => {
+  it("renders Help, sheets, and settings with opaque adaptive light roles", async () => {
     const representatives: ReadonlyArray<{
       name: string;
       needle: string;

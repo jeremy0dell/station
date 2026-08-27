@@ -1,9 +1,5 @@
 import type { DashboardSessionOverflow } from "../../selectors/dashboardSlots.js";
-import type {
-  DashboardScreenView,
-  DashboardSnapshotView,
-  DashboardStateView,
-} from "../../state/types.js";
+import type { DashboardSnapshotView, DashboardStateView } from "../../state/types.js";
 import { cellWidth } from "../../text/cells.js";
 
 type DashboardProjectView = DashboardSnapshotView["projects"][number];
@@ -164,18 +160,6 @@ export function observerHeaderStatusForConnection(
       full: "observer reconnecting · display-only snapshot",
       compact: "observer reconnecting",
     };
-  }
-  return undefined;
-}
-
-export type CommandPromptModel = { text: string; tone: "warning" | "danger" };
-
-/** Semantic prompt content for screens that augment the dashboard controls. */
-export function commandPromptForScreen(
-  screen: DashboardScreenView,
-): CommandPromptModel | undefined {
-  if (screen.name === "renameSession" && screen.step === "chooseSlot") {
-    return { text: "Rename: ↑↓ move · ↵ choose · 1-9/a-z or click", tone: "warning" };
   }
   return undefined;
 }

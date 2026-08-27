@@ -13632,11 +13632,43 @@
   ],
   "controlledDeclarations": [
     {
+      "path": "apps/cli/src/cliExecution.ts",
+      "declaration": "runCli",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates CLI arguments and loaded configuration into registered command execution, exposing only a non-rendered command-correlation seam to the process owner. Direct calls never persist process diagnostics.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/cliProcess.ts",
+      "declaration": "runCliMain",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Owns optional process tracing and best-effort failure finalization around registered CLI execution. Diagnostic writes never gate command side effects, replace output, alter exit status, or emit degradation warnings.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/cliProcessDiagnostics.ts",
+          "declaration": "createCliProcessDiagnostics",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/cliProcessDiagnostics.ts",
+      "declaration": "createCliProcessDiagnostics",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Projects one CLI process onto an allowlisted, redacted JSONL diagnostic sink. Its records are non-authoritative and best-effort: logger failure never gates command effects, output, or exit status, and configured-sink failure never redirects evidence to another state directory.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/commands/command.ts",
       "declaration": "executeTypedObserverCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Starts or selects the pinned Observer, dispatches one typed Station command, and optionally reloads its durable terminal outcome through the race-safe protocol completion wait. Post-dispatch wait failures retain the accepted command and trace correlation.",
+      "purpose": "Starts or selects the pinned Observer, dispatches one typed Station command, and optionally reloads its durable terminal outcome through the race-safe protocol completion wait. Post-dispatch waits preserve receipt command/trace correlation, including timeouts, and reject conflicting terminal completion evidence.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -13666,7 +13698,7 @@
       "declaration": "runCommandCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates raw CLI argv and stdin JSON into typed Observer command execution or record lookup.",
+      "purpose": "Parses raw CLI input once, executes typed Observer commands or record lookup, and projects only typed command receipt/record correlation for the process boundary.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/command.ts",
@@ -14429,38 +14461,6 @@
         {
           "path": "packages/protocol/src/client.ts",
           "declaration": "createObserverClient",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/cli/src/main.ts",
-      "declaration": "runCli",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Translates CLI arguments and loaded configuration into registered command execution.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/observerProviders.ts",
-          "declaration": "probeHarnessHooksStatus",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/cli/src/main.ts",
-      "declaration": "runCliMain",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Translates process arguments, output, and exit semantics around `runCli` while composing process-owned provider-hook launcher and artifact-owner identity.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/main.ts",
-          "declaration": "runCli",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"

@@ -31,6 +31,17 @@ describe("dashboard key bindings", () => {
     expect(matchDashboardBinding({ input: "?" })?.action).toBe("tui.help.open");
   });
 
+  it.each([
+    ["R", { name: "renameSession", step: "chooseSlot" }],
+    ["M", { name: "moveToGroup", step: "chooseSlot" }],
+    ["F", { name: "fork", step: "chooseSlot" }],
+    ["X", { name: "removeWorktree", step: "chooseSlot" }],
+  ] as const)("opens the visible session chooser flow for %s", (input, expectedScreen) => {
+    const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+
+    expect(handleTuiKey(state, { input }, KEY_CONTEXT).state.screen).toEqual(expectedScreen);
+  });
+
   it("derives the dedicated persistent-filter input mode", () => {
     const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     expect(

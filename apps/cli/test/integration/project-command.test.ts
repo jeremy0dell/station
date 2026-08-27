@@ -57,6 +57,11 @@ describe("CLI project commands", () => {
     expect(parseCommand).not.toHaveBeenCalled();
     expect(result).toEqual({
       code: 0,
+      correlation: {
+        status: "succeeded",
+        commandId: "cmd_project_add",
+        traceId: "trc_project",
+      },
       output: {
         action: "add",
         status: "succeeded",
@@ -96,6 +101,11 @@ describe("CLI project commands", () => {
     expect(parseCommand).not.toHaveBeenCalled();
     expect(result).toEqual({
       code: 0,
+      correlation: {
+        status: "succeeded",
+        commandId: "cmd_project_remove",
+        traceId: "trc_project",
+      },
       output: {
         action: "remove",
         status: "succeeded",
@@ -126,6 +136,11 @@ describe("CLI project commands", () => {
     expect(parseCommand).not.toHaveBeenCalled();
     expect(result).toEqual({
       code: 1,
+      correlation: {
+        status: "rejected",
+        commandId: "cmd_project_rejected",
+        traceId: "trc_project",
+      },
       output: {
         action: "add",
         status: "rejected",
@@ -152,6 +167,11 @@ describe("CLI project commands", () => {
 
     expect(result).toEqual({
       code: 1,
+      correlation: {
+        status: "failed",
+        commandId: "cmd_project_failed",
+        traceId: "trc_project",
+      },
       output: {
         action: "add",
         status: "failed",

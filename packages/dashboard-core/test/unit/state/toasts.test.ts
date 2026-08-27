@@ -6,6 +6,7 @@ import {
   activeTuiToast,
   addTuiToast,
   expireTuiToasts,
+  isTuiToastHiddenByScreen,
   nextTuiToastExpiry,
   refreshActiveTuiToastExpiry,
 } from "../../../src/state/toasts.js";
@@ -124,5 +125,14 @@ describe("TUI toast lifecycle state", () => {
       expiresAt: 7_400,
     });
     expect(nextTuiToastExpiry(resumed)).toBe(7_400);
+  });
+
+  it("shows toasts only on the dashboard and hides every session-picker modal", () => {
+    expect(isTuiToastHiddenByScreen({ name: "dashboard" })).toBe(false);
+    expect(isTuiToastHiddenByScreen({ name: "removeWorktree", step: "chooseSlot" })).toBe(true);
+    expect(isTuiToastHiddenByScreen({ name: "renameSession", step: "chooseSlot" })).toBe(true);
+    expect(isTuiToastHiddenByScreen({ name: "moveToGroup", step: "chooseSlot" })).toBe(true);
+    expect(isTuiToastHiddenByScreen({ name: "fork", step: "chooseSlot" })).toBe(true);
+    expect(isTuiToastHiddenByScreen({ name: "help" })).toBe(true);
   });
 });

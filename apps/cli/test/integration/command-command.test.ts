@@ -8,6 +8,11 @@ import { executeTypedObserverCommand, runCommandCommand } from "../../src/comman
 const now = "2026-05-22T12:00:00.000Z";
 const incumbentBuildVersion = `1.2.3+station.${"a".repeat(64)}`;
 const replacementBuildVersion = `1.2.3+station.${"b".repeat(64)}`;
+const cliBuildInfo = {
+  version: "0.7.0",
+  compiled: false,
+  buildIdentity: "a".repeat(64),
+} as const;
 
 type RunCli = typeof import("@station/cli").runCli;
 
@@ -45,6 +50,11 @@ describe("CLI command dispatch/get", () => {
     if (parsed?.success !== true) throw new Error("Expected command input to parse.");
     expect(result).toEqual({
       code: 0,
+      correlation: {
+        status: "accepted",
+        commandId: "cmd_1",
+        traceId: "trc_cli",
+      },
       output: {
         status: "accepted",
         receipt: receipt("cmd_1"),
@@ -100,6 +110,11 @@ describe("CLI command dispatch/get", () => {
 
     expect(result).toEqual({
       code: 1,
+      correlation: {
+        status: "rejected",
+        commandId: "cmd_rejected",
+        traceId: "trc_cli",
+      },
       output: {
         status: "rejected",
         receipt: rejected,
@@ -126,6 +141,11 @@ describe("CLI command dispatch/get", () => {
 
     expect(result).toEqual({
       code: 0,
+      correlation: {
+        status: "accepted",
+        commandId: "cmd_cursor",
+        traceId: "trc_cli",
+      },
       output: {
         status: "accepted",
         receipt: receipt("cmd_cursor"),
@@ -178,6 +198,11 @@ describe("CLI command dispatch/get", () => {
 
     expect(result).toEqual({
       code: 1,
+      correlation: {
+        status: "failed",
+        commandId: "cmd_failed",
+        traceId: "trc_cli",
+      },
       output: {
         status: "failed",
         receipt: receipt("cmd_failed"),
@@ -308,6 +333,7 @@ describe("CLI command dispatch/get", () => {
         ["--config", configPath, "command", "dispatch", "--stdin", "--wait", "--timeout-ms", "5"],
         {
           stdin: JSON.stringify(command),
+          updateDeps: { currentBuildInfo: cliBuildInfo },
           observerDeps: runningObserverDeps({
             socketPath: fixture.socketPath,
             dispatch: async () => receipt("cmd_rendered_timeout"),
@@ -409,6 +435,30 @@ describe("CLI command dispatch/get", () => {
     });
   });
 
+  it("rejects conflicting receipt and terminal-record trace correlation", async () => {
+    const fixture = await createTempState();
+    const command = reconcileCommand("cli-command-trace-mismatch");
+    const mismatched = commandRecord("cmd_expected", command, "succeeded");
+    mismatched.traceId = "trc_other";
+
+    await expect(
+      executeTypedObserverCommand(
+        command,
+        { config: fixture.config, timeoutMs: 1000, waitForCompletion: true },
+        runningObserverDeps({
+          socketPath: fixture.socketPath,
+          dispatch: async () => receipt("cmd_expected"),
+          waitForCommand: async () => mismatched as TerminalCommandRecord,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      tag: "CommandCliError",
+      code: "COMMAND_COMPLETION_MISMATCH",
+      commandId: "cmd_expected",
+      traceId: "trc_cli",
+    });
+  });
+
   it("rejects a same-id terminal record for another command type", async () => {
     const fixture = await createTempState();
     const command = reconcileCommand("cli-command-type-mismatch");
@@ -472,6 +522,7 @@ describe("CLI command dispatch/get", () => {
         ["dispatch", "--stdin", "--timeout-ms", "1"],
         { config: fixture.config, stdin: JSON.stringify(command) },
         {
+          buildVersion: "0.0.0",
           spawnObserver: async () => ({ pid: 1234, unref: () => undefined }),
           clientFactory: () =>
             ({

@@ -457,6 +457,55 @@ describe("session discovery commands", () => {
 });
 
 describe("session rename and close commands", () => {
+  it("projects process correlation only for rename and close mutations", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const initial = sessionSnapshot();
+    const cases = [
+      {
+        args: ["rename", "ses_station", "Correlated title", "--json"],
+        commandId: "cmd_correlated_rename",
+        command: {
+          type: "session.rename",
+          payload: { sessionId: "ses_station", title: "Correlated title" },
+        } satisfies StationCommand,
+        refreshed: renamedSnapshot(initial, "ses_station", "Correlated title"),
+      },
+      {
+        args: ["close", "ses_station", "--mode", "all", "--json"],
+        commandId: "cmd_correlated_close",
+        command: {
+          type: "session.close",
+          payload: { sessionId: "ses_station", mode: "all" },
+        } satisfies StationCommand,
+        refreshed: closedSnapshot(initial, "ses_station"),
+      },
+    ];
+
+    try {
+      for (const testCase of cases) {
+        const result = await runCli(["--config", configPath, "session", ...testCase.args], {
+          observerDeps: snapshotObserverDeps(fixture.socketPath, [initial, testCase.refreshed], {
+            dispatch: async () => acceptedReceipt(testCase.commandId),
+            waitForCommand: async () =>
+              succeededRecord(testCase.commandId, testCase.command) as TerminalCommandRecord,
+          }),
+        });
+
+        expect(result).toMatchObject({
+          code: 0,
+          correlation: {
+            status: "succeeded",
+            commandId: testCase.commandId,
+            traceId: "trc_session",
+          },
+        });
+      }
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("renames through the strict typed command and confirms refreshed identity", async () => {
     const fixture = await createTempState();
     const commandId = "cmd_rename";
