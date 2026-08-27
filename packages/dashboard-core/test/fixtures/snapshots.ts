@@ -102,6 +102,41 @@ export function createManySlotDashboardSnapshot(): StationSnapshot {
   ]);
 }
 
+/** One project with `sessionCount` idle sessions, for scrollbar / windowing stress. */
+export function createCrowdedDashboardSnapshot(sessionCount: number): StationSnapshot {
+  return snapshotFromRows(
+    Array.from({ length: Math.max(0, Math.floor(sessionCount)) }, (_, index) =>
+      row({
+        id: `wt_web_crowd_${index}`,
+        projectId: "web",
+        branch: `crowd-${String(index).padStart(4, "0")}`,
+        state: "idle",
+      }),
+    ),
+  );
+}
+
+/** Crowded web sessions inside one Group, so the tree has inert frame-end rows. */
+export function createCrowdedGroupedDashboardSnapshot(sessionCount: number): StationSnapshot {
+  const snapshot = createCrowdedDashboardSnapshot(sessionCount);
+  return {
+    ...snapshot,
+    sessionGroups: [
+      {
+        id: "group_crowd",
+        projectId: "web",
+        name: "Crowd",
+        sessionIds: snapshot.sessions
+          .filter((session) => session.projectId === "web")
+          .map((session) => session.id),
+        version: 1,
+        createdAt: fixtureNow,
+        updatedAt: fixtureNow,
+      },
+    ],
+  };
+}
+
 export function createCommandSnapshot(
   state: "none" | "idle" = "idle",
   options: { dirty?: boolean } = {},
