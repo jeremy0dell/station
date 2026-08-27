@@ -6,32 +6,26 @@ import type {
 } from "@station/contracts";
 
 /**
- * Readable `stn doctor` summary of session terminal topology. Detached/stale
- * sessions or orphans warn; full per-session detail remains in the JSON snapshot.
+ * Readable `stn doctor` summary of session terminal topology. Stale sessions or
+ * orphans warn; detached targets remain visible in the provider/state tally.
  */
 export function buildSessionEnvironmentCheck(
   snapshot: Pick<StationSnapshot, "sessions" | "orphans">,
 ): DoctorCheck {
   const sessions = snapshot.sessions;
   const orphans = snapshot.orphans ?? [];
-  const detached = sessions.filter(isDetachedOrStale);
+  const stale = sessions.filter((session) => session.terminal?.state === "stale");
 
   const parts = [`${sessions.length} session(s)${summarizeProviders(sessions)}.`];
-  if (detached.length > 0) {
-    parts.push(
-      `${detached.length} detached/stale (running, not attachable here): ${describeSessions(detached)}.`,
-    );
+  if (stale.length > 0) {
+    parts.push(`${stale.length} stale terminal target(s): ${describeSessions(stale)}.`);
   }
   if (orphans.length > 0) {
     parts.push(`${orphans.length} orphaned runtime state(s)${summarizeOrphans(orphans)}.`);
   }
 
-  const status: DoctorCheck["status"] = detached.length > 0 || orphans.length > 0 ? "warn" : "ok";
+  const status: DoctorCheck["status"] = stale.length > 0 || orphans.length > 0 ? "warn" : "ok";
   return { name: "sessions", status, message: parts.join(" ") };
-}
-
-function isDetachedOrStale(session: SessionView): boolean {
-  return session.terminal?.state === "detached" || session.terminal?.state === "stale";
 }
 
 /** ` — station: 4 open · tmux: 3 detached` (empty for zero sessions). */
