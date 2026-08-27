@@ -226,6 +226,7 @@ describe("session command vertical slice", () => {
 
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
+      result: { resolvedGroupId: "grp_existing" },
     });
     expect(fixture.core.getSnapshot().sessionGroups).toEqual([
       expect.objectContaining({
@@ -274,6 +275,7 @@ describe("session command vertical slice", () => {
 
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
+      result: { resolvedGroupId: "grp_inline" },
     });
     expect(fixture.core.getSnapshot().sessionGroups).toEqual([
       {
@@ -495,6 +497,25 @@ describe("session command vertical slice", () => {
       group: { kind: "create", groupId: "group_fork_source", name: "Fork source Group" },
     });
     await fixture.core.reconcile("group-fork-source");
+    await fixture.persistence.createSessionGroup({
+      id: "group_fork_transaction",
+      projectId: "web",
+      name: "Transaction Group",
+      createdAt: now,
+    });
+    await fixture.persistence.updateSessionGroupMembership({
+      id: "group_fork_transaction",
+      expectedVersion: 1,
+      add: [
+        {
+          sessionId: "ses_fork_source",
+          projectId: "web",
+          expectedGroupId: "group_fork_source",
+        },
+      ],
+      updatedAt: now,
+    });
+    await fixture.core.reconcile("move-fork-source-group");
 
     const receipt = await fixture.queue.dispatch({
       type: "session.fork",
@@ -532,6 +553,7 @@ describe("session command vertical slice", () => {
         projectId: "web",
         worktreeId: "wt_web_runner_fork",
         sessionId: "ses_runner_fork",
+        resolvedGroupId: "group_fork_transaction",
         requestedPlacement: "detached",
         resolvedPlacement: {
           provider: "fake-terminal",
@@ -541,9 +563,9 @@ describe("session command vertical slice", () => {
         },
       },
     });
-    await expect(fixture.persistence.getCommand(fallbackReceipt.commandId)).resolves.toMatchObject({
-      status: "succeeded",
-    });
+    const fallbackRecord = await fixture.persistence.getCommand(fallbackReceipt.commandId);
+    expect(fallbackRecord).toMatchObject({ status: "succeeded" });
+    expect(fallbackRecord?.result).not.toHaveProperty("resolvedGroupId");
     expect(terminal.snapshot().launches).toEqual([
       expect.objectContaining({
         worktree: expect.objectContaining({ branch: "runner-fork" }),
@@ -556,7 +578,7 @@ describe("session command vertical slice", () => {
     ]);
     expect(fixture.core.getSnapshot().sessionGroups).toContainEqual(
       expect.objectContaining({
-        id: "group_fork_source",
+        id: "group_fork_transaction",
         sessionIds: ["ses_fork_source", "ses_runner_fork"],
       }),
     );

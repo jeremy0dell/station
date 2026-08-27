@@ -282,6 +282,29 @@ describe("CLI manual-smoke commands", () => {
     expect(spawnObserver).not.toHaveBeenCalled();
   });
 
+  it("documents tmux create and fork before config or Observer startup", async () => {
+    const spawnObserver = vi.fn();
+    const create = await runCli(
+      ["--config", "/missing/config.toml", "session", "create", "--man"],
+      { observerDeps: { spawnObserver } },
+    );
+    const fork = await runCli(["--config", "/missing/config.toml", "session", "fork", "--man"], {
+      observerDeps: { spawnObserver },
+    });
+
+    expect(create).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(create)).toContain("--from-current | --terminal tmux");
+    expect(textOutput(create)).toContain("--group <groupId> | --new-group <name> | --ungrouped");
+    expect(textOutput(create)).toContain("No terminal provider is inferred");
+    expect(fork).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(fork)).toContain("--inherit-group | --ungrouped");
+    expect(textOutput(fork)).toContain("copy-dirty default as a distinct third state");
+    expect(textOutput(fork)).toContain(
+      "Placement may independently come from another invoking tmux pane",
+    );
+    expect(spawnObserver).not.toHaveBeenCalled();
+  });
+
   it("resolves hook action target help without running hook commands", async () => {
     const result = await runCli(["hooks", "install", "codex", "--help"]);
 

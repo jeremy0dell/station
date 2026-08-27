@@ -46,6 +46,7 @@ import {
   ProviderHookSpoolRecordSchema,
   ProviderProjectConfigSchema,
   ProviderTypeSchema,
+  PublicCommandRecordSchema,
   parseStationHookIdentityPayload,
   ReconcileReceiptSchema,
   RecoveryBreadcrumbSchema,
@@ -55,6 +56,7 @@ import {
   RepositoryRemoteSchema,
   SafeErrorSchema,
   SessionCreateCommandResultSchema,
+  SessionForkCommandResultSchema,
   SessionGroupRepairSummarySchema,
   SessionGroupViewSchema,
   SessionMigrationJournalEntrySchema,
@@ -2476,6 +2478,35 @@ describe("contract schemas", () => {
     expect(CommandRecordSchema.safeParse({ ...record, status: "failed" }).success).toBe(false);
     expect(CommandRecordSchema.safeParse({ ...record, result: undefined }).success).toBe(true);
 
+    const publicRecord = {
+      id: record.id,
+      type: record.type,
+      status: record.status,
+      createdAt: record.createdAt,
+      finishedAt: record.finishedAt,
+      result: record.result,
+    } as const;
+    expect(PublicCommandRecordSchema.safeParse(publicRecord).success).toBe(true);
+    expect(PublicCommandRecordSchema.safeParse({ ...publicRecord, command }).success).toBe(false);
+    expect(
+      PublicCommandRecordSchema.safeParse({
+        ...publicRecord,
+        diagnostics: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      PublicCommandRecordSchema.safeParse({
+        ...publicRecord,
+        type: "worktree.fork",
+      }).success,
+    ).toBe(false);
+    expect(
+      PublicCommandRecordSchema.safeParse({
+        ...publicRecord,
+        status: "failed",
+      }).success,
+    ).toBe(false);
+
     expect(
       CommandExecutionOutcomeSchema.safeParse({ status: "succeeded", receipt, record }).success,
     ).toBe(true);
@@ -2511,6 +2542,7 @@ describe("contract schemas", () => {
     } as const;
     const sibling = {
       ...identity,
+      resolvedGroupId: "group_created",
       requestedPlacement: "sibling",
       resolvedPlacement: {
         provider: "tmux",
@@ -2520,6 +2552,9 @@ describe("contract schemas", () => {
       },
     } as const;
     expect(SessionCreateCommandResultSchema.safeParse(sibling).success).toBe(true);
+    expect(
+      SessionForkCommandResultSchema.safeParse({ ...sibling, type: "session.fork" }).success,
+    ).toBe(true);
     expect(
       SessionCreateCommandResultSchema.safeParse({
         ...sibling,

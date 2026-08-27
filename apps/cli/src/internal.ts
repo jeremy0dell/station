@@ -19,6 +19,10 @@ export type {
   SessionProjectionState,
   SessionWorktreeProjectionState,
 } from "./commands/session/convergence.js";
+export type {
+  SessionCreationConvergence,
+  SessionCreationProjectionState,
+} from "./commands/session/creationConvergence.js";
 export type { SessionCommandDeps, SessionCommandOptions } from "./commands/session/options.js";
 export * from "./commands/session/result.js";
 export type {

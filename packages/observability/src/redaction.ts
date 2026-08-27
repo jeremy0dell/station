@@ -18,7 +18,7 @@ type MutableRedactionReport = {
 };
 
 const SECRET_KEY_PATTERN =
-  /(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|auth|credential|private[_-]?key|session[_-]?cookie)/i;
+  /(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|auth|credential|private[_-]?key|session[_-]?cookie|prompt)/i;
 
 const SECRET_VALUE_PATTERNS: Array<[string, RegExp]> = [
   ["bearer-token", /Bearer\s+[A-Za-z0-9._~+/=-]+/gi],

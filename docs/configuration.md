@@ -130,10 +130,14 @@ Worktrunk, and recreate it under the managed root.
 
 ### `[terminal.tmux]` — terminal provider (optional)
 
-Raw `session.create` and `session.fork` commands must name a terminal and carry
-an explicit placement request. `sibling` uses an unexpired source returned by
-`stn session current`; `detached` is source-free and creates an unselected tmux
-window in the configured workbench. Native Station does not support raw
+Recorded `session.create` and `session.fork` commands must name a terminal and
+carry an explicit placement request. The first-class CLI exposes that contract
+as exactly one of `--from-current` or `--terminal tmux`: the former obtains an
+unexpired source from `stn session current` for sibling placement, while the
+latter is source-free and creates an unselected tmux window in the configured
+workbench. The CLI never infers a terminal from project defaults. Omitted
+harness uses the project default for create or the source session's provider for
+fork; omitted layout uses the exact project default. Native Station does not support raw
 placement; its renderer-managed launch path is separate.
 
 | Key | Type | Notes |

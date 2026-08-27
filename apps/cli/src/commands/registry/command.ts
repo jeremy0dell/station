@@ -48,6 +48,8 @@ export const commandCliCommand: CliCommandNode = {
       options: [{ name: "--timeout-ms <ms>", description: "Override observer request timeout." }],
       notes: [
         "Use a command id returned by command dispatch, observe --json, or debug trace output.",
+        "Output includes lifecycle, correlation, safe error, and durable result fields; command payloads and diagnostic internals are omitted.",
+        "Use stn debug trace <commandId> for redacted diagnostic evidence.",
       ],
     },
   ],

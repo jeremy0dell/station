@@ -235,11 +235,22 @@ run/runtime-owners/v1/
 
 Use `bun run station:runtime-inventory [-- --json]` to inspect registered disposable owners without changing them. The report distinguishes a live persistent Host/PTY cohort from a disposable launcher record, returns only keys and root classifications, and names unavailable or ambiguous evidence as a refusal. It never prints raw commands, environment, terminal contents, prompts, credentials, or absolute private paths; use its logical `logs/cli.jsonl` location with `stn debug logs "runtime." --component cli` for the correlated lifecycle evidence. For the checkout-local devbox, run `cd station && bun run station:isolated inventory`.
 
-For terminal placement, run `stn session current` from the caller terminal and
-reuse only its unexpired `source` in a raw sibling request. A detached request
-has no source. If a command is rejected, inspect `stn debug trace <commandId>`
-for the placement or cleanup code. Debug export redacts `authorityId` and does
-not include raw caller claims or provider-private proof.
+For terminal placement, `stn session create ... --from-current` and `stn
+session fork ... --from-current` obtain fresh authority from the caller terminal
+and submit it only in that recorded sibling command. Explicit `--terminal tmux`
+is detached, has no source, and never consults current or focused state. Raw
+callers may instead run `stn session current` and reuse only its unexpired
+`source` in one sibling request. On rejection, failure, or timeout, use the
+returned `commandId` with `stn command get` or `stn debug trace`; a successful
+durable result, including its resolved Group ID when grouped, remains authoritative
+when the CLI reports a later convergence warning. Debug export redacts `authorityId`
+and all prompt-keyed fields and does not include prompt content,
+raw caller claims, or provider-private proof.
+
+`stn command get` and raw `command dispatch --wait` output include lifecycle,
+correlation, safe error, and durable result fields only. They omit the recorded
+command payload and diagnostic internals; use `stn debug trace <commandId>` for
+redacted diagnostic evidence.
 
 `bun run station:runtime-prune -- --runtime <run_uuid>` is the read-only plan for one inventory record. An eligible plan prints a stable SHA-256 digest; apply only by rerunning with `--yes --expect-plan <sha256>`. Apply serializes with runtime startup, requires the same plan after acquiring the runtime-key lock, and revalidates the exact owner, group, checkout, pinned cleanup roots, registered Host sockets, and live PTYs before every signal or recursive deletion. A stale digest, active owner, PID reuse, inaccessible Host, protected PTY overlap, malformed record, or root replacement refuses cleanup and retains the record. `runtime.prune.applied` means the group and pinned binary-smoke roots were confirmed absent before record retirement; `runtime.cleanup.refused` and `runtime.cleanup.failed` retain evidence for another inspection. The command never extends `agent:cleanup`, reset, or Observer reap behavior.
 

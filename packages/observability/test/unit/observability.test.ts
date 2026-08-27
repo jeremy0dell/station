@@ -25,6 +25,7 @@ describe("observability helpers", () => {
         headers: { authorization: "Bearer abcdefghijklmnop" },
         env: { OPENAI_API_KEY: "sk-secret000000000000" },
         placement: { authorityId: "placement-authority" },
+        command: { payload: { initialPrompt: "private customer context" } },
         output: "TOKEN=super-secret-value",
       },
       new Date(now),
@@ -33,7 +34,9 @@ describe("observability helpers", () => {
     expect(JSON.stringify(result.value)).not.toContain("sk-secret");
     expect(JSON.stringify(result.value)).not.toContain("abcdefghijklmnop");
     expect(JSON.stringify(result.value)).not.toContain("placement-authority");
+    expect(JSON.stringify(result.value)).not.toContain("private customer context");
     expect(result.report.redactedFields).toContain("placement.authorityId");
+    expect(result.report.redactedFields).toContain("command.payload.initialPrompt");
     expect(result.report.replacements).toBeGreaterThanOrEqual(3);
   });
 
@@ -250,6 +253,9 @@ describe("observability helpers", () => {
     expect(manifest.traceIds).toEqual(["trc_1"]);
     const bundleText = await readFile(join(manifest.bundlePath, "errors.jsonl"), "utf8");
     expect(bundleText).not.toContain("sk-secret");
+    const commandsText = await readFile(join(manifest.bundlePath, "commands.jsonl"), "utf8");
+    expect(commandsText).not.toContain("private prompt payload");
+    expect(commandsText).toContain("[REDACTED]");
     let rawIndex: unknown;
     try {
       rawIndex = JSON.parse(
@@ -304,8 +310,18 @@ function minimalSnapshot(): DiagnosticSnapshot {
     commands: [
       {
         id: "cmd_1",
-        type: "observer.reconcile",
-        command: { type: "observer.reconcile", payload: { reason: "unit" } },
+        type: "session.create",
+        command: {
+          type: "session.create",
+          payload: {
+            projectId: "web",
+            branch: "unit",
+            harness: { provider: "codex" },
+            terminal: { provider: "tmux" },
+            placement: { intent: "detached" },
+            initialPrompt: "private prompt payload",
+          },
+        },
         status: "failed",
         createdAt: now,
         traceId: "trc_1",

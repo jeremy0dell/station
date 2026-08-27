@@ -8,6 +8,7 @@ import type {
   CommandRecord,
   FailedCommandRecord,
   ObserverApi,
+  PublicCommandRecord,
   RejectedCommandReceipt,
   SafeError,
   StationCommand,
@@ -53,16 +54,16 @@ export type CommandDispatchCompletedResult =
   | {
       status: "succeeded";
       receipt: AcceptedCommandReceipt;
-      command: SucceededCommandRecord;
+      command: PublicCommandRecord;
     }
   | {
       status: "failed";
       receipt: AcceptedCommandReceipt;
-      command: FailedCommandRecord;
+      command: PublicCommandRecord;
     };
 
 export type CommandGetResult = {
-  command: CommandRecord;
+  command: PublicCommandRecord;
 };
 
 export type CommandCommandResult =
@@ -140,7 +141,9 @@ export async function executeTypedObserverCommand<TCommand extends StationComman
  * ADAPTER
  *
  * Parses raw CLI input once, executes typed Observer commands or record lookup, and projects only
- * typed command receipt/record correlation for the process boundary.
+ * typed lifecycle, receipt, result, and safe-error correlation for the process boundary. Durable
+ * command payloads and diagnostic internals remain private even when raw dispatch waits or record
+ * lookups succeed.
  */
 export async function runCommandCommand(
   args: string[],
@@ -164,7 +167,7 @@ export async function runCommandCommand(
   return {
     status: outcome.status,
     receipt: outcome.receipt,
-    command: outcome.record,
+    command: publicCommandRecord(outcome.record),
   };
 }
 
@@ -187,17 +190,16 @@ export function commandCommandCorrelation(
     case "rejected":
       return commandExecutionCorrelation(result);
     case "succeeded":
-      return commandExecutionCorrelation({
-        status: "succeeded",
-        receipt: result.receipt,
-        record: result.command,
-      });
-    case "failed":
-      return commandExecutionCorrelation({
-        status: "failed",
-        receipt: result.receipt,
-        record: result.command,
-      });
+    case "failed": {
+      assertMatchingCorrelation(result.receipt, result.command);
+      const correlation: CliRunCorrelation = {
+        status: result.status,
+        commandId: result.receipt.commandId,
+      };
+      const traceId = result.receipt.traceId ?? result.command.traceId;
+      if (traceId !== undefined) correlation.traceId = traceId;
+      return correlation;
+    }
   }
 }
 
@@ -216,7 +218,10 @@ export function commandExecutionCorrelation(outcome: CommandExecutionOutcome): C
   return correlation;
 }
 
-function assertMatchingCorrelation(receipt: AcceptedCommandReceipt, record: CommandRecord): void {
+function assertMatchingCorrelation(
+  receipt: AcceptedCommandReceipt,
+  record: Pick<CommandRecord, "id" | "traceId">,
+): void {
   if (
     record.id !== receipt.commandId ||
     (record.traceId !== undefined &&
@@ -233,8 +238,24 @@ async function getCommand(client: ObserverApi, commandId: CommandId): Promise<Co
     throw missingCommandRecordError(commandId);
   }
   return {
-    command,
+    command: publicCommandRecord(command),
   };
+}
+
+function publicCommandRecord(command: CommandRecord): PublicCommandRecord {
+  const record: PublicCommandRecord = {
+    id: command.id,
+    type: command.type,
+    status: command.status,
+    createdAt: command.createdAt,
+  };
+  if (command.startedAt !== undefined) record.startedAt = command.startedAt;
+  if (command.finishedAt !== undefined) record.finishedAt = command.finishedAt;
+  if (command.traceId !== undefined) record.traceId = command.traceId;
+  if (command.spanId !== undefined) record.spanId = command.spanId;
+  if (command.error !== undefined) record.error = command.error;
+  if (command.result !== undefined) record.result = command.result;
+  return record;
 }
 
 async function createCommandObserverClient(

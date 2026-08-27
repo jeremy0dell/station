@@ -40,7 +40,7 @@ A crucial subtlety: **no single layer owns all truth.** Config is authoritative 
 
 - **Commands** are how clients change the world. Clients never run `git`, `tmux`, or `wt` themselves — they submit a typed command (for example, "create a session for this project on this branch with this harness"), and the observer routes it to the providers that own the mechanics.
 
-- **Clients** — the CLI and the TUI — render the graph and dispatch commands. The TUI is the live dashboard; the CLI (`stn`) handles observer lifecycle, setup, reconcile, snapshots, exact current-session discovery, recorded session rename/close, hooks, and debugging. Both are *consumers*: they ask the observer, they don't invent state.
+- **Clients** — the CLI and the TUI — render the graph and dispatch commands. The TUI is the live dashboard; the CLI (`stn`) handles observer lifecycle, setup, reconcile, snapshots, exact current-session discovery, recorded session create/fork/rename/close, hooks, and debugging. Both are *consumers*: they ask the observer, they don't invent state.
 
 ## Two kinds of hooks (don't conflate them)
 

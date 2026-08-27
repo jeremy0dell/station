@@ -261,7 +261,12 @@ const SessionCommandResultFields = {
   projectId: ProjectIdSchema,
   worktreeId: WorktreeIdSchema,
   sessionId: SessionIdSchema,
+  resolvedGroupId: SessionGroupIdSchema.optional(),
 } as const;
+
+type WithExactOptionalProperty<T, K extends keyof T> = T extends T
+  ? Omit<T, K> & { [P in K]?: Exclude<T[P], undefined> }
+  : never;
 
 export const SessionCreateCommandResultSchema = z.discriminatedUnion("requestedPlacement", [
   z
@@ -280,7 +285,10 @@ export const SessionCreateCommandResultSchema = z.discriminatedUnion("requestedP
     .strict(),
 ]);
 
-export type SessionCreateCommandResult = z.infer<typeof SessionCreateCommandResultSchema>;
+export type SessionCreateCommandResult = WithExactOptionalProperty<
+  z.infer<typeof SessionCreateCommandResultSchema>,
+  "resolvedGroupId"
+>;
 
 export const SessionForkCommandResultSchema = z.discriminatedUnion("requestedPlacement", [
   z
@@ -299,4 +307,7 @@ export const SessionForkCommandResultSchema = z.discriminatedUnion("requestedPla
     .strict(),
 ]);
 
-export type SessionForkCommandResult = z.infer<typeof SessionForkCommandResultSchema>;
+export type SessionForkCommandResult = WithExactOptionalProperty<
+  z.infer<typeof SessionForkCommandResultSchema>,
+  "resolvedGroupId"
+>;

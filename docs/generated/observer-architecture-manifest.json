@@ -1479,7 +1479,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command. Success returns the exact created identities and the provider-resolved placement projection."
+          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command. Success returns the exact created identities, resolved Group identity when grouped, and provider-resolved placement projection."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -1586,7 +1586,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "WorktreeObservation"]
+          "bindings": ["ProviderProjectConfig", "SessionCreateCommandResult", "WorktreeObservation"]
         },
         {
           "specifier": "@station/runtime",
@@ -1603,7 +1603,7 @@
           "name": "createSessionForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback. Success returns the exact created identities and the provider-resolved placement projection."
+          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback. Success returns the exact created identities, transaction-resolved Group identity when grouped, and the provider-resolved placement projection."
         },
         {
           "name": "CreateSessionForkHandlerOptions",
@@ -1714,7 +1714,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "WorktreeObservation"]
+          "bindings": ["ProviderProjectConfig", "SessionForkCommandResult", "WorktreeObservation"]
         },
         {
           "specifier": "@station/runtime",
@@ -13774,7 +13774,7 @@
       "declaration": "runCommandCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Parses raw CLI input once, executes typed Observer commands or record lookup, and projects only typed command receipt/record correlation for the process boundary.",
+      "purpose": "Parses raw CLI input once, executes typed Observer commands or record lookup, and projects only typed lifecycle, receipt, result, and safe-error correlation for the process boundary. Durable command payloads and diagnostic internals remain private even when raw dispatch waits or record lookups succeed.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/command.ts",
@@ -14007,7 +14007,7 @@
       "declaration": "runSessionCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Collects provider-bound current-session evidence, projects exact sessions from one current snapshot, and translates exact rename or close CLI intent into recorded typed commands. Current-session collection remains independent of provider-specific claim keys.",
+      "purpose": "Collects provider-bound current-session evidence, projects exact session/create/fork facts from one current snapshot, and translates exact CLI intent into recorded typed commands. Sibling creation consumes only fresh public placement authority; durable created and resolved Group identities remain authoritative when the best-effort refreshed projection has not converged. Creation convergence exposes state only. Provider-specific claims and placement mechanics remain outside this adapter.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/command.ts",
@@ -15662,7 +15662,7 @@
       "declaration": "createSessionCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command. Success returns the exact created identities and the provider-resolved placement projection.",
+      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command. Success returns the exact created identities, resolved Group identity when grouped, and provider-resolved placement projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",
@@ -15678,7 +15678,7 @@
       "declaration": "createSessionForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback. Success returns the exact created identities and the provider-resolved placement projection.",
+      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback. Success returns the exact created identities, transaction-resolved Group identity when grouped, and the provider-resolved placement projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",

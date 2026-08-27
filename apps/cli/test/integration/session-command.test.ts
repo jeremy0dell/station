@@ -84,7 +84,7 @@ describe("session current command", () => {
     );
 
     expect(parent).toMatchObject({ code: 0, outputFormat: "text" });
-    expect(textOutput(parent)).toContain("Discover or operate on one exact current session.");
+    expect(textOutput(parent)).toContain("Discover, create, fork, or operate on exact sessions.");
     expect(textOutput(parent)).toContain("stn session current");
     expect(leaf).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(leaf)).toContain("Print the verified invoking terminal context as JSON.");
@@ -101,7 +101,8 @@ describe("session current command", () => {
     expect(manual).toContain("may start or contact the Observer");
     expect(manual).toContain("tmux is currently the only placement-capable terminal provider");
     expect(manual).toContain("short-lived, one-shot bearer input");
-    expect(manual).toContain("raw sibling session.create or session.fork dispatch");
+    expect(manual).toContain("session create/fork --from-current");
+    expect(manual).toContain("raw sibling dispatch");
     expect(manual).toContain("do not persist or log it");
     expect(manual).toContain("Detached placement is source-free");
     expect(manual).toContain("does not use stn session current");
@@ -120,7 +121,7 @@ describe("session current command", () => {
         runCli(["--config", configPath, "session", "create"], {
           observerDeps: { spawnObserver },
         }),
-      ).rejects.toThrow("Unknown session command: create. Use: stn session --help.");
+      ).rejects.toThrow("session create requires a value.");
       await expect(
         runCli(["--config", configPath, "session", "current", "--json", "later"], {
           observerDeps: { spawnObserver },
