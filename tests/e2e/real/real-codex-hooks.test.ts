@@ -25,7 +25,8 @@ import { createRealTempRepo, uniqueBranch } from "../../support/real-station/rep
 import {
   activeTmuxPane,
   captureTmuxPane,
-  killTmuxSession,
+  closeRealTmuxEndpoint,
+  type RealTmuxEndpoint,
   sendTmuxKeys,
 } from "../../support/real-station/tmux";
 import { removeRealWorktrunkWorktree } from "../../support/real-station/worktrunk";
@@ -67,17 +68,14 @@ describeReal("real Codex hook ingestion", () => {
         args: notify.args,
       },
     });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     await codex.installHooks(config);
     cleanup.defer(async () => {
       await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
-      }).catch(() => undefined);
+      });
     });
-    cleanup.defer(async () => {
-      await killTmuxSession(testEnv, config.tmuxSession);
-    });
-
     const branch = uniqueBranch("codex-hooks");
     cleanup.defer(async () => {
       await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
@@ -117,7 +115,7 @@ describeReal("real Codex hook ingestion", () => {
         branch,
         timeoutMs: 90_000,
       });
-      await continuePastCodexStartupPrompts(testEnv, config.tmuxSession, row);
+      await continuePastCodexStartupPrompts(config.tmuxEndpoint, config.tmuxSession, row);
       await waitForCodexSentinel(sentinel, { rootPath: row.path, timeoutMs: 240_000 });
       const idleRow = await waitForRowAgentState({
         env: testEnv,
@@ -234,12 +232,12 @@ async function waitForRowTerminalAttachment(input: {
 }
 
 async function continuePastCodexStartupPrompts(
-  env: RealE2eEnvironment,
+  endpoint: RealTmuxEndpoint,
   tmuxSession: string,
   row: StationSnapshot["rows"][number],
 ): Promise<void> {
   const target = await activeTmuxPane(
-    env,
+    endpoint,
     `${tmuxSession}:${buildWorkbenchWindowName({
       projectId: row.projectId,
       branch: row.branch,
@@ -249,12 +247,12 @@ async function continuePastCodexStartupPrompts(
   );
   const deadline = Date.now() + 30_000;
   while (Date.now() <= deadline) {
-    const captured = await captureTmuxPane({ env, target });
+    const captured = await captureTmuxPane({ endpoint, target });
     if (captured.includes("Do you trust the contents of this directory?")) {
-      await sendTmuxKeys({ env, target, keys: ["1", "Enter"] });
+      await sendTmuxKeys({ endpoint, target, keys: ["1", "Enter"] });
     }
     if (captured.includes("hooks need review") && captured.includes("Press t to trust all")) {
-      await sendTmuxKeys({ env, target, keys: ["t"] });
+      await sendTmuxKeys({ endpoint, target, keys: ["t"] });
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 500));

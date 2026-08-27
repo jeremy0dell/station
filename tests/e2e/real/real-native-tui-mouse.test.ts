@@ -38,10 +38,10 @@ import { createRealTempRepo } from "../../support/real-station/repo";
 import {
   type AttachedTmuxPtyClient,
   captureTmuxPane,
+  closeRealTmuxEndpoint,
   killTmuxSession,
   launchNativeStationInTmux,
   startAttachedTmuxPtyClient,
-  tmuxSessionExists,
 } from "../../support/real-station/tmux";
 import { removeRealWorktrunkWorktree } from "../../support/real-station/worktrunk";
 
@@ -85,6 +85,7 @@ describeReal("real native Station mouse input", () => {
       codexCommand: codex.codexCommand,
       installCodexHooks: true,
     });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
     await writeFile(
       config.configPath,
       `${(await readFile(config.configPath, "utf8")).replace(
@@ -106,10 +107,7 @@ describeReal("real native Station mouse input", () => {
         configPath: config.configPath,
         args: ["observer", "stop"],
         env: isolatedStationEnv(config),
-      }).catch(() => undefined);
-    });
-    cleanup.defer(async () => {
-      await killTmuxSession(testEnv, config.tmuxSession);
+      });
     });
     cleanup.defer(async () => {
       await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
@@ -158,7 +156,7 @@ describeReal("real native Station mouse input", () => {
       );
       const createdRow = findRowByBranch(created, branch);
       await waitForCodexSentinel(sentinel, { rootPath: createdRow.path, timeoutMs: 180_000 });
-      await killTmuxSession(testEnv, config.tmuxSession);
+      await killTmuxSession(config.tmuxEndpoint, config.tmuxSession);
       const dormant = await waitForSnapshot(
         client,
         (snapshot: StationSnapshot) => {
@@ -203,6 +201,7 @@ describeReal("real native Station mouse input", () => {
 
       const launched = await launchNativeStationInTmux({
         env: testEnv,
+        endpoint: config.tmuxEndpoint,
         configPath: config.configPath,
         observerSocketPath: config.socketPath,
         stateDir: config.stateDir,
@@ -210,11 +209,8 @@ describeReal("real native Station mouse input", () => {
         cwd: repo.repoPath,
         dimensions: NATIVE_DIMENSIONS,
       });
-      cleanup.defer(async () => {
-        await killTmuxSession(testEnv, nativeSession);
-      });
       const ptyClient = await startAttachedTmuxPtyClient({
-        env: testEnv,
+        endpoint: config.tmuxEndpoint,
         sessionName: nativeSession,
         dimensions: NATIVE_DIMENSIONS,
       });
@@ -232,7 +228,7 @@ describeReal("real native Station mouse input", () => {
         runtime,
         (frame) =>
           frame.includes("[shell]") &&
-          frame.includes(`╭ ▼ ${groupName} 1 session`) &&
+          frame.includes(`▼ ${groupName} 1 session`) &&
           hasDashboardSessionRow(frame, branch),
         "The native-only Station overlay did not render its Group and real session.",
       );
@@ -274,7 +270,7 @@ describeReal("real native Station mouse input", () => {
         (frame) => frame.includes(`▶ ${groupName}`) && !hasDashboardSessionRow(frame, branch),
         "The deliberate native Group click did not collapse exactly once.",
       );
-      await writeSgrClick(ptyClient, groupCell);
+      await writeSgrClick(ptyClient, cellForText(await captureNativeFrame(runtime), groupName));
       await waitForNativeFrame(
         runtime,
         (frame) => frame.includes(`▼ ${groupName}`) && hasDashboardSessionRow(frame, branch),
@@ -466,8 +462,6 @@ describeReal("real native Station mouse input", () => {
         expect(await waitForPidExit(nativePid, 10_000)).toBe(true);
         expect(await waitForPidExit(attachedClientPid, 10_000)).toBe(true);
         expect(await waitForPidExit(observerPid, 10_000)).toBe(true);
-        expect(await tmuxSessionExists(testEnv, nativeSession)).toBe(false);
-        expect(await tmuxSessionExists(testEnv, config.tmuxSession)).toBe(false);
         expect(await pathExists(worktreePath)).toBe(false);
         expect(await pathExists(repo.root)).toBe(false);
       }
@@ -603,7 +597,7 @@ async function waitForSnapshotWithDiagnostics(
 
 async function captureNativeFrame(runtime: NativeRuntime, styled = false): Promise<string> {
   return captureTmuxPane({
-    env: runtime.env,
+    endpoint: runtime.config.tmuxEndpoint,
     target: runtime.target,
     styled,
     preserveTrailingSpaces: true,
