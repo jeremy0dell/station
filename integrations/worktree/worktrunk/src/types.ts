@@ -69,4 +69,6 @@ export type WorktrunkProviderOptions = {
   runner?: ExternalCommandRunner;
   clock?: RuntimeClock;
   resolveRegistrationIdentity?: (worktreePath: string) => Promise<string | undefined>;
+  /** Platform authority for interpreting OS-specific observed path aliases. */
+  platform?: NodeJS.Platform;
 };
