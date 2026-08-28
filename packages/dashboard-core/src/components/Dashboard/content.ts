@@ -115,14 +115,21 @@ function plural(count: number, noun: string): string {
 
 export const FIRST_RUN_BODY_LABEL = "Add your first project";
 
+/** Copy for a tree-overflow row. Session counts stay when sessions are clipped. */
 export function scrollIndicatorLabel(
   direction: "above" | "below",
   overflow: DashboardSessionOverflow,
 ): string {
   if (direction === "above") {
-    return `▲ ${overflow.above} ${plural(overflow.above, "session")} above`;
+    if (overflow.above > 0) {
+      return `▲ ${overflow.above} ${plural(overflow.above, "session")} above`;
+    }
+    return "▲ more above";
   }
-  return `▼ ${overflow.below} below · showing ${overflow.visible} of ${overflow.total}`;
+  if (overflow.below > 0) {
+    return `▼ ${overflow.below} below · showing ${overflow.visible} of ${overflow.total}`;
+  }
+  return "▼ more below";
 }
 
 export type SnapshotLoadingLine = {

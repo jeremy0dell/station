@@ -79,6 +79,15 @@ describe("DashboardTableHeaderView", () => {
     expect(setup.captureCharFrame().split("\n")[0]?.trimEnd()).toBe("▲ 3 sessions above");
   });
 
+  it("renders generic above overflow when no sessions are clipped", async () => {
+    const setup = await renderHeader({
+      kind: "aboveOverflow",
+      overflow: { above: 0, below: 0, visible: 1, total: 1 },
+    });
+
+    expect(setup.captureCharFrame().split("\n")[0]?.trimEnd()).toBe("▲ more above");
+  });
+
   it("keeps the upward scroll pointer target", async () => {
     const targets: StationMouseTarget[] = [];
     const setup = await renderHeader(

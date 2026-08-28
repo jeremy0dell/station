@@ -70,7 +70,7 @@ export type StationMouseTarget =
   | { kind: "screenBackdrop" }
   | { kind: "sheetBackdrop" };
 
-export type StationMouseEventKind = "down" | "scroll-up" | "scroll-down";
+export type StationMouseEventKind = "down" | "drag" | "scroll-up" | "scroll-down";
 export type StationMouseOutcome = { kind: "handled" } | { kind: "open-url"; url: string };
 
 const SCROLL_PAGE_ROWS = 5;
@@ -100,8 +100,14 @@ export function routeStationMouse(
     return { kind: "handled" };
   }
   const mode = deriveTuiInputMode(runtime.state.getState());
-  if (eventKind !== "down") {
+  if (eventKind === "scroll-up" || eventKind === "scroll-down") {
     routeStationWheel(target, eventKind, runtime, mode);
+    return { kind: "handled" };
+  }
+  if (eventKind === "drag") {
+    if (target.kind === "scrollbar") {
+      routeScrollbar(target, runtime, mode);
+    }
     return { kind: "handled" };
   }
 
@@ -161,11 +167,7 @@ export function routeStationMouse(
       }
       return { kind: "handled" };
     case "scrollbar":
-      if (target.surface === "help" && mode === "help") {
-        runtime.actions.dispatch({ type: "help.scrollTo", offset: target.offset });
-      } else if (target.surface === "dashboard" && ROW_INTERACTIVE_MODES.has(mode)) {
-        runtime.actions.dispatch({ type: "dashboard.scrollTo", offset: target.offset });
-      }
+      routeScrollbar(target, runtime, mode);
       return { kind: "handled" };
     case "toast":
       dismissStationToasts(runtime);
@@ -254,7 +256,28 @@ export function stationMouseEventKind(event: StationMouseEvent): StationMouseEve
     if (event.scrollDirection === "down") return "scroll-down";
     return undefined;
   }
-  return event.type === "down" && event.button === "left" ? "down" : undefined;
+  if (event.button !== "left") {
+    return undefined;
+  }
+  if (event.type === "down") {
+    return "down";
+  }
+  if (event.type === "drag") {
+    return "drag";
+  }
+  return undefined;
+}
+
+function routeScrollbar(
+  target: Extract<StationMouseTarget, { kind: "scrollbar" }>,
+  runtime: DashboardMouseRuntime,
+  mode: TuiInputMode,
+): void {
+  if (target.surface === "help" && mode === "help") {
+    runtime.actions.dispatch({ type: "help.scrollTo", offset: target.offset });
+  } else if (target.surface === "dashboard" && ROW_INTERACTIVE_MODES.has(mode)) {
+    runtime.actions.dispatch({ type: "dashboard.scrollTo", offset: target.offset });
+  }
 }
 
 function routePersistentFilterConditionAction(

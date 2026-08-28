@@ -116,6 +116,45 @@ export function createCrowdedDashboardSnapshot(sessionCount: number): StationSna
   );
 }
 
+/** Crowded empty Groups after one session Group, so the tree can scroll with no sessions clipped. */
+export function createCrowdedEmptyGroupsSnapshot(groupCount: number): StationSnapshot {
+  const snapshot = snapshotFromRows([
+    row({
+      id: "wt_web_only",
+      projectId: "web",
+      branch: "only-session",
+      state: "idle",
+    }),
+  ]);
+  const sessionId = snapshot.sessions[0]?.id;
+  if (sessionId === undefined) {
+    throw new Error("crowded empty-group fixture requires a session");
+  }
+  return {
+    ...snapshot,
+    sessionGroups: [
+      {
+        id: "group_active",
+        projectId: "web",
+        name: "Active",
+        sessionIds: [sessionId],
+        version: 1,
+        createdAt: fixtureNow,
+        updatedAt: fixtureNow,
+      },
+      ...Array.from({ length: Math.max(0, Math.floor(groupCount)) }, (_, index) => ({
+        id: `group_empty_${String(index).padStart(2, "0")}`,
+        projectId: "web",
+        name: `Empty ${String(index).padStart(2, "0")}`,
+        sessionIds: [],
+        version: 1,
+        createdAt: fixtureNow,
+        updatedAt: fixtureNow,
+      })),
+    ],
+  };
+}
+
 /** Crowded web sessions inside one Group, so the tree has inert frame-end rows. */
 export function createCrowdedGroupedDashboardSnapshot(sessionCount: number): StationSnapshot {
   const snapshot = createCrowdedDashboardSnapshot(sessionCount);

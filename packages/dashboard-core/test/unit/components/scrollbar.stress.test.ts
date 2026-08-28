@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   scrollbarOffsetForTrackIndex,
   VERTICAL_SCROLLBAR_THUMB,
+  VERTICAL_SCROLLBAR_TRACK,
   verticalScrollbarCells,
 } from "../../../src/components/scrollbar.js";
 
@@ -49,6 +50,10 @@ describe("vertical scrollbar stress", () => {
     const bottom = verticalScrollbarCells({ ...input, offset: maxOffset });
     expect(top[0]).toBe(VERTICAL_SCROLLBAR_THUMB);
     expect(bottom.at(-1)).toBe(VERTICAL_SCROLLBAR_THUMB);
+    expect(
+      top.every((cell) => cell === VERTICAL_SCROLLBAR_THUMB || cell === VERTICAL_SCROLLBAR_TRACK),
+    ).toBe(true);
+    expect(top).toContain(VERTICAL_SCROLLBAR_TRACK);
   });
 
   it.each(

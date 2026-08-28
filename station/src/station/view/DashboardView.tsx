@@ -1,7 +1,8 @@
 // Render layer for the dashboard: one <text> per line, sized by the shared
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes, type BoxRenderable } from "@opentui/core";
+import { useRef } from "react";
 import {
   dashboardTableHeaderModel,
   dashboardRowGridInput,
@@ -13,7 +14,6 @@ import { layoutWorktreeRowGrid, textSegment, truncateCells } from "@station/dash
 import type { RowGridLayout, RowGridRowInput } from "@station/dashboard-core/selectors";
 import {
   dashboardScrollGutterChrome,
-  scrollbarOffsetForTrackIndex,
   selectDashboardViewport,
   selectFleetSummary,
   verticalScrollbarCells,
@@ -39,7 +39,12 @@ import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
 import { FLEET_STATUS_ORDER, STATION_STATUS_UI } from "../statusUi.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
-import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
+import {
+  useStationHoverState,
+  useStationMouse,
+  stationMouseProps,
+  stationScrollbarPointerProps,
+} from "./stationMouseContext.js";
 
 export type DashboardViewProps = {
   snapshot: DashboardSnapshotView;
@@ -69,6 +74,7 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
     overflow: viewport.sessionOverflow,
+    hiddenAbove: viewport.hiddenAbove,
     columns: contentColumns,
     ...(viewport.persistentFilter === undefined
       ? {}
@@ -84,7 +90,7 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
         overflow="hidden"
         onMouseScroll={stationMouseProps(dispatch, { kind: "body" }).onMouseScroll}
       >
-        <text> </text>
+        <text flexShrink={0}> </text>
         {firstRun ? null : (
           <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
         )}
@@ -102,7 +108,11 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
             layoutByItem={layoutByItem}
           />
         )}
-        <DashboardScrollIndicatorView direction="below" overflow={viewport.sessionOverflow} />
+        <DashboardScrollIndicatorView
+          direction="below"
+          overflow={viewport.sessionOverflow}
+          visible={viewport.hiddenBelow > 0}
+        />
         <Divider columns={contentColumns} />
       </box>
       <DashboardScrollGutter
@@ -112,6 +122,8 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
         contentLength={treeRowCount}
         viewportLength={viewport.bodyRows}
         offset={viewport.clampedScrollOffset}
+        hiddenAbove={viewport.hiddenAbove}
+        hiddenBelow={viewport.hiddenBelow}
       />
     </box>
   );
@@ -119,7 +131,11 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
 
 export function Divider({ columns }: { columns: number }) {
   const theme = useStationTheme();
-  return <text fg={toOpenTuiColor(theme.text.muted)}>{"─".repeat(Math.max(1, columns))}</text>;
+  return (
+    <text flexShrink={0} fg={toOpenTuiColor(theme.text.muted)}>
+      {"─".repeat(Math.max(1, columns))}
+    </text>
+  );
 }
 
 // Pinned fleet triage bar: glyph + colour reinforce each status lane. ready/
@@ -157,7 +173,7 @@ function FleetBar({
     Math.max(0, columns - lanesWidth - 2),
   );
   return (
-    <box height={1} width="100%" flexDirection="row" overflow="hidden">
+    <box height={1} width="100%" flexShrink={0} flexDirection="row" overflow="hidden">
       <text flexGrow={1} fg={toOpenTuiColor(theme.text.muted)}>
         <span attributes={TextAttributes.BOLD}>FLEET</span>
         {parts.map((part) => (
@@ -225,6 +241,8 @@ function DashboardScrollGutter({
   contentLength,
   viewportLength,
   offset,
+  hiddenAbove,
+  hiddenBelow,
 }: {
   chromeTop: number;
   chromeBottom: number;
@@ -232,9 +250,12 @@ function DashboardScrollGutter({
   contentLength: number;
   viewportLength: number;
   offset: number;
+  hiddenAbove: number;
+  hiddenBelow: number;
 }) {
   const dispatch = useStationMouse();
   const theme = useStationTheme();
+  const trackRef = useRef<BoxRenderable | null>(null);
   const overflow = contentLength > viewportLength && trackHeight > 0;
   const cells = verticalScrollbarCells({
     trackHeight,
@@ -242,38 +263,72 @@ function DashboardScrollGutter({
     viewportLength,
     offset,
   });
+  const pointer = overflow
+    ? stationScrollbarPointerProps(dispatch, {
+        surface: "dashboard",
+        contentLength,
+        viewportLength,
+        trackHeight,
+        trackTop: () => trackRef.current?.y ?? 0,
+      })
+    : undefined;
   return (
-    <box width={1} flexDirection="column" flexShrink={0}>
+    <box width={1} flexDirection="column" flexShrink={0} selectable={false}>
       {Array.from({ length: chromeTop }, (_, index) => (
-        <text key={`top-${index}`}> </text>
+        <GutterOverflowArrow
+          key={`top-${index}`}
+          glyph={index === chromeTop - 1 && hiddenAbove > 0 ? "▲" : " "}
+          direction="up"
+        />
       ))}
-      <box flexGrow={1} flexDirection="column">
+      <box
+        ref={trackRef}
+        width={1}
+        height={trackHeight}
+        flexShrink={0}
+        flexDirection="column"
+        selectable={false}
+        {...pointer}
+      >
         {cells.map((glyph, index) => (
-          <text
-            key={index}
-            fg={toOpenTuiColor(theme.text.muted)}
-            {...(overflow
-              ? stationMouseProps(dispatch, {
-                  kind: "scrollbar",
-                  surface: "dashboard",
-                  offset: scrollbarOffsetForTrackIndex({
-                    trackHeight,
-                    contentLength,
-                    viewportLength,
-                    offset,
-                    trackIndex: index,
-                  }),
-                })
-              : {})}
-          >
+          <text key={index} fg={toOpenTuiColor(theme.text.muted)} selectable={false}>
             {glyph}
           </text>
         ))}
       </box>
       {Array.from({ length: chromeBottom }, (_, index) => (
-        <text key={`bottom-${index}`}> </text>
+        <GutterOverflowArrow
+          key={`bottom-${index}`}
+          glyph={index === 0 && hiddenBelow > 0 ? "▼" : " "}
+          direction="down"
+        />
       ))}
     </box>
+  );
+}
+
+function GutterOverflowArrow({
+  glyph,
+  direction,
+}: {
+  glyph: string;
+  direction: "up" | "down";
+}) {
+  const dispatch = useStationMouse();
+  const theme = useStationTheme();
+  const interactive = glyph !== " ";
+  return (
+    <text
+      selectable={false}
+      {...(interactive
+        ? {
+            fg: toOpenTuiColor(theme.text.muted),
+            ...stationMouseProps(dispatch, { kind: "scrollIndicator", direction }),
+          }
+        : {})}
+    >
+      {glyph}
+    </text>
   );
 }
 

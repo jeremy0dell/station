@@ -3,6 +3,7 @@ import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import { selectDashboardViewport } from "../../../src/selectors/dashboardViewport.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
 import {
+  createCrowdedEmptyGroupsSnapshot,
   createDashboardSnapshot,
   createGroupedDashboardSnapshot,
 } from "../../fixtures/snapshots.js";
@@ -172,6 +173,22 @@ describe("dashboard viewport selector", () => {
       below: 5,
       visible: 2,
       total: 7,
+    });
+  });
+
+  it("can hide group chrome below while every session stays in the window", () => {
+    const snapshot = createCrowdedEmptyGroupsSnapshot(20);
+    const viewport = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({ initialSnapshot: snapshot, terminalRows: 12 }),
+    );
+
+    expect(viewport.hiddenBelow).toBeGreaterThan(0);
+    expect(viewport.sessionOverflow).toEqual({
+      above: 0,
+      below: 0,
+      visible: 1,
+      total: 1,
     });
   });
 

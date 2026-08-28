@@ -28,7 +28,7 @@ export type DashboardViewport = {
   readonly persistentFilter?: DashboardPersistentFilterProjection;
 };
 
-/** Session-row counts (not raw tree-row counts) for the scroll-overflow labels. */
+/** Session-row counts for overflow-label copy. Visibility uses hiddenAbove/hiddenBelow. */
 export type DashboardSessionOverflow = {
   readonly above: number;
   readonly below: number;

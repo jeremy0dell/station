@@ -21,8 +21,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
                                                                                ▐
-▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
-                                                                                
+▼ empty-project  0 sessions                                       [sh] [qs] [▾]▕
+▼ more below                                                                   ▼
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -82,11 +82,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown
  [2] - docs-cleanup            codex     no agent          ▐
  [3] ○ pty-buffer              codex     idle         #73 ✓▐
  [4] + session-resume          codex     starting          ▐
- [5] ⠋ station-overlay         codex     working      #76 … 
-                                                            
-▼ observer  3 sessions · 3 agents             [sh] [qs] [▾] 
- [6] x batch-export            opencode  exited        #8 ✓ 
-▼ 4 below · showing 6 of 10                                 
+ [5] ⠋ station-overlay         codex     working      #76 …▕
+                                                           ▕
+▼ observer  3 sessions · 3 agents             [sh] [qs] [▾]▕
+ [6] x batch-export            opencode  exited        #8 ✓▕
+▼ 4 below · showing 6 of 10                                ▼
 ─────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/e… 
 "
@@ -98,11 +98,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 ─────────────────────────────────────── 
        SESSION             STATUS       
 ▼ station  5 sessions · … [sh] [qs] [▾]▐
- [1] ○ cli-help-man        idle         
- [2] - docs-cleanup        no agent     
- [3] ○ pty-buffer          idle         
- [4] + session-resume      starting     
-▼ 6 below · showing 4 of 10             
+ [1] ○ cli-help-man        idle        ▕
+ [2] - docs-cleanup        no agent    ▕
+ [3] ○ pty-buffer          idle        ▕
+ [4] + session-resume      starting    ▕
+▼ 6 below · showing 4 of 10            ▼
 ─────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X… 
 "
@@ -125,12 +125,12 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 │ [4] ○ diagnostic-index            codex     idle                      +38 -7│▐
 │ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│▐
 │ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│▐
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Post-launch 0 sessions─────────────────────────────────────────────[qs] [▾]╮ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Release train 3 sessions───────────────────────────────────────────[qs] [▾]╮ 
-│ [7] x asset-proof                 codex     exited                    +19 -2│ 
-▼ 5 below · showing 7 of 12                                                     
+╰─────────────────────────────────────────────────────────────────────────────╯▕
+╭▼ Post-launch 0 sessions─────────────────────────────────────────────[qs] [▾]╮▕
+╰─────────────────────────────────────────────────────────────────────────────╯▕
+╭▼ Release train 3 sessions───────────────────────────────────────────[qs] [▾]╮▕
+│ [7] x asset-proof                 codex     exited                    +19 -2│▕
+▼ 5 below · showing 7 of 12                                                    ▼
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -188,13 +188,13 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited
 ▼ station  12 sessions · 6 Groups · 11 agents [sh] [qs] [▾]▐
 ╭▼ Design refresh 2 sessions──────────────────────[qs] [▾]╮▐
 │ [1] ⠋ group-contracts         codex     working         │▐
-│ [2] ○ group-keyboard          codex     idle            │ 
-╰─────────────────────────────────────────────────────────╯ 
-╭▼ Input parity and minimum-width interaction ve…─[qs] [▾]╮ 
-│ [3] ○ input-routing           codex     idle            │ 
-╰─────────────────────────────────────────────────────────╯ 
-╭▼ Observer hardening 3 sessions──────────────────[qs] [▾]╮ 
-▼ 9 below · showing 3 of 12                                 
+│ [2] ○ group-keyboard          codex     idle            │▕
+╰─────────────────────────────────────────────────────────╯▕
+╭▼ Input parity and minimum-width interaction ve…─[qs] [▾]╮▕
+│ [3] ○ input-routing           codex     idle            │▕
+╰─────────────────────────────────────────────────────────╯▕
+╭▼ Observer hardening 3 sessions──────────────────[qs] [▾]╮▕
+▼ 9 below · showing 3 of 12                                ▼
 ─────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/e… 
 "
@@ -206,11 +206,11 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1
 ─────────────────────────────────────── 
        SESSION                          
 ▼ station  12 sessions ·… [sh] [qs] [▾]▐
-╭▼ Design refresh 2 sessions──[qs] [▾]╮ 
-│ [1] ⠋ group-contracts               │ 
-│ [2] ○ group-keyboard                │ 
-╰─────────────────────────────────────╯ 
-▼ 10 below · showing 2 of 12            
+╭▼ Design refresh 2 sessions──[qs] [▾]╮▕
+│ [1] ⠋ group-contracts               │▕
+│ [2] ○ group-keyboard                │▕
+╰─────────────────────────────────────╯▕
+▼ 10 below · showing 2 of 12           ▼
 ─────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X… 
 "
@@ -316,9 +316,9 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3
 ▼ station  4 sessions · … [sh] [qs] [▾]▐
  [1] ! hook-scope                      ▐
  [2] ? metadata-refresh                ▐
- [3] ! popup-latency                    
- [4] ⠋ pr-info                          
-▼ 2 below · showing 4 of 6              
+ [3] ! popup-latency                   ▕
+ [4] ⠋ pr-info                         ▕
+▼ 2 below · showing 4 of 6             ▼
 ─────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X… 
 "
@@ -568,17 +568,17 @@ exports[`dashboard golden frames renders filtered Group counts and clips framed 
 "                                                                                
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
-▲ 3 sessions above                                                              
-╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮ 
-│ [1] ○ diagnostic-index            codex     idle                      +38 -7│ 
-│ [2] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
+▲ 3 sessions above                                                             ▲
+╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮▕
+│ [1] ○ diagnostic-index            codex     idle                      +38 -7│▕
+│ [2] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│▕
 │ [3] ⠋ trace-readiness             codex     working           +91 -22 #478 …│▐
 ╰─────────────────────────────────────────────────────────────────────────────╯▐
 ╭▼ Post-launch 0 sessions─────────────────────────────────────────────[qs] [▾]╮▐
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭▼ Release train 3 sessions───────────────────────────────────────────[qs] [▾]╮ 
-│ [4] x asset-proof                 codex     exited                    +19 -2│ 
-▼ 5 below · showing 4 of 12                                                     
+╰─────────────────────────────────────────────────────────────────────────────╯▕
+╭▼ Release train 3 sessions───────────────────────────────────────────[qs] [▾]╮▕
+│ [4] x asset-proof                 codex     exited                    +19 -2│▕
+▼ 5 below · showing 4 of 12                                                    ▼
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -649,8 +649,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
                                                                                ▐
-▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
-                                                                                
+▼ empty-project  0 sessions                                       [sh] [qs] [▾]▕
+▼ more below                                                                   ▼
 ─────────────────────────────────────────────────────────────────────────────── 
  FILTER   ←→ cursor  Enter apply  Tab condition  Ctrl-U clear  Esc cancel       
 "
@@ -669,8 +669,8 @@ FILTER working · Status=Working                2/10 matches
                                                            ▐
 ▼ scripts  2 sessions · 2 agents              [sh] [qs] [▾]▐
                                                            ▐
-▼ empty-project  0 sessions                   [sh] [qs] [▾] 
-                                                            
+▼ empty-project  0 sessions                   [sh] [qs] [▾]▕
+▼ more below                                               ▼
 ─────────────────────────────────────────────────────────── 
 / edit  Esc clear  ↵ activate  N new  Q:close               
 "
@@ -682,11 +682,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 ─────────────────────────────────────── 
 ▏ FILTER /t-filter-draft▏  0/10 matches 
 ▼ station  5 sessions · … [sh] [qs] [▾]▐
- [1] ○ cli-help-man        idle         
- [2] - docs-cleanup        no agent     
- [3] ○ pty-buffer          idle         
- [4] + session-resume      starting     
-▼ 6 below · showing 4 of 10             
+ [1] ○ cli-help-man        idle        ▕
+ [2] - docs-cleanup        no agent    ▕
+ [3] ○ pty-buffer          idle        ▕
+ [4] + session-resume      starting    ▕
+▼ 6 below · showing 4 of 10            ▼
 ─────────────────────────────────────── 
  FILTER   ↵ apply  Esc cancel           
 "

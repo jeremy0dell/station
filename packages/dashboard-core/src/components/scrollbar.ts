@@ -1,4 +1,6 @@
 export const VERTICAL_SCROLLBAR_THUMB = "▐";
+/** Thin right rail for leftover track; same cell as the thumb, not a second column. */
+export const VERTICAL_SCROLLBAR_TRACK = "▕";
 export const VERTICAL_SCROLLBAR_EMPTY = " ";
 
 export type VerticalScrollbarInput = {
@@ -8,15 +10,15 @@ export type VerticalScrollbarInput = {
   offset: number;
 };
 
-/** Whole-cell thumb; empty when content fits. Track cells are spaces, not a second rail. */
+/** Whole-cell thumb. Hidden when content fits. Overflowing leftover cells keep a rail. */
 export function verticalScrollbarCells(input: VerticalScrollbarInput): string[] {
   const trackHeight = Math.max(0, Math.floor(input.trackHeight));
-  const cells = Array.from({ length: trackHeight }, () => VERTICAL_SCROLLBAR_EMPTY);
   const metrics = scrollbarThumbMetrics(input, trackHeight);
   if (metrics === undefined) {
-    return cells;
+    return Array.from({ length: trackHeight }, () => VERTICAL_SCROLLBAR_EMPTY);
   }
   const { thumbStart, thumbSize } = metrics;
+  const cells = Array.from({ length: trackHeight }, () => VERTICAL_SCROLLBAR_TRACK);
   for (let index = thumbStart; index < thumbStart + thumbSize; index += 1) {
     cells[index] = VERTICAL_SCROLLBAR_THUMB;
   }
@@ -47,7 +49,13 @@ function scrollbarThumbMetrics(
   if (trackHeight === 0 || contentLength <= viewportLength) {
     return undefined;
   }
-  const thumbSize = Math.max(1, Math.round((viewportLength * trackHeight) / contentLength));
+  // Blink cc::ScrollUtils::CalculateScrollbarThumbLength (WebKit Composite
+  // matches the round + min). Min is one cell = bar thickness. Firefox sizes
+  // from page-increment instead of visible/content; do not copy that.
+  const thumbSize = Math.min(
+    trackHeight,
+    Math.max(1, Math.round((viewportLength * trackHeight) / contentLength)),
+  );
   const maxThumbStart = Math.max(0, trackHeight - thumbSize);
   const maxOffset = Math.max(1, contentLength - viewportLength);
   const offset = Math.min(Math.max(0, Math.floor(input.offset)), contentLength - viewportLength);

@@ -84,6 +84,7 @@ export {
   scrollbarOffsetForTrackIndex,
   VERTICAL_SCROLLBAR_EMPTY,
   VERTICAL_SCROLLBAR_THUMB,
+  VERTICAL_SCROLLBAR_TRACK,
   verticalScrollbarCells,
 } from "../components/scrollbar.js";
 

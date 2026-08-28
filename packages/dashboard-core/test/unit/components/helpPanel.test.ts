@@ -10,7 +10,10 @@ import {
   helpPanelModel,
   joinHelpPanelLine,
 } from "../../../src/components/HelpOverlay/helpPanel.js";
-import { VERTICAL_SCROLLBAR_THUMB } from "../../../src/components/scrollbar.js";
+import {
+  VERTICAL_SCROLLBAR_THUMB,
+  VERTICAL_SCROLLBAR_TRACK,
+} from "../../../src/components/scrollbar.js";
 import type { TuiHelpContentLine } from "../../../src/state/keymap.js";
 
 const FITTING: readonly TuiHelpContentLine[] = [
@@ -54,6 +57,7 @@ describe("helpPanelLines", () => {
     expect(scrolled[1]).toContain("line 2");
     expect(top[1]?.at(-1)).toBe("│");
     expect(top[1]?.at(-2)).toBe(VERTICAL_SCROLLBAR_THUMB);
+    expect(top[2]?.at(-2)).toBe(VERTICAL_SCROLLBAR_TRACK);
     expect(top[0]).toMatch(/^╭.+╮$/);
     expect(top.at(-1)).toMatch(/^╰.+╯$/);
   });

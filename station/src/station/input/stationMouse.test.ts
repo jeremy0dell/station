@@ -39,6 +39,11 @@ const LEFT_UP: StationMouseEvent = {
   type: "up",
 };
 
+const LEFT_DRAG: StationMouseEvent = {
+  ...LEFT_DOWN,
+  type: "drag",
+};
+
 const MIDDLE_DOWN: StationMouseEvent = {
   ...LEFT_DOWN,
   button: "middle",
@@ -677,6 +682,37 @@ describe("routeStationMouse", () => {
     const store = makeStore();
     routeStationMouse({ kind: "scrollbar", surface: "dashboard", offset: 4 }, LEFT_DOWN, store);
     expect(store.state.getState().scrollOffset).toBeGreaterThan(0);
+  });
+
+  it("scrolls from gutter drags without treating cell drags as activation", () => {
+    const store = makeStore();
+    routeStationMouse({ kind: "scrollbar", surface: "dashboard", offset: 4 }, LEFT_DRAG, store);
+    expect(store.state.getState().scrollOffset).toBeGreaterThan(0);
+
+    store.actions.dispatch({ type: "dashboard.scrollTo", offset: 0 });
+    const session = store.state.getState().snapshot?.sessions[0];
+    if (session === undefined) {
+      throw new Error("expected a session");
+    }
+    const focusBefore = store.state.getState().dashboardFocus;
+    routeStationMouse(
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.session(session.id),
+        cellId: "identity",
+      },
+      LEFT_DRAG,
+      store,
+    );
+    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(store.state.getState().dashboardFocus).toEqual(focusBefore);
+  });
+
+  it("scrolls Help from bar drags without closing it", () => {
+    const store = makeStore();
+    store.actions.handleKey({ input: "H" });
+    routeStationMouse({ kind: "scrollbar", surface: "help", offset: 3 }, LEFT_DRAG, store);
+    expect(store.state.getState().screen).toMatchObject({ name: "help", scrollOffset: 3 });
   });
 
   it("keeps stale screen and sheet backdrop wheel events from scrolling after dismissal", () => {

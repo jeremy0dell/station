@@ -649,7 +649,17 @@ inert. Native composition hosts the result in a managed pane, while standalone c
 Observer-backed capability.
 
 All bottom-sheet text uses the shared non-selectable sheet text primitive. Dragging inside any sheet
-therefore remains pointer interaction and never starts OpenTUI terminal text selection.
+therefore remains pointer interaction and never starts OpenTUI terminal text selection. Help overlay
+copy, `▲`/`▼` overflow chrome, and both inset scrollbar tracks are also non-selectable: OpenTUI
+starts a selection on left-down before renderable handlers run, so a drag on a selectable thumb
+would paint a selection across session copy. Track down/drag maps through the inclusive cell
+formula and never activates dashboard cells. The dashboard gutter paints `▲`/`▼` beside the
+overflow rows whenever the tree can scroll that way, not only when sessions are clipped.
+Session counts stay in the label when sessions are off-screen; otherwise the copy is
+`more above` / `more below`. Those arrows page like the labels and stay off the proportional
+thumb. Thumb length follows Blink/WebKit
+`round(visible/content × track)` (one-cell minimum, never longer than the track); leftover
+track cells keep a thin `▕` rail so the unused range still shows how much remains.
 
 Real native mouse acceptance lives in
 `tests/e2e/real/real-native-tui-mouse.test.ts`. It launches bare `stn` with `TMUX` and `TMUX_PANE`

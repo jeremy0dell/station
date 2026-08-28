@@ -19,10 +19,10 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
         │  ↵          open focused session                            ▐│       ▐
 ▼ script│  tab        next session needing you                        ▐│qs] [▾]▐
  [9] ○ a│  G/M        quick group/move to group                       ▐│6 #5 x1▐
- [a] ? m│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter      │ -1 #10▐
-        │  Tab S/P/A  build filter conditions · F applies builder      │       ▐
-▼ empty-│  1-9/a-z    open visible session or toggle condition         │qs] [▾] 
-        ╰──────────────────────────────────────────────────────────────╯        
+ [a] ? m│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter     ▕│ -1 #10▐
+        │  Tab S/P/A  build filter conditions · F applies builder     ▕│       ▐
+▼ empty-│  1-9/a-z    open visible session or toggle condition        ▕│qs] [▾]▕
+▼ more b╰──────────────────────────────────────────────────────────────╯       ▼
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -32,9 +32,9 @@ exports[`modal flow golden frames renders the help overlay scrolled 1`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ────────╭──────────────────────────────────────────────────────────────╮─────── 
-       S│  Ctrl-^     split pane below (Ctrl-6)                        │FF · PR 
-▼ statio│  Ctrl-]     focus next pane                                  │qs] [▾]▐
- [1] ○ c│  Ctrl-/     close split pane (Ctrl-_)                        │6 #70 ✓▐
+       S│  Ctrl-^     split pane below (Ctrl-6)                       ▕│FF · PR 
+▼ statio│  Ctrl-]     focus next pane                                 ▕│qs] [▾]▐
+ [1] ○ c│  Ctrl-/     close split pane (Ctrl-_)                       ▕│6 #70 ✓▐
  [2] - d│  Enter/Sp   open project view on welcome                    ▐│       ▐
  [3] ○ p│  Esc/↑↓     context menu close/move                         ▐│  #73 ✓▐
  [4] + s│  Enter/Sp   context menu select                             ▐│       ▐
@@ -49,8 +49,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ a│  N/A/R/C/F/P  new/add/rename/fold/fork/settings             ▐│6 #5 x1▐
  [a] ? m│  W          widgets                                         ▐│ -1 #10▐
         │  X          delete session                                  ▐│       ▐
-▼ empty-│  H/?        help · Z refresh                                ▐│qs] [▾] 
-        ╰──────────────────────────────────────────────────────────────╯        
+▼ empty-│  H/?        help · Z refresh                                ▐│qs] [▾]▕
+▼ more b╰──────────────────────────────────────────────────────────────╯       ▼
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -77,8 +77,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
                                                                                ▐
-▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
-                                                                                
+▼ empty-project  0 sessions                                       [sh] [qs] [▾]▕
+▼ more below                                                                   ▼
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -201,8 +201,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
                                                                                ▐
-▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
-                                                                                
+▼ empty-project  0 sessions                                       [sh] [qs] [▾]▕
+▼ more below                                                                   ▼
 ─────────────────────────────────────────────────────────────────────────────── 
  FILTER   ←→ cursor  Enter apply  Tab condition  Ctrl-U clear  Esc cancel       
 "
@@ -229,8 +229,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
                                                                                ▐
-▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
-                                                                                
+▼ empty-project  0 sessions                                       [sh] [qs] [▾]▕
+▼ more below                                                                   ▼
 ─────────────────────────────────────────────────────────────────────────────── 
  CONDITION   S/P/A edit  ↑↓ move  Enter select  F apply filter  Esc text        
 "
@@ -257,8 +257,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
                                                                                ▐
-▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
-                                                                                
+▼ empty-project  0 sessions                                       [sh] [qs] [▾]▕
+▼ more below                                                                   ▼
 ─────────────────────────────────────────────────────────────────────────────── 
  CONDITION   ← fields  ↑↓ move  Space/slot toggle  Enter done  Esc close        
 "
@@ -270,11 +270,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 ─────────────────────────────────────── 
 ▏ FILTER /▏               10/10 matches 
 ┌────────────────────────────────┐] [▾]▐
-│[←] STATUS CONDITION ↑5      [×]│      
-│  6 [ ] Exited                  │t     
-│▸ 7 [ ] No agent                │      
-│  8 [ ] Unknown                 │g     
-│  Done (Enter)                  │      
+│[←] STATUS CONDITION ↑5      [×]│     ▕
+│  6 [ ] Exited                  │t    ▕
+│▸ 7 [ ] No agent                │     ▕
+│  8 [ ] Unknown                 │g    ▕
+│  Done (Enter)                  │     ▼
 └────────────────────────────────┘───── 
  CONDITION  ← fields Sp toggle Esc clo… 
 "
@@ -385,8 +385,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9│                          │                                             │x1▐
  [a│                          │                                             │10▐
    │                          │                                             │  ▐
-▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾] 
-   └────────────────────────────────────────────────────────────────────────┘   
+▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾]▕
+▼ m└────────────────────────────────────────────────────────────────────────┘  ▼
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -413,8 +413,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9│                          │                                             │x1▐
  [a│                          │                                             │10▐
    │                          │                                             │  ▐
-▼ e│ ←/esc back                                                             │▾] 
-   └────────────────────────────────────────────────────────────────────────┘   
+▼ e│ ←/esc back                                                             │▾]▕
+▼ m└────────────────────────────────────────────────────────────────────────┘  ▼
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -441,8 +441,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9│                          │                                             │x1▐
  [a│                          │                                             │10▐
    │                          │                                             │  ▐
-▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾] 
-   └────────────────────────────────────────────────────────────────────────┘   
+▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾]▕
+▼ m└────────────────────────────────────────────────────────────────────────┘  ▼
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -469,8 +469,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1▐
 │ Select session to delete                   │code  unknown           +3 -1 #10▐
 │                                            │                                 ▐
-│ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾] 
-│ Esc:cancel                                 │                                  
+│ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾]▕
+│ Esc:cancel                                 │                                 ▼
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
@@ -497,8 +497,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Session  cli-help-man                      │code  idle           +14 -6 #5 x1▐
 │ Removes agent, worktree, and panes.        │code  unknown           +3 -1 #10▐
 │                                            │                                 ▐
-│  Delete (Y)  ▸ Keep session (N)            │                    [sh] [qs] [▾] 
-│ ←→ choose · Enter activate · Esc cancel    │                                  
+│  Delete (Y)  ▸ Keep session (N)            │                    [sh] [qs] [▾]▕
+│ ←→ choose · Enter activate · Esc cancel    │                                 ▼
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
@@ -525,8 +525,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Session  cli-help-man                      │code  idle           +14 -6 #5 x1▐
 │ Removes agent, worktree, and panes.        │code  unknown           +3 -1 #10▐
 │                                            │                                 ▐
-│▸ Delete (Y)    Keep session (N)            │                    [sh] [qs] [▾] 
-│ ←→ choose · Enter activate · Esc cancel    │                                  
+│▸ Delete (Y)    Keep session (N)            │                    [sh] [qs] [▾]▕
+│ ←→ choose · Enter activate · Esc cancel    │                                 ▼
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
@@ -573,8 +573,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Station cannot stop the active agent.                            │14 -6 #5 x1▐
 │ Stop it in its terminal before deleting the worktree.            │  +3 -1 #10▐
 │                                                                  │           ▐
-│                                                                  │h] [qs] [▾]
-│                                                                  │
+│                                                                  │h] [qs] [▾]▕
+│                                                                  │           ▼
 │ Esc/Enter:close                                                  │───────────
 └──────────────────────────────────────────────────────────────────┘
 "
@@ -601,8 +601,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
                                                                                ▐
-Rename: ↑↓ move · ↵ choose · 1-9/a-z or click                     [sh] [qs] [▾] 
-                                                                                
+Rename: ↑↓ move · ↵ choose · 1-9/a-z or click                     [sh] [qs] [▾]▕
+▼ more below                                                                   ▼
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -657,8 +657,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1▐
 │ Select session to fork                     │code  unknown           +3 -1 #10▐
 │                                            │                                 ▐
-│ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾] 
-│ Esc:cancel                                 │                                  
+│ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾]▕
+│ Esc:cancel                                 │                                 ▼
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
@@ -685,8 +685,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │▸ Name   Hexagonal PT 12|                   │code  idle           +14 -6 #5 x1▐
 │  Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10▐
 │ Source keeps running — copy is read-only.  │                                 ▐
-│                                            │                    [sh] [qs] [▾] 
-│  Fork (enter)                              │                                  
+│                                            │                    [sh] [qs] [▾]▕
+│  Fork (enter)                              │                                 ▼
 │ ↑↓ focus · Enter fork · Esc back           │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
@@ -713,8 +713,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │  Name   cli-help-man-fork                  │code  idle           +14 -6 #5 x1▐
 │▸ Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10▐
 │ Source keeps running — copy is read-only.  │                                 ▐
-│                                            │                    [sh] [qs] [▾] 
-│  Fork (enter)                              │                                  
+│                                            │                    [sh] [qs] [▾]▕
+│  Fork (enter)                              │                                 ▼
 │ Space/Enter toggle · ↑↓ focus · Esc back   │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
@@ -741,8 +741,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │  Name   cli-help-man-fork                  │code  idle           +14 -6 #5 x1▐
 │  Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10▐
 │ Source keeps running — copy is read-only.  │                                 ▐
-│                                            │                    [sh] [qs] [▾] 
-│▸ Fork (enter)                              │                                  
+│                                            │                    [sh] [qs] [▾]▕
+│▸ Fork (enter)                              │                                 ▼
 │ ↑↓ focus · Enter fork · Esc back           │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
@@ -1529,8 +1529,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
                                                                                ▐
-▼ empty-project  0 sessions                                       [sh] [qs] [▾]
-
+▼ empty-project  0 sessions                                       [sh] [qs] [▾]▕
+▼ more below                                                                   ▼
 ───────────────────────────────────────────────────────────────────────────────
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close
 "
@@ -1557,8 +1557,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1▐
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10▐
                                                                                ▐
-▼ empty-project  0 sessions                                       [sh] [qs] [▾]
-
+▼ empty-project  0 sessions                                       [sh] [qs] [▾]▕
+▼ more below                                                                   ▼
 ───────────────────────────────────────────────────────────────────────────────
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close
 "

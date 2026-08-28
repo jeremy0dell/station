@@ -44,11 +44,13 @@ export type DashboardTableHeaderModel =
 export function dashboardTableHeaderModel({
   layout,
   overflow,
+  hiddenAbove,
   columns = 80,
   persistentFilter,
 }: {
   layout: RowGridLayout | undefined;
   overflow: DashboardSessionOverflow;
+  hiddenAbove: number;
   columns?: number;
   persistentFilter?: DashboardPersistentFilterProjection;
 }): DashboardTableHeaderModel {
@@ -62,8 +64,8 @@ export function dashboardTableHeaderModel({
       }),
     };
   }
-  // The position cue owns the shared row whenever sessions are hidden above.
-  if (overflow.above > 0) {
+  // The position cue owns the shared row whenever the tree can scroll up.
+  if (hiddenAbove > 0) {
     return { kind: "aboveOverflow", overflow };
   }
   if (layout !== undefined) {

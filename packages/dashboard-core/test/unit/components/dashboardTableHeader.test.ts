@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { scrollIndicatorLabel } from "../../../src/components/Dashboard/content.js";
 import {
   dashboardPersistentFilterHeaderModel,
   dashboardTableHeaderModel,
@@ -45,6 +46,7 @@ describe("dashboard table header model", () => {
     const model = dashboardTableHeaderModel({
       layout: HEADER_LAYOUT,
       overflow: { ...NO_OVERFLOW, above: 2 },
+      hiddenAbove: 2,
       persistentFilter: projection(),
     });
 
@@ -54,23 +56,57 @@ describe("dashboard table header model", () => {
   it("gives above overflow precedence over the available column layout", () => {
     const overflow = { ...NO_OVERFLOW, above: 2, total: 6 };
 
-    expect(dashboardTableHeaderModel({ layout: HEADER_LAYOUT, overflow })).toEqual({
+    expect(dashboardTableHeaderModel({ layout: HEADER_LAYOUT, overflow, hiddenAbove: 2 })).toEqual({
       kind: "aboveOverflow",
       overflow,
     });
   });
 
+  it("uses above overflow when only tree chrome is hidden above", () => {
+    expect(
+      dashboardTableHeaderModel({
+        layout: HEADER_LAYOUT,
+        overflow: NO_OVERFLOW,
+        hiddenAbove: 3,
+      }),
+    ).toEqual({
+      kind: "aboveOverflow",
+      overflow: NO_OVERFLOW,
+    });
+  });
+
   it("uses column headers when the viewport is at the top", () => {
-    expect(dashboardTableHeaderModel({ layout: HEADER_LAYOUT, overflow: NO_OVERFLOW })).toEqual({
+    expect(
+      dashboardTableHeaderModel({
+        layout: HEADER_LAYOUT,
+        overflow: NO_OVERFLOW,
+        hiddenAbove: 0,
+      }),
+    ).toEqual({
       kind: "columns",
       layout: HEADER_LAYOUT,
     });
   });
 
   it("uses one empty header row when no layout exists", () => {
-    expect(dashboardTableHeaderModel({ layout: undefined, overflow: NO_OVERFLOW })).toEqual({
+    expect(
+      dashboardTableHeaderModel({ layout: undefined, overflow: NO_OVERFLOW, hiddenAbove: 0 }),
+    ).toEqual({
       kind: "empty",
     });
+  });
+});
+
+describe("scrollIndicatorLabel", () => {
+  it("keeps session copy when sessions are clipped", () => {
+    const overflow = { above: 2, below: 3, visible: 4, total: 9 };
+    expect(scrollIndicatorLabel("above", overflow)).toBe("▲ 2 sessions above");
+    expect(scrollIndicatorLabel("below", overflow)).toBe("▼ 3 below · showing 4 of 9");
+  });
+
+  it("uses generic copy when only tree chrome is clipped", () => {
+    expect(scrollIndicatorLabel("above", NO_OVERFLOW)).toBe("▲ more above");
+    expect(scrollIndicatorLabel("below", NO_OVERFLOW)).toBe("▼ more below");
   });
 });
 

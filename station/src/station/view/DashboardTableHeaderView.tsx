@@ -12,7 +12,7 @@ export function DashboardTableHeaderView({ model }: { model: DashboardTableHeade
     case "columns":
       return <ColumnHeaderRow layout={model.layout} />;
     case "aboveOverflow":
-      return <DashboardScrollIndicatorView direction="above" overflow={model.overflow} />;
+      return <DashboardScrollIndicatorView direction="above" overflow={model.overflow} visible />;
     case "empty":
       return <box height={1} />;
     default:
@@ -27,18 +27,20 @@ function assertNeverDashboardTableHeaderModel(_model: never): never {
 export function DashboardScrollIndicatorView({
   direction,
   overflow,
+  visible,
 }: {
   direction: "above" | "below";
   overflow: DashboardSessionOverflow;
+  visible: boolean;
 }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
-  const hiddenSessions = direction === "above" ? overflow.above : overflow.below;
   return (
-    <box height={1}>
-      {hiddenSessions > 0 ? (
+    <box height={1} flexShrink={0}>
+      {visible ? (
         <text
           fg={toOpenTuiColor(theme.text.muted)}
+          selectable={false}
           {...stationMouseProps(dispatch, {
             kind: "scrollIndicator",
             direction: direction === "above" ? "up" : "down",
@@ -54,7 +56,7 @@ export function DashboardScrollIndicatorView({
 function ColumnHeaderRow({ layout }: { layout: RowGridLayout }) {
   const theme = useStationTheme();
   return (
-    <box height={1} width="100%" overflow="hidden">
+    <box height={1} width="100%" flexShrink={0} overflow="hidden">
       <text fg={toOpenTuiColor(theme.text.muted)}>
         <Segments segments={layout.segments} />
       </text>
