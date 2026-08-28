@@ -49,10 +49,20 @@ export function createNativeProcessLifecycle(input: {
     installed = false;
   };
   const terminate = (reason: NativeShutdownReason, failed: boolean): void => {
-    dispose();
-    input.releaseTty();
+    let finalizationFailed = failed;
+    // Keep later hangups coalesced until ownership release is attempted, and always terminate.
+    try {
+      input.releaseTty();
+    } catch {
+      finalizationFailed = true;
+    }
+    try {
+      dispose();
+    } catch {
+      finalizationFailed = true;
+    }
     if (reason !== "terminal_loss") {
-      processControl.exit(failed ? 1 : 0);
+      processControl.exit(finalizationFailed ? 1 : 0);
       return;
     }
     try {

@@ -11,6 +11,8 @@ type Input = Parameters<typeof createNativeProcessLifecycle>[0];
 function harness(options: {
   cleanupSteps?: Input["cleanupSteps"];
   killResult?: boolean;
+  onRelease?: (listenerInstalled: boolean) => void;
+  releaseError?: unknown;
   terminalLossTimeoutMs?: number;
 } = {}) {
   const events: string[] = [];
@@ -32,7 +34,11 @@ function harness(options: {
         events.push("flush");
       },
     },
-    releaseTty: () => events.push("tty:release"),
+    releaseTty: () => {
+      events.push("tty:release");
+      options.onRelease?.(signalHandler !== undefined);
+      if (options.releaseError !== undefined) throw options.releaseError;
+    },
     processControl: {
       pid: 4242,
       on: (_signal, listener) => {
@@ -181,6 +187,34 @@ describe("native process lifecycle", () => {
       "signal:4242:SIGHUP",
       "exit:129",
     ]);
+  });
+
+  it("keeps coalescing SIGHUP through TTY release and self-signals when release throws", async () => {
+    let listenerInstalledDuringRelease = false;
+    const station = harness({
+      onRelease: (installed) => {
+        listenerInstalledDuringRelease = installed;
+        station.signal();
+      },
+      releaseError: new Error("release failed"),
+    });
+    station.lifecycle.install();
+    station.signal();
+
+    await station.lifecycle.request("ctrl_q");
+
+    expect(listenerInstalledDuringRelease).toBe(true);
+    expect(station.events.slice(-2)).toEqual(["tty:release", "signal:4242:SIGHUP"]);
+    station.signal();
+    expect(station.events.slice(-2)).toEqual(["tty:release", "signal:4242:SIGHUP"]);
+  });
+
+  it("exits unsuccessfully when TTY release fails during a non-signal shutdown", async () => {
+    const station = harness({ releaseError: new Error("release failed") });
+
+    await station.lifecycle.request("tty_takeover");
+
+    expect(station.events.slice(-2)).toEqual(["tty:release", "exit:1"]);
   });
 
   it("re-raises a real SIGHUP only after spawned-process cleanup settles", async () => {

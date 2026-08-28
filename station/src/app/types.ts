@@ -42,6 +42,7 @@ export type StationAppProps = {
 export type CreateStationOptions = {
   store: StationStore;
   stationClient: StationClient;
+  /** Admit an input-requested shutdown; the process owner coordinates `disposeForShutdown()`. */
   shutdown(): void;
   /** Real copy sinks (OSC 52 + a clipboard CLI); tests pass NO_OP_CLIPBOARD_EFFECTS. */
   clipboardEffects: ClipboardEffects;
