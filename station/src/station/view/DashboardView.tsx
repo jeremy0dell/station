@@ -1,8 +1,7 @@
 // Render layer for the dashboard: one <text> per line, sized by the shared
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
-import { TextAttributes, type BoxRenderable } from "@opentui/core";
-import { useRef } from "react";
+import { TextAttributes } from "@opentui/core";
 import {
   dashboardTableHeaderModel,
   dashboardRowGridInput,
@@ -16,7 +15,6 @@ import {
   dashboardScrollGutterChrome,
   selectDashboardViewport,
   selectFleetSummary,
-  verticalScrollbarCells,
 } from "@station/dashboard-core/selectors";
 import type {
   DashboardRowId,
@@ -36,6 +34,7 @@ import { GroupFrameEndView, GroupFrameRailView } from "./GroupFrameView.js";
 import { GroupHeaderView } from "./GroupHeaderView.js";
 import { ProjectHeaderView } from "./ProjectHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
+import { StationScrollbar } from "./StationScrollbar.js";
 import { Throbber } from "./Throbber.js";
 import { FLEET_STATUS_ORDER, STATION_STATUS_UI } from "../statusUi.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
@@ -43,7 +42,6 @@ import {
   useStationHoverState,
   useStationMouse,
   stationMouseProps,
-  stationScrollbarPointerProps,
 } from "./stationMouseContext.js";
 
 export type DashboardViewProps = {
@@ -253,25 +251,6 @@ function DashboardScrollGutter({
   hiddenAbove: number;
   hiddenBelow: number;
 }) {
-  const dispatch = useStationMouse();
-  const theme = useStationTheme();
-  const trackRef = useRef<BoxRenderable | null>(null);
-  const overflow = contentLength > viewportLength && trackHeight > 0;
-  const cells = verticalScrollbarCells({
-    trackHeight,
-    contentLength,
-    viewportLength,
-    offset,
-  });
-  const pointer = overflow
-    ? stationScrollbarPointerProps(dispatch, {
-        surface: "dashboard",
-        contentLength,
-        viewportLength,
-        trackHeight,
-        trackTop: () => trackRef.current?.y ?? 0,
-      })
-    : undefined;
   return (
     <box width={1} flexDirection="column" flexShrink={0} selectable={false}>
       {Array.from({ length: chromeTop }, (_, index) => (
@@ -281,21 +260,13 @@ function DashboardScrollGutter({
           direction="up"
         />
       ))}
-      <box
-        ref={trackRef}
-        width={1}
-        height={trackHeight}
-        flexShrink={0}
-        flexDirection="column"
-        selectable={false}
-        {...pointer}
-      >
-        {cells.map((glyph, index) => (
-          <text key={index} fg={toOpenTuiColor(theme.text.muted)} selectable={false}>
-            {glyph}
-          </text>
-        ))}
-      </box>
+      <StationScrollbar
+        surface="dashboard"
+        contentLength={contentLength}
+        viewportLength={viewportLength}
+        trackHeight={trackHeight}
+        offset={offset}
+      />
       {Array.from({ length: chromeBottom }, (_, index) => (
         <GutterOverflowArrow
           key={`bottom-${index}`}

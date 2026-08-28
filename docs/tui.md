@@ -657,7 +657,8 @@ formula and never activates dashboard cells. The dashboard gutter paints `▲`/`
 overflow rows whenever the tree can scroll that way, not only when sessions are clipped.
 Session counts stay in the label when sessions are off-screen; otherwise the copy is
 `more above` / `more below`. Those arrows page like the labels and stay off the proportional
-thumb. Thumb length follows Blink/WebKit
+thumb. Hovering a track brightens `▐`/`▕` from muted to primary; dragging fills it with the
+same hover surface as a row. Thumb length follows Blink/WebKit
 `round(visible/content × track)` (one-cell minimum, never longer than the track); leftover
 track cells keep a thin `▕` rail so the unused range still shows how much remains.
 

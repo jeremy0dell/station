@@ -1,8 +1,6 @@
 // OpenTUI port of apps/tui's HelpOverlay: centered box-drawn panel above the
 // dashboard (absolute + zIndex; the dashboard must never reflow for it).
 // Lines come from the shared panel generator over Station's visible help copy.
-import { useRef } from "react";
-import type { BoxRenderable } from "@opentui/core";
 import {
   helpOverlayContent,
   helpPanelLayout,
@@ -11,10 +9,10 @@ import {
 import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { stationKeymapHelp } from "../../input/keymap/stationBindings.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
+import { StationScrollbar } from "./StationScrollbar.js";
 import {
   useStationMouse,
   stationMouseProps,
-  stationScrollbarPointerProps,
 } from "./stationMouseContext.js";
 
 export function HelpOverlayView({
@@ -29,25 +27,14 @@ export function HelpOverlayView({
   const theme = useStationTheme();
   const helpBackground = toOpenTuiOpaqueColor(theme.surfaces.help);
   const dispatch = useStationMouse();
-  const trackRef = useRef<BoxRenderable | null>(null);
   const content = helpOverlayContent(stationKeymapHelp());
   const layout = helpPanelLayout(columns, rows, content);
   const model = helpPanelModel(layout.width, layout.height, content, screen.scrollOffset);
   const fg = toOpenTuiColor(theme.text.primary);
-  const barFg = toOpenTuiColor(theme.text.muted);
   const body = model.lines.flatMap((line) => (line.kind === "body" ? [line] : []));
   const top = model.lines[0];
   const bottom = model.lines.at(-1);
   const barColumn = body[0]?.bar.length === 1;
-  const pointer = model.overflow
-    ? stationScrollbarPointerProps(dispatch, {
-        surface: "help",
-        contentLength: content.length,
-        viewportLength: model.bodyRows,
-        trackHeight: model.bodyRows,
-        trackTop: () => trackRef.current?.y ?? layout.top + 1,
-      })
-    : undefined;
 
   return (
     <box
@@ -77,21 +64,13 @@ export function HelpOverlayView({
             ))}
           </box>
           {barColumn ? (
-            <box
-              ref={trackRef}
-              width={1}
-              height={model.bodyRows}
-              flexShrink={0}
-              flexDirection="column"
-              selectable={false}
-              {...pointer}
-            >
-              {body.map((line, index) => (
-                <text key={`bar:${index}`} fg={barFg} bg={helpBackground} selectable={false}>
-                  {line.bar}
-                </text>
-              ))}
-            </box>
+            <StationScrollbar
+              surface="help"
+              contentLength={content.length}
+              viewportLength={model.bodyRows}
+              trackHeight={model.bodyRows}
+              offset={screen.scrollOffset}
+            />
           ) : null}
           <box flexDirection="column" width={1} flexShrink={0}>
             {body.map((line, index) => (

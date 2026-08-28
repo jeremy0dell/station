@@ -1,7 +1,7 @@
 // Crowded dashboard + Help: last-cell identity (homebake maps last track cell
 // to maxOffset), one-row wheels with a stuck thumb, and Help click-away vs bar.
 import { afterEach, describe, expect, it } from "bun:test";
-import { TextRenderable, type BaseRenderable } from "@opentui/core";
+import { rgbToHex, TextRenderable, type BaseRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import {
@@ -14,10 +14,14 @@ import {
   VERTICAL_SCROLLBAR_TRACK,
 } from "@station/dashboard-core/selectors";
 import { act } from "react";
-import { createCrowdedDashboardSnapshot, createCrowdedEmptyGroupsSnapshot } from "../../../../packages/dashboard-core/test/fixtures/snapshots.js";
+import {
+  createCrowdedDashboardSnapshot,
+  createCrowdedEmptyGroupsSnapshot,
+} from "../../../../packages/dashboard-core/test/fixtures/snapshots.js";
 import { normalizeStationMouseEvent } from "../../input/mouse.js";
 import { stationKeymapHelp } from "../../input/keymap/stationBindings.js";
-import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
+import { nativeStationTheme, stationColorSnapshotValue, StationThemeProvider } from "../../theme/index.js";
+import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { routeStationMouse } from "../input/stationMouse.js";
 import { DashboardRoot } from "./DashboardRoot.js";
@@ -263,6 +267,87 @@ describe("dashboard and help scrollbar stress", () => {
     );
     expect(gutterTexts.length).toBeGreaterThan(0);
     expect(gutterTexts.every((text) => text.selectable === false)).toBe(true);
+  });
+
+  it("brightens the gutter on hover without changing glyphs", async () => {
+    const setup = await renderCrowded();
+    const gutter = gutterGeometry(setup);
+    const idle = spanAtFrameCell(setup.captureSpans(), gutter.firstY, gutter.x);
+    expect(spanHex(idle)).toBe(stationColorSnapshotValue(nativeStationTheme.text.muted));
+    expect(spanBgHex(idle)).not.toBe(stationColorSnapshotValue(nativeStationTheme.interaction.hover));
+    const idleGlyphs = gutterColumn(setup).slice(gutter.chromeTop, gutter.lastY + 1).join("");
+
+    await setup.mockMouse.moveTo(gutter.x, gutter.firstY, MOUSE);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    const hovered = spanAtFrameCell(setup.captureSpans(), gutter.firstY, gutter.x);
+    expect(spanHex(hovered)).toBe(stationColorSnapshotValue(nativeStationTheme.text.primary));
+    expect(spanBgHex(hovered)).not.toBe(stationColorSnapshotValue(nativeStationTheme.interaction.hover));
+    expect(gutterColumn(setup).slice(gutter.chromeTop, gutter.lastY + 1).join("")).toBe(idleGlyphs);
+
+    await setup.mockMouse.moveTo(0, 0, MOUSE);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(spanHex(spanAtFrameCell(setup.captureSpans(), gutter.firstY, gutter.x))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
+    );
+  });
+
+  it("fills the gutter while the pointer is down on the track", async () => {
+    const setup = await renderCrowded();
+    const gutter = gutterGeometry(setup);
+    await act(async () => {
+      await setup.mockMouse.pressDown(gutter.x, gutter.firstY, MouseButtons.LEFT, MOUSE);
+    });
+    await setup.flush();
+    const pressed = spanAtFrameCell(setup.captureSpans(), gutter.firstY, gutter.x);
+    expect(spanHex(pressed)).toBe(stationColorSnapshotValue(nativeStationTheme.text.primary));
+    expect(spanBgHex(pressed)).toBe(stationColorSnapshotValue(nativeStationTheme.interaction.hover));
+
+    await act(async () => {
+      await setup.mockMouse.release(gutter.x, gutter.firstY, MouseButtons.LEFT, MOUSE);
+    });
+    await setup.flush();
+    await act(async () => {
+      await setup.mockMouse.moveTo(0, 0, MOUSE);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), gutter.firstY, gutter.x))).not.toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+    );
+    expect(spanHex(spanAtFrameCell(setup.captureSpans(), gutter.firstY, gutter.x))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
+    );
+  });
+
+  it("brightens the Help bar on hover and fills it while dragging", async () => {
+    const setup = await renderCrowded();
+    await openHelp(setup);
+    const bar = helpBarGeometry(SIZE.width, SIZE.height);
+    const idle = spanAtFrameCell(setup.captureSpans(), bar.firstY, bar.x);
+    expect(spanHex(idle)).toBe(stationColorSnapshotValue(nativeStationTheme.text.muted));
+
+    await setup.mockMouse.moveTo(bar.x, bar.firstY, MOUSE);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(spanHex(spanAtFrameCell(setup.captureSpans(), bar.firstY, bar.x))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.primary),
+    );
+
+    await act(async () => {
+      await setup.mockMouse.pressDown(bar.x, bar.firstY, MouseButtons.LEFT, MOUSE);
+    });
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), bar.firstY, bar.x))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+    );
+    expect(setup.store.state.getState().screen).toMatchObject({ name: "help" });
+
+    await act(async () => {
+      await setup.mockMouse.release(bar.x, bar.firstY, MouseButtons.LEFT, MOUSE);
+    });
+    await setup.flush();
   });
 
   it("keeps Help panel copy and the inset bar out of OpenTUI selection", async () => {
@@ -623,6 +708,14 @@ function gutterGeometry(setup: {
 
 function gutterColumn(setup: { captureCharFrame: () => string }): string[] {
   return setup.captureCharFrame().split("\n").map((line) => line.at(-1) ?? "");
+}
+
+function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
+  return span?.fg === undefined ? undefined : rgbToHex(span.fg);
+}
+
+function spanBgHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
+  return span?.bg === undefined ? undefined : rgbToHex(span.bg);
 }
 
 function helpBarGeometry(columns: number, rows: number) {
