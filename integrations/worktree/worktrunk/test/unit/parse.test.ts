@@ -242,35 +242,41 @@ describe("Worktrunk list parser", () => {
     });
   });
 
-  it("keeps hashed worktree IDs stable across macOS /var aliases", () => {
+  it("derives fallback IDs from platform-authorized aliases while retaining raw paths", () => {
     const branch = "station/very-long-customer-account-permissions-rollout-for-enterprise-alpha";
-    const varObservation = parseWorktrunkListJson(
-      JSON.stringify([
-        {
-          path: "/var/folders/test/station/repo/.station-real-e2e/worktrees/feature",
-          branch,
-        },
-      ]),
-      {
-        project,
-        observedAt: now,
-      },
-    )[0];
-    const privateVarObservation = parseWorktrunkListJson(
-      JSON.stringify([
-        {
-          path: "/private/var/folders/test/station/repo/.station-real-e2e/worktrees/feature",
-          branch,
-        },
-      ]),
-      {
-        project,
-        observedAt: now,
-      },
-    )[0];
+    const observation = (path: string, platform: NodeJS.Platform, worktreeId?: string) =>
+      parseWorktrunkListJson(
+        JSON.stringify([
+          {
+            path,
+            branch,
+            ...(worktreeId === undefined ? {} : { vars: { station: { worktree_id: worktreeId } } }),
+          },
+        ]),
+        { project, observedAt: now, platform },
+      )[0];
+    const tmpPath = "/tmp/station/repo/worktrees/feature";
+    const privateTmpPath = "/private/tmp/station/repo/worktrees/feature";
+    const logicalTmp = observation(tmpPath, "darwin");
+    const physicalTmp = observation(privateTmpPath, "darwin");
+    const linuxPhysicalTmp = observation(privateTmpPath, "linux");
+    const varObservation = observation("/var/folders/test/station/repo/worktrees/feature", "linux");
+    const privateVarObservation = observation(
+      "/private/var/folders/test/station/repo/worktrees/feature",
+      "linux",
+    );
 
+    expect(logicalTmp?.id).toBe(physicalTmp?.id);
+    expect(logicalTmp?.id).not.toBe(linuxPhysicalTmp?.id);
+    expect([logicalTmp?.path, physicalTmp?.path]).toEqual([tmpPath, privateTmpPath]);
+    const whitespaceTmp = observation(`${tmpPath} `, "darwin");
+    expect(whitespaceTmp?.id).not.toBe(logicalTmp?.id);
+    expect(whitespaceTmp?.path).toBe(`${tmpPath} `);
     expect(varObservation?.id).toBe(privateVarObservation?.id);
     expect(varObservation?.id).toMatch(/^wt_web_feature_[a-f0-9]{10}$/);
+    expect(observation(privateTmpPath, "linux", "wt_provider_feature")?.id).toBe(
+      "wt_provider_feature",
+    );
   });
 
   it("rejects non-JSON output with a typed provider error", () => {

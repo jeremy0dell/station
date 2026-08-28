@@ -13,6 +13,8 @@ export type ParseWorktrunkListOptions = {
   project: ProviderProjectConfig;
   providerId?: ProviderId;
   observedAt: string;
+  /** Platform authority for deriving identity from OS-specific observed path aliases. */
+  platform?: NodeJS.Platform;
 };
 
 export type WorktrunkListItem = Record<string, unknown>;
@@ -67,7 +69,7 @@ export function parseWorktrunkListItem(
   const remote = repositoryRemoteFromItem(item);
   const headSha = headShaFromItem(item);
   const observationInput: WorktreeObservation = {
-    id: metadata?.worktreeId ?? worktreeId(options.project.id, path),
+    id: metadata?.worktreeId ?? worktreeId(options.project.id, path, options.platform),
     provider: options.providerId ?? "worktrunk",
     projectId: options.project.id,
     branch,
@@ -273,8 +275,8 @@ function hasWorktreePath(item: unknown): item is WorktrunkListItem {
   );
 }
 
-function worktreeId(projectId: string, path: string): string {
-  const identityPath = normalizeObservedPath(path);
+function worktreeId(projectId: string, path: string, platform?: NodeJS.Platform): string {
+  const identityPath = normalizeObservedPath(path, platform);
   const stableDisplayName = pathDisplaySlug(identityPath);
   return stableName({
     prefix: "wt",

@@ -20,6 +20,7 @@ export * from "./ids.js";
 export * from "./liveness.js";
 export * from "./logging.js";
 export * from "./observations.js";
+export * from "./observedPaths.js";
 export * from "./observer.js";
 export * from "./providerHooks.js";
 export * from "./providers.js";
