@@ -42,6 +42,7 @@ import {
   waitForHotDisposal,
 } from "../hmr/hotDisposalBarrier.js";
 import { invokeCleanup } from "../lifecycle/cleanup.js";
+import { installLiveHostTtyDimensions } from "../liveHostTtyDimensions.js";
 import {
   createDashboardRendererRuntimeLifecycle,
   type DashboardRendererRuntimeLifecycle,
@@ -187,6 +188,7 @@ export async function runDashboardMain(): Promise<void> {
 
   try {
     const copySelectedText = createOpenTuiSelectionCopyHandler(() => renderer, clipboardEffects);
+    installLiveHostTtyDimensions();
     const nextRenderer = await createCliRenderer({
       enableMouseMovement,
       exitOnCtrlC: false,
