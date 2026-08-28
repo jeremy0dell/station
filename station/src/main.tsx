@@ -20,11 +20,8 @@ import {
   type StationHotRenderer,
   type StationHotSlots,
 } from "./hmr/stationHotRuntime.js";
-import { invokeCleanup, settleCleanupSteps } from "./lifecycle/cleanup.js";
-import {
-  createNativeProcessLifecycle,
-  type NativeProcessLifecycle,
-} from "./lifecycle/nativeProcessLifecycle.js";
+import { invokeCleanup, settleCleanupSteps, type CleanupStep } from "./lifecycle/cleanup.js";
+import { createNativeProcessShutdown } from "./lifecycle/nativeProcessShutdown.js";
 import { createRenderProfiler, readRenderProfileEnabled } from "./profiling/renderProfiler.js";
 import {
   acquireStationTtyOwnership,
@@ -101,8 +98,8 @@ function stationHostSuccessorCommand(
 /**
  * Callable native OpenTUI process entry and semantic lifecycle witness boundary.
  * It acquires TTY ownership before other startup work, binds one validated run
- * context into Host terminal factories, owns native signal/lifecycle evidence,
- * and releases final TTY ownership only after renderer shutdown.
+ * context into Host terminal factories, synchronously admits native shutdown,
+ * flushes its evidence, and preserves terminal-loss signal truth after release.
  */
 export async function runStationMain(options: RunStationMainOptions = {}): Promise<void> {
   const ownershipResult = await acquireStationTtyOwnership();
@@ -127,6 +124,45 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
     ttyOwnership?.release();
     throw error;
   }
+}
+
+/** Order attempt-all composition cleanup, durable lifecycle evidence, and exact TTY release. */
+export async function settleNativeCompositionShutdown(input: {
+  cleanupSteps: readonly CleanupStep[];
+  failure(): { readonly error: unknown } | undefined;
+  finalized(): boolean;
+  completed(): Promise<void>;
+  recordFailure(error: unknown): Promise<void>;
+  flush(): Promise<void>;
+  release(): void;
+}): Promise<"success" | "failure"> {
+  const cleanup = settleCleanupSteps(input.cleanupSteps, "Native renderer shutdown cleanup failed.");
+  const canContinue = (): boolean => {
+    const failure = input.failure();
+    if (failure !== undefined) throw failure.error;
+    return !input.finalized();
+  };
+  let result: "success" | "failure" = "failure";
+  try {
+    await cleanup;
+    if (!canContinue()) return "failure";
+    await input.completed();
+    if (!canContinue()) return "failure";
+    await input.flush();
+    if (!canContinue()) return "failure";
+    result = "success";
+  } catch (error) {
+    if (input.finalized()) return "failure";
+    await input.recordFailure(error).catch(() => {});
+  }
+  if (input.finalized()) return "failure";
+  try {
+    input.release();
+  } catch (error) {
+    await input.recordFailure(error).catch(() => {});
+    return "failure";
+  }
+  return input.finalized() ? "failure" : result;
 }
 
 async function startStationMain(
@@ -342,10 +378,19 @@ async function startStationMain(
     writeToHost: (sequence) => process.stdout.write(sequence),
   });
 
+  let rendererStartup: Promise<CliRenderer> | undefined;
   let rendererForInput: CliRenderer | undefined;
   let rootForShutdown: { unmount(): void } | undefined;
   let stopSurfaceObservation: (() => void) | undefined;
-  let processLifecycle: NativeProcessLifecycle | undefined;
+  let shutdownAdmitted = false;
+  let shutdownFinalized = false;
+  let shutdownFailure: { readonly error: unknown } | undefined;
+  let failureEvidence: Promise<void> | undefined;
+  let flushEvidence: Promise<void> | undefined;
+  const flushLifecycle = (): Promise<void> => (flushEvidence ??= uiLifecycle.flush());
+  const recordFailure = (error: unknown): Promise<void> =>
+    (failureEvidence ??= uiLifecycle.fatal(error).then(flushLifecycle));
+  let nativeShutdown!: ReturnType<typeof createNativeProcessShutdown>;
   const station = createStation({
     store,
     stationClient,
@@ -364,113 +409,143 @@ async function startStationMain(
     ...(managedTerminalAttacher === undefined ? {} : { managedTerminalAttacher }),
     ...(layoutPath === undefined ? {} : { layout: { path: layoutPath } }),
     ...(ptyRuntime === undefined ? {} : { createTerminal: ptyRuntime.createTerminal }),
-    shutdown: () => void processLifecycle?.request("ctrl_q"),
+    shutdown: () => void nativeShutdown.request("ctrl_q"),
   });
 
-  if (ttyOwnership !== undefined && !currentStdinMatchesStationTty(ttyOwnership.identity)) {
-    const error = stationTtyOwnershipUnavailableError();
-    writeStartupError(error);
-    await uiLifecycle.fatalShutdown(error);
-    await station.disposeForShutdown();
-    ptyRuntime?.dispose();
-    await stationClient.stop();
-    await uiLifecycle.flush();
-    process.exitCode = 1;
-    return false;
-  }
-  processLifecycle = createNativeProcessLifecycle({
-    stopSurfaceObservation: () => stopSurfaceObservation?.(),
-    cleanupSteps: [
-      () => station.disposeForShutdown(),
-      () => rootForShutdown?.unmount(),
-      () => rendererForInput?.destroy(),
-      () => ptyRuntime?.dispose(),
-    ],
-    lifecycle: uiLifecycle,
-    releaseTty: () => ttyOwnership?.release(),
+  nativeShutdown = createNativeProcessShutdown({
+    onAdmitted(settled) {
+      shutdownAdmitted = true;
+      stationGlobalSlots.__stationHotDisposal = settled;
+    },
+    async startCleanup(reason, failure) {
+      if (failure !== undefined) shutdownFailure ??= failure;
+      return settleNativeCompositionShutdown({
+        cleanupSteps: [
+          () => stopSurfaceObservation?.(),
+          () => uiLifecycle.shutdownRequested(reason),
+          () => station.disposeForShutdown(),
+          () => rootForShutdown?.unmount(),
+          () => rendererStartup?.then((renderer) => renderer.destroy()),
+          () => ptyRuntime?.dispose(),
+        ],
+        failure: () => shutdownFailure,
+        finalized: () => shutdownFinalized,
+        completed: () => uiLifecycle.shutdownCompleted(reason),
+        recordFailure,
+        flush: flushLifecycle,
+        release: () => ttyOwnership?.release(),
+      });
+    },
+    finalizeLocal(deadlineExpired) {
+      shutdownFinalized = true;
+      if (!deadlineExpired) return true;
+      let succeeded = true;
+      // OpenTUI 0.4.1 and TTY ownership both guard these deadline retries.
+      try {
+        rendererForInput?.destroy();
+      } catch {
+        succeeded = false;
+      }
+      try {
+        ttyOwnership?.release();
+      } catch {
+        succeeded = false;
+      }
+      return succeeded;
+    },
   });
-  ttyOwnership?.setTakeoverHandler(() => void processLifecycle?.request("tty_takeover"));
 
-  const copySelectedText = createOpenTuiSelectionCopyHandler(
-    () => rendererForInput,
-    clipboardEffects,
-  );
-  const renderer = await createCliRenderer({
-    exitOnCtrlC: false,
-    exitSignals: [
-      "SIGINT",
-      "SIGTERM",
-      "SIGQUIT",
-      "SIGABRT",
-      "SIGBREAK",
-      "SIGPIPE",
-      "SIGBUS",
-    ],
-    prependInputHandlers: [copySelectedText, station.stationInput.handleSequence],
-    useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
-  });
-  rendererForInput = renderer;
-  stationGlobalSlots.__stationHotRenderer = renderer;
-  // OpenTUI routes paste events around the sequence handlers above, so the
-  // pane would never see a paste without this explicit forward.
-  renderer.keyInput.on("paste", (event) => {
-    station.stationInput.handlePaste(event);
-  });
-  const root = createRoot(renderer);
-  rootForShutdown = root;
-
-  // Opt-in dev profiling (STATION_PROFILE=1). Off by default: the tree renders
-  // bare, byte-for-byte the production path.
-  const onRenderProfile = readRenderProfileEnabled(env.STATION_PROFILE)
-    ? createRenderProfiler(devRenderProfilePath())
-    : undefined;
-  station.start();
-  const stationApp = (
-    <StationThemeProvider theme={nativeStationTheme}>
-      <StationApp {...station.viewProps} />
-    </StationThemeProvider>
-  );
-  root.render(
-    onRenderProfile ? (
-      <Profiler id="station" onRender={onRenderProfile}>
-        {stationApp}
-      </Profiler>
-    ) : (
-      stationApp
-    ),
-  );
-
-  await uiLifecycle.ready(selectUiLifecycleSurface(store.getState()));
-  stopSurfaceObservation = observeUiSurfaceLifecycle({ store, witness: uiLifecycle });
-  processLifecycle.install();
-
-  if (import.meta.hot) {
-    import.meta.hot.accept();
-    import.meta.hot.dispose(() => {
-      beginHotDisposal(
-        stationGlobalSlots,
-        () =>
-          settleCleanupSteps(
-            [
-              () => processLifecycle?.dispose(),
-              // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
-              () => stopSurfaceObservation?.(),
-              () => root.unmount(),
-              () => renderer.destroy(),
-              () => releaseHotRendererIfCurrent(stationGlobalSlots, renderer),
-              () => station.disposeForHotReload(),
-            ],
-            "Native Station HMR cleanup failed.",
-          ),
-        (error) => {
-          void uiLifecycle.fatal(error).catch(() => {
-            // HMR replacement ordering cannot depend on diagnostic persistence.
-          });
-        },
-      );
+  try {
+    if (ttyOwnership !== undefined && !currentStdinMatchesStationTty(ttyOwnership.identity)) {
+      const error = stationTtyOwnershipUnavailableError();
+      writeStartupError(error);
+      await nativeShutdown.request("fatal", { error });
+      return true;
+    }
+    ttyOwnership?.setTakeoverHandler(() => {
+      void nativeShutdown.request("tty_takeover");
     });
+
+    const copySelectedText = createOpenTuiSelectionCopyHandler(
+      () => rendererForInput,
+      clipboardEffects,
+    );
+    rendererStartup = createCliRenderer({
+      exitOnCtrlC: false,
+      // OpenTUI 0.4.1 defaults minus SIGHUP; review this pinned list on upgrade.
+      exitSignals: ["SIGINT", "SIGTERM", "SIGQUIT", "SIGABRT", "SIGBREAK", "SIGPIPE", "SIGBUS"],
+      prependInputHandlers: [copySelectedText, station.stationInput.handleSequence],
+      useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
+    });
+    const renderer = await rendererStartup;
+    rendererForInput = renderer;
+    if (shutdownAdmitted) return true;
+    stationGlobalSlots.__stationHotRenderer = renderer;
+    // OpenTUI routes paste events around the sequence handlers above, so the
+    // pane would never see a paste without this explicit forward.
+    renderer.keyInput.on("paste", (event) => {
+      station.stationInput.handlePaste(event);
+    });
+    const root = createRoot(renderer);
+    rootForShutdown = root;
+
+    // Opt-in dev profiling (STATION_PROFILE=1). Off by default: the tree renders
+    // bare, byte-for-byte the production path.
+    const onRenderProfile = readRenderProfileEnabled(env.STATION_PROFILE)
+      ? createRenderProfiler(devRenderProfilePath())
+      : undefined;
+    station.start();
+    const stationApp = (
+      <StationThemeProvider theme={nativeStationTheme}>
+        <StationApp {...station.viewProps} />
+      </StationThemeProvider>
+    );
+    root.render(
+      onRenderProfile ? (
+        <Profiler id="station" onRender={onRenderProfile}>
+          {stationApp}
+        </Profiler>
+      ) : (
+        stationApp
+      ),
+    );
+
+    await uiLifecycle.ready(selectUiLifecycleSurface(store.getState()));
+    if (shutdownAdmitted) return true;
+    stopSurfaceObservation = observeUiSurfaceLifecycle({ store, witness: uiLifecycle });
+
+    if (import.meta.hot) {
+      import.meta.hot.accept();
+      import.meta.hot.dispose(() => {
+        if (nativeShutdown.beginHotReload() === "process_shutdown") return;
+        beginHotDisposal(
+          stationGlobalSlots,
+          () =>
+            settleCleanupSteps(
+              [
+                // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
+                () => stopSurfaceObservation?.(),
+                () => root.unmount(),
+                () => renderer.destroy(),
+                () => releaseHotRendererIfCurrent(stationGlobalSlots, renderer),
+                () => station.disposeForHotReload(),
+              ],
+              "Native Station HMR cleanup failed.",
+            ),
+          (error) => {
+            void uiLifecycle.fatal(error).catch(() => {
+              // HMR replacement ordering cannot depend on diagnostic persistence.
+            });
+          },
+        );
+      });
+    }
+    return true;
+  } catch (error) {
+    shutdownFailure ??= { error };
+    await nativeShutdown.request("fatal", { error });
+    return true;
   }
-  return true;
 }
 
 function releaseHotRendererIfCurrent(

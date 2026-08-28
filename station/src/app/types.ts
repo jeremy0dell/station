@@ -42,7 +42,10 @@ export type StationAppProps = {
 export type CreateStationOptions = {
   store: StationStore;
   stationClient: StationClient;
-  /** Admit an input-requested shutdown; the process owner coordinates `disposeForShutdown()`. */
+  /**
+   * Synchronously admits shutdown once to the enclosing owner, which must drive
+   * and observe `disposeForShutdown()` before terminating the process.
+   */
   shutdown(): void;
   /** Real copy sinks (OSC 52 + a clipboard CLI); tests pass NO_OP_CLIPBOARD_EFFECTS. */
   clipboardEffects: ClipboardEffects;
@@ -93,7 +96,7 @@ export type Station = {
   stationInput: StationInputRuntime;
   start(): void;
   dispose(): void;
-  /** Drain dashboard work and config writes before stopping the client and terminal resources. */
+  /** Memoized shutdown drain the enclosing owner must observe before termination. */
   disposeForShutdown(): Promise<void>;
   /** Retain PTYs and workspace state while draining dashboard work before HMR replacement. */
   disposeForHotReload(): Promise<void>;

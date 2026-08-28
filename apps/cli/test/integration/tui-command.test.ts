@@ -1867,7 +1867,10 @@ describe("CLI tui command", () => {
     ]);
   });
 
-  it("retains exact renderer signals and never maps a null exit code to success", async () => {
+  it.each([
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const)("retains exact renderer $signal and maps its shell status", async (signal, status) => {
     const fixture = await createTempState();
     const child = Object.assign(new EventEmitter(), { pid: 4321 });
     let childEnv: NodeJS.ProcessEnv | undefined;
@@ -1886,13 +1889,13 @@ describe("CLI tui command", () => {
       },
     );
     await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledOnce());
-    child.emit("exit", null, "SIGTERM");
+    child.emit("exit", null, signal);
 
     await expect(resultPromise).resolves.toEqual({
       status: "exited",
-      code: 143,
+      code: status,
       exitCode: null,
-      signal: "SIGTERM",
+      signal,
     });
     expect(childEnv?.STATION_UI_RUN_ID).toMatch(/^ui_/);
     expect(childEnv?.STATION_UI_CLIENT_KIND).toBeUndefined();
@@ -1904,7 +1907,7 @@ describe("CLI tui command", () => {
     expect(records.at(-1)?.lifecycle).toMatchObject({
       uiRunId: childEnv?.STATION_UI_RUN_ID,
       exitCode: null,
-      signal: "SIGTERM",
+      signal,
       rendererPid: 4321,
     });
   });

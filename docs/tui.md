@@ -211,17 +211,11 @@ bun run dashboard                     # interactive dashboard renderer without n
 
 ## Native UI Lifecycle Evidence
 
-The native renderer is an independent semantic witness in `logs/tui.jsonl`. It
-records startup/ready, typed welcome, workspace, Station-overlay, and context-menu
-transitions, shutdown intent (`ctrl_q`, cooperative `tty_takeover`, or
-`terminal_loss`), fatal errors normalized to the fixed content-free `TUI_FATAL`
-shape, and successful shutdown completion. Station owns `SIGHUP`: terminal-loss
-composition cleanup is bounded to two seconds, after which Station flushes
-evidence, releases exact TTY ownership, and re-raises `SIGHUP` so the launcher
-observes the real signal outcome. Cleanup rejection or timeout records fatal
-evidence and never records completion or exits successfully. Ctrl-O is a surface
-transition inside one `uiRunId`, not a renderer restart. Direct development
-mints a valid run ID and preserves it across Bun HMR.
+The native renderer records startup, surfaces, typed shutdown intent (`ctrl_q`, TTY takeover, or
+`terminal_loss`), fixed `TUI_FATAL` errors, and completion in `logs/tui.jsonl`. Station owns native
+`SIGHUP`; OpenTUI retains its other pinned 0.4.1 signals while Station attempts shared cleanup and
+re-raises. Terminal loss has an absolute, non-extendable five-second bound; deadline release claims
+no durable fatal evidence. Ctrl-O and HMR keep one `uiRunId`.
 
 Native Host clients carry the same typed run context with a fresh connection ID
 per socket and Host-issued attachment ID per attach attempt. `station-host.jsonl` uses typed
@@ -231,16 +225,10 @@ remains a frozen operational and replay-metrics vocabulary; it does not carry
 detach reasons. Idempotent PTY reuse keeps the original creator correlation and
 does not emit a second spawn event.
 
-Normal Ctrl-Q and cooperative TTY takeover close dashboard effect admission and
-await admitted dashboard work before stopping the shared client and completing
-process shutdown. Native HMR releases renderer/stdin ownership synchronously,
-retains compatible workspace state and PTYs, publishes a settlement-only cleanup
-barrier in a process-global slot, and starts the replacement composition after
-that barrier even when prior cleanup reports a failure. Each native composition
-installs one `SIGHUP` listener only after it is ready and removes that listener
-during shutdown or HMR disposal. Only the standalone
-dashboard registers `process.on("exit")`; that path remains synchronous
-best-effort because the runtime cannot extend the event.
+Ctrl-Q and TTY takeover await dashboard work before stopping the client. Completion evidence flushes before
+exact TTY claim release; release failure records fatal evidence first. HMR synchronously releases renderer/stdin,
+retains workspace state and PTYs, and publishes a replacement barrier. Process shutdown retains it; Host-owned
+PTYs and agents detach rather than terminate. Only the standalone dashboard uses best-effort `process.on("exit")`.
 
 This telemetry is local and content-free: it must not collect terminal output,
 prompts, key contents, foreground application names, environment variables,

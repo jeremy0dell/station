@@ -50,82 +50,46 @@ describe("native Station lifecycle", () => {
     ]);
   });
 
-  it("attempts later cleanup after failure and admits Ctrl-Q once", async () => {
+  it("admits Ctrl-Q synchronously once while its owner drives failing cleanup", async () => {
     const snapshot = manyProjectsSnapshot();
     const source = new FakeStationSource(snapshot);
     const scripted = createScriptedTerminal();
     const store = createStationStore();
     let stopAttempts = 0;
-    let shutdowns = 0;
-    const composition = createStation({
+    const stopped = Promise.withResolvers<void>();
+    const ownerDisposals: Promise<void>[] = [];
+    let composition!: ReturnType<typeof createStation>;
+    composition = createStation({
       store,
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {
         state: source,
         service: new FakeTuiObserverService(snapshot),
         start: () => source.start(),
-        stop: async () => {
+        stop: () => {
           stopAttempts += 1;
-          throw new Error("client stop failed");
+          return stopped.promise;
         },
       },
       shutdown: () => {
-        shutdowns += 1;
+        ownerDisposals.push(composition.disposeForShutdown());
       },
       createTerminal: () => scripted.terminal,
     });
-    const paneId = "pane-cleanup-failure";
-    store.actions.createPane(paneId, { role: "shell" });
-    composition.registry.ensure(paneId, { cwd: "/tmp" });
-    composition.registry.resize(paneId, { cols: 80, rows: 24 });
+    store.actions.createPane("pane-cleanup-failure", { role: "shell" });
+    composition.registry.ensure("pane-cleanup-failure", { cwd: "/tmp" });
+    composition.registry.resize("pane-cleanup-failure", { cols: 80, rows: 24 });
     composition.start();
 
-    const first = composition.disposeForShutdown();
-    const second = composition.disposeForShutdown();
-    expect(second).toBe(first);
-
-    let failure: unknown;
-    try {
-      await first;
-    } catch (error: unknown) {
-      failure = error;
-    }
+    expect(composition.stationInput.handleSequence("\x11")).toBe(true);
+    expect(ownerDisposals).toHaveLength(1);
+    expect(composition.stationInput.handleSequence("\x11")).toBe(true);
+    expect(ownerDisposals).toHaveLength(1);
+    expect(composition.disposeForShutdown()).toBe(ownerDisposals[0]);
+    stopped.reject(new Error("client stop failed"));
+    const failure = await ownerDisposals[0]!.catch((error: unknown) => error);
     expect(failure instanceof AggregateError).toBe(true);
     expect(stopAttempts).toBe(1);
     expect(scripted.helpers.isDisposed()).toBe(true);
-
-    expect(composition.stationInput.handleSequence("\x11")).toBe(true);
-    expect(composition.stationInput.handleSequence("\x11")).toBe(true);
-    expect(shutdowns).toBe(1);
-  });
-
-  it("admits Ctrl-Q before process-owned composition disposal settles", async () => {
-    const snapshot = manyProjectsSnapshot();
-    const source = new FakeStationSource(snapshot);
-    let settleStop!: () => void;
-    const stopped = new Promise<void>((resolve) => {
-      settleStop = resolve;
-    });
-    let cleanup: Promise<void> | undefined;
-    let composition!: ReturnType<typeof createStation>;
-    composition = createStation({
-      store: createStationStore(),
-      clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
-      stationClient: {
-        state: source,
-        service: new FakeTuiObserverService(snapshot),
-        start: () => source.start(),
-        stop: () => stopped,
-      },
-      shutdown: () => {
-        cleanup = composition.disposeForShutdown();
-      },
-    });
-    composition.start();
-
-    expect(composition.stationInput.handleSequence("\x11")).toBe(true);
-    if (cleanup === undefined) throw new Error("Ctrl-Q was not admitted synchronously.");
-    settleStop();
-    await cleanup;
   });
 });

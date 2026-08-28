@@ -189,12 +189,12 @@ root = "${projectRoot}"
     ]);
   });
 
-  it("lets the process owner flush native Station after an immediate shutdown request", async () => {
+  it("admits native shutdown synchronously while its owner flushes configuration", async () => {
     const dir = await mkdtemp(join(tmpdir(), "station-tui-config-"));
     dirs.push(dir);
     const configPath = await writeWidgetTestConfig(dir);
     const source = new FakeStationSource(manyProjectsSnapshot());
-    let shutdown: Promise<void> | undefined;
+    let ownerDisposal: Promise<void> | undefined;
     let composition!: ReturnType<typeof createStation>;
     composition = createStation({
       store: createStationStore(),
@@ -208,7 +208,7 @@ root = "${projectRoot}"
       tuiConfig: { widgets: [{ type: "time" }] },
       tuiConfigPath: configPath,
       shutdown: () => {
-        shutdown = composition.disposeForShutdown();
+        ownerDisposal = composition.disposeForShutdown();
       },
     });
     composition.start();
@@ -217,8 +217,7 @@ root = "${projectRoot}"
     composition.dashboard.actions.handleKey({ input: " " });
     composition.stationInput.handleSequence("\x11");
 
-    if (shutdown === undefined) throw new Error("Ctrl-Q was not admitted synchronously.");
-    await shutdown;
+    await expect(ownerDisposal).resolves.toEqual(undefined);
     expect((await loadStationTuiConfig({ path: configPath })).config?.widgets).toEqual([
       { type: "time", enabled: false },
     ]);

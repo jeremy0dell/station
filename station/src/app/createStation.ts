@@ -102,9 +102,9 @@ export function createStation(options: CreateStationOptions): Station {
     layoutWriter,
     tuiConfigPath: options.tuiConfigPath,
   });
-  let shutdownRequested = false;
+  let shutdownStarted = false;
 
-  // The process owner admits shutdown before starting coordinated composition disposal.
+  // Input runtime admits shutdown synchronously; the enclosing owner drives disposal.
   const stationInput = createInputRuntime(options, {
     store,
     dashboardRuntime,
@@ -112,10 +112,10 @@ export function createStation(options: CreateStationOptions): Station {
     paneEffects,
     automations,
     onShutdown: () => {
-      if (shutdownRequested) {
+      if (shutdownStarted) {
         return;
       }
-      shutdownRequested = true;
+      shutdownStarted = true;
       options.shutdown();
     },
   });
