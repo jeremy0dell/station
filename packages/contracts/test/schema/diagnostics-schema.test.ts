@@ -91,7 +91,9 @@ describe("diagnostics schemas", () => {
     expect(
       UiLifecycleEventSchema.safeParse({ ...rendererExit, causalEventId: "event_unused" }).success,
     ).toBe(false);
+    expect(UiShutdownReasonSchema.parse("terminal_loss")).toBe("terminal_loss");
     expect(UiShutdownReasonSchema.safeParse("signal").success).toBe(false);
+    expect(UiShutdownReasonSchema.safeParse("SIGTERM").success).toBe(false);
     expect(UiSurfaceChangeReasonSchema.safeParse("startup").success).toBe(false);
     expect(UiLifecycleSurfaceSchema.parse("welcome")).toBe("welcome");
     const hostDetach = {

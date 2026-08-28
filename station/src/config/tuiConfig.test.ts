@@ -189,16 +189,14 @@ root = "${projectRoot}"
     ]);
   });
 
-  it("flushes the native Station input flow before its shutdown callback", async () => {
+  it("lets the process owner flush native Station after an immediate shutdown request", async () => {
     const dir = await mkdtemp(join(tmpdir(), "station-tui-config-"));
     dirs.push(dir);
     const configPath = await writeWidgetTestConfig(dir);
     const source = new FakeStationSource(manyProjectsSnapshot());
-    let resolveShutdown: (() => void) | undefined;
-    const shutdown = new Promise<void>((resolve) => {
-      resolveShutdown = resolve;
-    });
-    const composition = createStation({
+    let shutdown: Promise<void> | undefined;
+    let composition!: ReturnType<typeof createStation>;
+    composition = createStation({
       store: createStationStore(),
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {
@@ -209,7 +207,9 @@ root = "${projectRoot}"
       },
       tuiConfig: { widgets: [{ type: "time" }] },
       tuiConfigPath: configPath,
-      shutdown: () => resolveShutdown?.(),
+      shutdown: () => {
+        shutdown = composition.disposeForShutdown();
+      },
     });
     composition.start();
 
@@ -217,6 +217,7 @@ root = "${projectRoot}"
     composition.dashboard.actions.handleKey({ input: " " });
     composition.stationInput.handleSequence("\x11");
 
+    if (shutdown === undefined) throw new Error("Ctrl-Q was not admitted synchronously.");
     await shutdown;
     expect((await loadStationTuiConfig({ path: configPath })).config?.widgets).toEqual([
       { type: "time", enabled: false },

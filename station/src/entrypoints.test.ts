@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-const shutdownSignals = ["exit", "SIGINT", "SIGTERM"] as const;
+const shutdownSignals = ["exit", "SIGHUP", "SIGINT", "SIGTERM"] as const;
 
 describe("Station process entrypoints", () => {
   it("imports without starting renderers, clients, sockets, or shutdown handlers", async () => {

@@ -50,7 +50,7 @@ describe("native Station lifecycle", () => {
     ]);
   });
 
-  it("attempts later cleanup after failure and handles Ctrl-Q fire-and-forget rejection", async () => {
+  it("attempts later cleanup after failure and admits Ctrl-Q once", async () => {
     const snapshot = manyProjectsSnapshot();
     const source = new FakeStationSource(snapshot);
     const scripted = createScriptedTerminal();
@@ -94,18 +94,38 @@ describe("native Station lifecycle", () => {
     expect(stopAttempts).toBe(1);
     expect(scripted.helpers.isDisposed()).toBe(true);
 
-    const unhandled: unknown[] = [];
-    const observeUnhandled = (reason: unknown): void => {
-      unhandled.push(reason);
-    };
-    process.on("unhandledRejection", observeUnhandled);
-    try {
-      expect(composition.stationInput.handleSequence("\x11")).toBe(true);
-      await waitFor(() => shutdowns === 1);
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    } finally {
-      process.off("unhandledRejection", observeUnhandled);
-    }
-    expect(unhandled).toEqual([]);
+    expect(composition.stationInput.handleSequence("\x11")).toBe(true);
+    expect(composition.stationInput.handleSequence("\x11")).toBe(true);
+    expect(shutdowns).toBe(1);
+  });
+
+  it("admits Ctrl-Q before process-owned composition disposal settles", async () => {
+    const snapshot = manyProjectsSnapshot();
+    const source = new FakeStationSource(snapshot);
+    let settleStop!: () => void;
+    const stopped = new Promise<void>((resolve) => {
+      settleStop = resolve;
+    });
+    let cleanup: Promise<void> | undefined;
+    let composition!: ReturnType<typeof createStation>;
+    composition = createStation({
+      store: createStationStore(),
+      clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
+      stationClient: {
+        state: source,
+        service: new FakeTuiObserverService(snapshot),
+        start: () => source.start(),
+        stop: () => stopped,
+      },
+      shutdown: () => {
+        cleanup = composition.disposeForShutdown();
+      },
+    });
+    composition.start();
+
+    expect(composition.stationInput.handleSequence("\x11")).toBe(true);
+    if (cleanup === undefined) throw new Error("Ctrl-Q was not admitted synchronously.");
+    settleStop();
+    await cleanup;
   });
 });
