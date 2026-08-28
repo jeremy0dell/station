@@ -1,0 +1,393 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`dashboard and help scrollbar stress captures the full dashboard scrollbar for one-session 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 1 idle                2 · 1 · 1 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                                 AGENT     STATUS       DIFF · PR 
+▼ web  1 session · 1 agent                                        [sh] [qs] [▾] 
+ [1] ○ crowd-0000                              codex     idle                   
+                                                                                
+▼ api  0 sessions                                                 [sh] [qs] [▾] 
+ no sessions yet · [ + add session ]                                            
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures the full dashboard scrollbar for one-session 2`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 1 idle                2 · 1 · 1 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                                 AGENT     STATUS       DIFF · PR 
+▼ web  1 session · 1 agent                                        [sh] [qs] [▾] 
+ [1] ○ crowd-0000                              codex     idle                   
+                                                                                
+▼ api  0 sessions                                                 [sh] [qs] [▾] 
+ no sessions yet · [ + add session ]                                            
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures the full dashboard scrollbar for one-session 3`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 1 idle                2 · 1 · 1 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                                 AGENT     STATUS       DIFF · PR 
+▼ web  1 session · 1 agent                                        [sh] [qs] [▾] 
+ [1] ○ crowd-0000                              codex     idle                   
+                                                                                
+▼ api  0 sessions                                                 [sh] [qs] [▾] 
+ no sessions yet · [ + add session ]                                            
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures the full dashboard scrollbar for ten-sessions 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 10 idle             2 · 10 · 10 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                                 AGENT     STATUS       DIFF · PR 
+▼ web  10 sessions · 10 agents                                    [sh] [qs] [▾] 
+ [1] ○ crowd-0000                              codex     idle                   
+ [2] ○ crowd-0001                              codex     idle                   
+ [3] ○ crowd-0002                              codex     idle                   
+ [4] ○ crowd-0003                              codex     idle                   
+ [5] ○ crowd-0004                              codex     idle                   
+ [6] ○ crowd-0005                              codex     idle                   
+ [7] ○ crowd-0006                              codex     idle                   
+ [8] ○ crowd-0007                              codex     idle                   
+ [9] ○ crowd-0008                              codex     idle                   
+ [a] ○ crowd-0009                              codex     idle                   
+                                                                                
+▼ api  0 sessions                                                 [sh] [qs] [▾] 
+ no sessions yet · [ + add session ]                                            
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures the full dashboard scrollbar for ten-sessions 2`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 10 idle             2 · 10 · 10 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                                 AGENT     STATUS       DIFF · PR 
+▼ web  10 sessions · 10 agents                                    [sh] [qs] [▾] 
+ [1] ○ crowd-0000                              codex     idle                   
+ [2] ○ crowd-0001                              codex     idle                   
+ [3] ○ crowd-0002                              codex     idle                   
+ [4] ○ crowd-0003                              codex     idle                   
+ [5] ○ crowd-0004                              codex     idle                   
+ [6] ○ crowd-0005                              codex     idle                   
+ [7] ○ crowd-0006                              codex     idle                   
+ [8] ○ crowd-0007                              codex     idle                   
+ [9] ○ crowd-0008                              codex     idle                   
+ [a] ○ crowd-0009                              codex     idle                   
+                                                                                
+▼ api  0 sessions                                                 [sh] [qs] [▾] 
+ no sessions yet · [ + add session ]                                            
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures the full dashboard scrollbar for ten-sessions 3`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 10 idle             2 · 10 · 10 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                                 AGENT     STATUS       DIFF · PR 
+▼ web  10 sessions · 10 agents                                    [sh] [qs] [▾] 
+ [1] ○ crowd-0000                              codex     idle                   
+ [2] ○ crowd-0001                              codex     idle                   
+ [3] ○ crowd-0002                              codex     idle                   
+ [4] ○ crowd-0003                              codex     idle                   
+ [5] ○ crowd-0004                              codex     idle                   
+ [6] ○ crowd-0005                              codex     idle                   
+ [7] ○ crowd-0006                              codex     idle                   
+ [8] ○ crowd-0007                              codex     idle                   
+ [9] ○ crowd-0008                              codex     idle                   
+ [a] ○ crowd-0009                              codex     idle                   
+                                                                                
+▼ api  0 sessions                                                 [sh] [qs] [▾] 
+ no sessions yet · [ + add session ]                                            
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures the full dashboard scrollbar for three-hundred-sessions 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 300 idle          2 · 300 · 300 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                                 AGENT     STATUS       DIFF · PR 
+▼ web  300 sessions · 300 agents                                  [sh] [qs] [▾]▐
+ [1] ○ crowd-0000                              codex     idle                  ▕
+ [2] ○ crowd-0001                              codex     idle                  ▕
+ [3] ○ crowd-0002                              codex     idle                  ▕
+ [4] ○ crowd-0003                              codex     idle                  ▕
+ [5] ○ crowd-0004                              codex     idle                  ▕
+ [6] ○ crowd-0005                              codex     idle                  ▕
+ [7] ○ crowd-0006                              codex     idle                  ▕
+ [8] ○ crowd-0007                              codex     idle                  ▕
+ [9] ○ crowd-0008                              codex     idle                  ▕
+ [a] ○ crowd-0009                              codex     idle                  ▕
+ [b] ○ crowd-0010                              codex     idle                  ▕
+ [c] ○ crowd-0011                              codex     idle                  ▕
+ [d] ○ crowd-0012                              codex     idle                  ▕
+ [e] ○ crowd-0013                              codex     idle                  ▕
+ [f] ○ crowd-0014                              codex     idle                  ▕
+ [g] ○ crowd-0015                              codex     idle                  ▕
+▼ 284 below · showing 16 of 300                                                ▼
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures the full dashboard scrollbar for three-hundred-sessions 2`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 300 idle          2 · 300 · 300 
+─────────────────────────────────────────────────────────────────────────────── 
+▲ 151 sessions above                                                           ▲
+ [1] ○ crowd-0151                              codex     idle                  ▕
+ [2] ○ crowd-0152                              codex     idle                  ▕
+ [3] ○ crowd-0153                              codex     idle                  ▕
+ [4] ○ crowd-0154                              codex     idle                  ▕
+ [5] ○ crowd-0155                              codex     idle                  ▕
+ [6] ○ crowd-0156                              codex     idle                  ▕
+ [7] ○ crowd-0157                              codex     idle                  ▕
+ [8] ○ crowd-0158                              codex     idle                  ▕
+ [9] ○ crowd-0159                              codex     idle                  ▐
+ [a] ○ crowd-0160                              codex     idle                  ▕
+ [b] ○ crowd-0161                              codex     idle                  ▕
+ [c] ○ crowd-0162                              codex     idle                  ▕
+ [d] ○ crowd-0163                              codex     idle                  ▕
+ [e] ○ crowd-0164                              codex     idle                  ▕
+ [f] ○ crowd-0165                              codex     idle                  ▕
+ [g] ○ crowd-0166                              codex     idle                  ▕
+ [h] ○ crowd-0167                              codex     idle                  ▕
+▼ 132 below · showing 17 of 300                                                ▼
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures the full dashboard scrollbar for three-hundred-sessions 3`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 300 idle          2 · 300 · 300 
+─────────────────────────────────────────────────────────────────────────────── 
+▲ 286 sessions above                                                           ▲
+ [1] ○ crowd-0286                              codex     idle                  ▕
+ [2] ○ crowd-0287                              codex     idle                  ▕
+ [3] ○ crowd-0288                              codex     idle                  ▕
+ [4] ○ crowd-0289                              codex     idle                  ▕
+ [5] ○ crowd-0290                              codex     idle                  ▕
+ [6] ○ crowd-0291                              codex     idle                  ▕
+ [7] ○ crowd-0292                              codex     idle                  ▕
+ [8] ○ crowd-0293                              codex     idle                  ▕
+ [9] ○ crowd-0294                              codex     idle                  ▕
+ [a] ○ crowd-0295                              codex     idle                  ▕
+ [b] ○ crowd-0296                              codex     idle                  ▕
+ [c] ○ crowd-0297                              codex     idle                  ▕
+ [d] ○ crowd-0298                              codex     idle                  ▕
+ [e] ○ crowd-0299                              codex     idle                  ▕
+                                                                               ▕
+▼ api  0 sessions                                                 [sh] [qs] [▾]▕
+ no sessions yet · [ + add session ]                                           ▐
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures Help at the top, middle, bottom, and during a drag 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 300 idle          2 · 300 · 300 
+────────╭──────────────────────────────────────────────────────────────╮─────── 
+       S│                         station help                        ▐│FF · PR 
+▼ web  3│  Ctrl-O     open/close project view                         ▐│qs] [▾]▐
+ [1] ○ c│  Ctrl-Q     quit Station                                    ▐│       ▕
+ [2] ○ c│  Ctrl-\\     split pane right                                ▐│       ▕
+ [3] ○ c│  Ctrl-^     split pane below (Ctrl-6)                       ▐│       ▕
+ [4] ○ c│  Ctrl-]     focus next pane                                 ▐│       ▕
+ [5] ○ c│  Ctrl-/     close split pane (Ctrl-_)                       ▐│       ▕
+ [6] ○ c│  Enter/Sp   open project view on welcome                    ▐│       ▕
+ [7] ○ c│  Esc/↑↓     context menu close/move                         ▐│       ▕
+ [8] ○ c│  Enter/Sp   context menu select                             ▐│       ▕
+ [9] ○ c│                     station project view                    ▐│       ▕
+ [a] ○ c│  ↑/↓        move cursor · wheel scroll                      ▐│       ▕
+ [b] ○ c│  ↵          open focused session                            ▐│       ▕
+ [c] ○ c│  tab        next session needing you                        ▐│       ▕
+ [d] ○ c│  G/M        quick group/move to group                       ▐│       ▕
+ [e] ○ c│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter     ▕│       ▕
+ [f] ○ c│  Tab S/P/A  build filter conditions · F applies builder     ▕│       ▕
+ [g] ○ c│  1-9/a-z    open visible session or toggle condition        ▕│       ▕
+▼ 284 be╰──────────────────────────────────────────────────────────────╯       ▼
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures Help at the top, middle, bottom, and during a drag 2`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 300 idle          2 · 300 · 300 
+────────╭──────────────────────────────────────────────────────────────╮─────── 
+       S│  Ctrl-Q     quit Station                                    ▕│FF · PR 
+▼ web  3│  Ctrl-\\     split pane right                                ▕│qs] [▾]▐
+ [1] ○ c│  Ctrl-^     split pane below (Ctrl-6)                       ▐│       ▕
+ [2] ○ c│  Ctrl-]     focus next pane                                 ▐│       ▕
+ [3] ○ c│  Ctrl-/     close split pane (Ctrl-_)                       ▐│       ▕
+ [4] ○ c│  Enter/Sp   open project view on welcome                    ▐│       ▕
+ [5] ○ c│  Esc/↑↓     context menu close/move                         ▐│       ▕
+ [6] ○ c│  Enter/Sp   context menu select                             ▐│       ▕
+ [7] ○ c│                     station project view                    ▐│       ▕
+ [8] ○ c│  ↑/↓        move cursor · wheel scroll                      ▐│       ▕
+ [9] ○ c│  ↵          open focused session                            ▐│       ▕
+ [a] ○ c│  tab        next session needing you                        ▐│       ▕
+ [b] ○ c│  G/M        quick group/move to group                       ▐│       ▕
+ [c] ○ c│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter     ▐│       ▕
+ [d] ○ c│  Tab S/P/A  build filter conditions · F applies builder     ▐│       ▕
+ [e] ○ c│  1-9/a-z    open visible session or toggle condition        ▐│       ▕
+ [f] ○ c│  N/A/R/C/F/P  new/add/rename/fold/fork/settings             ▐│       ▕
+ [g] ○ c│  W          widgets                                         ▕│       ▕
+▼ 284 be╰──────────────────────────────────────────────────────────────╯       ▼
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures Help at the top, middle, bottom, and during a drag 3`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 300 idle          2 · 300 · 300 
+────────╭──────────────────────────────────────────────────────────────╮─────── 
+       S│  Ctrl-^     split pane below (Ctrl-6)                       ▕│FF · PR 
+▼ web  3│  Ctrl-]     focus next pane                                 ▕│qs] [▾]▐
+ [1] ○ c│  Ctrl-/     close split pane (Ctrl-_)                       ▕│       ▕
+ [2] ○ c│  Enter/Sp   open project view on welcome                    ▐│       ▕
+ [3] ○ c│  Esc/↑↓     context menu close/move                         ▐│       ▕
+ [4] ○ c│  Enter/Sp   context menu select                             ▐│       ▕
+ [5] ○ c│                     station project view                    ▐│       ▕
+ [6] ○ c│  ↑/↓        move cursor · wheel scroll                      ▐│       ▕
+ [7] ○ c│  ↵          open focused session                            ▐│       ▕
+ [8] ○ c│  tab        next session needing you                        ▐│       ▕
+ [9] ○ c│  G/M        quick group/move to group                       ▐│       ▕
+ [a] ○ c│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter     ▐│       ▕
+ [b] ○ c│  Tab S/P/A  build filter conditions · F applies builder     ▐│       ▕
+ [c] ○ c│  1-9/a-z    open visible session or toggle condition        ▐│       ▕
+ [d] ○ c│  N/A/R/C/F/P  new/add/rename/fold/fork/settings             ▐│       ▕
+ [e] ○ c│  W          widgets                                         ▐│       ▕
+ [f] ○ c│  X          delete session                                  ▐│       ▕
+ [g] ○ c│  H/?        help · Z refresh                                ▐│       ▕
+▼ 284 be╰──────────────────────────────────────────────────────────────╯       ▼
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures Help at the top, middle, bottom, and during a drag 4`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 300 idle          2 · 300 · 300 
+────────╭──────────────────────────────────────────────────────────────╮─────── 
+       S│                         station help                        ▐│FF · PR 
+▼ web  3│  Ctrl-O     open/close project view                         ▐│qs] [▾]▐
+ [1] ○ c│  Ctrl-Q     quit Station                                    ▐│       ▕
+ [2] ○ c│  Ctrl-\\     split pane right                                ▐│       ▕
+ [3] ○ c│  Ctrl-^     split pane below (Ctrl-6)                       ▐│       ▕
+ [4] ○ c│  Ctrl-]     focus next pane                                 ▐│       ▕
+ [5] ○ c│  Ctrl-/     close split pane (Ctrl-_)                       ▐│       ▕
+ [6] ○ c│  Enter/Sp   open project view on welcome                    ▐│       ▕
+ [7] ○ c│  Esc/↑↓     context menu close/move                         ▐│       ▕
+ [8] ○ c│  Enter/Sp   context menu select                             ▐│       ▕
+ [9] ○ c│                     station project view                    ▐│       ▕
+ [a] ○ c│  ↑/↓        move cursor · wheel scroll                      ▐│       ▕
+ [b] ○ c│  ↵          open focused session                            ▐│       ▕
+ [c] ○ c│  tab        next session needing you                        ▐│       ▕
+ [d] ○ c│  G/M        quick group/move to group                       ▐│       ▕
+ [e] ○ c│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter     ▕│       ▕
+ [f] ○ c│  Tab S/P/A  build filter conditions · F applies builder     ▕│       ▕
+ [g] ○ c│  1-9/a-z    open visible session or toggle condition        ▕│       ▕
+▼ 284 be╰──────────────────────────────────────────────────────────────╯       ▼
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`dashboard and help scrollbar stress captures Help at the top, middle, bottom, and during a drag 5`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 300 idle          2 · 300 · 300 
+────────╭──────────────────────────────────────────────────────────────╮─────── 
+       S│  Ctrl-^     split pane below (Ctrl-6)                       ▕│FF · PR 
+▼ web  3│  Ctrl-]     focus next pane                                 ▕│qs] [▾]▐
+ [1] ○ c│  Ctrl-/     close split pane (Ctrl-_)                       ▕│       ▕
+ [2] ○ c│  Enter/Sp   open project view on welcome                    ▐│       ▕
+ [3] ○ c│  Esc/↑↓     context menu close/move                         ▐│       ▕
+ [4] ○ c│  Enter/Sp   context menu select                             ▐│       ▕
+ [5] ○ c│                     station project view                    ▐│       ▕
+ [6] ○ c│  ↑/↓        move cursor · wheel scroll                      ▐│       ▕
+ [7] ○ c│  ↵          open focused session                            ▐│       ▕
+ [8] ○ c│  tab        next session needing you                        ▐│       ▕
+ [9] ○ c│  G/M        quick group/move to group                       ▐│       ▕
+ [a] ○ c│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter     ▐│       ▕
+ [b] ○ c│  Tab S/P/A  build filter conditions · F applies builder     ▐│       ▕
+ [c] ○ c│  1-9/a-z    open visible session or toggle condition        ▐│       ▕
+ [d] ○ c│  N/A/R/C/F/P  new/add/rename/fold/fork/settings             ▐│       ▕
+ [e] ○ c│  W          widgets                                         ▐│       ▕
+ [f] ○ c│  X          delete session                                  ▐│       ▕
+ [g] ○ c│  H/?        help · Z refresh                                ▐│       ▕
+▼ 284 be╰──────────────────────────────────────────────────────────────╯       ▼
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;

@@ -1,0 +1,133 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`StationScrollbar isolated golden frames renders fits 1`] = `
+" |fg=#ffffff|bg=#00000000
+ |fg=#ffffff|bg=#00000000
+ |fg=#ffffff|bg=#00000000
+ |fg=#ffffff|bg=#00000000
+ |fg=#ffffff|bg=#00000000
+ |fg=#ffffff|bg=#00000000
+ |fg=#ffffff|bg=#00000000
+ |fg=#ffffff|bg=#00000000
+ |fg=#ffffff|bg=#00000000"
+`;
+
+exports[`StationScrollbar isolated golden frames renders one-extra 1`] = `
+"▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000"
+`;
+
+exports[`StationScrollbar isolated golden frames renders top 1`] = `
+"▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000"
+`;
+
+exports[`StationScrollbar isolated golden frames renders middle 1`] = `
+"▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000"
+`;
+
+exports[`StationScrollbar isolated golden frames renders bottom 1`] = `
+"▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000"
+`;
+
+exports[`StationScrollbar isolated golden frames renders many 1`] = `
+"▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▐|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000
+▕|fg=#9ca3af|bg=#00000000"
+`;
+
+exports[`StationScrollbar isolated golden frames changes only color while hovered and fills the track while pressed 1`] = `
+"▕|fg=#e4e4e7|bg=#00000000
+▕|fg=#e4e4e7|bg=#00000000
+▕|fg=#e4e4e7|bg=#00000000
+▐|fg=#e4e4e7|bg=#00000000
+▐|fg=#e4e4e7|bg=#00000000
+▐|fg=#e4e4e7|bg=#00000000
+▕|fg=#e4e4e7|bg=#00000000
+▕|fg=#e4e4e7|bg=#00000000
+▕|fg=#e4e4e7|bg=#00000000"
+`;
+
+exports[`StationScrollbar isolated golden frames changes only color while hovered and fills the track while pressed 2`] = `
+"▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▐|fg=#e4e4e7|bg=#1f242b
+▐|fg=#e4e4e7|bg=#1f242b
+▐|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b"
+`;
+
+exports[`StationScrollbar isolated golden frames changes only color while hovered and fills the track while dragging 1`] = `
+"▕|fg=#e4e4e7|bg=#00000000
+▕|fg=#e4e4e7|bg=#00000000
+▕|fg=#e4e4e7|bg=#00000000
+▐|fg=#e4e4e7|bg=#00000000
+▐|fg=#e4e4e7|bg=#00000000
+▐|fg=#e4e4e7|bg=#00000000
+▕|fg=#e4e4e7|bg=#00000000
+▕|fg=#e4e4e7|bg=#00000000
+▕|fg=#e4e4e7|bg=#00000000"
+`;
+
+exports[`StationScrollbar isolated golden frames changes only color while hovered and fills the track while dragging 2`] = `
+"▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▐|fg=#e4e4e7|bg=#1f242b
+▐|fg=#e4e4e7|bg=#1f242b
+▐|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b"
+`;
+
+exports[`StationScrollbar isolated golden frames changes only color while hovered and fills the track while dragging 3`] = `
+"▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▕|fg=#e4e4e7|bg=#1f242b
+▐|fg=#e4e4e7|bg=#1f242b
+▐|fg=#e4e4e7|bg=#1f242b
+▐|fg=#e4e4e7|bg=#1f242b"
+`;

@@ -3,7 +3,6 @@ import {
   helpPanelBodyRows,
   helpPanelLines,
 } from "../../../src/components/HelpOverlay/helpPanel.js";
-import { verticalScrollbarCells } from "../../../src/components/scrollbar.js";
 import { dashboardRowIds, selectDashboardTree } from "../../../src/selectors/dashboardTree.js";
 import { selectDashboardViewport } from "../../../src/selectors/dashboardViewport.js";
 import { focusDashboardSession } from "../../../src/state/dashboardFocus.js";
@@ -189,22 +188,12 @@ describe("dashboard windowing stress", () => {
     expect(state.scrollOffset).toBe(1);
   });
 
-  it("a one-row wheel still changes the window when the painted thumb does not", () => {
+  it("a one-row wheel still changes the window", () => {
     const snapshot = createCrowdedDashboardSnapshot(SESSION_COUNT);
     const initial = createInitialTuiState({
       initialSnapshot: snapshot,
       terminalRows: TERMINAL_ROWS,
     });
-    const tree = selectDashboardTree(snapshot, initial, initial.screen);
-    const viewportLength = selectDashboardViewport(snapshot, initial).bodyRows;
-    const paint = {
-      trackHeight: viewportLength,
-      contentLength: tree.visibleRows.length,
-      viewportLength,
-    };
-    expect(verticalScrollbarCells({ ...paint, offset: 0 }).join("")).toBe(
-      verticalScrollbarCells({ ...paint, offset: 1 }).join(""),
-    );
     const after = handleTuiKey(initial, { input: "", mouseScroll: "down" }).state;
     expect(after.scrollOffset).toBe(1);
     expect(firstRowId(selectDashboardViewport(snapshot, after))).not.toBe(
@@ -305,17 +294,8 @@ describe("help windowing stress", () => {
     });
   });
 
-  it("a one-line help wheel still changes the window when the painted thumb does not", () => {
+  it("a one-line Help wheel still changes the window", () => {
     const content = crowdedHelpContent(300);
-    const bodyRows = helpPanelBodyRows(TERMINAL_ROWS, content.length);
-    const paint = {
-      trackHeight: bodyRows,
-      contentLength: content.length,
-      viewportLength: bodyRows,
-    };
-    expect(verticalScrollbarCells({ ...paint, offset: 0 }).join("")).toBe(
-      verticalScrollbarCells({ ...paint, offset: 1 }).join(""),
-    );
     let state = createInitialTuiState({ terminalRows: TERMINAL_ROWS });
     state = {
       ...state,

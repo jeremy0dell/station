@@ -3,7 +3,6 @@
 // stopPropagation happen here. Default is no-op (golden tests don't need provider).
 import { createContext, useCallback, useContext, useState } from "react";
 import type { MouseEvent } from "@opentui/core";
-import { scrollbarOffsetForTrackIndex } from "@station/dashboard-core/selectors";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 
 export type StationMouseDispatch = (target: StationMouseTarget, event: MouseEvent) => void;
@@ -56,52 +55,5 @@ export function stationMouseProps(
       event.stopPropagation();
       dispatch(target, event);
     },
-  };
-}
-
-/** Track pointer: map cell y through core's inclusive ends, and swallow the
- * gesture so OpenTUI cannot start a drag selection on neighboring copy. */
-export function stationScrollbarPointerProps(
-  dispatch: StationMouseDispatch,
-  input: {
-    surface: "help" | "dashboard";
-    contentLength: number;
-    viewportLength: number;
-    trackHeight: number;
-    trackTop: () => number;
-  },
-): {
-  onMouseDown: (event: MouseEvent) => void;
-  onMouseDrag: (event: MouseEvent) => void;
-  onMouseScroll: (event: MouseEvent) => void;
-} {
-  const emitOffset = (event: MouseEvent) => {
-    event.stopPropagation();
-    event.preventDefault();
-    const trackHeight = Math.max(1, Math.floor(input.trackHeight));
-    const trackIndex = Math.min(Math.max(0, event.y - input.trackTop()), trackHeight - 1);
-    dispatch(
-      {
-        kind: "scrollbar",
-        surface: input.surface,
-        offset: scrollbarOffsetForTrackIndex({
-          trackHeight,
-          contentLength: input.contentLength,
-          viewportLength: input.viewportLength,
-          offset: 0,
-          trackIndex,
-        }),
-      },
-      event,
-    );
-  };
-  return {
-    onMouseDown: emitOffset,
-    onMouseDrag: emitOffset,
-    onMouseScroll: stationMouseProps(dispatch, {
-      kind: "scrollbar",
-      surface: input.surface,
-      offset: 0,
-    }).onMouseScroll,
   };
 }

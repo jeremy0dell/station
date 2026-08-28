@@ -1,5 +1,4 @@
-// Crowded dashboard + Help: last-cell identity (homebake maps last track cell
-// to maxOffset), one-row wheels with a stuck thumb, and Help click-away vs bar.
+// Crowded dashboard + Help: scroll endpoints, one-row wheels, chrome, and drag isolation.
 import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex, TextRenderable, type BaseRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
@@ -10,8 +9,6 @@ import {
   helpPanelLayout,
   helpPanelModel,
   selectDashboardViewport,
-  VERTICAL_SCROLLBAR_THUMB,
-  VERTICAL_SCROLLBAR_TRACK,
 } from "@station/dashboard-core/selectors";
 import { act } from "react";
 import {
@@ -30,7 +27,8 @@ import { StationHoverProvider, StationMouseProvider } from "./stationMouseContex
 const SIZE = { width: 80, height: 24 };
 const SESSION_COUNT = 300;
 const MOUSE = { delayMs: 0 } as const;
-const THUMB = VERTICAL_SCROLLBAR_THUMB;
+const THUMB = "▐";
+const TRACK = "▕";
 
 type RenderedDashboard = Awaited<ReturnType<typeof testRender>> & {
   store: ReturnType<typeof makeStationTestRuntime>["runtime"];
@@ -112,8 +110,8 @@ describe("dashboard and help scrollbar stress", () => {
     expect(column[gutter.chromeTop]).toBe(THUMB);
     expect(column[gutter.lastY + 1]).toBe("▼");
     const track = column.slice(gutter.chromeTop, gutter.lastY + 1);
-    expect(track.some((cell) => cell === VERTICAL_SCROLLBAR_TRACK)).toBe(true);
-    expect(track.every((cell) => cell === THUMB || cell === VERTICAL_SCROLLBAR_TRACK)).toBe(true);
+    expect(track.some((cell) => cell === TRACK)).toBe(true);
+    expect(track.every((cell) => cell === THUMB || cell === TRACK)).toBe(true);
     expect(frame).toContain("below · showing");
     expect(frame).not.toContain("sessions above");
   });
@@ -135,10 +133,9 @@ describe("dashboard and help scrollbar stress", () => {
     const gutter = gutterGeometry(setup);
     let column = gutterColumn(setup);
     let frame = setup.captureCharFrame();
-    const atTop = selectDashboardViewport(
-      setup.store.state.getState().snapshot,
-      setup.store.state.getState(),
-    );
+    const atTopState = setup.store.state.getState();
+    if (atTopState.snapshot === undefined) throw new Error("expected snapshot");
+    const atTop = selectDashboardViewport(atTopState.snapshot, atTopState);
     expect(atTop.hiddenBelow).toBeGreaterThan(0);
     expect(atTop.sessionOverflow.below).toBe(0);
     expect(column[gutter.lastY + 1]).toBe("▼");
@@ -153,10 +150,9 @@ describe("dashboard and help scrollbar stress", () => {
     await setup.flush();
     column = gutterColumn(setup);
     frame = setup.captureCharFrame();
-    const scrolled = selectDashboardViewport(
-      setup.store.state.getState().snapshot,
-      setup.store.state.getState(),
-    );
+    const scrolledState = setup.store.state.getState();
+    if (scrolledState.snapshot === undefined) throw new Error("expected snapshot");
+    const scrolled = selectDashboardViewport(scrolledState.snapshot, scrolledState);
     expect(scrolled.hiddenAbove).toBe(1);
     expect(scrolled.sessionOverflow.above).toBe(0);
     expect(column[gutter.chromeTop - 1]).toBe("▲");
@@ -350,6 +346,59 @@ describe("dashboard and help scrollbar stress", () => {
     await setup.flush();
   });
 
+  // Temporary visual proof for the native adapter. Delete these captures before merge.
+  for (const { name, sessionCount } of [
+    { name: "one-session", sessionCount: 1 },
+    { name: "ten-sessions", sessionCount: 10 },
+    { name: "three-hundred-sessions", sessionCount: 300 },
+  ]) {
+    it(`captures the full dashboard scrollbar for ${name}`, async () => {
+      const setup = await renderCrowded(sessionCount);
+      const state = setup.store.state.getState();
+      if (state.snapshot === undefined) throw new Error("expected snapshot");
+      const viewport = selectDashboardViewport(state.snapshot, state);
+      const treeRowCount = viewport.rows.length + viewport.hiddenBelow;
+      const offsets = [0, Math.floor(treeRowCount / 2), Number.MAX_SAFE_INTEGER];
+      for (const offset of offsets) {
+        await act(async () => {
+          setup.store.actions.dispatch({ type: "dashboard.scrollTo", offset });
+          await Promise.resolve();
+        });
+        await setup.flush();
+        expect(setup.captureCharFrame()).toMatchSnapshot();
+      }
+    });
+  }
+
+  it("captures Help at the top, middle, bottom, and during a drag", async () => {
+    const setup = await renderCrowded();
+    await openHelp(setup);
+    const bar = helpBarGeometry(SIZE.width, SIZE.height);
+    const offsets = [0, Math.floor(bar.maxOffset / 2), bar.maxOffset];
+    for (const offset of offsets) {
+      await act(async () => {
+        setup.store.actions.dispatch({ type: "help.scrollTo", offset });
+        await Promise.resolve();
+      });
+      await setup.flush();
+      expect(setup.captureCharFrame()).toMatchSnapshot();
+    }
+    await act(async () => {
+      await setup.mockMouse.pressDown(bar.x, bar.firstY, MouseButtons.LEFT, MOUSE);
+    });
+    await setup.flush();
+    expect(setup.captureCharFrame()).toMatchSnapshot();
+    await act(async () => {
+      await setup.mockMouse.moveTo(bar.x, bar.lastY, MOUSE);
+    });
+    await setup.flush();
+    expect(setup.captureCharFrame()).toMatchSnapshot();
+    await act(async () => {
+      await setup.mockMouse.release(bar.x, bar.lastY, MouseButtons.LEFT, MOUSE);
+    });
+    await setup.flush();
+  });
+
   it("keeps Help panel copy and the inset bar out of OpenTUI selection", async () => {
     const setup = await renderCrowded();
     await act(async () => {
@@ -537,8 +586,8 @@ describe("dashboard and help scrollbar stress", () => {
     expect(setup.renderer.getSelection()?.getSelectedText()).toContain("crowd");
   });
 
-  async function renderCrowded() {
-    const snapshot = createCrowdedDashboardSnapshot(SESSION_COUNT);
+  async function renderCrowded(sessionCount = SESSION_COUNT) {
+    const snapshot = createCrowdedDashboardSnapshot(sessionCount);
     const { runtime: store } = makeStationTestRuntime({
       snapshot,
       terminalRows: SIZE.height,

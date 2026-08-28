@@ -252,7 +252,7 @@ function DashboardScrollGutter({
   hiddenBelow: number;
 }) {
   return (
-    <box width={1} flexDirection="column" flexShrink={0} selectable={false}>
+    <box width={1} flexDirection="column" flexShrink={0}>
       {Array.from({ length: chromeTop }, (_, index) => (
         <GutterOverflowArrow
           key={`top-${index}`}

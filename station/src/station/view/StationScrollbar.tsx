@@ -3,14 +3,13 @@ import {
   type MouseEvent,
   type OptimizedBuffer,
   ScrollBarRenderable,
-  type ScrollBarOptions,
   type SliderRenderable,
 } from "@opentui/core";
 import { extend } from "@opentui/react";
 import { useLayoutEffect, useRef } from "react";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import {
-  stationScrollbarPointerProps,
+  stationMouseProps,
   useStationHoverEnabled,
   useStationMouse,
 } from "./stationMouseContext.js";
@@ -40,60 +39,79 @@ export function StationScrollbar({
   const hoverEnabled = useStationHoverEnabled();
   const dispatch = useStationMouse();
   const ref = useRef<ScrollBarRenderable>(null);
-  const inputRef = useRef({ surface, contentLength, viewportLength, trackHeight });
-  inputRef.current = { surface, contentLength, viewportLength, trackHeight };
-  const dispatchRef = useRef(dispatch);
-  dispatchRef.current = dispatch;
   const hoverRef = useRef(false);
   const draggingRef = useRef(false);
-  const themeRef = useRef(theme);
-  const hoverEnabledRef = useRef(hoverEnabled);
-  themeRef.current = theme;
-  hoverEnabledRef.current = hoverEnabled;
 
   useLayoutEffect(() => {
     const scrollbar = ref.current;
     if (scrollbar === null) return;
+    // Station owns keyboard scrolling; this renderable only paints and routes pointer input.
+    scrollbar.focusable = false;
     scrollbar.scrollSize = Math.max(0, Math.floor(contentLength));
     scrollbar.viewportSize = Math.max(1, Math.floor(viewportLength));
     scrollbar.scrollPosition = Math.max(0, Math.floor(offset));
     scrollbar.requestRender();
   }, [contentLength, offset, viewportLength]);
 
-  const options: Omit<ScrollBarOptions, "orientation"> = {
-    width: 1,
-    height: Math.max(0, Math.floor(trackHeight)),
-    showArrows: false,
-    trackOptions: {
-      width: 1,
-      backgroundColor: "transparent",
-      foregroundColor: "transparent",
-      onMouse(event) {
-        const interactionChanged = updateScrollbarInteraction(event);
-        if (interactionChanged) this.requestRender();
+  return (
+    <stationScrollbar
+      ref={ref}
+      orientation="vertical"
+      width={1}
+      height={Math.max(0, Math.floor(trackHeight))}
+      showArrows={false}
+      trackOptions={{
+        width: 1,
+        backgroundColor: "transparent",
+        foregroundColor: "transparent",
+        onMouse(event) {
+          const interactionChanged = updateScrollbarInteraction(event);
+          if (interactionChanged) this.requestRender();
 
-        const pointer = stationScrollbarPointerProps(dispatchRef.current, {
-          ...inputRef.current,
-          trackTop: () => ref.current?.slider.y ?? 0,
-        });
-        if (event.type === "down") pointer.onMouseDown(event);
-        if (event.type === "drag") pointer.onMouseDrag(event);
-        if (event.type === "scroll") pointer.onMouseScroll(event);
-      },
-      renderAfter(buffer) {
-        paintStationScrollbar(
-          this,
-          buffer,
-          themeRef.current,
-          hoverEnabledRef.current,
-          hoverRef.current,
-          draggingRef.current,
-        );
-      },
-    },
-  };
-
-  return <stationScrollbar ref={ref} orientation="vertical" {...options} />;
+          if (event.type === "down" || event.type === "drag") {
+            event.stopPropagation();
+            event.preventDefault();
+            const normalizedTrackHeight = Math.max(1, Math.floor(trackHeight));
+            const trackIndex = Math.min(
+              Math.max(0, event.y - (ref.current?.slider.y ?? 0)),
+              normalizedTrackHeight - 1,
+            );
+            const maxOffset = Math.max(
+              0,
+              Math.floor(contentLength) - Math.max(1, Math.floor(viewportLength)),
+            );
+            dispatch(
+              {
+                kind: "scrollbar",
+                surface,
+                offset:
+                  normalizedTrackHeight <= 1
+                    ? 0
+                    : Math.round((trackIndex * maxOffset) / (normalizedTrackHeight - 1)),
+              },
+              event,
+            );
+          } else if (event.type === "scroll") {
+            stationMouseProps(dispatch, {
+              kind: "scrollbar",
+              surface,
+              offset: 0,
+            }).onMouseScroll(event);
+          }
+        },
+        renderAfter(buffer) {
+          paintStationScrollbar(
+            this,
+            buffer,
+            theme,
+            hoverEnabled,
+            hoverRef.current,
+            draggingRef.current,
+          );
+        },
+      }}
+    />
+  );
 
   function updateScrollbarInteraction(event: MouseEvent): boolean {
     const wasHovered = hoverRef.current;

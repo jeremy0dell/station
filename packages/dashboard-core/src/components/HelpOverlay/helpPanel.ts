@@ -1,5 +1,4 @@
 import type { TuiHelpContentLine } from "../../state/keymap.js";
-import { scrollbarOffsetForTrackIndex, verticalScrollbarCells } from "../scrollbar.js";
 
 export type HelpPanelLayout = {
   left: number;
@@ -18,15 +17,12 @@ export type HelpPanelBodyLine = {
   prefix: string;
   bar: string;
   suffix: string;
-  trackIndex: number;
-  offset: number;
 };
 
 export type HelpPanelLine = HelpPanelBorderLine | HelpPanelBodyLine;
 
 export type HelpPanelModel = {
   lines: HelpPanelLine[];
-  overflow: boolean;
   bodyRows: number;
   scrollOffset: number;
 };
@@ -88,44 +84,26 @@ export function helpPanelModel(
   if (panelHeight === 1) {
     return {
       lines: [{ kind: "border", text: horizontalBorder(panelWidth) }],
-      overflow: content.length > 0,
       bodyRows: 0,
       scrollOffset: 0,
     };
   }
 
   const bodyRows = Math.max(0, panelHeight - 2);
-  const overflow = content.length > bodyRows;
   const offset = clampHelpScrollOffset(content.length, bodyRows, scrollOffset);
-  const bars = verticalScrollbarCells({
-    trackHeight: bodyRows,
-    contentLength: content.length,
-    viewportLength: bodyRows,
-    offset,
-  });
   const lines: HelpPanelLine[] = [{ kind: "border", text: horizontalBorder(panelWidth) }];
   for (let index = 0; index < bodyRows; index += 1) {
-    const bar = bars[index] ?? " ";
-    const parts = contentLineParts(panelWidth, content[offset + index], bar);
+    const parts = contentLineParts(panelWidth, content[offset + index]);
     lines.push({
       kind: "body",
       prefix: parts.prefix,
       bar: parts.bar,
       suffix: parts.suffix,
-      trackIndex: index,
-      offset: scrollbarOffsetForTrackIndex({
-        trackHeight: bodyRows,
-        contentLength: content.length,
-        viewportLength: bodyRows,
-        offset,
-        trackIndex: index,
-      }),
     });
   }
   lines.push({ kind: "border", text: bottomBorder(panelWidth) });
   return {
     lines,
-    overflow,
     bodyRows,
     scrollOffset: offset,
   };
@@ -167,7 +145,6 @@ function bottomBorder(width: number): string {
 function contentLineParts(
   width: number,
   content: TuiHelpContentLine | undefined,
-  barGlyph: string,
 ): { prefix: string; bar: string; suffix: string } {
   if (width === 1) {
     return { prefix: "│", bar: "", suffix: "" };
@@ -180,14 +157,15 @@ function contentLineParts(
   const contentWidth = Math.max(0, innerWidth - padding * 2);
   const body = formatContent(content, contentWidth);
   const leftPad = " ".repeat(padding);
-  // The thumb lives in the last inner pad cell so ╭╮│╰╯ stay rounded chrome.
+  // Keep the scrollbar column inside the inner pad so ╭╮│╰╯ stay rounded chrome.
   if (padding === 0) {
     return { prefix: `│${body}`, bar: "", suffix: "│" };
   }
   const rightPad = " ".repeat(padding - 1);
   return {
     prefix: `│${leftPad}${body}${rightPad}`,
-    bar: barGlyph,
+    // The view owns scrollbar paint; this cell only reserves the panel column.
+    bar: " ",
     suffix: "│",
   };
 }

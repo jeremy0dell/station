@@ -46,7 +46,6 @@ export function HelpOverlayView({
       zIndex={10}
       flexDirection="column"
       backgroundColor={helpBackground}
-      selectable={false}
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
       {top?.kind === "border" ? (

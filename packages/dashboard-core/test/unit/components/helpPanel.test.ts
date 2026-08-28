@@ -10,10 +10,6 @@ import {
   helpPanelModel,
   joinHelpPanelLine,
 } from "../../../src/components/HelpOverlay/helpPanel.js";
-import {
-  VERTICAL_SCROLLBAR_THUMB,
-  VERTICAL_SCROLLBAR_TRACK,
-} from "../../../src/components/scrollbar.js";
 import type { TuiHelpContentLine } from "../../../src/state/keymap.js";
 
 const FITTING: readonly TuiHelpContentLine[] = [
@@ -44,20 +40,19 @@ describe("helpPanelLines", () => {
     expect(lines[0]?.startsWith("╭")).toBe(true);
     expect(lines[0]?.endsWith("╮")).toBe(true);
     expect(lines.at(-1)?.startsWith("╰")).toBe(true);
-    expect(lines.join("")).not.toContain(VERTICAL_SCROLLBAR_THUMB);
     expect(lines[1]?.endsWith("│")).toBe(true);
     expect(lines[1]?.at(-2)).toBe(" ");
   });
 
-  it("windows overflowing copy and paints an inset thumb inside the box", () => {
+  it("windows overflowing copy and reserves the inset scrollbar cell", () => {
     const top = helpPanelLines(64, 5, OVERFLOW, 0);
     const scrolled = helpPanelLines(64, 5, OVERFLOW, 2);
     expect(top[1]).toContain("line 0");
     expect(top.join("")).not.toContain("line 5");
     expect(scrolled[1]).toContain("line 2");
     expect(top[1]?.at(-1)).toBe("│");
-    expect(top[1]?.at(-2)).toBe(VERTICAL_SCROLLBAR_THUMB);
-    expect(top[2]?.at(-2)).toBe(VERTICAL_SCROLLBAR_TRACK);
+    expect(top[1]?.at(-2)).toBe(" ");
+    expect(top[2]?.at(-2)).toBe(" ");
     expect(top[0]).toMatch(/^╭.+╮$/);
     expect(top.at(-1)).toMatch(/^╰.+╯$/);
   });
@@ -70,16 +65,15 @@ describe("helpPanelLines", () => {
 });
 
 describe("helpPanelModel", () => {
-  it("splits the inset bar cell for pointer targets", () => {
+  it("reserves the inset scrollbar column", () => {
     const model = helpPanelModel(64, 5, OVERFLOW, 0);
-    expect(model.overflow).toBe(true);
     expect(model.bodyRows).toBe(3);
     const body = model.lines[1];
     if (body === undefined || body.kind !== "body") {
       throw new Error("expected a body line");
     }
     expect(joinHelpPanelLine(body)).toHaveLength(64);
-    expect(body.bar).toBe(VERTICAL_SCROLLBAR_THUMB);
+    expect(body.bar).toBe(" ");
     expect(body.suffix).toBe("│");
   });
 });

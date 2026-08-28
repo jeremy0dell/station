@@ -80,14 +80,6 @@ export {
 } from "../components/NewSessionBottomSheet/content.js";
 export { newSessionContentRowCount } from "../components/NewSessionBottomSheet/layout.js";
 export { projectSettingsPanelLayout } from "../components/ProjectSettingsPanel/layout.js";
-export {
-  scrollbarOffsetForTrackIndex,
-  VERTICAL_SCROLLBAR_EMPTY,
-  VERTICAL_SCROLLBAR_THUMB,
-  VERTICAL_SCROLLBAR_TRACK,
-  verticalScrollbarCells,
-} from "../components/scrollbar.js";
-
 export { textMatchSegments } from "../components/TextMatch/segments.js";
 export type { ToastBorderColorName } from "../components/ToastOverlay/content.js";
 export {
