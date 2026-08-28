@@ -111,6 +111,7 @@ export function createScrollViewportController<
   let visibleIds: readonly ItemId[] | undefined;
   let followedId: ItemId | undefined;
   let followAlignment: "start" | "end" | undefined;
+  let synchronizedScrollTop: number | undefined;
   let reflowQueued = false;
   let itemIndexDirty = true;
   const itemById = new Map<ItemId, Renderable>();
@@ -191,7 +192,12 @@ export function createScrollViewportController<
   };
   const synchronize = (): void => {
     ensureItemIndex();
+    synchronizedScrollTop = viewport?.scrollTop;
     synchronizeIndexed();
+  };
+  const stopFollowing = (): void => {
+    followedId = undefined;
+    followAlignment = undefined;
   };
   const revealFollowedItemIndexed = (): void => {
     if (
@@ -229,6 +235,7 @@ export function createScrollViewportController<
   const reflow = (): void => {
     ensureItemIndex();
     revealFollowedItemIndexed();
+    synchronizedScrollTop = viewport?.scrollTop;
     synchronizeIndexed();
   };
 
@@ -251,6 +258,7 @@ export function createScrollViewportController<
       viewport = undefined;
       orderedIds = [];
       followAlignment = undefined;
+      synchronizedScrollTop = undefined;
       clearItemIndex();
       itemIndexDirty = true;
       if (visibleIds === undefined) return;
@@ -259,7 +267,13 @@ export function createScrollViewportController<
     },
     reflow,
     synchronize: (): void => {
-      followAlignment = undefined;
+      if (
+        viewport !== undefined &&
+        synchronizedScrollTop !== undefined &&
+        viewport.scrollTop !== synchronizedScrollTop
+      ) {
+        stopFollowing();
+      }
       synchronize();
     },
     subscribe: (listener): (() => void) => {
@@ -268,14 +282,16 @@ export function createScrollViewportController<
     },
     snapshot: () => visibleIds,
     scrollBy: (cells): void => {
-      followAlignment = undefined;
+      const previousScrollTop = viewport?.scrollTop;
       viewport?.scrollBy(cells);
+      if (viewport?.scrollTop !== previousScrollTop) stopFollowing();
       synchronize();
     },
     scrollPage: (direction): void => {
-      followAlignment = undefined;
+      const previousScrollTop = viewport?.scrollTop;
       const page = Math.max(1, (viewport?.viewport.height ?? 1) - 1);
       viewport?.scrollBy(direction * page);
+      if (viewport?.scrollTop !== previousScrollTop) stopFollowing();
       synchronize();
     },
     follow: (itemId): void => {
@@ -284,6 +300,7 @@ export function createScrollViewportController<
       if (itemId === undefined) return;
       ensureItemIndex();
       revealFollowedItemIndexed();
+      synchronizedScrollTop = viewport?.scrollTop;
       synchronizeIndexed();
     },
   };

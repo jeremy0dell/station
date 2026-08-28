@@ -2,10 +2,13 @@
 // between the loading/waiting/unavailable bodies and the live dashboard —
 // mirroring apps/tui's App.tsx branch for the popup posture, including the
 // toast overlay, kind-specific expiry timers, and explicit error dismissal.
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useStore } from "zustand/react";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import {
+  scrollIndicatorLabel,
+  selectDashboardSlotsForTree,
+  selectDashboardTree,
   snapshotLoadingContent,
   type SnapshotLoadingContent,
 } from "@station/dashboard-core/selectors";
@@ -25,6 +28,7 @@ import {
 import { ToastOverlayView } from "./ToastOverlayView.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import type { DashboardScrollController } from "./layout/scrollViewport.js";
+import { useDashboardVisibleRows } from "./layout/DashboardScrollViewport.js";
 
 export type DashboardRootProps = {
   state: DashboardStateSource;
@@ -64,6 +68,35 @@ export function DashboardRoot({
   const activeToast = useStore(state, activeTuiToast);
   const nextExpiry = useStore(state, nextTuiToastExpiry);
   const hoverEnabled = useStationHoverEnabled();
+  const visibleRowIds = useDashboardVisibleRows(layout);
+  const dashboardProjection = useMemo(() => {
+    const viewState = {
+      collapsedProjectIds,
+      collapsedGroupIds,
+      groupOrderingMode,
+      groupHeaderActionVisibility,
+      localRows,
+      selection,
+      ...(persistentFilter === undefined ? {} : { persistentFilter }),
+      ...(dashboardFocus === undefined ? {} : { dashboardFocus }),
+    };
+    return {
+      viewState,
+      tree:
+        snapshot === undefined ? undefined : selectDashboardTree(snapshot, viewState, screen),
+    };
+  }, [
+    collapsedGroupIds,
+    collapsedProjectIds,
+    dashboardFocus,
+    groupHeaderActionVisibility,
+    groupOrderingMode,
+    localRows,
+    persistentFilter,
+    screen,
+    selection,
+    snapshot,
+  ]);
 
   const toastHiddenByScreen = isTuiToastHiddenByScreen(screen);
   const backgroundHoverEnabled =
@@ -98,7 +131,7 @@ export function DashboardRoot({
     />
   );
 
-  if (loading || snapshot === undefined) {
+  if (loading || snapshot === undefined || dashboardProjection.tree === undefined) {
     const content = snapshotLoadingContent(loading, observerConnectionStatus);
     // Keep both root branches padding-free because OpenTUI retains a removed inset during reconciliation.
     return (
@@ -113,16 +146,11 @@ export function DashboardRoot({
     );
   }
 
-  const viewState = {
-    collapsedProjectIds,
-    collapsedGroupIds,
-    groupOrderingMode,
-    groupHeaderActionVisibility,
-    localRows,
-    selection,
-    ...(persistentFilter === undefined ? {} : { persistentFilter }),
-    ...(dashboardFocus === undefined ? {} : { dashboardFocus }),
-  };
+  const { tree, viewState } = dashboardProjection;
+  const slots = selectDashboardSlotsForTree(tree, visibleRowIds);
+  const dividerTitle = slots.semanticOverflow.below
+    ? scrollIndicatorLabel("below", slots.sessionOverflow)
+    : undefined;
   return (
     <box width="100%" flexGrow={1} minHeight={0} flexDirection="column">
       <StationHoverProvider value={backgroundHoverEnabled}>
@@ -132,11 +160,17 @@ export function DashboardRoot({
             viewState={viewState}
             screen={screen}
             layout={layout}
+            tree={tree}
+            slots={slots}
             columns={columns}
             menuHoverEnabled={hoverEnabled}
           />
         </DashboardNoticeRegion>
-        <DashboardControlsView state={state} columns={contentColumns} />
+        <DashboardControlsView
+          state={state}
+          columns={contentColumns}
+          {...(dividerTitle === undefined ? {} : { dividerTitle })}
+        />
       </StationHoverProvider>
       <ActiveScreenOverlayView
         snapshot={snapshot}

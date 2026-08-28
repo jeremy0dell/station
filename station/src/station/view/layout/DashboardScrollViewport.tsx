@@ -20,7 +20,7 @@ export function DashboardScrollViewport({
   children: ReactNode;
 }) {
   return (
-    <SemanticScrollViewport controller={controller} itemIds={itemIds}>
+    <SemanticScrollViewport controller={controller} itemIds={itemIds} scrollbar="gutter">
       {children}
     </SemanticScrollViewport>
   );

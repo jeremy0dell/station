@@ -34,7 +34,7 @@ export function HelpOverlayView({
     controller.snapshot,
     controller.snapshot,
   );
-  const continuation = helpContinuation(visibleEntryIds);
+  const continuation = helpContinuation(visibleEntryIds, columns);
 
   return (
     <box
@@ -67,6 +67,7 @@ export function HelpOverlayView({
           followedItemId={focusedEntryId}
           viewportId="station-help-content"
           controller={controller}
+          scrollbar="inside"
         >
           <box width="100%" flexDirection="column" paddingLeft={2} paddingRight={2}>
             {STATION_HELP_ENTRIES.map((entry) => (
@@ -135,14 +136,24 @@ function HelpEntryView({ entry, focused }: { entry: StationHelpEntry; focused: b
   );
 }
 
-function helpContinuation(visibleEntryIds: readonly string[] | undefined): string {
+function helpContinuation(
+  visibleEntryIds: readonly string[] | undefined,
+  panelWidth: number,
+): string {
   const first = visibleEntryIds?.[0];
   const last = visibleEntryIds?.at(-1);
-  const hasAbove = first !== undefined && STATION_HELP_ENTRY_IDS.indexOf(first) > 0;
-  const hasBelow =
-    last !== undefined && STATION_HELP_ENTRY_IDS.indexOf(last) < STATION_HELP_ENTRY_IDS.length - 1;
-  if (hasAbove && hasBelow) return "↕ more";
-  if (hasAbove) return "↑ more";
-  if (hasBelow) return "↓ more";
+  const above = first === undefined ? 0 : Math.max(0, STATION_HELP_ENTRY_IDS.indexOf(first));
+  const below = last === undefined
+    ? 0
+    : Math.max(0, STATION_HELP_ENTRY_IDS.length - STATION_HELP_ENTRY_IDS.indexOf(last) - 1);
+  if (panelWidth < 48) {
+    if (above > 0 && below > 0) return `↑${above}/↓${below}`;
+    if (above > 0) return `↑${above}`;
+    if (below > 0) return `↓${below}`;
+    return "all";
+  }
+  if (above > 0 && below > 0) return `↑ ${above} above · ↓ ${below} below`;
+  if (above > 0) return `↑ ${above} above`;
+  if (below > 0) return `↓ ${below} below`;
   return "all visible";
 }

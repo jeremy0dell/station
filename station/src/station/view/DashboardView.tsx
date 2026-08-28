@@ -5,12 +5,12 @@ import {
   emptyProjectLabel,
   fleetCountsLabel,
   FIRST_RUN_BODY_LABEL,
-  selectDashboardSlotsForTree,
-  selectDashboardTree,
   selectFleetSummary,
   withRowGridSelectionSlot,
   type DashboardRowId,
+  type DashboardSlots,
   type DashboardTreeBranch,
+  type DashboardTreeProjection,
   type DashboardTreeRow,
   type FleetSummary,
   type RowGridLayout,
@@ -21,10 +21,7 @@ import type {
   DashboardSnapshotView,
   DashboardViewState,
 } from "@station/dashboard-core/state";
-import {
-  DashboardScrollIndicatorView,
-  DashboardTableHeaderView,
-} from "./DashboardTableHeaderView.js";
+import { DashboardTableHeaderView } from "./DashboardTableHeaderView.js";
 import { GroupFrameView, groupFrameContentColumns } from "./GroupFrameView.js";
 import { GroupHeaderView } from "./GroupHeaderView.js";
 import { ProjectHeaderView } from "./ProjectHeaderView.js";
@@ -39,10 +36,7 @@ import {
   stationMouseProps,
 } from "./stationMouseContext.js";
 import { memo, useLayoutEffect, useMemo } from "react";
-import {
-  DashboardScrollViewport,
-  useDashboardVisibleRows,
-} from "./layout/DashboardScrollViewport.js";
+import { DashboardScrollViewport } from "./layout/DashboardScrollViewport.js";
 import {
   semanticItemRenderableId,
   type DashboardScrollController,
@@ -60,6 +54,8 @@ export type DashboardViewProps = {
   viewState: DashboardViewState;
   screen: DashboardScreenView;
   layout: DashboardScrollController;
+  tree: DashboardTreeProjection;
+  slots: DashboardSlots;
   columns: number;
   menuHoverEnabled: boolean;
 };
@@ -69,17 +65,13 @@ export function DashboardView({
   viewState,
   screen,
   layout,
+  tree,
+  slots,
   columns,
   menuHoverEnabled,
 }: DashboardViewProps) {
   const theme = useStationTheme();
-  const visibleRowIds = useDashboardVisibleRows(layout);
   const dispatch = useStationMouse();
-  const tree = useMemo(
-    () => selectDashboardTree(snapshot, viewState, screen),
-    [screen, snapshot, viewState],
-  );
-  const slots = selectDashboardSlotsForTree(tree, visibleRowIds);
   const rowGridProjector = useMemo(() => createDashboardRowGridProjector(), []);
   const itemIds = useMemo(() => tree.visibleRows.map((row) => row.id), [tree.visibleRows]);
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
@@ -96,6 +88,7 @@ export function DashboardView({
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
     overflow: slots.sessionOverflow,
+    hasSemanticRowsAbove: slots.semanticOverflow.above,
     columns: contentColumns,
     ...(slots.persistentFilter === undefined
       ? {}
@@ -192,7 +185,6 @@ export function DashboardView({
           />
         </DashboardScrollViewport>
       )}
-      <DashboardScrollIndicatorView direction="below" overflow={slots.sessionOverflow} />
       {screen.name === "projectMenu" && menuAnchorRenderableId !== undefined ? (
         <StationHoverProvider value={menuHoverEnabled}>
           <ProjectMenuView

@@ -77,17 +77,17 @@ exports[`dashboard golden frames renders many-projects at 60x16 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown   
 ─────────────────────────────────────────────────────────── 
        SESSION                 AGENT     STATUS          PR 
- ▼ station  5 sessions · 4 agents             [sh] [qs] [▾] 
- [1] ○ cli-help-man            codex     idle         #70 ✓ 
- [2] - docs-cleanup            codex     no agent           
- [3] ○ pty-buffer              codex     idle         #73 ✓ 
- [4] + session-resume          codex     starting           
- [5] ⠋ station-overlay         codex     working      #76 … 
-                                                            
- ▼ observer  3 sessions · 3 agents            [sh] [qs] [▾] 
- [6] x batch-export            opencode  exited        #8 ✓ 
-▼ 4 below · showing 6 of 10                                 
-─────────────────────────────────────────────────────────── 
+ ▼ station  5 sessions · 4 agents             [sh] [qs] [▾]▲
+ [1] ○ cli-help-man            codex     idle         #70 ✓▐
+ [2] - docs-cleanup            codex     no agent          ▐
+ [3] ○ pty-buffer              codex     idle         #73 ✓▐
+ [4] + session-resume          codex     starting          ▐
+ [5] ⠋ station-overlay         codex     working      #76 …▕
+                                                           ▕
+ ▼ observer  3 sessions · 3 agents            [sh] [qs] [▾]▕
+ [6] x batch-export            opencode  exited        #8 ✓▕
+ [7] ⠋ provider-hooks          opencode  working      #16 …▼
+── ▼ 3 below · showing 7 of 10 ──────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/e… 
 "
 `;
@@ -97,13 +97,13 @@ exports[`dashboard golden frames renders many-projects at 40x12 1`] = `
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
        SESSION             STATUS       
- ▼ station  5 sessions ·  [sh] [qs] [▾] 
- [1] ○ cli-help-man        idle         
- [2] - docs-cleanup        no agent     
- [3] ○ pty-buffer          idle         
- [4] + session-resume      starting     
-▼ 6 below · showing 4 of 10             
-─────────────────────────────────────── 
+ ▼ station  5 sessions ·  [sh] [qs] [▾]▲
+ [1] ○ cli-help-man        idle        ▐
+ [2] - docs-cleanup        no agent    ▕
+ [3] ○ pty-buffer          idle        ▕
+ [4] + session-resume      starting    ▕
+ [5] ⠋ station-overlay     working     ▼
+── ▼ 5 below · showing 5 of 10 ──────── 
 ↵ activate  N new  ⇥ next  / filter  X… 
 "
 `;
@@ -113,25 +113,25 @@ exports[`dashboard golden frames renders grouped-many-projects at 80x24 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
- ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾] 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│ 
-│ [3] ○ input-routing               codex     idle                      +27 -6│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Observer hardening 3 sessions                                     [qs] [▾]│ 
-│ [4] ○ diagnostic-index            codex     idle                      +38 -7│ 
-│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
-│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-▼ 6 below · showing 6 of 12                                                     
-─────────────────────────────────────────────────────────────────────────────── 
+ ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
+│ [3] ○ input-routing               codex     idle                      +27 -6│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭─────────────────────────────────────────────────────────────────────────────╮▕
+│ ▼ Observer hardening 3 sessions                                     [qs] [▾]│▕
+│ [4] ○ diagnostic-index            codex     idle                      +38 -7│▕
+│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│▕
+│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│▕
+╰─────────────────────────────────────────────────────────────────────────────╯▕
+╭─────────────────────────────────────────────────────────────────────────────╮▕
+│ ▼ Post-launch 0 sessions                                            [qs] [▾]│▼
+── ▼ 6 below · showing 6 of 12 ──────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;
@@ -185,17 +185,17 @@ exports[`dashboard golden frames renders grouped-many-projects at 60x16 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited    
 ─────────────────────────────────────────────────────────── 
        SESSION           AGENT     STATUS                PR 
- ▼ station  12 sessions · 6 Groups · 11 agent [sh] [qs] [▾] 
-╭─────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                     [qs] [▾]│ 
-│ [1] ⠋ group-contracts         codex     working         │ 
-│ [2] ○ group-keyboard          codex     idle            │ 
-╰─────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────╮ 
-│ ▼ Input parity and minimum-width interaction ve [qs] [▾]│ 
-│ [3] ○ input-routing           codex     idle            │ 
-▼ 9 below · showing 3 of 12                                 
-─────────────────────────────────────────────────────────── 
+ ▼ station  12 sessions · 6 Groups · 11 agent [sh] [qs] [▾]▲
+╭─────────────────────────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions                     [qs] [▾]│▐
+│ [1] ⠋ group-contracts         codex     working         │▐
+│ [2] ○ group-keyboard          codex     idle            │▕
+╰─────────────────────────────────────────────────────────╯▕
+╭─────────────────────────────────────────────────────────╮▕
+│ ▼ Input parity and minimum-width interaction ve [qs] [▾]│▕
+│ [3] ○ input-routing           codex     idle            │▕
+╰─────────────────────────────────────────────────────────╯▼
+── ▼ 9 below · showing 3 of 12 ──────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/e… 
 "
 `;
@@ -205,13 +205,13 @@ exports[`dashboard golden frames renders grouped-many-projects at 40x12 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1      
 ─────────────────────────────────────── 
        SESSION                          
- ▼ station  12 sessions · [sh] [qs] [▾] 
-╭─────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions [qs] [▾]│ 
-│ [1] ⠋ group-contracts               │ 
-│ [2] ○ group-keyboard                │ 
-▼ 10 below · showing 2 of 12            
-─────────────────────────────────────── 
+ ▼ station  12 sessions · [sh] [qs] [▾]▲
+╭─────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions [qs] [▾]│▕
+│ [1] ⠋ group-contracts               │▕
+│ [2] ○ group-keyboard                │▕
+╰─────────────────────────────────────╯▼
+── ▼ 10 below · showing 2 of 12 ─────── 
 ↵ activate  N new  ⇥ next  / filter  X… 
 "
 `;
@@ -313,13 +313,13 @@ exports[`dashboard golden frames renders attention-and-failures at 40x12 1`] = `
 FLEET  ● 0 ready  ⠋ 1 working  ! 3      
 ─────────────────────────────────────── 
        SESSION                          
- ▼ station  4 sessions ·  [sh] [qs] [▾] 
- [1] ! hook-scope                       
- [2] ? metadata-refresh                 
- [3] ! popup-latency                    
- [4] ⠋ pr-info                          
-▼ 2 below · showing 4 of 6              
-─────────────────────────────────────── 
+ ▼ station  4 sessions ·  [sh] [qs] [▾]▲
+ [1] ! hook-scope                      ▐
+ [2] ? metadata-refresh                ▐
+ [3] ! popup-latency                   ▐
+ [4] ⠋ pr-info                         ▕
+                                       ▼
+── ▼ 2 below · showing 4 of 6 ───────── 
 ↵ activate  N new  ⇥ next  / filter  X… 
 "
 `;
@@ -569,17 +569,17 @@ exports[`dashboard golden frames renders filtered Group counts and clips structu
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
 ▲ 2 sessions above                                                              
-│ [1] ○ input-routing               codex     idle                      +27 -6│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Observer hardening 3 sessions                                     [qs] [▾]│ 
-│ [2] ○ diagnostic-index            codex     idle                      +38 -7│ 
-│ [3] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
-│ [4] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-▼ 6 below · showing 4 of 12                                                     
-─────────────────────────────────────────────────────────────────────────────── 
+│ [1] ○ input-routing               codex     idle                      +27 -6│▲
+╰─────────────────────────────────────────────────────────────────────────────╯▕
+╭─────────────────────────────────────────────────────────────────────────────╮▕
+│ ▼ Observer hardening 3 sessions                                     [qs] [▾]│▐
+│ [2] ○ diagnostic-index            codex     idle                      +38 -7│▐
+│ [3] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│▐
+│ [4] ⠋ trace-readiness             codex     working           +91 -22 #478 …│▕
+╰─────────────────────────────────────────────────────────────────────────────╯▕
+╭─────────────────────────────────────────────────────────────────────────────╮▕
+│ ▼ Post-launch 0 sessions                                            [qs] [▾]│▼
+── ▼ 6 below · showing 4 of 12 ──────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;
@@ -681,13 +681,13 @@ exports[`dashboard golden frames clips a long persistent draft at minimum dashbo
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
 ▏ FILTER /t-filter-draft▏  0/10 matches 
- ▼ station  5 sessions ·  [sh] [qs] [▾] 
- [1] ○ cli-help-man        idle         
- [2] - docs-cleanup        no agent     
- [3] ○ pty-buffer          idle         
- [4] + session-resume      starting     
-▼ 6 below · showing 4 of 10             
-─────────────────────────────────────── 
+ ▼ station  5 sessions ·  [sh] [qs] [▾]▲
+ [1] ○ cli-help-man        idle        ▐
+ [2] - docs-cleanup        no agent    ▕
+ [3] ○ pty-buffer          idle        ▕
+ [4] + session-resume      starting    ▕
+ [5] ⠋ station-overlay     working     ▼
+── ▼ 5 below · showing 5 of 10 ──────── 
  FILTER   ↵ apply  Esc cancel           
 "
 `;

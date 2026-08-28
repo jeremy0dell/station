@@ -175,7 +175,7 @@ const CASES: ModalCase[] = [
       "station help",
       "Ctrl-\\",
       "split pane right",
-      "↓ more",
+      "↓ 6 below",
       "PgUp/PgDn",
       "╭",
       "╰",
@@ -187,18 +187,18 @@ const CASES: ModalCase[] = [
       { input: "H" },
       ...Array.from({ length: 10 }, () => ({ input: "", downArrow: true })),
     ],
-    expect: ["station help", "▸", "↓ more", "PgUp/PgDn"],
+    expect: ["station help", "▸", "↓ 6 below", "PgUp/PgDn"],
   },
   {
     name: "help overlay final entry at standard size",
     keys: [{ input: "H" }, { input: "", pageDown: true }],
-    expect: ["widgets", "delete", "▸   H/?", "refresh", "↑ more", "PgUp/PgDn"],
+    expect: ["widgets", "delete", "▸   H/?", "refresh", "↑ 7 above", "PgUp/PgDn"],
   },
   {
     name: "help overlay top at minimum size",
     keys: [{ input: "H" }],
     size: { width: 40, height: 12 },
-    expect: ["station help", "Ctrl-O", "↓ more", "PgUp/PgDn"],
+    expect: ["station help", "Ctrl-O", "↓16", "PgUp/PgDn"],
   },
   {
     name: "help overlay middle at minimum size",
@@ -207,13 +207,13 @@ const CASES: ModalCase[] = [
       ...Array.from({ length: 10 }, () => ({ input: "", downArrow: true })),
     ],
     size: { width: 40, height: 12 },
-    expect: ["▸", "↕ more", "PgUp/PgDn"],
+    expect: ["▸", "↑5/↓12", "PgUp/PgDn"],
   },
   {
     name: "help overlay final entry at minimum size",
     keys: [{ input: "H" }, { input: "", pageDown: true }],
     size: { width: 40, height: 12 },
-    expect: ["widgets", "delete", "▸", "refresh", "↑ more", "PgUp/PgDn"],
+    expect: ["widgets", "delete", "▸", "refresh", "↑17", "PgUp/PgDn"],
   },
   {
     name: "project menu",
@@ -244,7 +244,7 @@ const CASES: ModalCase[] = [
   {
     name: "Group menu above a short viewport",
     keys: [],
-    size: { width: 30, height: 9 },
+    size: { width: 30, height: 8 },
     snapshot: groupedManyProjectsSnapshot,
     prepare: (state) => {
       let opened = openGroupMenu(state, "group_design_refresh");
@@ -253,8 +253,8 @@ const CASES: ModalCase[] = [
       }
       return opened;
     },
-    expect: ["New session…", "Group settings…", "Remove Group…"],
-    reject: ["Quick session"],
+    expect: ["Group settings…", "Remove Group…"],
+    reject: ["Quick session", "New session…"],
   },
   {
     name: "create group sheet",

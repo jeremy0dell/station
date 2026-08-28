@@ -116,9 +116,13 @@ export function scrollIndicatorLabel(
   overflow: DashboardSessionOverflow,
 ): string {
   if (direction === "above") {
-    return `▲ ${overflow.above} ${plural(overflow.above, "session")} above`;
+    return overflow.above > 0
+      ? `▲ ${overflow.above} ${plural(overflow.above, "session")} above`
+      : "▲ more above";
   }
-  return `▼ ${overflow.below} below · showing ${overflow.visible} of ${overflow.total}`;
+  return overflow.below > 0
+    ? `▼ ${overflow.below} below · showing ${overflow.visible} of ${overflow.total}`
+    : "▼ more below";
 }
 
 export type SnapshotLoadingContent =
