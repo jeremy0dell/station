@@ -2,7 +2,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import type { UiShutdownReason } from "@station/contracts";
 import { createStationHostClient } from "@station/host";
 import { componentLogPath, createJsonlLogger, toSafeError } from "@station/observability";
 import { stationBuildInfo } from "@station/runtime";
@@ -22,6 +21,10 @@ import {
   type StationHotSlots,
 } from "./hmr/stationHotRuntime.js";
 import { invokeCleanup, settleCleanupSteps } from "./lifecycle/cleanup.js";
+import {
+  createNativeProcessLifecycle,
+  type NativeProcessLifecycle,
+} from "./lifecycle/nativeProcessLifecycle.js";
 import { createRenderProfiler, readRenderProfileEnabled } from "./profiling/renderProfiler.js";
 import {
   acquireStationTtyOwnership,
@@ -98,8 +101,8 @@ function stationHostSuccessorCommand(
 /**
  * Callable native OpenTUI process entry and semantic lifecycle witness boundary.
  * It acquires TTY ownership before other startup work, binds one validated run
- * context into Host terminal factories, flushes shutdown evidence, and releases
- * ownership only after renderer shutdown.
+ * context into Host terminal factories, owns native signal/lifecycle evidence,
+ * and releases final TTY ownership only after renderer shutdown.
  */
 export async function runStationMain(options: RunStationMainOptions = {}): Promise<void> {
   const ownershipResult = await acquireStationTtyOwnership();
@@ -342,35 +345,7 @@ async function startStationMain(
   let rendererForInput: CliRenderer | undefined;
   let rootForShutdown: { unmount(): void } | undefined;
   let stopSurfaceObservation: (() => void) | undefined;
-  let shutdownStarted = false;
-  const finishProcessShutdown = (reason: UiShutdownReason): void => {
-    if (shutdownStarted) return;
-    shutdownStarted = true;
-    stopSurfaceObservation?.();
-    void (async () => {
-      let exitCode = 0;
-      await uiLifecycle.shutdownRequested(reason);
-      try {
-        await settleCleanupSteps(
-          [
-            () => rootForShutdown?.unmount(),
-            () => rendererForInput?.destroy(),
-            () => ptyRuntime?.dispose(),
-            () => stationClient.stop(),
-          ],
-          "Native renderer shutdown cleanup failed.",
-        );
-        await uiLifecycle.shutdownCompleted(reason);
-      } catch (error) {
-        exitCode = 1;
-        await uiLifecycle.fatal(error);
-      } finally {
-        await uiLifecycle.flush();
-        ttyOwnership?.release();
-        process.exit(exitCode);
-      }
-    })();
-  };
+  let processLifecycle: NativeProcessLifecycle | undefined;
   const station = createStation({
     store,
     stationClient,
@@ -389,7 +364,7 @@ async function startStationMain(
     ...(managedTerminalAttacher === undefined ? {} : { managedTerminalAttacher }),
     ...(layoutPath === undefined ? {} : { layout: { path: layoutPath } }),
     ...(ptyRuntime === undefined ? {} : { createTerminal: ptyRuntime.createTerminal }),
-    shutdown: () => finishProcessShutdown("ctrl_q"),
+    shutdown: () => void processLifecycle?.request("ctrl_q"),
   });
 
   if (ttyOwnership !== undefined && !currentStdinMatchesStationTty(ttyOwnership.identity)) {
@@ -403,16 +378,18 @@ async function startStationMain(
     process.exitCode = 1;
     return false;
   }
-  ttyOwnership?.setTakeoverHandler(() => {
-    void (async () => {
-      try {
-        await station.disposeForShutdown();
-      } catch {
-        // The shutdown witness still owns the final fatal path after best-effort disposal.
-      }
-      finishProcessShutdown("tty_takeover");
-    })();
+  processLifecycle = createNativeProcessLifecycle({
+    stopSurfaceObservation: () => stopSurfaceObservation?.(),
+    cleanupSteps: [
+      () => station.disposeForShutdown(),
+      () => rootForShutdown?.unmount(),
+      () => rendererForInput?.destroy(),
+      () => ptyRuntime?.dispose(),
+    ],
+    lifecycle: uiLifecycle,
+    releaseTty: () => ttyOwnership?.release(),
   });
+  ttyOwnership?.setTakeoverHandler(() => void processLifecycle?.request("tty_takeover"));
 
   const copySelectedText = createOpenTuiSelectionCopyHandler(
     () => rendererForInput,
@@ -420,6 +397,15 @@ async function startStationMain(
   );
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
+    exitSignals: [
+      "SIGINT",
+      "SIGTERM",
+      "SIGQUIT",
+      "SIGABRT",
+      "SIGBREAK",
+      "SIGPIPE",
+      "SIGBUS",
+    ],
     prependInputHandlers: [copySelectedText, station.stationInput.handleSequence],
     useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
   });
@@ -456,6 +442,7 @@ async function startStationMain(
 
   await uiLifecycle.ready(selectUiLifecycleSurface(store.getState()));
   stopSurfaceObservation = observeUiSurfaceLifecycle({ store, witness: uiLifecycle });
+  processLifecycle.install();
 
   if (import.meta.hot) {
     import.meta.hot.accept();
@@ -465,6 +452,7 @@ async function startStationMain(
         () =>
           settleCleanupSteps(
             [
+              () => processLifecycle?.dispose(),
               // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
               () => stopSurfaceObservation?.(),
               () => root.unmount(),

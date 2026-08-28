@@ -54,7 +54,7 @@ export const UiSurfaceChangeReasonSchema = z.enum([
 ]);
 export type UiSurfaceChangeReason = z.infer<typeof UiSurfaceChangeReasonSchema>;
 
-export const UiShutdownReasonSchema = z.enum(["ctrl_q", "tty_takeover", "fatal"]);
+export const UiShutdownReasonSchema = z.enum(["ctrl_q", "tty_takeover", "terminal_loss", "fatal"]);
 export type UiShutdownReason = z.infer<typeof UiShutdownReasonSchema>;
 
 export const UiLifecycleDetachReasonSchema = z.enum([

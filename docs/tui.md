@@ -213,12 +213,15 @@ bun run dashboard                     # interactive dashboard renderer without n
 
 The native renderer is an independent semantic witness in `logs/tui.jsonl`. It
 records startup/ready, typed welcome, workspace, Station-overlay, and context-menu
-transitions, shutdown intent (`ctrl_q` or cooperative TTY takeover), fatal
-errors normalized to the fixed content-free `TUI_FATAL` shape, and normal
-shutdown completion. Normal shutdown flushes this evidence before process exit;
-abrupt loss and exact process signals remain covered by the launcher. Ctrl-O is
-a surface transition inside one `uiRunId`, not a renderer restart. Direct
-development mints a valid run ID and preserves it across Bun HMR.
+transitions, shutdown intent (`ctrl_q`, cooperative `tty_takeover`, or
+`terminal_loss`), fatal errors normalized to the fixed content-free `TUI_FATAL`
+shape, and successful shutdown completion. Station owns `SIGHUP`: terminal-loss
+composition cleanup is bounded to two seconds, after which Station flushes
+evidence, releases exact TTY ownership, and re-raises `SIGHUP` so the launcher
+observes the real signal outcome. Cleanup rejection or timeout records fatal
+evidence and never records completion or exits successfully. Ctrl-O is a surface
+transition inside one `uiRunId`, not a renderer restart. Direct development
+mints a valid run ID and preserves it across Bun HMR.
 
 Native Host clients carry the same typed run context with a fresh connection ID
 per socket and Host-issued attachment ID per attach attempt. `station-host.jsonl` uses typed
@@ -233,7 +236,9 @@ await admitted dashboard work before stopping the shared client and completing
 process shutdown. Native HMR releases renderer/stdin ownership synchronously,
 retains compatible workspace state and PTYs, publishes a settlement-only cleanup
 barrier in a process-global slot, and starts the replacement composition after
-that barrier even when prior cleanup reports a failure. Only the standalone
+that barrier even when prior cleanup reports a failure. Each native composition
+installs one `SIGHUP` listener only after it is ready and removes that listener
+during shutdown or HMR disposal. Only the standalone
 dashboard registers `process.on("exit")`; that path remains synchronous
 best-effort because the runtime cannot extend the event.
 
@@ -265,6 +270,8 @@ disposes subscriptions and PTYs, unmounts React, destroys OpenTUI to release raw
 stdin, closes its control endpoint, and releases the transaction last. The
 successor cannot enter raw mode until that acquisition succeeds. Station never
 signals another process during this flow and never escalates a failed takeover.
+Final shutdown releases the active transaction and adjacent control socket; the
+persistent SQLite claim file may remain and is not evidence of live ownership.
 
 Bun HMR retains the transaction and control endpoint in process-global state
 while replacing the takeover handler with the newest Station composition. An

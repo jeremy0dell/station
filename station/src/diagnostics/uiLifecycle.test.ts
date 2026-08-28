@@ -75,6 +75,30 @@ describe("UI lifecycle witness", () => {
     expect(JSON.stringify(records)).not.toContain("renderer failed");
   });
 
+  it("records content-free terminal-loss failure evidence without completion", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-ui-terminal-loss-"));
+    const logger = createJsonlLogger({
+      component: "tui",
+      path: componentLogPath(stateDir, "tui"),
+    });
+    const witness = createUiLifecycleWitness({ logger, context });
+
+    await witness.shutdownRequested("terminal_loss");
+    await witness.fatal(new Error("private terminal output"));
+    await witness.flush();
+
+    const records = await readJsonlLog(join(stateDir, "logs", "tui.jsonl"));
+    expect(records.map((record) => record.lifecycle?.kind)).toEqual([
+      "ui.shutdown.requested",
+      "ui.fatal",
+    ]);
+    expect(records[0]?.lifecycle).toMatchObject({ reason: "terminal_loss" });
+    expect(records[1]?.lifecycle).toMatchObject({
+      error: { code: "TUI_FATAL", message: "The native Station UI failed." },
+    });
+    expect(JSON.stringify(records)).not.toContain("private terminal output");
+  });
+
   for (const { label, error, privateValue } of [
     {
       label: "SafeError",
