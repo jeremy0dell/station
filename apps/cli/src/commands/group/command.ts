@@ -60,7 +60,10 @@ export async function runGroupCommand(
 ): Promise<GroupCommandResult> {
   const parsed = Array.isArray(args) ? parseGroupArgs(args) : args;
   if (parsed.action === "list") {
-    const snapshot = await loadObserverSnapshot(snapshotLoadOptions(options), deps);
+    const snapshot = await loadObserverSnapshot(
+      snapshotLoadOptions(options, parsed.requireRunning),
+      deps,
+    );
     return {
       action: "list",
       filters: parsed.filters,
@@ -68,12 +71,15 @@ export async function runGroupCommand(
     };
   }
   if (parsed.action === "get") {
-    const snapshot = await loadObserverSnapshot(snapshotLoadOptions(options), deps);
+    const snapshot = await loadObserverSnapshot(
+      snapshotLoadOptions(options, parsed.requireRunning),
+      deps,
+    );
     return { action: "get", group: findGroup(snapshot, parsed.groupId) };
   }
 
   const timeoutMs = parsed.timeoutMs ?? options.timeoutMs ?? 30_000;
-  const snapshot = await loadObserverSnapshot(snapshotLoadOptions(options, timeoutMs), deps);
+  const snapshot = await loadObserverSnapshot(snapshotLoadOptions(options, false, timeoutMs), deps);
   const context = { snapshot, options, timeoutMs, deps };
   switch (parsed.action) {
     case "create":
@@ -312,16 +318,17 @@ async function executeGroupCommand<TCommand extends GroupMutationCommand>(
 function loadConvergence(expectation: GroupConvergenceExpectation, context: GroupMutationContext) {
   return loadGroupConvergence(
     expectation,
-    snapshotLoadOptions(context.options, context.timeoutMs),
+    snapshotLoadOptions(context.options, false, context.timeoutMs),
     context.deps,
   );
 }
 
 function snapshotLoadOptions(
   options: GroupCommandOptions,
+  requireRunning: boolean,
   timeoutMs = options.timeoutMs,
 ): ObserverSnapshotLoadOptions {
-  const loadOptions: ObserverSnapshotLoadOptions = {};
+  const loadOptions: ObserverSnapshotLoadOptions = { requireRunning };
   if (options.config !== undefined) loadOptions.config = options.config;
   if (options.configPath !== undefined) loadOptions.configPath = options.configPath;
   if (timeoutMs !== undefined) loadOptions.timeoutMs = timeoutMs;

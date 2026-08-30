@@ -20,6 +20,8 @@ const timeoutOption = {
   description: "Override snapshot, command, completion, and refresh timeout.",
 } satisfies CliCommandOption;
 const mutationOptions = [timeoutOption, jsonOption] as const;
+const startupNote =
+  "Normal execution may start or contact the Observer; --require-running on read-only discovery refuses instead of starting a missing Observer.";
 
 export const groupCliCommand: CliCommandNode = {
   name: "group",
@@ -27,8 +29,8 @@ export const groupCliCommand: CliCommandNode = {
   requiresConfig: true,
   run: runGroupCliCommand,
   usage: [
-    "stn group list [--project <projectId>] [--json]",
-    "stn group get <groupId> [--json]",
+    "stn group list [--project <projectId>] [--require-running] [--json]",
+    "stn group get <groupId> [--require-running] [--json]",
     "stn group create <projectId> <name> [--session <sessionId>]... [--timeout-ms <ms>] [--json]",
     "stn group rename <groupId> <name> [--timeout-ms <ms>] [--json]",
     "stn group members add <groupId> <sessionId>... [--timeout-ms <ms>] [--json]",
@@ -40,6 +42,7 @@ export const groupCliCommand: CliCommandNode = {
   notes: [
     "A Session Group is durable, project-local organization with direct session membership and optional nesting. Snapshot order, direct membership, versions, and timestamps are preserved.",
     "Selection uses exact current Group, project, and session IDs. Mutation commands use the observed Group version and membership as optimistic preconditions.",
+    startupNote,
     "Successful mutations include one refreshed project projection. A refresh failure or projection mismatch is a warning with exit code 0; rejected and failed Observer commands exit 1 without refresh.",
     "Group deletion removes only Group organization: it does not close or remove sessions, terminals, worktrees, agents, Hosts, or providers.",
     "Session creation remains available through `stn session create --group`, `--new-group`, or `--ungrouped`; fork inherits its source Group unless `--ungrouped` is selected or `--inherit-group` makes that requirement explicit.",
@@ -49,23 +52,35 @@ export const groupCliCommand: CliCommandNode = {
     {
       name: "list",
       description: "List all current Groups or only one exact project projection.",
-      usage: ["stn group list [--project <projectId>] [--json]"],
+      usage: ["stn group list [--project <projectId>] [--require-running] [--json]"],
       options: [
         { name: "--project <projectId>", description: "Match the exact project id." },
+        {
+          name: "--require-running",
+          description: "Refuse instead of starting a missing Observer.",
+        },
         { name: "--json", description: "Print the structured list result." },
       ],
       examples: ["stn group list", 'stn group list --project "$PROJECT_ID" --json'],
       notes: [
+        startupNote,
         "An unknown but valid project filter returns an empty list. The command never infers a project from a Group name or session.",
       ],
     },
     {
       name: "get",
       description: "Inspect one exact current Group id.",
-      usage: ["stn group get <groupId> [--json]"],
-      options: [{ name: "--json", description: "Print the structured Group result." }],
+      usage: ["stn group get <groupId> [--require-running] [--json]"],
+      options: [
+        {
+          name: "--require-running",
+          description: "Refuse instead of starting a missing Observer.",
+        },
+        { name: "--json", description: "Print the structured Group result." },
+      ],
       examples: ['stn group get "$GROUP_ID" --json'],
       notes: [
+        startupNote,
         "The id must match one complete current Group id. Names, prefixes, display indexes, and project-local guesses are not selectors.",
       ],
     },

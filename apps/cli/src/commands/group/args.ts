@@ -12,8 +12,18 @@ import type { GroupFilters } from "./summary.js";
 export type GroupOutputFormat = "json" | "text";
 
 export type ParsedGroupArgs =
-  | { action: "list"; filters: GroupFilters; outputFormat: GroupOutputFormat }
-  | { action: "get"; groupId: SessionGroupId; outputFormat: GroupOutputFormat }
+  | {
+      action: "list";
+      filters: GroupFilters;
+      outputFormat: GroupOutputFormat;
+      requireRunning: boolean;
+    }
+  | {
+      action: "get";
+      groupId: SessionGroupId;
+      outputFormat: GroupOutputFormat;
+      requireRunning: boolean;
+    }
   | {
       action: "create";
       projectId: ProjectId;
@@ -69,6 +79,7 @@ function parseListArgs(args: string[]): Extract<ParsedGroupArgs, { action: "list
   const seen = new Set<string>();
   const filters: GroupFilters = {};
   let outputFormat: GroupOutputFormat = "text";
+  let requireRunning = false;
   for (let index = 0; index < args.length; index += 1) {
     const option = args[index];
     if (option === "--project") {
@@ -78,24 +89,34 @@ function parseListArgs(args: string[]): Extract<ParsedGroupArgs, { action: "list
     } else if (option === "--json") {
       claimOption(seen, option, "group list");
       outputFormat = "json";
+    } else if (option === "--require-running") {
+      claimOption(seen, option, "group list");
+      requireRunning = true;
     } else {
       throw new Error(`Unknown group list option: ${option ?? ""}`);
     }
   }
-  return { action: "list", filters, outputFormat };
+  return { action: "list", filters, outputFormat, requireRunning };
 }
 
 function parseGetArgs(args: string[]): Extract<ParsedGroupArgs, { action: "get" }> {
   const groupId = parseGroupId(args[0], "group get");
   const seen = new Set<string>();
   let outputFormat: GroupOutputFormat = "text";
+  let requireRunning = false;
   for (let index = 1; index < args.length; index += 1) {
     const option = args[index];
-    if (option !== "--json") throw new Error(`Unknown group get option: ${option ?? ""}`);
-    claimOption(seen, option, "group get");
-    outputFormat = "json";
+    if (option === "--json") {
+      claimOption(seen, option, "group get");
+      outputFormat = "json";
+    } else if (option === "--require-running") {
+      claimOption(seen, option, "group get");
+      requireRunning = true;
+    } else {
+      throw new Error(`Unknown group get option: ${option ?? ""}`);
+    }
   }
-  return { action: "get", groupId, outputFormat };
+  return { action: "get", groupId, outputFormat, requireRunning };
 }
 
 function parseCreateArgs(args: string[]): Extract<ParsedGroupArgs, { action: "create" }> {
@@ -159,6 +180,8 @@ function parseMembersArgs(
     } else if (option === "--json") {
       claimOption(seen, option, command);
       outputFormat = "json";
+    } else if (option?.startsWith("--")) {
+      throw new Error(`Unknown ${command} option: ${option}`);
     } else {
       sessionIds.push(parseSessionId(option, command));
     }

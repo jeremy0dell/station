@@ -1,4 +1,5 @@
 import { runCli } from "@station/cli";
+import type { ObserverProcessDeps } from "@station/cli/internal";
 import type {
   CommandReceipt,
   CommandRecord,
@@ -12,7 +13,6 @@ import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { runGroupCommand } from "../../src/commands/group/command.js";
 import { renderGroupCommandText } from "../../src/commands/group/text.js";
-import type { ObserverProcessDeps } from "../../src/commands/observerProcess.js";
 
 const now = "2026-08-30T12:00:00.000Z";
 const observerBuildVersion = `0.0.0-local+station.${"a".repeat(64)}`;
@@ -34,6 +34,7 @@ describe("group command", () => {
 
     expect(help).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(help)).toContain("stn group members add");
+    expect(textOutput(help)).toContain("--require-running");
     expect(manual).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(manual)).toContain("atomically move");
     expect(spawnObserver).not.toHaveBeenCalled();
@@ -140,7 +141,7 @@ describe("group command", () => {
             spawnObserver,
           },
         ),
-      ).rejects.toThrow("requires an exact session id");
+      ).rejects.toThrow("Unknown group members add option: --not-an-id");
       await expect(
         runGroupCommand(
           ["create", "web", "Name", "--timeout-ms", "0"],
@@ -150,6 +151,30 @@ describe("group command", () => {
           { spawnObserver },
         ),
       ).rejects.toThrow("--timeout-ms must be a positive integer");
+      expect(spawnObserver).not.toHaveBeenCalled();
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("honors --require-running for read-only discovery without spawning", async () => {
+    const fixture = await createTempState();
+    const spawnObserver = vi.fn();
+    const deps: ObserverProcessDeps = {
+      spawnObserver,
+      clientFactory: () =>
+        ({ health: async () => Promise.reject(new Error("not running")) }) as never,
+    };
+
+    try {
+      for (const args of [
+        ["list", "--require-running"],
+        ["get", "grp_parent", "--require-running"],
+      ]) {
+        await expect(
+          runGroupCommand(args, { config: fixture.config, timeoutMs: 20 }, deps),
+        ).rejects.toMatchObject({ error: { code: "OBSERVER_NOT_RUNNING" } });
+      }
       expect(spawnObserver).not.toHaveBeenCalled();
     } finally {
       await fixture.cleanup();
@@ -293,6 +318,23 @@ describe("group command", () => {
         },
         output: { action: "rename", outcome: { status: "rejected" } },
       });
+      const text = renderGroupCommandText(
+        await runGroupCommand(
+          ["members", "add", "grp_parent", "ses_free"],
+          { config: fixture.config },
+          snapshotObserverDeps(fixture.socketPath, [groupSnapshot()], {
+            dispatch: async () => rejectedReceipt("cmd_text_rejected"),
+          }).deps,
+        ),
+      );
+      expect(text).toContain("Group members add");
+      expect(text.indexOf("Command: cmd_text_rejected")).toBeLessThan(
+        text.indexOf("Trace: trc_group"),
+      );
+      expect(text).toContain(
+        "Error: The Group command was rejected by Observer preconditions. (GROUP_COMMAND_REJECTED)",
+      );
+      expect(text).toContain("Hint: Refresh Group state.");
       expect(harness.snapshotReads()).toBe(1);
     } finally {
       await fixture.cleanup();
@@ -598,6 +640,8 @@ describe("group command", () => {
     });
     const mismatch = withGroup(initial, "grp_parent", { name: "Unexpected" });
     const mismatchHarness = snapshotObserverDeps(fixture.socketPath, [initial, mismatch]);
+    const membershipMismatchHarness = snapshotObserverDeps(fixture.socketPath, [initial, initial]);
+    const deleteMismatchHarness = snapshotObserverDeps(fixture.socketPath, [initial, initial]);
 
     try {
       const failedRefresh = await runCli(
@@ -622,6 +666,36 @@ describe("group command", () => {
           warning: { code: "GROUP_RENAME_CONVERGENCE_MISMATCH" },
         },
       });
+
+      const membershipMismatch = await runGroupCommand(
+        ["members", "add", "grp_parent", "ses_free"],
+        { config: fixture.config },
+        membershipMismatchHarness.deps,
+      );
+      expect(membershipMismatch).toMatchObject({
+        convergence: {
+          status: "warning",
+          warning: {
+            message: expect.stringContaining("Group members add command"),
+          },
+        },
+      });
+      expect(membershipMismatch.convergence.warning?.message).not.toContain("members_add");
+
+      const deleteMismatch = await runGroupCommand(
+        ["delete", "grp_parent"],
+        { config: fixture.config },
+        deleteMismatchHarness.deps,
+      );
+      expect(deleteMismatch).toMatchObject({
+        convergence: {
+          status: "warning",
+          warning: {
+            hint: expect.stringContaining("stn group list --project web --json"),
+          },
+        },
+      });
+      expect(deleteMismatch.convergence.warning?.hint).not.toContain("group get grp_parent");
     } finally {
       await fixture.cleanup();
     }
@@ -712,6 +786,7 @@ function rejectedReceipt(commandId: string): CommandReceipt {
       tag: "CommandRejectedError",
       code: "GROUP_COMMAND_REJECTED",
       message: "The Group command was rejected by Observer preconditions.",
+      hint: "Refresh Group state.",
     },
   };
 }

@@ -66,7 +66,7 @@ export async function loadGroupConvergence(
       message: "The Group command succeeded, but Station could not load the refreshed snapshot.",
     });
     if (warning.projectId === undefined) warning.projectId = expectation.projectId;
-    warning.hint ??= `Inspect the current Group with \`stn group get ${expectation.groupId} --json\`.`;
+    warning.hint ??= `Inspect the current Group projection with \`${groupInspectionCommand(expectation)}\`.`;
     return { status: "warning", projectId: expectation.projectId, warning };
   }
 }
@@ -125,12 +125,18 @@ function projectionMismatchError(expectation: GroupConvergenceExpectation): Safe
   return {
     tag: "GroupCliError",
     code: `GROUP_${action}_CONVERGENCE_MISMATCH`,
-    message: `The Group ${action.toLowerCase()} command succeeded, but the refreshed snapshot did not preserve the expected Group projection.`,
-    hint: `Inspect the refreshed Group state before retrying. Use \`stn group get ${expectation.groupId} --json\`.`,
+    message: `The Group ${expectation.action.replace(".", " ")} command succeeded, but the refreshed snapshot did not preserve the expected Group projection.`,
+    hint: `Inspect the refreshed Group state before retrying. Use \`${groupInspectionCommand(expectation)}\`.`,
     projectId: expectation.projectId,
   };
 }
 
 function convergenceAction(expectation: GroupConvergenceExpectation): string {
   return expectation.action.toUpperCase().replace(".", "_");
+}
+
+function groupInspectionCommand(expectation: GroupConvergenceExpectation): string {
+  return expectation.action === "delete"
+    ? `stn group list --project ${expectation.projectId} --json`
+    : `stn group get ${expectation.groupId} --json`;
 }

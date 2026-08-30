@@ -87,17 +87,7 @@ export function assertParentProject(
 }
 
 function projectGroup(group: SessionGroupView): SessionGroupView {
-  const projected: SessionGroupView = {
-    id: group.id,
-    projectId: group.projectId,
-    name: group.name,
-    sessionIds: [...group.sessionIds],
-    version: group.version,
-    createdAt: group.createdAt,
-    updatedAt: group.updatedAt,
-  };
-  if (group.parentGroupId !== undefined) projected.parentGroupId = group.parentGroupId;
-  return projected;
+  return structuredClone(group);
 }
 
 function groupProjectNotFoundError(projectId: ProjectId): SafeError {

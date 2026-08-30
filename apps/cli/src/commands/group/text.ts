@@ -14,7 +14,7 @@ export function renderGroupCommandText(result: GroupCommandResult): string {
   }
   if (result.action === "get") return renderGroup(result.group);
 
-  const lines = [`Group ${escapeTerminalBytes(result.action)}`];
+  const lines = [`Group ${escapeTerminalBytes(result.action.replace(".", " "))}`];
   if (result.action !== "create") {
     lines.push(`Target: ${escapeTerminalBytes(result.target.id)}`, renderGroup(result.target));
   }
@@ -51,11 +51,13 @@ function renderGroup(group: SessionGroupView): string {
 }
 
 function renderGroupOutcome(outcome: CompletedGroupOutcome<GroupMutationCommand>): string[] {
-  const lines = [`Outcome: ${escapeTerminalBytes(outcome.status)}`];
+  const lines = [
+    `Outcome: ${escapeTerminalBytes(outcome.status)}`,
+    `Command: ${escapeTerminalBytes(outcome.receipt.commandId)}`,
+  ];
   if (outcome.receipt.traceId !== undefined) {
     lines.push(`Trace: ${escapeTerminalBytes(outcome.receipt.traceId)}`);
   }
-  lines.push(`Command: ${escapeTerminalBytes(outcome.receipt.commandId)}`);
   if (outcome.status === "rejected" && outcome.receipt.error !== undefined) {
     lines.push(...renderGroupError("Error", outcome.receipt.error));
   }
@@ -81,8 +83,8 @@ function renderGroupConvergence(convergence: GroupMutationConvergence): string[]
 
 function renderGroupError(label: "Error" | "Warning", error: SafeError): string[] {
   const lines = [
-    `${label}: ${escapeTerminalBytes(error.code)}: ${escapeTerminalBytes(error.message)}`,
+    `${label}: ${escapeTerminalBytes(error.message)} (${escapeTerminalBytes(error.code)})`,
   ];
-  if (error.hint !== undefined) lines.push(`  hint: ${escapeTerminalBytes(error.hint)}`);
+  if (error.hint !== undefined) lines.push(`Hint: ${escapeTerminalBytes(error.hint)}`);
   return lines;
 }
