@@ -1,7 +1,7 @@
 import type { DashboardRowId } from "@station/dashboard-core/selectors";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { SemanticScrollViewport } from "./SemanticScrollViewport.js";
-import type { DashboardScrollController } from "./scrollViewport.js";
+import type { DashboardScrollController } from "./dashboardScrollController.js";
 
 export function useDashboardVisibleRows(
   controller: DashboardScrollController,

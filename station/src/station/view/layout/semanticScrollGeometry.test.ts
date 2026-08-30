@@ -3,9 +3,9 @@ import {
   intersectingOrderedSemanticItems,
   intersectingSemanticItems,
   semanticRevealDelta,
-} from "./scrollViewport.js";
+} from "./semanticScrollGeometry.js";
 
-describe("semantic scroll viewport", () => {
+describe("semantic scroll geometry", () => {
   it("resolves visibility from mixed-height coordinates instead of item count", () => {
     const items = [
       { id: "one", top: 0, bottom: 1 },
@@ -54,11 +54,11 @@ describe("semantic scroll viewport", () => {
     const itemIds = Array.from({ length: 10_000 }, (_, index) => `item-${index}`);
     let top = 0;
     const geometry = itemIds.map((id, index) => {
-        const height = index % 2 === 0 ? 1 : 4;
-        const item = { id, top, bottom: top + height };
-        top += height;
-        return item;
-      });
+      const height = index % 2 === 0 ? 1 : 4;
+      const item = { id, top, bottom: top + height };
+      top += height;
+      return item;
+    });
     const geometryById = new Map(geometry.map((item) => [item.id, item] as const));
     let geometryReads = 0;
     for (let experiment = 0; experiment < 200; experiment += 1) {

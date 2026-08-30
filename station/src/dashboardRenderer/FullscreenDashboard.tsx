@@ -14,7 +14,7 @@ import {
   type StationMouseDispatch,
 } from "../station/view/stationMouseContext.js";
 import { routeDashboardMouse } from "./dashboardMouse.js";
-import type { DashboardScrollController } from "../station/view/layout/scrollViewport.js";
+import type { DashboardScrollController } from "../station/view/layout/dashboardScrollController.js";
 
 type FullscreenDashboardInput = {
   state: DashboardStateSource;

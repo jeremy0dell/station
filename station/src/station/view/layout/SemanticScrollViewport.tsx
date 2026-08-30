@@ -1,18 +1,12 @@
-import type {
-  MouseEvent,
-  OptimizedBuffer,
-  ScrollBarOptions,
-  ScrollBarRenderable,
-  ScrollBoxRenderable,
-  SliderRenderable,
-} from "@opentui/core";
+import type { ScrollBoxRenderable } from "@opentui/core";
 import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
-import { toOpenTuiColor, type StationTheme, useStationTheme } from "../../../theme/index.js";
+import { useStationTheme } from "../../../theme/index.js";
 import { useStationHoverEnabled } from "../stationMouseContext.js";
 import {
   createScrollViewportController,
   type ScrollViewportController,
 } from "./scrollViewport.js";
+import { stationScrollbarOptions } from "./stationScrollbar.js";
 
 /** Scroll region for overlays whose geometry is wholly renderer-owned. */
 export function SemanticScrollRegion<ItemId extends string>({
@@ -112,137 +106,4 @@ export function SemanticScrollViewport<ItemId extends string>({
       {children}
     </scrollbox>
   );
-}
-
-function stationScrollbarOptions(
-  theme: StationTheme,
-  hoverEnabled: boolean,
-  placement: "inside" | "gutter",
-  synchronize: () => void,
-): Omit<ScrollBarOptions, "orientation"> {
-  const restingColor = toOpenTuiColor(theme.text.muted);
-  const hoverColor = toOpenTuiColor(theme.text.primary);
-  return {
-    width: 1,
-    height: "100%",
-    position: "absolute",
-    top: 0,
-    right: placement === "gutter" ? -1 : 0,
-    showArrows: true,
-    arrowOptions: {
-      foregroundColor: restingColor,
-      backgroundColor: "transparent",
-      onMouse(event) {
-        if (event.type === "over") {
-          this.foregroundColor = hoverEnabled ? hoverColor : restingColor;
-        } else if (event.type === "out") {
-          this.foregroundColor = restingColor;
-        }
-        synchronizeAfterScrollbarMouse(event, synchronize);
-      },
-    },
-    trackOptions: {
-      width: 1,
-      backgroundColor: "transparent",
-      foregroundColor: restingColor,
-      renderAfter(buffer) {
-        paintStationScrollbar(this, buffer);
-      },
-      onMouse(event) {
-        switch (event.type) {
-          case "over":
-            this.foregroundColor = hoverEnabled ? hoverColor : restingColor;
-            break;
-          case "out":
-            this.foregroundColor = restingColor;
-            this.backgroundColor = "transparent";
-            break;
-          case "down":
-          case "drag":
-            this.backgroundColor = toOpenTuiColor(theme.interaction.hover);
-            break;
-          case "up":
-          case "drag-end":
-            this.backgroundColor = "transparent";
-            break;
-        }
-        snapScrollbarTrackEnd(this, event);
-        synchronizeAfterScrollbarMouse(event, synchronize);
-      },
-    },
-  };
-}
-
-function synchronizeAfterScrollbarMouse(event: MouseEvent, synchronize: () => void): void {
-  if (
-    event.type === "down" ||
-    event.type === "drag" ||
-    event.type === "up" ||
-    event.type === "drag-end"
-  ) {
-    queueMicrotask(synchronize);
-  }
-}
-
-function paintStationScrollbar(slider: SliderRenderable, buffer: OptimizedBuffer): void {
-  const scrollbar = slider.parent as ScrollBarRenderable;
-  const trackHeight = Math.max(0, Math.floor(slider.height));
-  const contentHeight = Math.max(0, Math.floor(scrollbar.scrollSize));
-  const viewportHeight = Math.max(1, Math.floor(scrollbar.viewportSize));
-  const overflow = contentHeight > viewportHeight && trackHeight > 0;
-  // A whole-cell thumb keeps the same painted height at every scroll position.
-  const thumbHeight = overflow
-    ? Math.min(
-        trackHeight,
-        Math.max(1, Math.round((viewportHeight * trackHeight) / contentHeight)),
-      )
-    : 0;
-  const maxThumbTop = Math.max(0, trackHeight - thumbHeight);
-  const maxOffset = Math.max(1, contentHeight - viewportHeight);
-  const offset = Math.min(Math.max(0, Math.floor(scrollbar.scrollPosition)), maxOffset);
-  const thumbTop = Math.round((offset * maxThumbTop) / maxOffset);
-
-  for (let row = 0; row < trackHeight; row += 1) {
-    const glyph = overflow && row >= thumbTop && row < thumbTop + thumbHeight ? "▐" : "▕";
-    buffer.setCellWithAlphaBlending(
-      slider.x,
-      slider.y + row,
-      glyph,
-      slider.foregroundColor,
-      slider.backgroundColor,
-    );
-  }
-}
-
-function snapScrollbarTrackEnd(slider: SliderRenderable, event: MouseEvent): void {
-  if (
-    event.type !== "down" &&
-    event.type !== "drag" &&
-    event.type !== "up" &&
-    event.type !== "drag-end"
-  ) {
-    return;
-  }
-  if (slider.height <= 1) {
-    return;
-  }
-  const localY = event.y - slider.y;
-  const scrollbar = slider.parent as ScrollBarRenderable;
-  let position: number;
-  if (localY <= 0) {
-    position = 0;
-  } else if (localY >= slider.height - 1) {
-    position = Math.max(0, scrollbar.scrollSize - scrollbar.viewportSize);
-  } else {
-    return;
-  }
-  const snap = () => {
-    scrollbar.scrollPosition = position;
-  };
-  if (event.type === "up" || event.type === "drag-end") {
-    // OpenTUI writes its exclusive-end mouse ratio after the generic release handler.
-    queueMicrotask(snap);
-  } else {
-    snap();
-  }
 }

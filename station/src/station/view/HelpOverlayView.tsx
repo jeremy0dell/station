@@ -7,12 +7,16 @@ import {
   STATION_HELP_ENTRY_IDS,
   type StationHelpEntry,
 } from "../helpEntries.js";
+import { helpScrollChrome } from "./helpScrollChrome.js";
 import { SemanticScrollRegion } from "./layout/SemanticScrollViewport.js";
 import {
   createScrollViewportController,
   semanticItemRenderableId,
 } from "./layout/scrollViewport.js";
-import { helpPanelFrame } from "./layout/helpPanelFrame.js";
+import {
+  HELP_PANEL_MAX_WIDTH,
+  helpPanelFrame,
+} from "./layout/helpPanelFrame.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
 export function HelpOverlayView({
@@ -34,15 +38,19 @@ export function HelpOverlayView({
     controller.snapshot,
     controller.snapshot,
   );
-  const continuation = helpContinuation(visibleEntryIds, columns);
+  const continuation = helpScrollChrome({
+    allIds: STATION_HELP_ENTRY_IDS,
+    visibleIds: visibleEntryIds,
+    panelWidth: frame.effectiveWidth,
+  });
 
   return (
     <box
       position="absolute"
       top={0}
       left={0}
-      width={Math.max(1, columns)}
-      height={Math.max(1, rows)}
+      width={frame.overlayWidth}
+      height={frame.overlayHeight}
       zIndex={10}
       alignItems="center"
       justifyContent="center"
@@ -52,7 +60,7 @@ export function HelpOverlayView({
         id="station-help-surface"
         width={frame.width}
         height={frame.height}
-        maxWidth={64}
+        maxWidth={HELP_PANEL_MAX_WIDTH}
         flexDirection="column"
         flexShrink={1}
         border
@@ -134,26 +142,4 @@ function HelpEntryView({ entry, focused }: { entry: StationHelpEntry; focused: b
       </text>
     </box>
   );
-}
-
-function helpContinuation(
-  visibleEntryIds: readonly string[] | undefined,
-  panelWidth: number,
-): string {
-  const first = visibleEntryIds?.[0];
-  const last = visibleEntryIds?.at(-1);
-  const above = first === undefined ? 0 : Math.max(0, STATION_HELP_ENTRY_IDS.indexOf(first));
-  const below = last === undefined
-    ? 0
-    : Math.max(0, STATION_HELP_ENTRY_IDS.length - STATION_HELP_ENTRY_IDS.indexOf(last) - 1);
-  if (panelWidth < 48) {
-    if (above > 0 && below > 0) return `↑${above}/↓${below}`;
-    if (above > 0) return `↑${above}`;
-    if (below > 0) return `↓${below}`;
-    return "all";
-  }
-  if (above > 0 && below > 0) return `↑ ${above} above · ↓ ${below} below`;
-  if (above > 0) return `↑ ${above} above`;
-  if (below > 0) return `↓ ${below} below`;
-  return "all visible";
 }
