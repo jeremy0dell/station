@@ -6,6 +6,7 @@ type FakeTty = {
   fd: number;
   isTTY: boolean;
   rows: number;
+  emit?: (event: "resize") => unknown;
 };
 
 function fakeTty(input: Partial<FakeTty> = {}): FakeTty {
@@ -18,52 +19,77 @@ function fakeTty(input: Partial<FakeTty> = {}): FakeTty {
   };
 }
 
+function resizeSubscription(): {
+  subscribe(listener: () => void): void;
+  resize(): void;
+  subscriptions(): number;
+} {
+  let listener: (() => void) | undefined;
+  let subscriptions = 0;
+  return {
+    subscribe(nextListener) {
+      listener = nextListener;
+      subscriptions += 1;
+    },
+    resize() {
+      listener?.();
+    },
+    subscriptions: () => subscriptions,
+  };
+}
+
 describe("installLiveHostTtyDimensions", () => {
-  it("prefers a TTY stdout and reads fresh dimensions", () => {
+  it("publishes one coherent stdout size per refresh", () => {
     const stdout = fakeTty({ fd: 1 });
     const stdin = fakeTty({ fd: 0 });
-    let size = { columns: 120, rows: 40 };
+    const samples = [
+      { columns: 80, rows: 24 },
+      { columns: 120, rows: 40 },
+      { columns: 60, rows: 18 },
+    ];
     const queriedFds: number[] = [];
+    const resize = resizeSubscription();
 
     installLiveHostTtyDimensions({
       stdin,
       stdout,
       readWindowSize: (fd) => {
         queriedFds.push(fd);
-        return size;
+        return samples.shift();
       },
+      subscribeToResize: resize.subscribe,
     });
 
-    expect(stdout.columns).toBe(120);
-    expect(stdout.rows).toBe(40);
-    size = { columns: 60, rows: 18 };
-    expect(stdout.columns).toBe(60);
-    expect(stdout.rows).toBe(18);
-    expect(queriedFds.every((fd) => fd === 1)).toBe(true);
+    resize.resize();
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual({ columns: 120, rows: 40 });
+    resize.resize();
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual({ columns: 60, rows: 18 });
+    expect(queriedFds).toEqual([1, 1, 1]);
   });
 
   it("refreshes through the stream's native size method", () => {
     const stdout = fakeTty() as FakeTty & { _refreshSize: () => void };
     const stdin = fakeTty({ fd: 0 });
+    const resize = resizeSubscription();
     let size = { columns: 118, rows: 38 };
     stdout._refreshSize = function (this: FakeTty): void {
       this.columns = size.columns;
       this.rows = size.rows;
     };
 
-    installLiveHostTtyDimensions({ stdin, stdout });
+    installLiveHostTtyDimensions({ stdin, stdout, subscribeToResize: resize.subscribe });
 
-    expect(stdout.columns).toBe(118);
-    expect(stdout.rows).toBe(38);
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual(size);
     size = { columns: 62, rows: 17 };
-    expect(stdout.columns).toBe(62);
-    expect(stdout.rows).toBe(17);
+    resize.resize();
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual(size);
   });
 
   it("uses a TTY stdin when stdout is piped", () => {
     const stdout = fakeTty({ isTTY: false });
     const stdin = fakeTty({ fd: 0 });
     const queriedFds: number[] = [];
+    const resize = resizeSubscription();
 
     installLiveHostTtyDimensions({
       stdin,
@@ -72,80 +98,128 @@ describe("installLiveHostTtyDimensions", () => {
         queriedFds.push(fd);
         return { columns: 99, rows: 25 };
       },
+      subscribeToResize: resize.subscribe,
     });
 
-    expect(stdout.columns).toBe(99);
-    expect(stdout.rows).toBe(25);
-    expect(queriedFds).toEqual([0, 0, 0]);
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual({ columns: 99, rows: 25 });
+    resize.resize();
+    expect(queriedFds).toEqual([0, 0]);
   });
 
-  it("retains the last valid pair after an invalid or failed refresh", () => {
+  it("retries after an invalid initial refresh and retains the last valid pair", () => {
     const stdout = fakeTty();
     const stdin = fakeTty({ fd: 0 });
-    let size: { columns: number; rows: number } | undefined = { columns: 100, rows: 30 };
+    const resize = resizeSubscription();
+    let size: { columns: number; rows: number } | undefined;
 
     installLiveHostTtyDimensions({
       stdin,
       stdout,
       readWindowSize: () => size,
+      subscribeToResize: resize.subscribe,
     });
 
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual({ columns: 80, rows: 24 });
+    size = { columns: 100, rows: 30 };
+    resize.resize();
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual(size);
     size = { columns: 0, rows: 20 };
-    expect(stdout.columns).toBe(100);
-    expect(stdout.rows).toBe(30);
-    size = undefined;
-    expect(stdout.columns).toBe(100);
-    expect(stdout.rows).toBe(30);
+    resize.resize();
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual({ columns: 100, rows: 30 });
   });
 
-  it("does not partially patch unsupported streams or add signal listeners", () => {
+  it("emits one stream resize only when the published pair changes", () => {
+    const events: string[] = [];
+    const stdout = fakeTty({ emit: (event) => events.push(event) });
+    const stdin = fakeTty({ fd: 0 });
+    const resize = resizeSubscription();
+    let size = { columns: 80, rows: 24 };
+
+    installLiveHostTtyDimensions({
+      stdin,
+      stdout,
+      readWindowSize: () => size,
+      subscribeToResize: resize.subscribe,
+    });
+    resize.resize();
+    size = { columns: 100, rows: 30 };
+    resize.resize();
+
+    expect(events).toEqual(["resize"]);
+  });
+
+  it("does not partially patch unsupported streams", () => {
     const stdout = fakeTty();
     const stdin = fakeTty({ fd: 0 });
+    const resize = resizeSubscription();
     Object.defineProperty(stdout, "columns", {
       configurable: false,
       value: stdout.columns,
       writable: true,
     });
     const columnsDescriptor = Object.getOwnPropertyDescriptor(stdout, "columns");
-    const sigwinchListeners = process.listenerCount("SIGWINCH");
 
     installLiveHostTtyDimensions({
       stdin,
       stdout,
       readWindowSize: () => ({ columns: 100, rows: 30 }),
+      subscribeToResize: resize.subscribe,
     });
 
     expect(Object.getOwnPropertyDescriptor(stdout, "columns")).toEqual(columnsDescriptor);
     expect(stdout.rows).toBe(24);
-    expect(process.listenerCount("SIGWINCH")).toBe(sigwinchListeners);
+    expect(resize.subscriptions()).toBe(0);
   });
 
-  it("is idempotent for HMR and absorbs cache writes", () => {
+  it("rolls back a mid-update descriptor failure and retries later", () => {
+    const target = fakeTty();
+    let rejectRows = true;
+    const stdout = new Proxy(target, {
+      defineProperty(object, property, descriptor) {
+        if (property === "rows" && rejectRows && descriptor.value === 30) {
+          throw new Error("rows unavailable");
+        }
+        return Reflect.defineProperty(object, property, descriptor);
+      },
+    });
+    const resize = resizeSubscription();
+
+    installLiveHostTtyDimensions({
+      stdin: fakeTty({ fd: 0 }),
+      stdout,
+      readWindowSize: () => ({ columns: 100, rows: 30 }),
+      subscribeToResize: resize.subscribe,
+    });
+
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual({ columns: 80, rows: 24 });
+    rejectRows = false;
+    resize.resize();
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual({ columns: 100, rows: 30 });
+  });
+
+  it("keeps one HMR subscription while updating its refresh closure", () => {
     const stdout = fakeTty();
     const stdin = fakeTty({ fd: 0 });
-    let queries = 0;
-    const readWindowSize = () => {
-      queries += 1;
-      return { columns: 110, rows: 33 };
-    };
+    const resize = resizeSubscription();
+    let replacementSize = { columns: 70, rows: 20 };
 
-    installLiveHostTtyDimensions({ stdin, stdout, readWindowSize });
-    const columnsDescriptor = Object.getOwnPropertyDescriptor(stdout, "columns");
-    const rowsDescriptor = Object.getOwnPropertyDescriptor(stdout, "rows");
-    const initialQueries = queries;
     installLiveHostTtyDimensions({
       stdin,
       stdout,
-      readWindowSize: () => ({ columns: 70, rows: 20 }),
+      readWindowSize: () => ({ columns: 110, rows: 33 }),
+      subscribeToResize: resize.subscribe,
     });
-    stdout.columns = 70;
-    stdout.rows = 20;
+    installLiveHostTtyDimensions({
+      stdin,
+      stdout,
+      readWindowSize: () => replacementSize,
+      subscribeToResize: resize.subscribe,
+    });
 
-    expect(Object.getOwnPropertyDescriptor(stdout, "columns")?.get).toBe(columnsDescriptor?.get);
-    expect(Object.getOwnPropertyDescriptor(stdout, "rows")?.get).toBe(rowsDescriptor?.get);
-    expect(queries).toBe(initialQueries);
-    expect(stdout.columns).toBe(110);
-    expect(stdout.rows).toBe(33);
-    expect(queries).toBe(initialQueries + 2);
+    expect(resize.subscriptions()).toBe(1);
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual(replacementSize);
+    replacementSize = { columns: 90, rows: 28 };
+    resize.resize();
+    expect({ columns: stdout.columns, rows: stdout.rows }).toEqual(replacementSize);
   });
 });

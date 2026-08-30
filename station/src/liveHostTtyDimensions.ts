@@ -5,6 +5,7 @@ type HostTtyStream = {
   isTTY?: boolean;
   columns?: number;
   rows?: number;
+  emit?: (event: "resize") => unknown;
 };
 
 type WindowSize = {
@@ -25,12 +26,17 @@ type LiveHostTtyDimensionsOptions = {
   stdout?: HostTtyStream;
   stdin?: HostTtyStream;
   readWindowSize?: (fd: number) => WindowSize | undefined;
+  subscribeToResize?: (listener: () => void) => void;
 };
 
-const installationMarker = Symbol.for("station.liveHostTtyDimensions.v1");
+type LiveHostTtyInstallation = {
+  refresh: () => void;
+};
+
+const installationMarker = Symbol.for("station.liveHostTtyDimensions.v2");
 
 type MarkedHostTtyStream = HostTtyStream & {
-  [installationMarker]?: true;
+  [installationMarker]?: LiveHostTtyInstallation;
 };
 
 type RefreshableHostTtyStream = HostTtyStream & {
@@ -58,7 +64,9 @@ function usableTty(stream: HostTtyStream): stream is HostTtyStream & { fd: numbe
   return Number.isInteger(stream.fd) && stream.fd >= 0;
 }
 
-function refreshSizeFor(stream: HostTtyStream & { fd: number }): (() => WindowSize | undefined) | undefined {
+function refreshSizeFor(
+  stream: HostTtyStream & { fd: number },
+): (() => WindowSize | undefined) | undefined {
   const selectedRefresh = (stream as RefreshableHostTtyStream)._refreshSize;
   // Bun's WriteStream implementation is the native TIOCGWINSZ bridge, including for stdin.
   const prototypeRefresh = (WriteStream.prototype as unknown as RefreshableHostTtyStream)
@@ -68,8 +76,6 @@ function refreshSizeFor(stream: HostTtyStream & { fd: number }): (() => WindowSi
     return undefined;
   }
 
-  // Bun's refresh method reads `this.columns`/`this.rows`; keep those backing
-  // values off process.stdout so the live accessors cannot recurse.
   const probe: TtySizeProbe = {
     columns: stream.columns ?? 0,
     emit: () => undefined,
@@ -87,18 +93,64 @@ function canReplaceDimension(stream: object, property: "columns" | "rows"): bool
   return descriptor === undefined || descriptor.configurable === true;
 }
 
+function restoreDescriptor(
+  stream: object,
+  property: "columns" | "rows",
+  descriptor: PropertyDescriptor | undefined,
+): void {
+  try {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(stream, property);
+    } else {
+      Object.defineProperty(stream, property, descriptor);
+    }
+  } catch {
+    // The supported process streams accept rollback; an exotic embedding may refuse it.
+  }
+}
+
+function applyWindowSize(stream: HostTtyStream, nextSize: WindowSize): void {
+  if (!canReplaceDimension(stream, "columns") || !canReplaceDimension(stream, "rows")) {
+    return;
+  }
+
+  const columnsDescriptor = Object.getOwnPropertyDescriptor(stream, "columns");
+  const rowsDescriptor = Object.getOwnPropertyDescriptor(stream, "rows");
+  const changed = stream.columns !== nextSize.columns || stream.rows !== nextSize.rows;
+  try {
+    Object.defineProperties(stream, {
+      columns: {
+        configurable: true,
+        enumerable: columnsDescriptor?.enumerable ?? true,
+        value: nextSize.columns,
+        writable: true,
+      },
+      rows: {
+        configurable: true,
+        enumerable: rowsDescriptor?.enumerable ?? true,
+        value: nextSize.rows,
+        writable: true,
+      },
+    });
+  } catch {
+    restoreDescriptor(stream, "columns", columnsDescriptor);
+    restoreDescriptor(stream, "rows", rowsDescriptor);
+    return;
+  }
+
+  if (changed) {
+    stream.emit?.("resize");
+  }
+}
+
 /**
- * Makes OpenTUI's process.stdout size sample the host PTY before its SIGWINCH
- * handler captures a resize; this intentionally installs no second resize loop.
+ * Refreshes Bun's cached stdout geometry before OpenTUI handles each SIGWINCH.
+ * One ioctl updates both dimensions and preserves the stream's resize event.
  */
 export function installLiveHostTtyDimensions(
   options: LiveHostTtyDimensionsOptions = {},
 ): void {
   const stdout = (options.stdout ?? process.stdout) as MarkedHostTtyStream;
-  if (stdout[installationMarker] === true) {
-    return;
-  }
-
   const stdin = options.stdin ?? process.stdin;
   const source = usableTty(stdout)
     ? stdout
@@ -108,8 +160,7 @@ export function installLiveHostTtyDimensions(
   if (source === undefined || !Object.isExtensible(stdout)) {
     return;
   }
-  const markerDescriptor = Object.getOwnPropertyDescriptor(stdout, installationMarker);
-  if (markerDescriptor !== undefined && markerDescriptor.configurable !== true) {
+  if (!canReplaceDimension(stdout, "columns") || !canReplaceDimension(stdout, "rows")) {
     return;
   }
 
@@ -118,57 +169,43 @@ export function installLiveHostTtyDimensions(
     return;
   }
 
-  let lastSize: WindowSize | undefined;
   const refresh = (): void => {
+    let nextSize: WindowSize | undefined;
     try {
-      const nextSize = readSize(source.fd);
-      if (validWindowSize(nextSize)) {
-        lastSize = { columns: nextSize.columns, rows: nextSize.rows };
-      }
+      nextSize = readSize(source.fd);
     } catch {
       // Keep the last known-good dimensions when a transient ioctl fails.
+      return;
+    }
+    if (validWindowSize(nextSize)) {
+      applyWindowSize(stdout, nextSize);
     }
   };
-  refresh();
-  if (lastSize === undefined) {
+
+  const existing = stdout[installationMarker];
+  if (existing !== undefined) {
+    existing.refresh = refresh;
+    refresh();
     return;
   }
 
-  if (!canReplaceDimension(stdout, "columns") || !canReplaceDimension(stdout, "rows")) {
-    return;
-  }
-
-  const columnsDescriptor = {
-    configurable: true,
-    enumerable: true,
-    get: (): number => {
-      refresh();
-      return lastSize?.columns ?? 80;
-    },
-    set: () => undefined,
-  };
-  const rowsDescriptor = {
-    configurable: true,
-    enumerable: true,
-    get: (): number => {
-      refresh();
-      return lastSize?.rows ?? 24;
-    },
-    set: () => undefined,
-  };
-
+  const installation: LiveHostTtyInstallation = { refresh };
   try {
-    Object.defineProperties(stdout, {
-      columns: columnsDescriptor,
-      rows: rowsDescriptor,
-      [installationMarker]: {
-        configurable: false,
-        enumerable: false,
-        value: true,
-        writable: false,
-      },
+    Object.defineProperty(stdout, installationMarker, {
+      configurable: true,
+      enumerable: false,
+      value: installation,
+      writable: false,
     });
+    const subscribe =
+      options.subscribeToResize ??
+      ((listener: () => void): void => {
+        process.prependListener("SIGWINCH", listener);
+      });
+    subscribe(() => installation.refresh());
   } catch {
-    // A host stream can be replaced by an embedding runtime; leave it intact.
+    Reflect.deleteProperty(stdout, installationMarker);
+    return;
   }
+  refresh();
 }
