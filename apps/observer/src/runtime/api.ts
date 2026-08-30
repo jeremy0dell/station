@@ -68,8 +68,8 @@ import {
 import type { ObserverPersistenceBundle, PersistenceHealthSource } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { type ObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
-import { inspectObserverRecoveryAssessment } from "../sessionRecoveryAssessment.js";
-import { inspectObserverRecoveryInventory } from "../sessionRecoveryInventory.js";
+import { inspectObserverRecoveryAssessment } from "../sessionRecovery/assessment.js";
+import { inspectObserverRecoveryInventory } from "../sessionRecovery/inventory.js";
 import type { StationLogger } from "../stationLogger.js";
 import {
   createWorktreeMutationCoordinator,

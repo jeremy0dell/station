@@ -257,8 +257,6 @@ export const ObserverRestartCommandResultSchema = z.discriminatedUnion("status",
   }).strict(),
 ]);
 
-export type ObserverRestartCommandResult = z.infer<typeof ObserverRestartCommandResultSchema>;
-
 export const ObserverStaleEvidenceRepairReasonSchema = z.enum([
   "process-missing",
   "os-start-token-drift",

@@ -18,8 +18,6 @@ export const TerminalCallerProcessSchema = z
   })
   .strict();
 
-export type TerminalCallerProcess = z.infer<typeof TerminalCallerProcessSchema>;
-
 /**
  * Raw caller claims arrive only at the terminal-integration boundary. They are
  * deliberately not included in a resolved context or command result.

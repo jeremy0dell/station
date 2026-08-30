@@ -4,7 +4,7 @@ import {
   type SessionRecoveryEligibilityInput,
   type SessionRecoveryStationSession,
   sessionRecoveryEligibility,
-} from "../../src/sessionRecoveryEligibility";
+} from "../../src/sessionRecovery/eligibility";
 
 const now = "2026-08-20T12:00:00.000Z";
 const worktreePath = "/tmp/station/web/feature";

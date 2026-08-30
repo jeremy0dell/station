@@ -1,28 +1,34 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import {
+  applyObservedPathAliases,
+  observedPathIsSameOrInside,
+  sameObservedPath,
+} from "@station/contracts";
 
-export function pathIsSame(candidate: string, root: string): boolean {
-  return normalizeLocalPath(candidate) === normalizeLocalPath(root);
+export function pathIsSame(
+  candidate: string,
+  root: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return sameObservedPath(candidate, root, platform);
 }
 
-export function pathIsSameOrInside(candidate: string, root: string): boolean {
-  const normalizedCandidate = normalizeLocalPath(candidate);
-  const normalizedRoot = normalizeLocalPath(root);
-  if (normalizedCandidate === normalizedRoot) {
-    return true;
-  }
-  if (normalizedRoot === "/") {
-    return normalizedCandidate.startsWith("/");
-  }
-  return normalizedCandidate.startsWith(`${normalizedRoot}/`);
+export function pathIsSameOrInside(
+  candidate: string,
+  root: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return observedPathIsSameOrInside(candidate, root, platform);
 }
 
-export function normalizeLocalPath(value: string): string {
+export function normalizeLocalPath(
+  value: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
   const trimmed = value.trim();
   const withoutTrailingSlash = trimmed.length > 1 ? trimmed.replace(/\/+$/g, "") : trimmed;
-  return withoutTrailingSlash.startsWith("/private/var/")
-    ? `/var/${withoutTrailingSlash.slice("/private/var/".length)}`
-    : withoutTrailingSlash;
+  return applyObservedPathAliases(withoutTrailingSlash, platform);
 }
 
 export function resolveLocalPath(

@@ -19,11 +19,7 @@ export {
 export { addProjectRows } from "../flows/addProject/rows.js";
 
 export type { AddProjectFlowStateView } from "../flows/addProject/types.js";
-export type {
-  NewSessionActionId,
-  NewSessionFlowStateView,
-  NewSessionGroupSelection,
-} from "../flows/newSession.js";
+export type { NewSessionActionId, NewSessionFlowStateView } from "../flows/newSession.js";
 export {
   createNewSessionFlow,
   selectedProject,
@@ -33,11 +29,7 @@ export type {
   PersistentFilterActionId,
   TuiSemanticAction,
 } from "../state/actions.js";
-export type {
-  DashboardBindingHelp,
-  TuiDashboardBindingId,
-  TuiInputMode,
-} from "../state/keymap.js";
+export type { TuiDashboardBindingId, TuiInputMode } from "../state/keymap.js";
 export {
   dashboardBindingHelp,
   deriveTuiInputMode,
@@ -46,7 +38,6 @@ export {
 } from "../state/keymap.js";
 export type { TuiKey } from "../state/keys.js";
 export { addPendingProjectDefaultHarness } from "../state/localRows.js";
-export { resolveMoveSessionToGroupOperation } from "../state/operations/sessionGroups.js";
 export { createInitialTuiState } from "../state/screen.js";
 export { tuiScreenBehavior } from "../state/screenBehavior.js";
 export {
@@ -55,34 +46,20 @@ export {
   applyAddProjectFolderReviewFailed,
   applyAddProjectSubmitted,
 } from "../state/screens/addProjectScreen.js";
-export { openNewSession } from "../state/screens/dashboard.js";
 export type { ForkSessionActionId } from "../state/screens/fork.js";
 export type { FreshStartActionId } from "../state/screens/freshStart.js";
-export type {
-  GroupMenuInputActionId,
-  GroupMenuItem,
-} from "../state/screens/groupMenu.js";
 export {
   activateSessionGroupMenuAction,
   GROUP_MENU_ITEMS,
   openGroupMenu,
 } from "../state/screens/groupMenu.js";
-export {
-  GROUP_SETTINGS_ITEMS,
-  hasGroupSettingsMembershipDelta,
-  isRemoveSessionGroupArmed,
-  openGroupSettings,
-  removeSessionGroupConfirmPhrase,
-} from "../state/screens/groupSettings.js";
+export { GROUP_SETTINGS_ITEMS, openGroupSettings } from "../state/screens/groupSettings.js";
 export {
   MOVE_TO_GROUP_CREATE_CHOICE_ID,
   MOVE_TO_GROUP_LIST_ID,
   MOVE_TO_GROUP_UNGROUPED_CHOICE_ID,
   moveToGroupExistingChoiceId,
-  openMoveToGroupCreate,
   openMoveToGroupForRow,
-  selectMoveToGroupDestination,
-  submitMoveToGroupCreate,
 } from "../state/screens/moveToGroup.js";
 export { openProjectDefaultAgentPicker } from "../state/screens/projectDefaultAgent.js";
 export {
@@ -98,6 +75,7 @@ export {
   openRemoveWorktreeConfirmForRow,
 } from "../state/screens/removeWorktree.js";
 export type { ProjectMenuInputActionId } from "../state/screens/sessionGroups.js";
+/** @public These actions are consumed by the public role-entrypoint contract. */
 export {
   openCreateGroup,
   openProjectMenu,
@@ -142,7 +120,6 @@ export type {
   GroupMenuActionId,
   GroupMenuScreenView,
   GroupSettingsDetailFocus,
-  GroupSettingsPendingMutation,
   GroupSettingsSection,
   ProjectMenuActionId,
   ProjectMenuScreenView,

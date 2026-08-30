@@ -25,9 +25,9 @@ import {
   worktreeHasLiveAgent,
 } from "@station/contracts";
 import { pathIsSameOrInside } from "@station/runtime";
-import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
-import { sessionRecoveryEligibility } from "../sessionRecoveryEligibility.js";
-import { selectNewestSessionRecoveryCandidate } from "../sessionRecoverySelection.js";
+import { sessionRecoveryEligibility } from "../sessionRecovery/eligibility.js";
+import { selectNewestSessionRecoveryCandidate } from "../sessionRecovery/selection.js";
+import { harnessRunCanActivateSession, terminalCanActivateSession } from "./sessionActivation.js";
 import { countsForSnapshot } from "./snapshotCounts.js";
 import { terminalControlEvidence } from "./terminalControlEvidence.js";
 

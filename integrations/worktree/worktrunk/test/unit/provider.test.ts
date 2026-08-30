@@ -4,7 +4,11 @@ import { join } from "node:path";
 import type { ProviderProjectConfig } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { gitLocalEnvironmentVariables, nodeExternalCommandRunner } from "@station/runtime";
-import { WorktrunkProvider, type WorktrunkProviderOptions } from "@station/worktrunk";
+import {
+  parseWorktrunkListJson,
+  WorktrunkProvider,
+  type WorktrunkProviderOptions,
+} from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
 
 const now = "2026-05-21T12:00:00.000Z";
@@ -23,12 +27,31 @@ const project: ProviderProjectConfig = {
     base: "main",
   },
 };
+const tmpProject: ProviderProjectConfig = {
+  ...project,
+  worktrunk: {
+    ...project.worktrunk,
+    managedRoot: ".worktrees",
+    includeMain: false,
+    includeExternal: false,
+  },
+};
 
 function testProvider(options: WorktrunkProviderOptions): WorktrunkProvider {
   return new WorktrunkProvider({
     resolveRegistrationIdentity: async (path) => `git-registration:${path}`,
     ...options,
   });
+}
+
+function removalRequest(worktreeId: string, expectedPath: string, expectedBranch: string) {
+  return {
+    project: tmpProject,
+    worktreeId,
+    expectedPath,
+    expectedBranch,
+    expectedRegistrationIdentity: "git-registration:native-marker",
+  };
 }
 
 describe("WorktrunkProvider", () => {
@@ -169,6 +192,119 @@ describe("WorktrunkProvider", () => {
         branch: "feature",
       }),
     ]);
+  });
+
+  it("keeps Darwin create, physical list, and raw removal identity inside the managed root", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const logical = "/tmp/station/web/.worktrees/feature";
+    const physical = "/private/tmp/station/web/.worktrees/feature";
+    let listCount = 0;
+    const provider = testProvider({
+      platform: "darwin",
+      resolveRegistrationIdentity: async () => "git-registration:native-marker",
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.includes("remove")) return result(input, "{}");
+        const rows = input.args?.includes("switch")
+          ? [{ path: logical, branch: "feature" }]
+          : listCount++ === 0
+            ? [{ path: project.root, branch: "main", is_main: true }]
+            : [{ path: physical, branch: "feature" }];
+        return result(input, JSON.stringify(rows));
+      },
+    });
+    const created = await provider.createWorktree({ project: tmpProject, branch: "feature" });
+    const [listed] = await provider.listWorktrees(tmpProject);
+    expect(created.path).toBe(logical);
+    expect(listed).toMatchObject({
+      id: created.id,
+      path: physical,
+      registrationIdentity: created.registrationIdentity,
+    });
+    await provider.removeWorktree(removalRequest(created.id, created.path, created.branch));
+    expect(calls.find((call) => call.args?.includes("remove"))?.args).toEqual([
+      "-C",
+      physical,
+      "remove",
+      "--format=json",
+    ]);
+  });
+
+  it("rejects unsafe, non-Darwin, and physical-main rows at provider boundaries", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const resolvedPaths: string[] = [];
+    const unsafeRows = [
+      { path: "/private/tmp/station/web/.worktrees ", branch: "whitespace" },
+      { path: "/private/tmp/station/web/.worktrees/link/../feature", branch: "dot" },
+    ];
+    const provider = testProvider({
+      platform: "darwin",
+      resolveRegistrationIdentity: async (path) => {
+        resolvedPaths.push(path);
+        return "git-registration:native-marker";
+      },
+      runner: async (input) => {
+        calls.push(input);
+        return result(input, JSON.stringify(unsafeRows));
+      },
+    });
+    const unsafe = parseWorktrunkListJson(JSON.stringify(unsafeRows), {
+      project,
+      observedAt: now,
+      platform: "darwin",
+    });
+    await expect(provider.listWorktrees(tmpProject)).resolves.toEqual([]);
+    expect(resolvedPaths).toEqual([unsafeRows[0]?.path]);
+    calls.length = 0;
+    await expect(
+      provider.removeWorktree(
+        removalRequest(unsafe[0]?.id ?? "wt_missing", "/tmp/station/web/.worktrees", "whitespace"),
+      ),
+    ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_CHANGED" });
+    expect(calls.some((call) => call.args?.includes("remove"))).toBe(false);
+    calls.length = 0;
+    await expect(
+      provider.removeWorktree(
+        removalRequest(unsafe[1]?.id ?? "wt_missing", unsafeRows[1]?.path ?? "missing", "dot"),
+      ),
+    ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_CHANGED" });
+    expect(calls).toEqual([]);
+
+    const rows = JSON.stringify([
+      { path: "/private/tmp/station/web", branch: "main" },
+      { path: "/private/tmp/station/web/.worktrees/feature", branch: "feature" },
+    ]);
+    const read = (platform: NodeJS.Platform, target = tmpProject) =>
+      testProvider({ platform, runner: async (input) => result(input, rows) }).listWorktrees(
+        target,
+      );
+    await expect(read("linux")).resolves.toEqual([]);
+    await expect(
+      read("darwin", {
+        ...project,
+        worktrunk: { ...project.worktrunk, includeMain: false, includeExternal: true },
+      }),
+    ).resolves.toEqual([expect.objectContaining({ branch: "feature" })]);
+  });
+
+  it("does not resolve registration identity for unsafe create output", async () => {
+    let resolutions = 0;
+    const provider = testProvider({
+      platform: "darwin",
+      resolveRegistrationIdentity: async () => {
+        resolutions += 1;
+        return "unexpected";
+      },
+      runner: async (input) =>
+        result(
+          input,
+          '[{"path":"relative/feature","branch":"feature"},{"path":"/private/tmp/root/link/../feature","branch":"feature"}]',
+        ),
+    });
+    await expect(provider.createWorktree({ project, branch: "feature" })).rejects.toMatchObject({
+      code: "WORKTRUNK_INVALID_OUTPUT",
+    });
+    expect(resolutions).toBe(0);
   });
 
   it("keeps managed roots authoritative over Worktrunk project path templates", async () => {

@@ -1,6 +1,6 @@
 import type { SessionRecoveryHandle } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { inspectObserverRecoveryInventory } from "../../src/sessionRecoveryInventory";
+import { inspectObserverRecoveryInventory } from "../../src/sessionRecovery/inventory";
 
 const earlier = "2026-08-20T11:00:00.000Z";
 const now = "2026-08-20T12:00:00.000Z";
