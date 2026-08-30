@@ -327,7 +327,7 @@ describeReal("real native Station mouse input", () => {
       );
 
       await writeSgrClick(ptyClient, cellForText(collapsedFiltered, "/ edit"));
-      const reopenedFilter = await waitForNativeFrame(
+      await waitForNativeFrame(
         runtime,
         (frame) => frame.includes(`FILTER /${branch}`),
         "Clicking the native applied-filter edit control did not reopen the header editor.",
@@ -357,12 +357,12 @@ describeReal("real native Station mouse input", () => {
         "Clicking Status after Back did not reopen native condition values.",
       );
       await writeSgrClick(ptyClient, cellForText(reopenedStatusValues, "Working"));
-      await waitForNativeFrame(
+      const selectedWorking = await waitForNativeFrame(
         runtime,
         (frame) => frame.includes("[✓] Working"),
         "Clicking Working did not toggle the native condition value.",
       );
-      await writeSgrClick(ptyClient, cellForText(reopenedFilter, `FILTER /${branch}`));
+      await writeSgrClick(ptyClient, cellForText(selectedWorking, `FILTER /${branch}`));
       await waitForNativeFrame(
         runtime,
         (frame) => frame.includes(`FILTER /${branch}`) && !frame.includes("STATUS CONDITION"),
