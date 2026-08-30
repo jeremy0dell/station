@@ -8,19 +8,19 @@ import {
   type SessionRecoveryAssessmentReason,
   type StationSnapshot,
 } from "@station/contracts";
-import type { SessionStore } from "./persistence/ports.js";
+import type { SessionStore } from "../persistence/ports.js";
 import type {
   ObserverRecoveryInventoryPersistenceSnapshot,
   PersistedSession,
-} from "./persistence/types.js";
-import type { ProviderRegistry } from "./providers/registry.js";
+} from "../persistence/types.js";
+import type { ProviderRegistry } from "../providers/registry.js";
 import {
   type SessionRecoveryEligibility,
   type SessionRecoveryEligibilityInput,
   sessionRecoveryEligibility,
-} from "./sessionRecoveryEligibility.js";
-import { observerRecoveryInventoryFromPersistence } from "./sessionRecoveryInventory.js";
-import { selectNewestSessionRecoveryCandidate } from "./sessionRecoverySelection.js";
+} from "./eligibility.js";
+import { observerRecoveryInventoryFromPersistence } from "./inventory.js";
+import { selectNewestSessionRecoveryCandidate } from "./selection.js";
 
 type RecoveryAssessmentProviders = Pick<ProviderRegistry, "harnesses">;
 type RecoveryAssessmentConfig = Pick<StationConfig, "featureFlags" | "harness">;

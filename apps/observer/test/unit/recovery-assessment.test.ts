@@ -6,7 +6,7 @@ import type { PersistedSession } from "../../src/persistence/types";
 import {
   assessObserverRecovery,
   inspectObserverRecoveryAssessment,
-} from "../../src/sessionRecoveryAssessment";
+} from "../../src/sessionRecovery/assessment";
 
 const earlier = "2026-08-20T11:00:00.000Z";
 const now = "2026-08-20T12:00:00.000Z";

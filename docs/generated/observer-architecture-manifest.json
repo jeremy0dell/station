@@ -2017,8 +2017,8 @@
           "bindings": ["ObserverEventBus"]
         },
         {
-          "specifier": "../../sessionRecovery.js",
-          "resolvedPath": "apps/observer/src/sessionRecovery.ts",
+          "specifier": "../../sessionRecovery/resolve.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/resolve.ts",
           "edgeKind": "runtime",
           "bindings": ["resolveSessionRecovery"]
         },
@@ -9789,6 +9789,12 @@
       ],
       "imports": [
         {
+          "specifier": "./sessionActivation.js",
+          "resolvedPath": "apps/observer/src/reconcile/sessionActivation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["harnessRunCanActivateSession", "terminalCanActivateSession"]
+        },
+        {
           "specifier": "./snapshotCounts.js",
           "resolvedPath": "apps/observer/src/reconcile/snapshotCounts.ts",
           "edgeKind": "runtime",
@@ -9801,20 +9807,14 @@
           "bindings": ["terminalControlEvidence"]
         },
         {
-          "specifier": "../sessionActivation.js",
-          "resolvedPath": "apps/observer/src/sessionActivation.ts",
-          "edgeKind": "runtime",
-          "bindings": ["harnessRunCanActivateSession", "terminalCanActivateSession"]
-        },
-        {
-          "specifier": "../sessionRecoveryEligibility.js",
-          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "specifier": "../sessionRecovery/eligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/eligibility.ts",
           "edgeKind": "runtime",
           "bindings": ["sessionRecoveryEligibility"]
         },
         {
-          "specifier": "../sessionRecoverySelection.js",
-          "resolvedPath": "apps/observer/src/sessionRecoverySelection.ts",
+          "specifier": "../sessionRecovery/selection.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/selection.ts",
           "edgeKind": "runtime",
           "bindings": ["selectNewestSessionRecoveryCandidate"]
         },
@@ -10466,6 +10466,31 @@
       ]
     },
     {
+      "path": "apps/observer/src/reconcile/sessionActivation.ts",
+      "exports": [
+        {
+          "name": "harnessRunCanActivateSession",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "terminalCanActivateSession",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessRunObservation", "TerminalTargetObservation"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/reconcile/sessionGroupRepairAuthority.ts",
       "exports": [
         {
@@ -11004,14 +11029,14 @@
           "bindings": ["SpoolDrainDeps"]
         },
         {
-          "specifier": "../sessionRecoveryAssessment.js",
-          "resolvedPath": "apps/observer/src/sessionRecoveryAssessment.ts",
+          "specifier": "../sessionRecovery/assessment.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/assessment.ts",
           "edgeKind": "runtime",
           "bindings": ["inspectObserverRecoveryAssessment"]
         },
         {
-          "specifier": "../sessionRecoveryInventory.js",
-          "resolvedPath": "apps/observer/src/sessionRecoveryInventory.ts",
+          "specifier": "../sessionRecovery/inventory.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/inventory.ts",
           "edgeKind": "runtime",
           "bindings": ["inspectObserverRecoveryInventory"]
         },
@@ -11223,8 +11248,8 @@
           "bindings": ["ObserverCore"]
         },
         {
-          "specifier": "../sessionRecovery.js",
-          "resolvedPath": "apps/observer/src/sessionRecovery.ts",
+          "specifier": "../sessionRecovery/resolve.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/resolve.ts",
           "edgeKind": "runtime",
           "bindings": ["resolveSessionRecovery"]
         },
@@ -13126,98 +13151,7 @@
       ]
     },
     {
-      "path": "apps/observer/src/sessionActivation.ts",
-      "exports": [
-        {
-          "name": "harnessRunCanActivateSession",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalCanActivateSession",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "@station/contracts",
-          "resolvedPath": "packages/contracts/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": ["HarnessRunObservation", "TerminalTargetObservation"]
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/sessionRecovery.ts",
-      "exports": [
-        {
-          "name": "resolveSessionRecovery",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting the newest automatic candidate deterministically, then returns only typed resume authority for that provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists."
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "./commands/providers.js",
-          "resolvedPath": "apps/observer/src/commands/providers.ts",
-          "edgeKind": "runtime",
-          "bindings": ["resolveHarnessProviderOrThrow"]
-        },
-        {
-          "specifier": "./commands/session/shared.js",
-          "resolvedPath": "apps/observer/src/commands/session/shared.ts",
-          "edgeKind": "runtime",
-          "bindings": ["commandValidationError"]
-        },
-        {
-          "specifier": "./persistence/index.js",
-          "resolvedPath": "apps/observer/src/persistence/index.ts",
-          "edgeKind": "type-only",
-          "bindings": ["SessionStore"]
-        },
-        {
-          "specifier": "./providers/registry.js",
-          "resolvedPath": "apps/observer/src/providers/registry.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ProviderRegistry"]
-        },
-        {
-          "specifier": "./sessionRecoveryEligibility.js",
-          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
-          "edgeKind": "runtime",
-          "bindings": ["sessionRecoveryEligibility"]
-        },
-        {
-          "specifier": "./sessionRecoveryEligibility.js",
-          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
-          "edgeKind": "type-only",
-          "bindings": ["SessionRecoveryEligibility", "SessionRecoveryEligibilityInput"]
-        },
-        {
-          "specifier": "./sessionRecoverySelection.js",
-          "resolvedPath": "apps/observer/src/sessionRecoverySelection.ts",
-          "edgeKind": "runtime",
-          "bindings": ["selectNewestSessionRecoveryCandidate"]
-        },
-        {
-          "specifier": "@station/contracts",
-          "resolvedPath": "packages/contracts/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": [
-            "HarnessProvider",
-            "SafeError",
-            "SessionRecoveryHandle",
-            "WorktreeObservation"
-          ]
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/sessionRecoveryAssessment.ts",
+      "path": "apps/observer/src/sessionRecovery/assessment.ts",
       "exports": [
         {
           "name": "assessObserverRecovery",
@@ -13234,44 +13168,44 @@
       ],
       "imports": [
         {
-          "specifier": "./persistence/ports.js",
+          "specifier": "../persistence/ports.js",
           "resolvedPath": "apps/observer/src/persistence/ports.ts",
           "edgeKind": "type-only",
           "bindings": ["SessionStore"]
         },
         {
-          "specifier": "./persistence/types.js",
+          "specifier": "../persistence/types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverRecoveryInventoryPersistenceSnapshot", "PersistedSession"]
         },
         {
-          "specifier": "./providers/registry.js",
+          "specifier": "../providers/registry.js",
           "resolvedPath": "apps/observer/src/providers/registry.ts",
           "edgeKind": "type-only",
           "bindings": ["ProviderRegistry"]
         },
         {
-          "specifier": "./sessionRecoveryEligibility.js",
-          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "specifier": "./eligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/eligibility.ts",
           "edgeKind": "runtime",
           "bindings": ["sessionRecoveryEligibility"]
         },
         {
-          "specifier": "./sessionRecoveryEligibility.js",
-          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "specifier": "./eligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/eligibility.ts",
           "edgeKind": "type-only",
           "bindings": ["SessionRecoveryEligibility", "SessionRecoveryEligibilityInput"]
         },
         {
-          "specifier": "./sessionRecoveryInventory.js",
-          "resolvedPath": "apps/observer/src/sessionRecoveryInventory.ts",
+          "specifier": "./inventory.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/inventory.ts",
           "edgeKind": "runtime",
           "bindings": ["observerRecoveryInventoryFromPersistence"]
         },
         {
-          "specifier": "./sessionRecoverySelection.js",
-          "resolvedPath": "apps/observer/src/sessionRecoverySelection.ts",
+          "specifier": "./selection.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/selection.ts",
           "edgeKind": "runtime",
           "bindings": ["selectNewestSessionRecoveryCandidate"]
         },
@@ -13302,7 +13236,7 @@
       ]
     },
     {
-      "path": "apps/observer/src/sessionRecoveryEligibility.ts",
+      "path": "apps/observer/src/sessionRecovery/eligibility.ts",
       "exports": [
         {
           "name": "sessionRecoveryEligibility",
@@ -13351,7 +13285,7 @@
       ]
     },
     {
-      "path": "apps/observer/src/sessionRecoveryInventory.ts",
+      "path": "apps/observer/src/sessionRecovery/inventory.ts",
       "exports": [
         {
           "name": "inspectObserverRecoveryInventory",
@@ -13368,13 +13302,13 @@
       ],
       "imports": [
         {
-          "specifier": "./persistence/ports.js",
+          "specifier": "../persistence/ports.js",
           "resolvedPath": "apps/observer/src/persistence/ports.ts",
           "edgeKind": "type-only",
           "bindings": ["SessionStore"]
         },
         {
-          "specifier": "./persistence/types.js",
+          "specifier": "../persistence/types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverRecoveryInventoryPersistenceSnapshot", "PersistedSession"]
@@ -13399,7 +13333,73 @@
       ]
     },
     {
-      "path": "apps/observer/src/sessionRecoverySelection.ts",
+      "path": "apps/observer/src/sessionRecovery/resolve.ts",
+      "exports": [
+        {
+          "name": "resolveSessionRecovery",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting the newest automatic candidate deterministically, then returns only typed resume authority for that provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../commands/providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow"]
+        },
+        {
+          "specifier": "../commands/session/shared.js",
+          "resolvedPath": "apps/observer/src/commands/session/shared.ts",
+          "edgeKind": "runtime",
+          "bindings": ["commandValidationError"]
+        },
+        {
+          "specifier": "../persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionStore"]
+        },
+        {
+          "specifier": "../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "./eligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/eligibility.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sessionRecoveryEligibility"]
+        },
+        {
+          "specifier": "./eligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/eligibility.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionRecoveryEligibility", "SessionRecoveryEligibilityInput"]
+        },
+        {
+          "specifier": "./selection.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/selection.ts",
+          "edgeKind": "runtime",
+          "bindings": ["selectNewestSessionRecoveryCandidate"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "HarnessProvider",
+            "SafeError",
+            "SessionRecoveryHandle",
+            "WorktreeObservation"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/sessionRecovery/selection.ts",
       "exports": [
         {
           "name": "selectNewestSessionRecoveryCandidate",
@@ -15716,7 +15716,7 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/sessionRecovery.ts",
+          "path": "apps/observer/src/sessionRecovery/resolve.ts",
           "declaration": "resolveSessionRecovery",
           "kind": "function",
           "role": "USE CASE",
@@ -16156,14 +16156,14 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "path": "apps/observer/src/sessionRecovery/eligibility.ts",
           "declaration": "sessionRecoveryEligibility",
           "kind": "function",
           "role": "POLICY",
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/sessionRecoverySelection.ts",
+          "path": "apps/observer/src/sessionRecovery/selection.ts",
           "declaration": "selectNewestSessionRecoveryCandidate",
           "kind": "function",
           "role": "POLICY",
@@ -16435,14 +16435,14 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/sessionRecoveryAssessment.ts",
+          "path": "apps/observer/src/sessionRecovery/assessment.ts",
           "declaration": "inspectObserverRecoveryAssessment",
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/sessionRecoveryInventory.ts",
+          "path": "apps/observer/src/sessionRecovery/inventory.ts",
           "declaration": "inspectObserverRecoveryInventory",
           "kind": "function",
           "role": "USE CASE",
@@ -16472,7 +16472,7 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/sessionRecovery.ts",
+          "path": "apps/observer/src/sessionRecovery/resolve.ts",
           "declaration": "resolveSessionRecovery",
           "kind": "function",
           "role": "USE CASE",
@@ -17161,44 +17161,7 @@
       ]
     },
     {
-      "path": "apps/observer/src/sessionRecovery.ts",
-      "declaration": "resolveSessionRecovery",
-      "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting the newest automatic candidate deterministically, then returns only typed resume authority for that provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/persistence/ports.ts",
-          "declaration": "SessionStore",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/sessionRecoveryEligibility.ts",
-          "declaration": "sessionRecoveryEligibility",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/sessionRecoverySelection.ts",
-          "declaration": "selectNewestSessionRecoveryCandidate",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/contracts/src/providers.ts",
-          "declaration": "HarnessProvider",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/sessionRecoveryAssessment.ts",
+      "path": "apps/observer/src/sessionRecovery/assessment.ts",
       "declaration": "inspectObserverRecoveryAssessment",
       "kind": "function",
       "role": "USE CASE",
@@ -17214,7 +17177,7 @@
       ]
     },
     {
-      "path": "apps/observer/src/sessionRecoveryEligibility.ts",
+      "path": "apps/observer/src/sessionRecovery/eligibility.ts",
       "declaration": "sessionRecoveryEligibility",
       "kind": "function",
       "role": "POLICY",
@@ -17222,7 +17185,7 @@
       "dependencies": []
     },
     {
-      "path": "apps/observer/src/sessionRecoveryInventory.ts",
+      "path": "apps/observer/src/sessionRecovery/inventory.ts",
       "declaration": "inspectObserverRecoveryInventory",
       "kind": "function",
       "role": "USE CASE",
@@ -17238,7 +17201,44 @@
       ]
     },
     {
-      "path": "apps/observer/src/sessionRecoverySelection.ts",
+      "path": "apps/observer/src/sessionRecovery/resolve.ts",
+      "declaration": "resolveSessionRecovery",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting the newest automatic candidate deterministically, then returns only typed resume authority for that provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/persistence/ports.ts",
+          "declaration": "SessionStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/sessionRecovery/eligibility.ts",
+          "declaration": "sessionRecoveryEligibility",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/sessionRecovery/selection.ts",
+          "declaration": "selectNewestSessionRecoveryCandidate",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/sessionRecovery/selection.ts",
       "declaration": "selectNewestSessionRecoveryCandidate",
       "kind": "function",
       "role": "POLICY",

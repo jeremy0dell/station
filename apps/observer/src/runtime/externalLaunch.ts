@@ -27,7 +27,7 @@ import {
 import type { SessionSeedGroupProvenance, SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
-import { resolveSessionRecovery } from "../sessionRecovery.js";
+import { resolveSessionRecovery } from "../sessionRecovery/resolve.js";
 import type { StationLogger } from "../stationLogger.js";
 import { nowIso } from "../utils/time.js";
 import type { WorktreeMutationCoordinator } from "../worktreeMutationCoordinator.js";
