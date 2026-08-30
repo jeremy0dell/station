@@ -10,7 +10,7 @@ import { DashboardFrameTitle } from "./view/DashboardFrameTitle.js";
 import { DashboardRoot } from "./view/DashboardRoot.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
 import { StationMouseProvider, type StationMouseDispatch } from "./view/stationMouseContext.js";
-import type { DashboardScrollController } from "./view/layout/dashboardScrollController.js";
+import type { DashboardScrollController } from "./view/layout/scroll/dashboardScrollController.js";
 
 export type StationOverlayProps = {
   /** Read-only dashboard state owned by the renderer composition. */

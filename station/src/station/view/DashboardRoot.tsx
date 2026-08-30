@@ -27,8 +27,8 @@ import {
 } from "./stationMouseContext.js";
 import { ToastOverlayView } from "./ToastOverlayView.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
-import type { DashboardScrollController } from "./layout/dashboardScrollController.js";
-import { useDashboardVisibleRows } from "./layout/DashboardScrollViewport.js";
+import type { DashboardScrollController } from "./layout/scroll/dashboardScrollController.js";
+import { useDashboardVisibleRows } from "./layout/scroll/DashboardScrollViewport.js";
 
 export type DashboardRootProps = {
   state: DashboardStateSource;

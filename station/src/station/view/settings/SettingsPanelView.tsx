@@ -3,10 +3,10 @@ import type { SettingsPanelFocus } from "@station/dashboard-core/state";
 import type { ReactNode } from "react";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
-import { SemanticScrollRegion } from "../layout/SemanticScrollViewport.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { fit } from "../controls/sheetText.js";
+import { SemanticScrollRegion } from "../layout/scroll/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 import { settingsPanelFrame } from "../layout/settingsPanelFrame.js";
-import { fit } from "../sheets/parts.js";
 import {
   stationMouseProps,
   useStationHoverState,

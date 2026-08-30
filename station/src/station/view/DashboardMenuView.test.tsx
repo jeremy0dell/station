@@ -6,7 +6,7 @@ import { act } from "react";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { DashboardMenuView, type DashboardMenuModel } from "./DashboardMenuView.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
 
 const teardowns: Array<() => void> = [];

@@ -11,7 +11,7 @@ import type { TuiSelectionState } from "@station/dashboard-core/state";
 import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
 import {
   nativeStationTheme,

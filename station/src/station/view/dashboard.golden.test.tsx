@@ -39,7 +39,7 @@ import {
   StationMouseProvider,
   type StationMouseDispatch,
 } from "./stationMouseContext.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import { FullscreenDashboard } from "../../dashboardRenderer/FullscreenDashboard.js";
 
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {

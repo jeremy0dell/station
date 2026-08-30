@@ -3,7 +3,7 @@ import type {
   SelectionChoice,
 } from "@station/dashboard-core/selectors";
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
-import { SheetChoiceLine } from "./parts.js";
+import { SheetChoiceLine } from "../controls/sheetPicker.js";
 
 export type AgentChoiceListViewProps = {
   choices: readonly SelectionChoice<NewSessionHarnessOption>[];

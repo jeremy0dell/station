@@ -17,8 +17,8 @@ import {
   useStationTheme,
   type StationTheme,
 } from "../../theme/index.js";
-import { SemanticScrollRegion } from "./layout/SemanticScrollViewport.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { SemanticScrollRegion } from "./layout/scroll/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
 export type ToastOverlayViewProps = {

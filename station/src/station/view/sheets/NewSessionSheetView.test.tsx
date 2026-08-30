@@ -12,7 +12,7 @@ import type { StationSnapshot } from "@station/contracts";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import { groupedManyProjectsSnapshot, manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
 import {
   nativeStationTheme,

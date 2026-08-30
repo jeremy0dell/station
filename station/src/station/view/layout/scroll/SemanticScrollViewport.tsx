@@ -1,7 +1,7 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
-import { useStationTheme } from "../../../theme/index.js";
-import { useStationHoverEnabled } from "../stationMouseContext.js";
+import { useStationTheme } from "../../../../theme/index.js";
+import { useStationHoverEnabled } from "../../stationMouseContext.js";
 import {
   createScrollViewportController,
   type ScrollViewportController,

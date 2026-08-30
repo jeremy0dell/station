@@ -4,7 +4,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { act, type Dispatch, type SetStateAction, useState } from "react";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
 
 const teardowns: Array<() => void> = [];

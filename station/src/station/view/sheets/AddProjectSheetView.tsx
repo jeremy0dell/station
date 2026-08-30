@@ -1,19 +1,17 @@
 import { addProjectActions, addProjectRows, addProjectSelectedIndexForFlow } from "@station/dashboard-core/state";
 import type { AddProjectFlowStateView, TuiSelectionState } from "@station/dashboard-core/state";
+import { SheetButtonRow, type SheetButtonSpec } from "../controls/sheetButtons.js";
+import {
+  SheetMessageLine,
+  SheetMetaLine,
+  SheetProgressFooter,
+  SheetSectionLine,
+} from "../controls/sheetMessages.js";
+import { SheetPickerLine } from "../controls/sheetPicker.js";
+import { SheetFooter, SheetLabelValue } from "../controls/sheetText.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
-import {
-  SheetButtonRow,
-  type SheetButtonSpec,
-  SheetFooter,
-  SheetLabelValue,
-  SheetMessageLine,
-  SheetMetaLine,
-  SheetPickerLine,
-  SheetProgressFooter,
-  SheetSectionLine,
-} from "./parts.js";
 
 export type AddProjectSheetViewProps = {
   state: AddProjectFlowStateView;

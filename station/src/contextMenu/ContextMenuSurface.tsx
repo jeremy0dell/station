@@ -2,8 +2,8 @@ import type { ColorInput, MouseEvent } from "@opentui/core";
 import { Fragment } from "react";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
-import { SemanticScrollRegion } from "../station/view/layout/SemanticScrollViewport.js";
-import { semanticItemRenderableId } from "../station/view/layout/scrollViewport.js";
+import { SemanticScrollRegion } from "../station/view/layout/scroll/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "../station/view/layout/scroll/scrollViewport.js";
 import { semanticItemIdAtPointer } from "../station/view/layout/semanticPointerTarget.js";
 import {
   toOpenTuiColor,

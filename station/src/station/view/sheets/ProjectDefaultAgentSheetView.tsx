@@ -5,10 +5,10 @@ import type {
   SelectionChoice,
 } from "@station/dashboard-core/selectors";
 import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
+import { SheetFooter } from "../controls/sheetText.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
-import { SheetFooter } from "./parts.js";
 
 export type ProjectDefaultAgentSheetViewProps = {
   snapshot: DashboardSnapshotView;

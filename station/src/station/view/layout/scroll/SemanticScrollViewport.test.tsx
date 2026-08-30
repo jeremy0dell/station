@@ -7,9 +7,9 @@ import {
   nativeStationTheme,
   stationColorSnapshotValue,
   StationThemeProvider,
-} from "../../../theme/index.js";
-import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
-import { StationHoverProvider } from "../stationMouseContext.js";
+} from "../../../../theme/index.js";
+import { spanAtFrameCell } from "../../../../terminal/testing/frameProbe.js";
+import { StationHoverProvider } from "../../stationMouseContext.js";
 import { SemanticScrollViewport } from "./SemanticScrollViewport.js";
 import {
   createScrollViewportController,

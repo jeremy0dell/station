@@ -23,7 +23,7 @@ import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { stationHelpEntryOrder } from "../station/helpEntries.js";
-import { createDashboardScrollController } from "../station/view/layout/dashboardScrollController.js";
+import { createDashboardScrollController } from "../station/view/layout/scroll/dashboardScrollController.js";
 import {
   createStationThemeController,
   type StationThemeController,

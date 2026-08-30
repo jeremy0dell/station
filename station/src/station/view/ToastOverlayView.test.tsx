@@ -12,7 +12,7 @@ import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { DashboardRoot, type DashboardRootProps } from "./DashboardRoot.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
 
 const NOTICE: ClientNotice = {
