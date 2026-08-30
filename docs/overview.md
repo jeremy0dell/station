@@ -42,6 +42,33 @@ A crucial subtlety: **no single layer owns all truth.** Config is authoritative 
 
 - **Clients** — the CLI and the TUI — render the graph and dispatch commands. The TUI is the live dashboard; the CLI (`stn`) handles observer lifecycle, setup, reconcile, snapshots, exact current-session discovery, recorded session create/fork/rename/close, hooks, and debugging. Both are *consumers*: they ask the observer, they don't invent state.
 
+## Session Groups
+
+Session Groups are durable, project-local organization for canonical sessions. The CLI exposes
+their flat snapshot projection and exact recorded mutations:
+
+```sh
+stn group list
+stn group list --project "$PROJECT_ID" --json
+stn group create "$PROJECT_ID" "Review"
+stn group members add "$GROUP_ID" "$SESSION_ID"
+stn group reparent "$GROUP_ID" --root
+```
+
+Group selection uses complete current IDs. Mutation commands carry the Group version and observed
+membership as optimistic preconditions, so a stale writer is refused instead of silently
+overwriting a concurrent change. Create receives the durable Group ID and version from the typed
+Observer result; it never guesses an ID from a name or a later refresh. JSON returns the complete
+typed result, while default output is terminal-safe text.
+
+Group membership is direct: listing a parent does not flatten descendant Groups. Group deletion
+only removes organization, ungroups its direct sessions, and reparents its direct children; it
+does not stop or remove sessions, terminals, worktrees, agents, Hosts, or providers. Session
+creation keeps its explicit `--group`, `--new-group`, and `--ungrouped` choices, while fork
+inherits its source session's current Group unless `--ungrouped` opts out or `--inherit-group`
+makes inheritance explicit. Cross-project Stacks are a separate future workflow lens, not a
+`stn group` operation.
+
 ## Two kinds of hooks (don't conflate them)
 
 The word "hook" points in two opposite directions, and keeping them straight is the key to reasoning about runtime behavior:

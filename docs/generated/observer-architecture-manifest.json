@@ -13859,6 +13859,22 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/group/command.ts",
+      "declaration": "runGroupCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Projects canonical project-local Groups from one typed snapshot and translates exact CLI mutations into recorded Observer commands with optimistic version and membership preconditions.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/command.ts",
+          "declaration": "executeTypedObserverCommand",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/host/index.ts",
       "declaration": "runHostCommand",
       "kind": "function",
