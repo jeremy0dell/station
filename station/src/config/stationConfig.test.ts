@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
 import {
-  DEFAULT_SCROLLBACK_LINES,
   DEFAULT_WORKSPACE_CONFIG,
   loadStationConfig,
+  MAX_SCROLLBACK_LINES,
 } from "./stationConfig.js";
 
 // The [workspace] schema, defaults, and validation are owned by @station/config
@@ -91,7 +91,7 @@ scroll_on_output = "follow"`);
 
   it("keeps the TUI alive with a warning when [workspace] exceeds the scrollback ceiling", async () => {
     const path = await writeConfig(`[workspace]
-scrollback_lines = ${DEFAULT_SCROLLBACK_LINES + 1}`);
+scrollback_lines = ${MAX_SCROLLBACK_LINES + 1}`);
     const result = await loadStationConfig({ path });
     // Best-effort: the config still loads (source "file"), the invalid section
     // drops to defaults, and the ceiling violation is surfaced as a warning.

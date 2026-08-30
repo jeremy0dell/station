@@ -1,7 +1,7 @@
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/headless";
-import { DEFAULT_SCROLLBACK_LINES } from "../config/stationConfig.js";
+import { MAX_SCROLLBACK_LINES } from "../config/stationConfig.js";
 import { EraseDisplayMode } from "../terminal/protocol/csi.js";
 import { EscSequence } from "../terminal/protocol/esc.js";
 import { CsiCommand, EscCommand } from "../terminal/protocol/identifiers.js";
@@ -93,7 +93,7 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
     this.#terminal = new Terminal({
       cols,
       rows,
-      scrollback: DEFAULT_SCROLLBACK_LINES,
+      scrollback: MAX_SCROLLBACK_LINES,
       allowProposedApi: true,
       logLevel: "off",
     });

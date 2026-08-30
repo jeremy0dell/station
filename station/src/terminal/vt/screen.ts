@@ -1,6 +1,10 @@
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { type IMarker, Terminal } from "@xterm/headless";
-import { DEFAULT_SCROLLBACK_LINES, type ScrollOnOutputMode } from "../../config/stationConfig.js";
+import {
+  DEFAULT_SCROLLBACK_LINES,
+  MAX_SCROLLBACK_LINES,
+  type ScrollOnOutputMode,
+} from "../../config/stationConfig.js";
 import { ChunkRing } from "../chunkRing.js";
 import {
   reportTerminalCorruption,
@@ -255,7 +259,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   const requestedScrollback = options.scrollback ?? DEFAULT_SCROLLBACK_LINES;
   // xterm's retained-row memory and resize reflow both scale with pane width.
   const scrollback = Number.isFinite(requestedScrollback)
-    ? Math.max(0, Math.min(Math.trunc(requestedScrollback), DEFAULT_SCROLLBACK_LINES))
+    ? Math.max(0, Math.min(Math.trunc(requestedScrollback), MAX_SCROLLBACK_LINES))
     : DEFAULT_SCROLLBACK_LINES;
   const terminal = new Terminal({
     cols: Math.max(options.size.cols, MIN_COLS),

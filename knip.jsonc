@@ -4,6 +4,10 @@
   "ignoreExportsUsedInFile": true,
   // Dynamic extension entrypoints carry this tag because consumers load them by file path.
   "tags": ["-knipignore"],
+  "ignoreIssues": {
+    // Default and ceiling are separate policies even while their initial values match.
+    "packages/config/src/workspace.ts": ["duplicates"]
+  },
   "ignoreWorkspaces": [
     // Test fixtures are not part of Station's shipped production graph.
     "packages/testing!"

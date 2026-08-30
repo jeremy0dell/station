@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import {
   DEFAULT_SCROLLBACK_LINES,
+  MAX_SCROLLBACK_LINES,
   ProjectConfigSchema,
   ProjectLocalConfigSchema,
   StationConfigSchema,
@@ -333,8 +334,8 @@ describe("workspace config", () => {
   it("accepts disabled and maximum scrollback depths", () => {
     expect(WorkspaceConfigSchema.parse({ scrollback_lines: 0 }).scrollback_lines).toBe(0);
     expect(
-      WorkspaceConfigSchema.parse({ scrollback_lines: DEFAULT_SCROLLBACK_LINES }).scrollback_lines,
-    ).toBe(DEFAULT_SCROLLBACK_LINES);
+      WorkspaceConfigSchema.parse({ scrollback_lines: MAX_SCROLLBACK_LINES }).scrollback_lines,
+    ).toBe(MAX_SCROLLBACK_LINES);
   });
 
   it("treats an explicit empty automations array as the off switch", () => {
@@ -411,7 +412,7 @@ describe("workspace config", () => {
     expect(WorkspaceConfigSchema.safeParse({ scrollback_lines: -1 }).success).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ scrollback_lines: 1.5 }).success).toBe(false);
     expect(
-      WorkspaceConfigSchema.safeParse({ scrollback_lines: DEFAULT_SCROLLBACK_LINES + 1 }).success,
+      WorkspaceConfigSchema.safeParse({ scrollback_lines: MAX_SCROLLBACK_LINES + 1 }).success,
     ).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ overlay_width_percent: 101 }).success).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ overlay_height_percent: 9 }).success).toBe(false);
