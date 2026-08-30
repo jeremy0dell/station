@@ -103,5 +103,3 @@ export function processDescendsFrom(
   }
   return false;
 }
-
-export const DEFAULT_PROCESS_ANCESTRY_DEPTH = maximumDefaultAncestryDepth;

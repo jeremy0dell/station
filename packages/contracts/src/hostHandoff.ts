@@ -21,8 +21,6 @@ export const PtyInstanceIdSchema = nonEmptyStringSchema;
 export type PtyInstanceId = z.infer<typeof PtyInstanceIdSchema>;
 
 export const PtyHandoffKindSchema = z.enum(["agent", "aux"]);
-export type PtyHandoffKind = z.infer<typeof PtyHandoffKindSchema>;
-
 /**
  * Launch metadata round-tripped through the handoff manifest and the bridge
  * park state; mirrors the host's PTY identity so adoption can rebuild entries
@@ -125,8 +123,6 @@ export const PtyBridgeAdoptCommandSchema = z
     ptyInstanceId: PtyInstanceIdSchema,
   })
   .strict();
-export type PtyBridgeAdoptCommand = z.infer<typeof PtyBridgeAdoptCommandSchema>;
-
 /** Strict bridge control status; ownership changes only after its PTY instance is verified. */
 export const PtyBridgeStatusSchema = z
   .object({
@@ -166,8 +162,6 @@ export const PtyScrollbackEventSchema = z.discriminatedUnion("type", [
   PtyScrollbackDataEventSchema,
   PtyScrollbackResizeEventSchema,
 ]);
-export type PtyScrollbackEvent = z.infer<typeof PtyScrollbackEventSchema>;
-
 /** A host's scrollback ring snapshot persisted beside the parked bridge. */
 export const PtyScrollbackExportSchema = z
   .object({

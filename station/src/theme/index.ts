@@ -15,7 +15,6 @@ export type { StationThemeSource } from "./themeContext.js";
 export { rgbColor, stationColorSnapshotValue } from "./types.js";
 export type {
   StationColor,
-  StationForegroundColor,
   StationSemanticColor,
   StationTerminalTheme,
   StationTheme,

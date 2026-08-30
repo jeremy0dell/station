@@ -65,15 +65,11 @@ export const UiLifecycleDetachReasonSchema = z.enum([
   "stream_failed",
   "pty_exited",
 ]);
-export type UiLifecycleDetachReason = z.infer<typeof UiLifecycleDetachReasonSchema>;
-
 export const UiLifecycleClientDetachReasonSchema = z.enum([
   "client_shutdown",
   "socket_closed",
   "stream_failed",
 ]);
-export type UiLifecycleClientDetachReason = z.infer<typeof UiLifecycleClientDetachReasonSchema>;
-
 export const UiLifecyclePtyKindSchema = z.enum(["agent", "aux"]);
 export type UiLifecyclePtyKind = z.infer<typeof UiLifecyclePtyKindSchema>;
 
@@ -249,5 +245,3 @@ export type UiLifecycleEventInputFor<Component extends UiLifecycleComponent> =
         : never
       : never
     : never;
-
-export type UiLifecycleEventInput = UiLifecycleEventInputFor<UiLifecycleComponent>;

@@ -1,15 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  chmod,
-  lstat,
-  mkdir,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 export type ReplaceTextFileOptions = {
@@ -66,18 +56,6 @@ export async function readTextFileIfPresent(path: string): Promise<string | unde
   } catch (cause) {
     if ((cause as NodeJS.ErrnoException | null | undefined)?.code === "ENOENT") {
       return undefined;
-    }
-    throw cause;
-  }
-}
-
-export async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch (cause) {
-    if ((cause as NodeJS.ErrnoException | null | undefined)?.code === "ENOENT") {
-      return false;
     }
     throw cause;
   }

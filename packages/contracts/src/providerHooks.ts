@@ -8,8 +8,6 @@ export const ProviderHookFollowUpSchema = z
   })
   .strict();
 
-export type ProviderHookFollowUp = z.infer<typeof ProviderHookFollowUpSchema>;
-
 const configuredDisabledHealthSchema = z
   .object({
     provider: ProviderIdSchema,

@@ -18,7 +18,7 @@ export type ScrollOnOutputMode = (typeof SCROLL_ON_OUTPUT_MODES)[number];
 /** Default normal-buffer history retained by each native pane screen. */
 export const DEFAULT_SCROLLBACK_LINES = 10_000;
 /** Initial safety ceiling; raise only with representative multi-pane memory and reflow evidence. */
-export const MAX_SCROLLBACK_LINES = DEFAULT_SCROLLBACK_LINES;
+export const MAX_SCROLLBACK_LINES = 10_000;
 
 /**
  * One automation pane: split from `origin` or `previous`, write or execute its

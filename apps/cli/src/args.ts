@@ -9,10 +9,6 @@ export class CliInputError extends Error {
   }
 }
 
-export function isCliInputError(error: unknown): error is CliInputError {
-  return error instanceof CliInputError;
-}
-
 export function parsePositiveIntegerOption(value: string | undefined, option: string): number {
   if (value === undefined) {
     throw new CliInputError("CLI_OPTION_VALUE_REQUIRED", `${option} requires a value.`);

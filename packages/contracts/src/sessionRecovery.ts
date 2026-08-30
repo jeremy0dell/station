@@ -83,6 +83,7 @@ export const SessionRescueManifestSchema = z
   })
   .strict();
 
+/** @public Loaded from the built contracts package by session-migrate. */
 export const SessionRecoveryCoverageSchema = z.array(
   z
     .object({

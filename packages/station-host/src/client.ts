@@ -12,20 +12,18 @@ import {
   HOST_PROTOCOL_VERSION,
   type HostAbortHandoffResult,
   HostAbortHandoffResultSchema,
-  type HostAdoptRegistryResult,
-  HostAdoptRegistryResultSchema,
   type HostAttachAck,
   HostAttachAckSchema,
   type HostAttachmentIntent,
   type HostBeginHandoffResult,
   HostBeginHandoffResultSchema,
-  HostClaimControlResultSchema,
   type HostClientIdentity,
   HostClientIdentitySchema,
   HostCloseResultSchema,
   type HostCompleteHandoffResult,
   HostCompleteHandoffResultSchema,
   type HostControlState,
+  HostControlStateSchema,
   type HostFrame,
   HostFrameSchema,
   type HostHealthResult,
@@ -97,7 +95,7 @@ export type StationHostClient = {
   /** Lifecycle-only: re-adopt parked bridges and resume normal serving. */
   abortHandoff(): Promise<HostAbortHandoffResult>;
   /** Lifecycle-only: adopt a parked manifest on a successor host. */
-  adoptRegistry(manifest: PtyHandoffManifest): Promise<HostAdoptRegistryResult>;
+  adoptRegistry(manifest: PtyHandoffManifest): Promise<HostAbortHandoffResult>;
   spawn(params: HostSpawnParamsInput): Promise<HostSpawnResult>;
   /** Read protocol-v8 PTY lifetimes without exporting or parking them. */
   list(): Promise<HostListResult["ptys"]>;
@@ -442,7 +440,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     abortHandoff: () => rawRequest("host.abortHandoff", undefined, HostAbortHandoffResultSchema),
     // Successor adopt requires matching build identity; not a lifecycle exemption.
     adoptRegistry: (manifest) =>
-      request("host.adoptRegistry", { manifest }, HostAdoptRegistryResultSchema),
+      request("host.adoptRegistry", { manifest }, HostAbortHandoffResultSchema),
     spawn: (params) => request("host.spawn", params, HostSpawnResultSchema),
     list: async () => (await request("host.list", undefined, HostListResultSchema)).ptys,
     recoveryInventory: () =>
@@ -530,7 +528,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
           const state = await request(
             "host.claimControl",
             { attachmentId: ack.attachmentId },
-            HostClaimControlResultSchema,
+            HostControlStateSchema,
           );
           sink.updateControlState(state);
           return sink.controlState;

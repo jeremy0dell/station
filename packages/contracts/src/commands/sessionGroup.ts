@@ -24,8 +24,6 @@ export const CreateSessionGroupPayloadSchema = z
   })
   .strict();
 
-export type CreateSessionGroupPayload = z.infer<typeof CreateSessionGroupPayloadSchema>;
-
 export const RenameSessionGroupPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -34,8 +32,6 @@ export const RenameSessionGroupPayloadSchema = z
     name: SessionGroupNameSchema,
   })
   .strict();
-
-export type RenameSessionGroupPayload = z.infer<typeof RenameSessionGroupPayloadSchema>;
 
 export const UpdateSessionGroupMembershipPayloadSchema = z
   .object({
@@ -72,10 +68,6 @@ export const UpdateSessionGroupMembershipPayloadSchema = z
     }
   });
 
-export type UpdateSessionGroupMembershipPayload = z.infer<
-  typeof UpdateSessionGroupMembershipPayloadSchema
->;
-
 export const ReparentSessionGroupPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -85,8 +77,6 @@ export const ReparentSessionGroupPayloadSchema = z
   })
   .strict();
 
-export type ReparentSessionGroupPayload = z.infer<typeof ReparentSessionGroupPayloadSchema>;
-
 export const DeleteSessionGroupPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -94,8 +84,6 @@ export const DeleteSessionGroupPayloadSchema = z
     expectedVersion: z.number().int().positive(),
   })
   .strict();
-
-export type DeleteSessionGroupPayload = z.infer<typeof DeleteSessionGroupPayloadSchema>;
 
 export const CreateSessionGroupCommandSchema = z
   .object({ type: z.literal("sessionGroup.create"), payload: CreateSessionGroupPayloadSchema })

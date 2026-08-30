@@ -13,45 +13,10 @@ export * from "./commands/project.js";
 export * from "./commands/providerHookAdapters.js";
 export * from "./commands/reconcile.js";
 export * from "./commands/session/command.js";
-export type {
-  CloseSessionConvergence,
-  RenameSessionConvergence,
-  SessionProjectionState,
-  SessionWorktreeProjectionState,
-} from "./commands/session/convergence.js";
-export type {
-  SessionCreationConvergence,
-  SessionCreationProjectionState,
-} from "./commands/session/creationConvergence.js";
-export type { SessionCommandDeps, SessionCommandOptions } from "./commands/session/options.js";
 export * from "./commands/session/result.js";
-export type {
-  SessionFilters,
-  SessionSummary,
-  SessionWorktreeSummary,
-} from "./commands/session/summary.js";
 export * from "./commands/setup/index.js";
-export type {
-  ObserverSnapshotLoadOptions,
-  SnapshotCommandOptions,
-} from "./commands/snapshot.js";
-export { runSnapshotCommand } from "./commands/snapshot.js";
 export * from "./commands/tui.js";
 export { runCliMain, shouldSuppressCliProcessOutput } from "./main.js";
-export {
-  convergeExactObserverBuild,
-  type ExactObserverConvergenceCommand,
-  type ExactObserverConvergenceDependencies,
-  type ExactObserverLifecycleSessionCapability,
-  type ExactObserverRestartEvidence,
-  parseExactObserverConvergenceCommand,
-} from "./observerProcess/convergeExactObserverBuild.js";
-export type {
-  ChildProcessLike,
-  ExactObserverActivationPhase,
-  ExactObserverBuildStatus,
-  ExactObserverIncumbentDisposition,
-  ObserverProcessDeps,
-} from "./observerProcess.js";
+export type { ChildProcessLike, ObserverProcessDeps } from "./observerProcess.js";
 export * from "./persistedStateReconcile.js";
 export * from "./selfExec.js";
