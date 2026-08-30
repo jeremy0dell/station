@@ -25,6 +25,7 @@ import {
   createNativeProcessLifecycle,
   type NativeProcessLifecycle,
 } from "./lifecycle/nativeProcessLifecycle.js";
+import { installLiveHostTtyDimensions } from "./liveHostTtyDimensions.js";
 import { createRenderProfiler, readRenderProfileEnabled } from "./profiling/renderProfiler.js";
 import {
   acquireStationTtyOwnership,
@@ -395,6 +396,7 @@ async function startStationMain(
     () => rendererForInput,
     clipboardEffects,
   );
+  installLiveHostTtyDimensions();
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
     exitSignals: [
