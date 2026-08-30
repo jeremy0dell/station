@@ -5,7 +5,7 @@ import type {
   ScrollBarRenderable,
   SliderRenderable,
 } from "@opentui/core";
-import { toOpenTuiColor, type StationTheme } from "../../../theme/index.js";
+import { toOpenTuiColor, type StationTheme } from "../../../../theme/index.js";
 import {
   scrollbarThumbGeometry,
   scrollbarTrackEndpoint,

@@ -12,8 +12,8 @@ import {
 } from "../../theme/index.js";
 import { stationAgentStatusTone } from "../statusUi.js";
 import { filterConditionFrame } from "./layout/filterConditionFrame.js";
-import { SemanticScrollRegion } from "./layout/SemanticScrollViewport.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { SemanticScrollRegion } from "./layout/scroll/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import { useAncestorBoundedHeight } from "./layout/useAncestorBoundedHeight.js";
 import {
   stationMouseProps,

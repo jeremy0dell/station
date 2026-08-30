@@ -36,9 +36,9 @@ import {
   stationMouseProps,
 } from "./stationMouseContext.js";
 import { memo, useLayoutEffect, useMemo } from "react";
-import { DashboardScrollViewport } from "./layout/DashboardScrollViewport.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
-import type { DashboardScrollController } from "./layout/dashboardScrollController.js";
+import { DashboardScrollViewport } from "./layout/scroll/DashboardScrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
+import type { DashboardScrollController } from "./layout/scroll/dashboardScrollController.js";
 import { DashboardFilterConditionView } from "./DashboardFilterConditionView.js";
 import { DashboardDividerView } from "./DashboardDividerView.js";
 import { GroupMenuView } from "./GroupMenuView.js";

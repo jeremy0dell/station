@@ -207,7 +207,7 @@ the working role, and member focus dims that working frame while the member keep
 ordinary keyboard-focus or hover treatment.
 
 Station mounts the complete semantic component tree in one OpenTUI scroll box.
-`station/view/layout/scrollViewport.ts` is the sole dashboard translation between
+`station/view/layout/scroll/scrollViewport.ts` is the sole dashboard translation between
 stable identities and measured `y`/`height` cell geometry. It follows focus by
 identity, scrolls and clips by box coordinates, treats partially intersecting and
 oversized boxes correctly, and reports only intersecting semantic IDs back to
@@ -279,7 +279,7 @@ open that downstream stage without replaying the chooser.
 
 Physical geometry is permitted only after semantic state and has these owners:
 
-- `station/view/layout/*` and the context-menu placement adapter translate
+- `station/view/layout/*`, including `layout/scroll/*`, and the context-menu placement adapter translate
   OpenTUI renderables into measured coordinates, bounded heights, pointer hits,
   and scroll deltas. The Station import-boundary test inventories these modules.
 - Group/sheet frame helpers subtract their two vertical border cells only to

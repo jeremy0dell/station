@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 import { bottomSheetFrame } from "../layout/bottomSheetFrame.js";
 import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
-import { SemanticScrollRegion } from "../layout/SemanticScrollViewport.js";
+import { SemanticScrollRegion } from "../layout/scroll/SemanticScrollViewport.js";
 import { SheetText } from "./parts.js";
 
 export type BottomSheetFrameViewProps = {

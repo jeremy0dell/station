@@ -29,7 +29,7 @@ import {
   dispatchRowSlot,
   dispatchStationAction,
 } from "./stationActions.js";
-import type { DashboardScrollController } from "../view/layout/dashboardScrollController.js";
+import type { DashboardScrollController } from "../view/layout/scroll/dashboardScrollController.js";
 
 /** Read/action surface required by the pointer router shared by both Station renderers. */
 export type DashboardMouseRuntime = {

@@ -17,7 +17,7 @@ import {
   type StationColor,
   type StationTheme,
 } from "../../../theme/index.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 
 export function fit(value: string, width: number): string {
   const visible = clipCells(value, width);

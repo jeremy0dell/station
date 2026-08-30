@@ -11,7 +11,7 @@ import type {
 import { GROUP_SETTINGS_ITEMS } from "@station/dashboard-core/state";
 import { toOpenTuiColor, useStationTheme } from "../../../theme/index.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 import { fit, SheetButtonRow } from "../sheets/parts.js";
 import {
   stationMouseProps,

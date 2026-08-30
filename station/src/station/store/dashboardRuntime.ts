@@ -12,7 +12,7 @@ import { stationHelpEntryOrder } from "../helpEntries.js";
 import {
   createDashboardScrollController,
   type DashboardScrollController,
-} from "../view/layout/dashboardScrollController.js";
+} from "../view/layout/scroll/dashboardScrollController.js";
 
 export type StationDashboardRuntime = DashboardRuntime & {
   /** Canonical snapshot/connection authority paired with this dashboard projection. */

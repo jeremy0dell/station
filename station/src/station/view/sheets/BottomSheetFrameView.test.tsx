@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import { act, type Dispatch, type SetStateAction, useState } from "react";
 import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { SheetChoiceLine, SheetFooter, SheetLine } from "./parts.js";

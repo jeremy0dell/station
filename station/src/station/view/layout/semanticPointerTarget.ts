@@ -1,5 +1,5 @@
 import { type BaseRenderable, Renderable, ScrollBoxRenderable } from "@opentui/core";
-import { semanticItemRenderableId } from "./scrollViewport.js";
+import { semanticItemRenderableId } from "./scroll/scrollViewport.js";
 
 /**
  * Resolves a terminal-cell pointer to a semantic child inside its measured scroll viewport.

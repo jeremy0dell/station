@@ -8,11 +8,11 @@ import {
   type StationHelpEntry,
 } from "../helpEntries.js";
 import { helpScrollChrome } from "./helpScrollChrome.js";
-import { SemanticScrollRegion } from "./layout/SemanticScrollViewport.js";
+import { SemanticScrollRegion } from "./layout/scroll/SemanticScrollViewport.js";
 import {
   createScrollViewportController,
   semanticItemRenderableId,
-} from "./layout/scrollViewport.js";
+} from "./layout/scroll/scrollViewport.js";
 import {
   HELP_PANEL_MAX_WIDTH,
   helpPanelFrame,

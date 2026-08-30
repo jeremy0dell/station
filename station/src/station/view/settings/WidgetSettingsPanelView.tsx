@@ -7,8 +7,8 @@ import type {
 } from "@station/dashboard-core/state";
 import { widgetSettingsPanelModel } from "@station/dashboard-core/selectors";
 import type { WidgetSettingsItem } from "@station/dashboard-core/selectors";
-import { SemanticScrollRegion } from "../layout/SemanticScrollViewport.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { SemanticScrollRegion } from "../layout/scroll/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 import { widgetSettingsFrame } from "../layout/settingsPanelFrame.js";
 import { fit } from "../sheets/parts.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";

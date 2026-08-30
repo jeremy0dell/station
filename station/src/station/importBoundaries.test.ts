@@ -484,9 +484,9 @@ const DASHBOARD_TEXT_NAMES = new Set([
 ]);
 const OPENTUI_LAYOUT_GEOMETRY_OWNERS = new Set([
   "contextMenu/usePointerAnchoredMenuPlacement.ts",
-  "station/view/layout/SemanticScrollViewport.tsx",
+  "station/view/layout/scroll/SemanticScrollViewport.tsx",
   "station/view/layout/renderBoxInsets.ts",
-  "station/view/layout/scrollViewport.ts",
+  "station/view/layout/scroll/scrollViewport.ts",
   "station/view/layout/semanticPointerTarget.ts",
   "station/view/layout/useAncestorBoundedHeight.ts",
   "station/view/layout/useAnchoredMenuPlacement.ts",
