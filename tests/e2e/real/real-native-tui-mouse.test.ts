@@ -1,9 +1,8 @@
-import { access, readFile, writeFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   ObserverProcessIdentitySchema,
-  type StationCommand,
   type StationSnapshot,
   worktreeHasLiveAgent,
 } from "../../../packages/contracts/dist/index.js";
@@ -14,8 +13,10 @@ import {
 import { createStationHostClient } from "../../../packages/station-host/dist/index.js";
 import { findRowByBranch } from "../../support/real-station/assertions";
 import {
+  continuePastCodexStartupPrompts,
   createCodexSentinel,
   createRealCodexFixture,
+  readCodexSessionStartWitness,
   waitForCodexSentinel,
 } from "../../support/real-station/codex";
 import {
@@ -34,12 +35,15 @@ import {
   waitForCommandRecord,
   waitForSnapshot,
 } from "../../support/real-station/protocol";
+import {
+  createRealIngressWitness,
+  launchProvenDormantRecovery,
+} from "../../support/real-station/recovery";
 import { createRealTempRepo } from "../../support/real-station/repo";
 import {
   type AttachedTmuxPtyClient,
   captureTmuxPane,
   closeRealTmuxEndpoint,
-  killTmuxSession,
   launchNativeStationInTmux,
   startAttachedTmuxPtyClient,
 } from "../../support/real-station/tmux";
@@ -76,25 +80,49 @@ describeReal("real native Station mouse input", () => {
   it("routes raw SGR hover and clicks through the native renderer exactly once", async () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
-    cleanup.defer(repo.cleanup);
-    const codex = await createRealCodexFixture({ env, repo });
+    const cleanupProcessIds: Array<{ label: string; pid: number }> = [];
+    cleanup.defer(async () => {
+      const failures: unknown[] = [];
+      let stableAbsenceChecks = 0;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await delay(500);
+        const existedBeforeSweep = await pathExists(repo.root);
+        try {
+          await repo.cleanup();
+        } catch (error) {
+          failures.push(error);
+        }
+        if (await pathExists(repo.root)) {
+          stableAbsenceChecks = 0;
+          continue;
+        }
+        stableAbsenceChecks = existedBeforeSweep ? 0 : stableAbsenceChecks + 1;
+        if (stableAbsenceChecks === 4) return;
+      }
+      throw new AggregateError(failures, `Real E2E root remained after cleanup: ${repo.root}`);
+    });
+    cleanup.defer(async () => {
+      for (const processIdentity of cleanupProcessIds) {
+        if (!(await waitForPidExit(processIdentity.pid, 30_000))) {
+          throw new Error(
+            `${processIdentity.label} process remained after cleanup: ${processIdentity.pid}`,
+          );
+        }
+      }
+    });
+    const ingressWitness = await createRealIngressWitness({ env, rootPath: repo.root });
+    const codex = await createRealCodexFixture({ env: ingressWitness.env, repo });
     const testEnv = codex.env;
     const config = await writeRealStationConfig({
       env: testEnv,
       repo,
       codexCommand: codex.codexCommand,
       installCodexHooks: true,
+      recovery: true,
+      stationPersistentAgents: true,
     });
     cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
-    await writeFile(
-      config.configPath,
-      `${(await readFile(config.configPath, "utf8")).replace(
-        "[harness.codex]\n",
-        "[harness.codex]\nresume = true\n",
-      )}\n[feature_flags]\nsession_resume_agent = true\nstation_persistent_agents = true\n`,
-      "utf8",
-    );
-    await codex.installHooks(config);
+    const hooks = await codex.installHooks(config);
     const nativeSession = uniqueTmuxSession("station-real-native-mouse");
     const branch = `nm-${process.pid}-${Date.now().toString(36).slice(-6)}`;
     const groupName = "Native mouse Group";
@@ -126,60 +154,31 @@ describeReal("real native Station mouse input", () => {
         timeoutMs: 45_000,
         env: isolatedStationEnv(config),
       });
+      cleanupProcessIds.push({ label: "Observer", pid: await readObserverPid(config) });
       const sentinel = createCodexSentinel(repo, "native-mouse");
-      const createCommand: StationCommand = {
-        type: "session.create",
-        payload: {
-          projectId: config.projectId,
-          branch,
-          harness: {
-            provider: "codex",
-            mode: "exec",
-          },
-          terminal: {
-            provider: "tmux",
-            layout: "agent-build-shell",
-          },
-          placement: { intent: "detached" },
-          initialPrompt: sentinel.prompt,
-        },
-      };
-      const createReceipt = await client.dispatch(createCommand);
-      commandId = createReceipt.commandId;
-      await waitForCommandRecord(client, createReceipt.commandId, { timeoutMs: 180_000 });
-
-      const created = await waitForSnapshot(
+      const proven = await launchProvenDormantRecovery({
         client,
-        (snapshot: StationSnapshot) => snapshot.rows.some((row) => row.branch === branch),
-        `Observer did not create the native mouse fixture ${branch}.`,
-        90_000,
-      );
-      const createdRow = findRowByBranch(created, branch);
-      await waitForCodexSentinel(sentinel, { rootPath: createdRow.path, timeoutMs: 180_000 });
-      await killTmuxSession(config.tmuxEndpoint, config.tmuxSession);
-      const dormant = await waitForSnapshot(
-        client,
-        (snapshot: StationSnapshot) => {
-          const row = snapshot.rows.find((candidate) => candidate.branch === branch);
-          return (
-            row !== undefined &&
-            !worktreeHasLiveAgent(row) &&
-            row.recovery?.kind === "agent-resume" &&
-            snapshot.sessions.some(
-              (session) => session.worktreeId === row.id && session.origin === "station",
-            )
-          );
+        config,
+        ingress: ingressWitness,
+        provider: "codex",
+        branch,
+        initialPrompt: sentinel.prompt,
+        afterTerminalAttached: async (row) => {
+          await continuePastCodexStartupPrompts(config.tmuxEndpoint, config.tmuxSession, row);
+          await waitForCodexSentinel(sentinel, { rootPath: row.path, timeoutMs: 180_000 });
         },
-        `Real Codex did not exit into a launchable Station session for ${branch}.`,
-        120_000,
-      );
-      const dormantRow = findRowByBranch(dormant, branch);
-      const dormantSession = dormant.sessions.find(
-        (session) => session.worktreeId === dormantRow.id && session.origin === "station",
-      );
-      if (dormantSession === undefined) {
-        throw new Error(`Observer did not retain a Station session for ${branch}.`);
-      }
+        readWitness: (row) =>
+          readCodexSessionStartWitness({
+            ingress: ingressWitness,
+            hooks,
+            cwd: row.path,
+            source: "startup",
+          }),
+        timeoutMs: 120_000,
+      });
+      commandId = proven.commandId;
+      const dormantRow = proven.row;
+      const dormantSession = { id: proven.identity.sessionId };
       const groupReceipt = await client.dispatch({
         type: "sessionGroup.create",
         payload: {
@@ -214,6 +213,10 @@ describeReal("real native Station mouse input", () => {
         sessionName: nativeSession,
         dimensions: NATIVE_DIMENSIONS,
       });
+      cleanupProcessIds.push(
+        { label: "native Station", pid: launched.panePid },
+        { label: "attached tmux client", pid: ptyClient.processId },
+      );
       cleanup.defer(ptyClient.close);
       runtime = { client: ptyClient, config, env: testEnv, target: launched.target };
 
@@ -453,22 +456,18 @@ describeReal("real native Station mouse input", () => {
       );
       expect(findRowByBranch(active, branch).agent).toMatchObject({ harness: "codex" });
 
-      const observerPid = await readObserverPid(config);
-      const nativePid = launched.panePid;
-      const attachedClientPid = ptyClient.processId;
       const worktreePath = dormantRow.path;
       if (process.env.STATION_REAL_E2E_KEEP_TEMP !== "1") {
         await cleanup.run();
-        expect(await waitForPidExit(nativePid, 10_000)).toBe(true);
-        expect(await waitForPidExit(attachedClientPid, 10_000)).toBe(true);
-        expect(await waitForPidExit(observerPid, 10_000)).toBe(true);
         expect(await pathExists(worktreePath)).toBe(false);
         expect(await pathExists(repo.root)).toBe(false);
       }
     } catch (error) {
       await writeNativeFailureBundle(testEnv, config, commandId);
       const diagnostics =
-        runtime === undefined ? "" : await nativeDiagnostics(runtime).catch(() => "");
+        runtime === undefined || !(await pathExists(testEnv.stationBin))
+          ? ""
+          : await nativeDiagnostics(runtime).catch(() => "");
       throw new Error(`${errorMessage(error)}${diagnostics}`, { cause: error });
     }
   }, 360_000);
@@ -488,6 +487,7 @@ async function writeNativeFailureBundle(
   config: RealStationConfigFixture,
   commandId: string | undefined,
 ): Promise<void> {
+  if (!(await pathExists(env.stationBin))) return;
   const args = ["debug", "bundle"];
   if (commandId !== undefined) args.push("--command", commandId);
   await runStationJson(env, {

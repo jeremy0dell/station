@@ -23,12 +23,14 @@ vi.mock("node:child_process", () => {
 import {
   closeRealTmuxEndpoint,
   createRealTmuxEndpoint,
+  destroyExactTmuxSession,
   displayStationPopupAndSendKey,
   killTmuxSession,
   launchNativeStationInTmux,
   type RealTmuxEndpoint,
   startAttachedTmuxPtyClient,
   startStationTuiInTmux,
+  tmuxSessionExists,
 } from "../../../../tests/support/real-station/tmux.js";
 
 describe("real Station tmux support", () => {
@@ -160,6 +162,34 @@ describe("real Station tmux support", () => {
     if (initializationRoot === undefined) throw new Error("Initialization did not invoke tmux.");
     roots.push(initializationRoot);
     await expect(stat(initializationRoot)).resolves.toBeDefined();
+  });
+
+  it("proves exact session presence and absence around terminal loss", async () => {
+    const endpoint = testEndpoint();
+    let present = true;
+    mockTmux((args) => {
+      if (args.includes("has-session")) {
+        return present ? succeed() : fail(1, "can't find session: workbench\n");
+      }
+      if (args.includes("kill-session")) {
+        present = false;
+        return succeed();
+      }
+      return succeed();
+    });
+
+    await expect(tmuxSessionExists(endpoint, "workbench")).resolves.toBe(true);
+    const loss = await destroyExactTmuxSession(endpoint, "workbench");
+    expect(loss).toEqual({ sessionName: "workbench", lostAt: expect.any(String) });
+    expect(commandCalls("has-session").map((call) => call[1].at(-1))).toEqual([
+      "=workbench",
+      "=workbench",
+      "=workbench",
+    ]);
+    expect(commandCalls("kill-session")[0]?.[1].at(-1)).toBe("=workbench");
+    await expect(destroyExactTmuxSession(endpoint, "workbench")).rejects.toThrow(
+      "did not exist before terminal loss",
+    );
   });
 
   it("performs zero writes after tuple drift or popup settlement", async () => {

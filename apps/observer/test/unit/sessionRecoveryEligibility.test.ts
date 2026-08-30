@@ -68,6 +68,53 @@ describe("sessionRecoveryEligibility", () => {
     });
   });
 
+  it.each([
+    ["codex", { kind: "native-session", id: "codex-native" }],
+    ["claude", { kind: "native-session", id: "claude-native" }],
+    ["cursor", { kind: "native-session", id: "cursor-native" }],
+    ["opencode", { kind: "native-session", id: "opencode-native" }],
+    ["pi", { kind: "session-file", path: "/tmp/station/web/feature/.pi/session.jsonl" }],
+  ] as const)("preserves exact %s recovery target authority", (provider, target) => {
+    const providerSession = session({ harness: provider });
+    expect(
+      sessionRecoveryEligibility(
+        input({
+          handle: handle({ provider, target }),
+          stationSessions: [providerSession],
+          expectedSession: { id: providerSession.id, harness: provider },
+          registeredHarness: { id: provider, canResume: true },
+        }),
+      ),
+    ).toEqual({
+      kind: "eligible",
+      stationSession: providerSession,
+      resume: {
+        target,
+        previousSessionId: "ses_feature",
+        recoveryHandleId: "rec_feature",
+      },
+    });
+  });
+
+  it.each([
+    [
+      "provider",
+      handle({ provider: "claude" }),
+      { id: "codex", canResume: true },
+      "harness_provider_missing",
+    ],
+    [
+      "Station session",
+      handle({ sessionId: "ses_other" }),
+      { id: "fake-harness", canResume: true },
+      "station_session_mismatch",
+    ],
+  ] as const)("rejects a selected handle with mismatched %s authority", (_name, selectedHandle, registeredHarness, reason) => {
+    expect(
+      sessionRecoveryEligibility(input({ handle: selectedHandle, registeredHarness })),
+    ).toEqual({ kind: "ineligible", reason });
+  });
+
   it("allows an explicitly selected imported handle only when its local lifecycle row is absent", () => {
     const imported = input({
       stationSessions: [

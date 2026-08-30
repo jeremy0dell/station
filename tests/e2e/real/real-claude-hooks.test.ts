@@ -1,10 +1,11 @@
 import type { CommandRecord, StationCommand, StationSnapshot } from "@station/contracts";
-import { buildWorkbenchWindowName } from "@station/tmux";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { assertDebugBundleContains, findRowByBranch } from "../../support/real-station/assertions";
 import {
+  continuePastClaudeTrustDialog,
   createClaudeSentinel,
   installClaudeHookProjectConfig,
+  readClaudeSessionStartWitness,
   waitForClaudeSentinel,
 } from "../../support/real-station/claude";
 import { writeFailureBundle } from "../../support/real-station/codex";
@@ -15,14 +16,9 @@ import {
   requireRealE2eEnvironment,
 } from "../../support/real-station/env";
 import { CleanupStack, runStationJson } from "../../support/real-station/process";
+import { createRealIngressWitness } from "../../support/real-station/recovery";
 import { createRealTempRepo, uniqueBranch } from "../../support/real-station/repo";
-import {
-  activeTmuxPane,
-  captureTmuxPane,
-  closeRealTmuxEndpoint,
-  type RealTmuxEndpoint,
-  sendTmuxKeys,
-} from "../../support/real-station/tmux";
+import { closeRealTmuxEndpoint } from "../../support/real-station/tmux";
 import { removeRealWorktrunkWorktree } from "../../support/real-station/worktrunk";
 
 const describeReal =
@@ -50,27 +46,29 @@ describeReal("real Claude hook ingestion", () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
+    const ingress = await createRealIngressWitness({ env, rootPath: repo.root });
+    const testEnv = ingress.env;
     const config = await writeRealStationConfig({
-      env,
+      env: testEnv,
       repo,
       harnessProvider: "claude",
       installClaudeHooks: true,
     });
     cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
-    await installClaudeHookProjectConfig({
-      env,
+    const hooks = await installClaudeHookProjectConfig({
+      env: testEnv,
       repo,
       configPath: config.configPath,
     });
     cleanup.defer(async () => {
-      await runStationJson(env, {
+      await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
       });
     });
     const branch = uniqueBranch("claude-hooks");
     cleanup.defer(async () => {
-      await removeRealWorktrunkWorktree({ env, config, repo, branch });
+      await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
     });
     const sentinel = createClaudeSentinel(repo, "hooks");
     const createCommand: StationCommand = {
@@ -93,7 +91,7 @@ describeReal("real Claude hook ingestion", () => {
 
     let createResult: CommandDispatchWaitResult | undefined;
     try {
-      createResult = await runStationJson<CommandDispatchWaitResult>(env, {
+      createResult = await runStationJson<CommandDispatchWaitResult>(testEnv, {
         configPath: config.configPath,
         args: ["command", "dispatch", "--stdin", "--wait", "--timeout-ms", "180000"],
         stdin: JSON.stringify(createCommand),
@@ -102,7 +100,7 @@ describeReal("real Claude hook ingestion", () => {
       expect(createResult.status).toBe("succeeded");
 
       const row = await waitForRowTerminalAttachment({
-        env,
+        env: testEnv,
         configPath: config.configPath,
         branch,
         timeoutMs: 90_000,
@@ -110,7 +108,7 @@ describeReal("real Claude hook ingestion", () => {
       await continuePastClaudeTrustDialog(config.tmuxEndpoint, config.tmuxSession, row);
       await waitForClaudeSentinel(sentinel, { rootPath: row.path, timeoutMs: 240_000 });
       const idleRow = await waitForRowAgentState({
-        env,
+        env: testEnv,
         configPath: config.configPath,
         branch,
         states: ["idle"],
@@ -121,8 +119,22 @@ describeReal("real Claude hook ingestion", () => {
         state: "idle",
         sessionId: expect.any(String),
       });
+      await expect(
+        readClaudeSessionStartWitness({
+          ingress,
+          hooks,
+          cwd: idleRow.path,
+          source: "startup",
+        }),
+      ).resolves.toMatchObject({
+        mode: "interactive",
+        target: { kind: "native-session", id: expect.any(String) },
+        settingsArtifact: hooks.settingsPath,
+        hooks,
+        delivery: { exitStatus: 0 },
+      });
 
-      const bundle = await runStationJson<{ bundlePath: string }>(env, {
+      const bundle = await runStationJson<{ bundlePath: string }>(testEnv, {
         configPath: config.configPath,
         args: ["debug", "bundle"],
         timeoutMs: 30_000,
@@ -137,7 +149,7 @@ describeReal("real Claude hook ingestion", () => {
       );
     } catch (error) {
       await writeFailureBundle({
-        env,
+        env: testEnv,
         configPath: config.configPath,
         commandId: createResult?.receipt.commandId,
       });
@@ -205,29 +217,4 @@ async function waitForRowTerminalAttachment(input: {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   throw new Error(`Timed out waiting for Claude row ${input.branch} to get terminal attachment.`);
-}
-
-async function continuePastClaudeTrustDialog(
-  endpoint: RealTmuxEndpoint,
-  tmuxSession: string,
-  row: StationSnapshot["rows"][number],
-): Promise<void> {
-  const target = await activeTmuxPane(
-    endpoint,
-    `${tmuxSession}:${buildWorkbenchWindowName({
-      projectId: row.projectId,
-      branch: row.branch,
-      worktreeId: row.id,
-      path: row.path,
-    })}.0`,
-  );
-  const deadline = Date.now() + 30_000;
-  while (Date.now() <= deadline) {
-    const captured = await captureTmuxPane({ endpoint, target });
-    if (captured.includes("Yes, I trust this folder")) {
-      await sendTmuxKeys({ endpoint, target, keys: ["Enter"] });
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
 }

@@ -1,11 +1,21 @@
 import { access, chmod, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { CodexHookEventSchema } from "@station/codex";
+import type { StationSnapshot } from "@station/contracts";
+import { buildWorkbenchWindowName } from "@station/tmux";
 import type { RealStationConfigFixture } from "./config";
 import type { RealE2eEnvironment } from "./env";
 import { requireToolPath } from "./env";
 import { runStationJson } from "./process";
+import {
+  type IngressAttempt,
+  type ProviderSessionStartWitness,
+  pathsReferToSameLocation,
+  type RealIngressWitness,
+} from "./recovery";
 import type { RealTempRepo } from "./repo";
+import { activeTmuxPane, captureTmuxPane, type RealTmuxEndpoint, sendTmuxKeys } from "./tmux";
 
 export type CodexSentinel = {
   relativePath: string;
@@ -21,6 +31,25 @@ export type CodexBranchSwitchSentinel = CodexSentinel & {
 export type CodexHookFixture = {
   hookScriptPath: string;
   hookConfigPath: string;
+};
+
+export type CodexSessionStartWitness = ProviderSessionStartWitness & {
+  provider: "codex";
+  target: { kind: "native-session"; id: string };
+  profile: "station";
+  mode: "interactive";
+  source: "startup" | "resume" | "clear" | "compact";
+  model: string;
+  permissionMode?: string;
+  hooks: CodexHookFixture;
+  delivery: {
+    attemptId: string;
+    invokedAt: string;
+    argv: string[];
+    exitStatus: 0;
+    stdout: string;
+    stderr: string;
+  };
 };
 
 export type RealCodexFixture = {
@@ -110,6 +139,105 @@ export async function waitForCodexSentinel(
     await delay(1000);
   }
   throw new Error(`Codex did not write sentinel ${sentinel.relativePath}.`);
+}
+
+export async function readCodexSessionStartWitness(input: {
+  ingress: Pick<RealIngressWitness, "readAttempts">;
+  hooks: CodexHookFixture;
+  cwd?: string;
+  source?: CodexSessionStartWitness["source"];
+  invokedAfter?: string;
+  nativeSessionId?: string;
+}): Promise<CodexSessionStartWitness | undefined> {
+  const attempts = await input.ingress.readAttempts();
+  return codexSessionStartWitnessFromAttempts(attempts, input);
+}
+
+export function codexSessionStartWitnessFromAttempts(
+  attempts: readonly IngressAttempt[],
+  input: {
+    hooks: CodexHookFixture;
+    cwd?: string;
+    source?: CodexSessionStartWitness["source"];
+    invokedAfter?: string;
+    nativeSessionId?: string;
+  },
+): CodexSessionStartWitness | undefined {
+  for (const attempt of attempts) {
+    if (input.invokedAfter !== undefined && attempt.invokedAt <= input.invokedAfter) continue;
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(attempt.rawInput);
+    } catch {
+      continue;
+    }
+    const parsed = CodexHookEventSchema.safeParse(parsedJson);
+    if (!parsed.success || parsed.data.hook_event_name !== "SessionStart") continue;
+    const event = parsed.data;
+    if (input.cwd !== undefined && !pathsReferToSameLocation(event.cwd, input.cwd)) continue;
+    if (input.source !== undefined && event.source !== input.source) continue;
+    if (input.nativeSessionId !== undefined && event.session_id !== input.nativeSessionId) continue;
+    if (attempt.exitStatus !== 0) continue;
+    const witness: CodexSessionStartWitness = {
+      provider: "codex",
+      target: { kind: "native-session", id: event.session_id },
+      cwd: event.cwd,
+      attempt,
+      profile: "station",
+      mode: "interactive",
+      source: event.source,
+      model: event.model,
+      hooks: input.hooks,
+      delivery: {
+        attemptId: attempt.id,
+        invokedAt: attempt.invokedAt,
+        argv: attempt.argv,
+        exitStatus: 0,
+        stdout: attempt.stdout,
+        stderr: attempt.stderr,
+      },
+    };
+    if (event.permission_mode !== undefined) witness.permissionMode = event.permission_mode;
+    return witness;
+  }
+  return undefined;
+}
+
+export async function continuePastCodexStartupPrompts(
+  endpoint: RealTmuxEndpoint,
+  tmuxSession: string,
+  row: StationSnapshot["rows"][number],
+): Promise<void> {
+  const target = await activeTmuxPane(endpoint, workbenchPaneTarget(tmuxSession, row));
+  const deadline = Date.now() + 30_000;
+  while (Date.now() <= deadline) {
+    const captured = await captureTmuxPane({ endpoint, target });
+    if (captured.includes("Do you trust the contents of this directory?")) {
+      await sendTmuxKeys({ endpoint, target, keys: ["1", "Enter"] });
+    }
+    if (captured.includes("hooks need review") && captured.includes("Press t to trust all")) {
+      await sendTmuxKeys({ endpoint, target, keys: ["t"] });
+      return;
+    }
+    await delay(500);
+  }
+}
+
+export function codexWorkbenchPaneTarget(
+  endpoint: RealTmuxEndpoint,
+  tmuxSession: string,
+  row: StationSnapshot["rows"][number],
+): Promise<string> {
+  return activeTmuxPane(endpoint, workbenchPaneTarget(tmuxSession, row));
+}
+
+function workbenchPaneTarget(tmuxSession: string, row: StationSnapshot["rows"][number]): string {
+  return `${tmuxSession}:${buildWorkbenchWindowName({
+    projectId: row.projectId,
+    branch: row.branch,
+    worktreeId: row.id,
+    path: row.path,
+  })}.0`;
 }
 
 async function createCodexHookEnabledWrapper(input: {
