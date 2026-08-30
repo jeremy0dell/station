@@ -4,16 +4,16 @@ import type {
   SessionRecoveryHandle,
   WorktreeObservation,
 } from "@station/contracts";
-import { resolveHarnessProviderOrThrow } from "./commands/providers.js";
-import { commandValidationError } from "./commands/session/shared.js";
-import type { SessionStore } from "./persistence/index.js";
-import type { ProviderRegistry } from "./providers/registry.js";
+import { resolveHarnessProviderOrThrow } from "../commands/providers.js";
+import { commandValidationError } from "../commands/session/shared.js";
+import type { SessionStore } from "../persistence/index.js";
+import type { ProviderRegistry } from "../providers/registry.js";
 import {
   type SessionRecoveryEligibility,
   type SessionRecoveryEligibilityInput,
   sessionRecoveryEligibility,
-} from "./sessionRecoveryEligibility.js";
-import { selectNewestSessionRecoveryCandidate } from "./sessionRecoverySelection.js";
+} from "./eligibility.js";
+import { selectNewestSessionRecoveryCandidate } from "./selection.js";
 
 type SessionRecoveryExpectation = {
   sessionId: string;

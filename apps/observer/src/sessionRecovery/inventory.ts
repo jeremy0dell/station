@@ -5,11 +5,11 @@ import type {
   SessionRecoveryHandle,
 } from "@station/contracts";
 import { compareCodeUnitStrings, ObserverRecoveryInventorySchema } from "@station/contracts";
-import type { SessionStore } from "./persistence/ports.js";
+import type { SessionStore } from "../persistence/ports.js";
 import type {
   ObserverRecoveryInventoryPersistenceSnapshot,
   PersistedSession,
-} from "./persistence/types.js";
+} from "../persistence/types.js";
 
 /**
  * USE CASE
