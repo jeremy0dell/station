@@ -148,7 +148,7 @@ describe("text setup presenter", () => {
       {
         id: "station-launchers",
         tier: "recommended" as const,
-        status: "warning" as const,
+        status: "warn" as const,
         label: "STATION launchers",
         message: "These Station launchers are missing: stn.",
       },
@@ -330,7 +330,7 @@ function setupFacts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       message: "Lifecycle hooks are enabled.",
     },
     worktrunkShellIntegration: {
-      status: "warning",
+      status: "warn",
       shell: "zsh",
       rcPath: "/tmp/home/.zshrc",
       message: "Worktrunk shell integration is not installed for zsh.",

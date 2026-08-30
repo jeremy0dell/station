@@ -46,7 +46,7 @@ export type SetupDependencyFact = {
 };
 
 export type SetupWorktrunkAutomationFact = {
-  status: "ok" | "warning" | "skipped";
+  status: "ok" | "warn" | "skipped";
   automationMode: "skip-hooks" | "preapprove-hooks" | "worktrunk-default";
   message: string;
   flag?: "--no-hooks" | "--yes";
@@ -54,7 +54,7 @@ export type SetupWorktrunkAutomationFact = {
 };
 
 export type SetupWorktrunkShellIntegrationFact = {
-  status: "ok" | "warning" | "skipped";
+  status: "ok" | "warn" | "skipped";
   message: string;
   shell?: "bash" | "zsh";
   rcPath?: string;

@@ -241,7 +241,7 @@ describe("protocol client/server", () => {
     };
     await expect(client.ingestProviderHookEvent(hookEvent)).resolves.toMatchObject({
       provider: "worktrunk",
-      status: "ingested",
+      status: "accepted",
     });
 
     const report: HarnessEventReport = {

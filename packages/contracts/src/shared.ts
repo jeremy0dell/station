@@ -11,6 +11,7 @@ export function compareCodeUnitStrings(left: string, right: string): number {
 }
 
 export const nonEmptyStringSchema = z.string().min(1);
+export const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 export const userFacingTitleSchema = z.string().trim().min(1);
 export const safeTextSchema = nonEmptyStringSchema.refine(
   (value) => !/(?:\r\n|[\n\r\u2028\u2029])\s*at\s+\S+/u.test(value),

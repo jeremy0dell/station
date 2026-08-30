@@ -64,7 +64,7 @@ describe("observer reconcile with Claude harness", () => {
         tool_use_id: "toolu_1",
       }),
     );
-    expect(working).toMatchObject({ status: "accepted", scheduledReconcile: true });
+    expect(working).toMatchObject({ status: "accepted" });
 
     let snapshot = await core.reconcile("claude-working");
     expect(snapshot.rows[0]?.agent).toMatchObject({

@@ -1126,25 +1126,25 @@ function creationSnapshot(): StationSnapshot {
     observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
     providerHealth: {
       worktrunk: {
-        providerId: "worktrunk",
+        provider: "worktrunk",
         providerType: "worktree",
         status: "healthy",
         lastCheckedAt: now,
       },
       tmux: {
-        providerId: "tmux",
+        provider: "tmux",
         providerType: "terminal",
         status: "healthy",
         lastCheckedAt: now,
       },
       codex: {
-        providerId: "codex",
+        provider: "codex",
         providerType: "harness",
         status: "healthy",
         lastCheckedAt: now,
       },
       claude: {
-        providerId: "claude",
+        provider: "claude",
         providerType: "harness",
         status: "healthy",
         lastCheckedAt: now,
@@ -1161,7 +1161,7 @@ function creationSnapshot(): StationSnapshot {
         root: "/projects/web",
         defaults: { harness: "codex", terminal: "native", layout: "custom-project-layout" },
         health: {
-          providerId: "worktrunk",
+          provider: "worktrunk",
           providerType: "worktree",
           status: "healthy",
           lastCheckedAt: now,

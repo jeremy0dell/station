@@ -352,7 +352,7 @@ function renderSuccessfulApply(projection: TextSetupProjection, theme: SetupThem
   }
 
   const launcher = projection.plan.checks.find(
-    (check) => check.id === "station-launchers" && check.status === "warning",
+    (check) => check.id === "station-launchers" && check.status === "warn",
   );
   const stationExecutable = setupLauncherExecutable(projection.facts.launchers.station);
   const linkAction = projection.plan.actions.find(
@@ -906,7 +906,7 @@ function statusLabel(status: CliSetupCheck["status"]): string {
       return resolveSetupMessage(setupMessageRef("status.ok"));
     case "missing":
       return resolveSetupMessage(setupMessageRef("status.missing"));
-    case "warning":
+    case "warn":
       return resolveSetupMessage(setupMessageRef("status.warning"));
     case "skipped":
       return resolveSetupMessage(setupMessageRef("status.skipped"));
@@ -919,7 +919,7 @@ function colorStatus(label: string, status: CliSetupCheck["status"], theme: Setu
       return theme.green(label);
     case "missing":
       return theme.red(label);
-    case "warning":
+    case "warn":
       return theme.yellow(label);
     case "skipped":
       return theme.dim(label);

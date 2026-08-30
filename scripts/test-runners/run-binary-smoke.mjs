@@ -275,7 +275,7 @@ async function runBinarySmoke() {
       assertEqual(setupPlan.summary.requiredOk, false, "compiled setup requiredOk alias");
       const launcherCheck = setupPlan.checks.find((check) => check.id === "station-launchers");
       assertEqual(launcherCheck?.tier, "recommended", "compiled launcher PATH warning tier");
-      assertEqual(launcherCheck?.status, "warning", "compiled launcher PATH warning status");
+      assertEqual(launcherCheck?.status, "warn", "compiled launcher PATH warning status");
       assertEqual(
         launcherCheck?.message,
         "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup. Use the installer's PATH guidance to repair bare launcher resolution.",

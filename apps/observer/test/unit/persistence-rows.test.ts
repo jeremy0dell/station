@@ -32,7 +32,7 @@ describe("persistence row conversion", () => {
     expect(
       providerObservationFromRow(
         providerObservationRow("provider_health", {
-          providerId: "fake-harness",
+          provider: "fake-harness",
           providerType: "harness",
           status: "healthy",
           lastCheckedAt: now,
@@ -41,7 +41,7 @@ describe("persistence row conversion", () => {
       ),
     ).toMatchObject({
       entityKind: "provider_health",
-      payload: { providerId: "fake-harness", status: "healthy" },
+      payload: { provider: "fake-harness", status: "healthy" },
     });
     expect(() =>
       providerObservationFromRow(

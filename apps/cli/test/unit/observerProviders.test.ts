@@ -153,15 +153,15 @@ describe("observer providers", () => {
     const project = firstProject();
 
     await expect(registry.worktree.health()).resolves.toMatchObject({
-      providerId: "noop-worktree",
+      provider: "noop-worktree",
       status: "healthy",
     });
     await expect(registry.terminal.health()).resolves.toMatchObject({
-      providerId: "noop-terminal",
+      provider: "noop-terminal",
       status: "healthy",
     });
     await expect(harness.health()).resolves.toMatchObject({
-      providerId: "noop-harness",
+      provider: "noop-harness",
       status: "healthy",
     });
     expect(await registry.worktree.listWorktrees(project)).toEqual([]);
@@ -197,7 +197,7 @@ describe("observer providers", () => {
     }
 
     await expect(registry.worktree.health()).resolves.toMatchObject({
-      providerId: "codxe",
+      provider: "codxe",
       providerType: "worktree",
       status: "unavailable",
       lastError: {
@@ -210,7 +210,7 @@ describe("observer providers", () => {
       },
     });
     await expect(registry.terminal.health()).resolves.toMatchObject({
-      providerId: "tmxu",
+      provider: "tmxu",
       providerType: "terminal",
       status: "unavailable",
       lastError: {
@@ -220,7 +220,7 @@ describe("observer providers", () => {
       },
     });
     await expect(harness.health()).resolves.toMatchObject({
-      providerId: "harnes",
+      provider: "harnes",
       providerType: "harness",
       status: "unavailable",
       lastError: {
@@ -341,7 +341,7 @@ describe("observer providers", () => {
     expect(createPiHarnessProvider).toHaveBeenCalledTimes(1);
     expect(registry.harnesses.get("scripted")).toBeInstanceOf(ScriptedAgentHarnessProvider);
     await expect(registry.harnesses.get("noop-harness")?.health()).resolves.toMatchObject({
-      providerId: "noop-harness",
+      provider: "noop-harness",
       status: "healthy",
     });
   });
@@ -548,7 +548,7 @@ describe("observer providers", () => {
       });
 
       await expect(registry.terminal.health()).resolves.toMatchObject({
-        providerId: "tmux",
+        provider: "tmux",
         status: "healthy",
       });
     } finally {
@@ -1056,7 +1056,7 @@ describe("observer providers", () => {
     const provider = registry.harnesses.get("crush");
 
     await expect(provider?.health()).resolves.toMatchObject({
-      providerId: "crush",
+      provider: "crush",
       providerType: "harness",
       status: "unavailable",
       lastError: {
@@ -1075,7 +1075,7 @@ describe("observer providers", () => {
     const provider = registry.repositories.get("github");
 
     await expect(provider?.health()).resolves.toMatchObject({
-      providerId: "github",
+      provider: "github",
       providerType: "repository",
       status: "unknown",
     });

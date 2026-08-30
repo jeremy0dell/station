@@ -335,7 +335,7 @@ describe("setup operation adapters", () => {
         homeDir: "/tmp/station-shell-precondition",
         worktrunk: { status: "ok", command: "wt" },
         worktrunkShellIntegration: {
-          status: "warning",
+          status: "warn",
           message: "missing",
           shell: "zsh",
           rcPath: "/tmp/station-shell-precondition/does-not-exist/.zshrc",

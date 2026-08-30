@@ -26,7 +26,7 @@
     "hookSpoolDepth": 0,
     "providerHealth": {
       "fake-worktree": {
-        "providerId": "fake-worktree",
+        "provider": "fake-worktree",
         "providerType": "worktree",
         "status": "unavailable",
         "lastCheckedAt": "2026-05-20T12:00:00.000Z",
@@ -51,7 +51,7 @@
   },
   "providers": {
     "fake-worktree": {
-      "providerId": "fake-worktree",
+      "provider": "fake-worktree",
       "providerType": "worktree",
       "status": "unavailable",
       "lastCheckedAt": "2026-05-20T12:00:00.000Z",
@@ -78,7 +78,7 @@
     },
     "providerHealth": {
       "fake-worktree": {
-        "providerId": "fake-worktree",
+        "provider": "fake-worktree",
         "providerType": "worktree",
         "status": "unavailable",
         "lastCheckedAt": "2026-05-20T12:00:00.000Z",

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CommandRecordSchema } from "./commandLifecycle.js";
-import { ErrorEnvelopeSchema, SafeErrorSchema } from "./errors.js";
+import { ErrorEnvelopeSchema, ErrorSeveritySchema, SafeErrorSchema } from "./errors.js";
 import { StationEventSchema } from "./events.js";
 import {
   CommandIdSchema,
@@ -14,8 +14,13 @@ import {
   WorktreeIdSchema,
 } from "./ids.js";
 import { LogComponentSchema, LogLevelSchema } from "./logging.js";
-import { ObserverHealthSchema, ObserverSqliteHealthSummarySchema } from "./observer.js";
-import { ProviderHealthSchema, ProviderHookRuntimeSchema } from "./providers.js";
+import { ConfidenceSchema } from "./observations.js";
+import {
+  ObserverHealthSchema,
+  ObserverHealthStatusSchema,
+  ObserverSqliteHealthSummarySchema,
+} from "./observer.js";
+import { DoctorCheckSchema, ProviderHealthSchema, ProviderHookRuntimeSchema } from "./providers.js";
 import { nonEmptyStringSchema } from "./shared.js";
 import { StationSnapshotSchema } from "./snapshot.js";
 import { UiLifecycleEventSchema } from "./uiLifecycle.js";
@@ -212,7 +217,7 @@ export const DiagnosticEvidenceCategorySchema = z.enum([
   "retention",
 ]);
 
-export const DiagnosticEvidenceSeveritySchema = z.enum(["debug", "info", "warn", "error", "fatal"]);
+export const DiagnosticEvidenceSeveritySchema = ErrorSeveritySchema;
 
 export const DiagnosticRootCauseCodeSchema = z.enum([
   "INVALID_CONFIG",
@@ -244,8 +249,8 @@ export const DiagnosticEvidenceItemSchema = z
     projectId: ProjectIdSchema.optional(),
     worktreeId: WorktreeIdSchema.optional(),
     sessionId: SessionIdSchema.optional(),
-    targetId: TerminalTargetIdSchema.optional(),
-    runId: HarnessRunIdSchema.optional(),
+    terminalTargetId: TerminalTargetIdSchema.optional(),
+    harnessRunId: HarnessRunIdSchema.optional(),
     diagnosticId: nonEmptyStringSchema.optional(),
     evidence: z.record(nonEmptyStringSchema, z.unknown()).optional(),
   })
@@ -256,7 +261,7 @@ export type DiagnosticEvidenceItem = z.infer<typeof DiagnosticEvidenceItemSchema
 export const DiagnosticRootCauseSchema = z
   .object({
     code: DiagnosticRootCauseCodeSchema,
-    confidence: z.enum(["high", "medium", "low"]),
+    confidence: ConfidenceSchema,
     summary: nonEmptyStringSchema,
     itemIds: z.array(nonEmptyStringSchema),
     provider: ProviderIdSchema.optional(),
@@ -289,7 +294,7 @@ export const DiagnosticEvidenceIndexSchema = z
       .optional(),
     summary: z
       .object({
-        status: z.enum(["healthy", "degraded", "unavailable"]),
+        status: ObserverHealthStatusSchema,
         rootCauseCodes: z.array(DiagnosticRootCauseCodeSchema),
         providers: z.array(ProviderIdSchema),
         commandIds: z.array(CommandIdSchema),
@@ -305,22 +310,11 @@ export const DiagnosticEvidenceIndexSchema = z
 
 export type DiagnosticEvidenceIndex = z.infer<typeof DiagnosticEvidenceIndexSchema>;
 
-export const DoctorCheckSchema = z
-  .object({
-    name: nonEmptyStringSchema,
-    status: z.enum(["ok", "warn", "error"]),
-    message: nonEmptyStringSchema,
-    error: SafeErrorSchema.optional(),
-  })
-  .strict();
-
-export type DoctorCheck = z.infer<typeof DoctorCheckSchema>;
-
 export const DoctorReportSchema = z
   .object({
     schemaVersion: SchemaVersionSchema,
     generatedAt: TimestampSchema,
-    status: z.enum(["healthy", "degraded", "unavailable"]),
+    status: ObserverHealthStatusSchema,
     checks: z.array(DoctorCheckSchema),
     observer: ObserverHealthSchema,
     config: DiagnosticConfigSummarySchema,

@@ -21,7 +21,7 @@ describe("missing Worktrunk binary diagnostic", () => {
       snapshot: baseDiagnosticSnapshot({
         providerHealth: {
           worktrunk: {
-            providerId: "worktrunk",
+            provider: "worktrunk",
             providerType: "worktree",
             status: "unavailable",
             lastCheckedAt: diagnosticNow,

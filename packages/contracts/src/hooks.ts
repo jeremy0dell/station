@@ -23,7 +23,8 @@ import {
 } from "./observations.js";
 import { nonEmptyStringSchema, optionalProviderDataSchema } from "./shared.js";
 
-export const ProviderHookKindSchema = z.enum(["worktree", "terminal", "harness", "provider"]);
+// Terminal is reserved for the tested non-harness ingress path; no production producer exists yet.
+export const ProviderHookKindSchema = z.enum(["worktree", "terminal", "harness"]);
 
 export const ProviderHookEventSchema = z
   .object({
@@ -49,12 +50,8 @@ export const ProviderHookReceiptSchema = z
     hookId: nonEmptyStringSchema,
     provider: ProviderIdSchema,
     event: nonEmptyStringSchema,
-    accepted: z.boolean(),
-    status: z.enum(["ingested", "spooled", "rejected", "ignored"]),
+    status: z.enum(["accepted", "spooled", "rejected", "ignored"]),
     receivedAt: TimestampSchema,
-    reconciled: z.boolean().optional(),
-    spooled: z.boolean().optional(),
-    deduped: z.boolean().optional(),
     error: SafeErrorSchema.optional(),
   })
   .strict();
@@ -103,10 +100,8 @@ export const HarnessEventReportReceiptSchema = z
     provider: ProviderIdSchema,
     eventType: nonEmptyStringSchema,
     accepted: z.boolean(),
-    status: z.enum(["accepted", "spooled", "rejected"]),
+    status: z.enum(["accepted", "rejected"]),
     receivedAt: TimestampSchema,
-    projected: z.boolean().optional(),
-    scheduledReconcile: z.boolean().optional(),
     deduped: z.boolean().optional(),
     error: SafeErrorSchema.optional(),
   })
@@ -241,14 +236,21 @@ export type ProviderHookAdapter = {
   toHarnessEventReport?: (input: ProviderHookReportInput) => HarnessEventReportResult;
 };
 
+// The distinct payload keys (`event` vs `report`) discriminate the two spool
+// record shapes: spoolStore parses hook first and relies on strict-mode
+// rejection to fall through to the report schema.
+const spoolEnvelopeShape = {
+  schemaVersion: SchemaVersionSchema,
+  spoolId: nonEmptyStringSchema,
+  createdAt: TimestampSchema,
+  attempts: z.number().int().nonnegative(),
+  lastError: SafeErrorSchema.optional(),
+};
+
 export const ProviderHookSpoolRecordSchema = z
   .object({
-    schemaVersion: SchemaVersionSchema,
-    spoolId: nonEmptyStringSchema,
-    createdAt: TimestampSchema,
+    ...spoolEnvelopeShape,
     event: ProviderHookEventSchema,
-    attempts: z.number().int().nonnegative(),
-    lastError: SafeErrorSchema.optional(),
   })
   .strict();
 
@@ -256,12 +258,8 @@ export type ProviderHookSpoolRecord = z.infer<typeof ProviderHookSpoolRecordSche
 
 export const HarnessEventReportSpoolRecordSchema = z
   .object({
-    schemaVersion: SchemaVersionSchema,
-    spoolId: nonEmptyStringSchema,
-    createdAt: TimestampSchema,
+    ...spoolEnvelopeShape,
     report: HarnessEventReportSchema,
-    attempts: z.number().int().nonnegative(),
-    lastError: SafeErrorSchema.optional(),
   })
   .strict();
 

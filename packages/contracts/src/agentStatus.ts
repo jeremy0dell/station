@@ -1,8 +1,22 @@
+import { z } from "zod";
 import type { AgentState } from "./observations.js";
 import type { WorktreeRow } from "./snapshot.js";
 
+export const AgentStatusLabelSchema = z.enum([
+  "no agent",
+  "starting",
+  "idle",
+  "working",
+  "needs attention",
+  "stuck",
+  "exited",
+  "unknown",
+]);
+
+export type AgentStatusLabel = z.infer<typeof AgentStatusLabelSchema>;
+
 export type AgentStatusDefinition = {
-  label: WorktreeRow["display"]["statusLabel"];
+  label: AgentStatusLabel;
   priority: number;
   alert: boolean;
   warning: boolean;

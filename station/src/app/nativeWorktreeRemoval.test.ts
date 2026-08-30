@@ -41,7 +41,7 @@ describe("native worktree removal", () => {
       providerHealth: {
         ...base.providerHealth,
         native: {
-          providerId: "native",
+          provider: "native",
           providerType: "terminal",
           status: "healthy",
           lastCheckedAt: base.generatedAt,

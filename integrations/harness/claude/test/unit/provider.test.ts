@@ -43,7 +43,7 @@ describe("ClaudeHarnessProvider", () => {
     });
 
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "claude",
+      provider: "claude",
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: now,
@@ -67,7 +67,7 @@ describe("ClaudeHarnessProvider", () => {
     });
 
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "claude",
+      provider: "claude",
       providerType: "harness",
       status: "unavailable",
       lastError: {

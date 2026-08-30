@@ -25,21 +25,21 @@ export const mockObserverSnapshot = {
   },
   providerHealth: {
     worktrunk: {
-      providerId: "worktrunk",
+      provider: "worktrunk",
       providerType: "worktree",
       status: "healthy",
       lastCheckedAt: fixtureNow,
       latencyMs: 18,
     },
     tmux: {
-      providerId: "tmux",
+      provider: "tmux",
       providerType: "terminal",
       status: "healthy",
       lastCheckedAt: fixtureNow,
       latencyMs: 8,
     },
     codex: {
-      providerId: "codex",
+      provider: "codex",
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: fixtureNow,
@@ -58,7 +58,7 @@ export const mockObserverSnapshot = {
         layout: "agent-build-shell",
       },
       health: {
-        providerId: "worktrunk",
+        provider: "worktrunk",
         providerType: "worktree",
         status: "healthy",
         lastCheckedAt: fixtureNow,

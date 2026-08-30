@@ -1010,7 +1010,7 @@ class FakeRepositoryProvider implements RepositoryProvider {
 
   async health(): Promise<ProviderHealth> {
     return {
-      providerId: this.id,
+      provider: this.id,
       providerType: "repository",
       status: "unknown",
       lastCheckedAt: toIso(this.#clock),

@@ -56,7 +56,7 @@ function fakeRepositoryProvider(
       canUseCliAuth: false,
     }),
     health: async () => ({
-      providerId: id,
+      provider: id,
       providerType: "repository",
       status: "unknown",
       lastCheckedAt: "2026-05-20T12:00:00.000Z",

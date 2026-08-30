@@ -65,7 +65,7 @@ export type SetupWorktrunkAutomationUnreadyIssue = SetupIssueBase<
   "worktrunk-automation-unready",
   "recommended"
 > & {
-  readonly state: "warning" | "skipped";
+  readonly state: "warn" | "skipped";
 };
 
 export type SetupWorktrunkShellMissingIssue = SetupIssueBase<

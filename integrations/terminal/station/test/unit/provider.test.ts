@@ -126,7 +126,7 @@ describe("StationTerminalProvider", () => {
   it("reports healthy", async () => {
     const provider = new StationTerminalProvider({ clock });
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "native",
+      provider: "native",
       providerType: "terminal",
       status: "healthy",
       lastCheckedAt: now,

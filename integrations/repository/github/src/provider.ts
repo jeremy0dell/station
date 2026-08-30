@@ -118,7 +118,7 @@ export class GithubRepositoryProvider implements RepositoryProvider {
   async health(): Promise<ProviderHealth> {
     return (
       this.#health ?? {
-        providerId: this.id,
+        provider: this.id,
         providerType: "repository",
         status: "unknown",
         lastCheckedAt: this.#now(),
@@ -266,7 +266,7 @@ export class GithubRepositoryProvider implements RepositoryProvider {
     diagnostics?: Record<string, string>,
   ): void {
     const health: ProviderHealth = {
-      providerId: this.id,
+      provider: this.id,
       providerType: "repository",
       status,
       lastCheckedAt: this.#now(),

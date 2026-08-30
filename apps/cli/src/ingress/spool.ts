@@ -72,10 +72,8 @@ export async function writeProviderHookSpoolRecord(
     hookId: options.event.hookId ?? spoolId,
     provider: options.event.provider,
     event: options.event.event,
-    accepted: true,
     status: "spooled",
     receivedAt: options.event.receivedAt,
-    spooled: true,
     ...(options.error === undefined ? {} : { error: options.error }),
   });
 }

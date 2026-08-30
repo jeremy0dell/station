@@ -514,7 +514,7 @@ describe("observer reconcile persistence", () => {
     let healthStatus: "healthy" | "unavailable" = "unavailable";
     const providers = providersWithOneSession();
     vi.spyOn(providers.worktree, "health").mockImplementation(async () => ({
-      providerId: providers.worktree.id,
+      provider: providers.worktree.id,
       providerType: "worktree",
       status: healthStatus,
       lastCheckedAt: currentTime,
@@ -542,7 +542,7 @@ describe("observer reconcile persistence", () => {
     expect(core.getSnapshot()).toMatchObject({
       observer: { healthy: false },
       providerHealth: { "fake-worktree": { status: "unavailable" } },
-      projects: [{ health: { providerId: "fake-worktree", status: "unavailable" } }],
+      projects: [{ health: { provider: "fake-worktree", status: "unavailable" } }],
       alerts: [{ provider: "fake-worktree", severity: "error" }],
     });
 
@@ -562,7 +562,7 @@ describe("observer reconcile persistence", () => {
     expect(core.getSnapshot()).toMatchObject({
       observer: { healthy: true },
       providerHealth: { "fake-worktree": { status: "healthy" } },
-      projects: [{ health: { providerId: "fake-worktree", status: "healthy" } }],
+      projects: [{ health: { provider: "fake-worktree", status: "healthy" } }],
       alerts: [],
     });
     expect(core.getHealth().providerHealth["fake-worktree"]?.status).toBe("healthy");
@@ -581,7 +581,7 @@ describe("observer reconcile persistence", () => {
 
     await expect(
       core.commitProviderHealthProbe({
-        providerId: "fake-worktree",
+        provider: "fake-worktree",
         providerType: "worktree",
         status: "unavailable",
         lastCheckedAt: now,
@@ -743,7 +743,7 @@ describe("observer reconcile persistence", () => {
     const terminalHealth = (await persistence.listProviderObservations()).find(
       (observation) =>
         observation.entityKind === "provider_health" &&
-        observation.payload.providerId === "fake-terminal",
+        observation.payload.provider === "fake-terminal",
     );
     expect(terminalHealth).toMatchObject({
       entityKind: "provider_health",

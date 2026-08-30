@@ -50,7 +50,7 @@ describe("CursorHarnessProvider", () => {
     });
 
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "cursor",
+      provider: "cursor",
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: now,

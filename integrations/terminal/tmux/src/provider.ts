@@ -165,7 +165,7 @@ export class TmuxProvider implements TerminalProvider {
         retries: 1,
       });
       return {
-        providerId: this.id,
+        provider: this.id,
         providerType: "terminal",
         status: "healthy",
         lastCheckedAt: checkedAt,
@@ -178,7 +178,7 @@ export class TmuxProvider implements TerminalProvider {
         hint: "Install tmux or choose a different terminal provider.",
       });
       return {
-        providerId: this.id,
+        provider: this.id,
         providerType: "terminal",
         status: "unavailable",
         lastCheckedAt: checkedAt,

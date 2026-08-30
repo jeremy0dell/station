@@ -55,10 +55,8 @@ describe("provider hook ingress command", () => {
                 hookId: event.hookId ?? "hook_final_command",
                 provider: event.provider,
                 event: event.event,
-                accepted: true,
-                status: "ingested",
+                status: "accepted",
                 receivedAt: event.receivedAt,
-                reconciled: false,
               } satisfies ProviderHookReceipt;
             },
           }) as never,
@@ -71,7 +69,7 @@ describe("provider hook ingress command", () => {
       },
     );
 
-    expect(receipt.status).toBe("ingested");
+    expect(receipt.status).toBe("accepted");
     expect(staleSocketPresentAtSpawn).toBe(true);
     expect(spawnInput).toEqual({
       paths: expect.objectContaining({
@@ -126,17 +124,15 @@ describe("provider hook ingress command", () => {
                 hookId: event.hookId ?? "hook_child_timeout",
                 provider: event.provider,
                 event: event.event,
-                accepted: true,
-                status: "ingested",
+                status: "accepted",
                 receivedAt: event.receivedAt,
-                reconciled: false,
               } satisfies ProviderHookReceipt;
             },
           }) as never,
       },
     );
 
-    expect(receipt.status).toBe("ingested");
+    expect(receipt.status).toBe("accepted");
     const childArgv = JSON.parse(await readFile(argvPath, "utf8")) as string[];
     expect(childArgv.slice(0, 5)).toEqual([
       "--socket",
@@ -177,10 +173,8 @@ describe("provider hook ingress command", () => {
               hookId: event.hookId ?? "hook_worktrunk_1",
               provider: event.provider,
               event: event.event,
-              accepted: true,
-              status: "ingested",
+              status: "accepted",
               receivedAt: event.receivedAt,
-              reconciled: false,
             };
           };
           return {
@@ -192,7 +186,7 @@ describe("provider hook ingress command", () => {
     );
 
     expect(receipt).toMatchObject({
-      status: "ingested",
+      status: "accepted",
       provider: "worktrunk",
       event: "post-create",
     });
@@ -221,17 +215,15 @@ describe("provider hook ingress command", () => {
                 hookId: event.hookId ?? "hook_worktrunk_empty",
                 provider: event.provider,
                 event: event.event,
-                accepted: true,
-                status: "ingested",
+                status: "accepted",
                 receivedAt: event.receivedAt,
-                reconciled: false,
               } satisfies ProviderHookReceipt;
             },
           }) as never,
       },
     );
 
-    expect(receipt.status).toBe("ingested");
+    expect(receipt.status).toBe("accepted");
     expect(observedEvent).toBeDefined();
     expect(Object.hasOwn(observedEvent ?? {}, "payload")).toBe(false);
   });
@@ -267,7 +259,6 @@ describe("provider hook ingress command", () => {
             hookId: event.hookId ?? "hook_worktrunk_config_only",
             provider: event.provider,
             event: event.event,
-            accepted: true,
             status: "spooled",
             receivedAt: event.receivedAt,
             spooledAt: clock === undefined ? now : clock.now().toISOString(),
@@ -379,10 +370,8 @@ describe("provider hook ingress command", () => {
               hookId: event.hookId ?? "hook_1",
               provider: event.provider,
               event: event.event,
-              accepted: true,
-              status: "ingested",
+              status: "accepted",
               receivedAt: event.receivedAt,
-              reconciled: false,
             };
           };
           return {
@@ -394,7 +383,7 @@ describe("provider hook ingress command", () => {
       },
     );
 
-    expect(receipt.status).toBe("ingested");
+    expect(receipt.status).toBe("accepted");
     expect(observedEvent).toMatchObject({
       provider: "codex",
       kind: "harness",
@@ -443,10 +432,8 @@ describe("provider hook ingress command", () => {
               hookId: event.hookId ?? "hook_1",
               provider: event.provider,
               event: event.event,
-              accepted: true,
-              status: "ingested",
+              status: "accepted",
               receivedAt: event.receivedAt,
-              reconciled: false,
             };
           };
           return {
@@ -458,7 +445,7 @@ describe("provider hook ingress command", () => {
       },
     );
 
-    expect(receipt.status).toBe("ingested");
+    expect(receipt.status).toBe("accepted");
     expect(observedEvent).toMatchObject({
       provider: "claude",
       kind: "harness",
@@ -503,10 +490,8 @@ describe("provider hook ingress command", () => {
               hookId: event.hookId ?? "hook_1",
               provider: event.provider,
               event: event.event,
-              accepted: true,
-              status: "ingested",
+              status: "accepted",
               receivedAt: event.receivedAt,
-              reconciled: false,
             };
           };
           return {
@@ -518,7 +503,7 @@ describe("provider hook ingress command", () => {
       },
     );
 
-    expect(receipt.status).toBe("ingested");
+    expect(receipt.status).toBe("accepted");
     expect(observedEvent).toMatchObject({
       provider: "cursor",
       kind: "harness",
@@ -555,17 +540,15 @@ describe("provider hook ingress command", () => {
                 hookId: event.hookId ?? "hook_pi_1",
                 provider: event.provider,
                 event: event.event,
-                accepted: true,
-                status: "ingested",
+                status: "accepted",
                 receivedAt: event.receivedAt,
-                reconciled: false,
               } satisfies ProviderHookReceipt;
             },
           }) as never,
       },
     );
 
-    expect(receipt.status).toBe("ingested");
+    expect(receipt.status).toBe("accepted");
     expect(observedEvent).toMatchObject({
       provider: "pi",
       kind: "harness",
@@ -618,10 +601,8 @@ describe("provider hook ingress command", () => {
               hookId: event.hookId ?? "hook_opencode_1",
               provider: event.provider,
               event: event.event,
-              accepted: true,
-              status: "ingested",
+              status: "accepted",
               receivedAt: event.receivedAt,
-              reconciled: false,
             };
           };
           return {
@@ -641,7 +622,7 @@ describe("provider hook ingress command", () => {
       },
     );
 
-    expect(receipt.status).toBe("ingested");
+    expect(receipt.status).toBe("accepted");
     expect(observedEvent).toMatchObject({
       hookId: "hook_opencode_1",
       provider: "opencode",
@@ -700,7 +681,6 @@ describe("provider hook ingress command", () => {
                 hookId: event.hookId ?? "hook_pi_invalid",
                 provider: event.provider,
                 event: event.event,
-                accepted: false,
                 status: "rejected",
                 receivedAt: event.receivedAt,
                 error: {
@@ -769,10 +749,8 @@ describe("provider hook ingress command", () => {
             hookId: event.hookId ?? "hook_timeout_1",
             provider: event.provider,
             event: event.event,
-            accepted: true,
-            status: "ingested",
+            status: "accepted",
             receivedAt: event.receivedAt,
-            reconciled: false,
           });
           return {
             health: async () => healthyObserver(fixture),
@@ -783,7 +761,7 @@ describe("provider hook ingress command", () => {
       },
     );
 
-    expect(receipt.status).toBe("ingested");
+    expect(receipt.status).toBe("accepted");
     expect(observedTimeoutMs).toBe(4321);
     expect(observedBuildVersion).toBe(stationObserverBuildVersion());
   });
@@ -874,10 +852,8 @@ describe("provider hook ingress command", () => {
               hookId: event.hookId ?? "hook_codex_auto_review",
               provider: event.provider,
               event: event.event,
-              accepted: true,
-              status: "ingested",
+              status: "accepted",
               receivedAt: event.receivedAt,
-              reconciled: false,
             };
           };
           return {
@@ -889,7 +865,7 @@ describe("provider hook ingress command", () => {
       },
     );
 
-    expect(receipt.status).toBe("ingested");
+    expect(receipt.status).toBe("accepted");
     expect(observedEvent).toMatchObject({
       event: "PermissionRequest",
       payload: {

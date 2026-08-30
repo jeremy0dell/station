@@ -101,7 +101,7 @@ function snapshotWithUnavailableCodex(): StationSnapshot {
     providerHealth: {
       ...snapshot.providerHealth,
       codex: {
-        providerId: "codex",
+        provider: "codex",
         providerType: "harness",
         status: "unavailable",
         lastCheckedAt: snapshot.generatedAt,

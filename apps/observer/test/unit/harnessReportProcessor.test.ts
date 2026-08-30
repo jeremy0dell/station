@@ -40,8 +40,6 @@ describe("harness report processor logging", () => {
           accepted: true,
           status: "accepted",
           receivedAt: now,
-          projected: false,
-          scheduledReconcile: false,
           deduped: false,
         }),
     };
@@ -196,7 +194,7 @@ function healthRevalidationDeps(input: {
   const snapshot = emptyStationSnapshot(now);
   if (input.healthStatus !== undefined) {
     snapshot.providerHealth.codex = {
-      providerId: "codex",
+      provider: "codex",
       providerType: "harness",
       status: input.healthStatus,
       lastCheckedAt: now,
@@ -215,8 +213,6 @@ function healthRevalidationDeps(input: {
         accepted,
         status: accepted ? "accepted" : "rejected",
         receivedAt: now,
-        projected: false,
-        scheduledReconcile: false,
         deduped: input.deduped ?? false,
       }),
   };

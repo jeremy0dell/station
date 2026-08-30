@@ -126,7 +126,7 @@ export class WorktrunkProvider implements WorktreeProvider {
     const dependency = await checkWorktrunkDependency(dependencyOptions);
     if (dependency.status === "available") {
       return {
-        providerId: this.id,
+        provider: this.id,
         providerType: "worktree",
         status: "healthy",
         lastCheckedAt: checkedAt,
@@ -136,7 +136,7 @@ export class WorktrunkProvider implements WorktreeProvider {
     }
 
     return {
-      providerId: this.id,
+      provider: this.id,
       providerType: "worktree",
       status: "unavailable",
       lastCheckedAt: checkedAt,

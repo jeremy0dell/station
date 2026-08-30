@@ -485,7 +485,7 @@ function assertCodexHookDelivery() {
     newRecords.some(
       (record) =>
         record.provider === "codex" &&
-        record.attributes?.status === "ingested" &&
+        record.attributes?.status === "accepted" &&
         record.attributes?.event === "SessionStart",
     ),
     `Codex hook did not deliver to the restarted Observer\n${JSON.stringify(newRecords, null, 2)}`,

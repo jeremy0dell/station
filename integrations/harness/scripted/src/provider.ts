@@ -56,7 +56,7 @@ export class ScriptedAgentHarnessProvider implements HarnessProvider {
 
   async health(): Promise<ProviderHealth> {
     return {
-      providerId: this.id,
+      provider: this.id,
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: toIsoTimestamp(this.#clock.now()),

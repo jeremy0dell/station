@@ -164,7 +164,7 @@ describe("setup dependency checks", () => {
         }),
       }),
     ).resolves.toMatchObject({
-      status: "warning",
+      status: "warn",
       shell,
       rcPath: `/tmp/home/${rcFile}`,
     });
@@ -583,7 +583,7 @@ describe("setup dependency checks", () => {
     );
     expect(missing.checks.find((check) => check.id === "station-ui")).toMatchObject({
       tier: "recommended",
-      status: "warning",
+      status: "warn",
     });
 
     const installed = buildSetupPlan(
@@ -976,7 +976,7 @@ describe("setup dependency checks", () => {
     const plan = buildSetupPlan(facts);
 
     expect(plan.checks.find((check) => check.id === "worktrunk-hooks")).toMatchObject({
-      status: "warning",
+      status: "warn",
       message: expect.stringContaining("--no-hooks"),
       details: {
         automationMode: "skip-hooks",
@@ -1102,7 +1102,7 @@ scroll_on_output = "teleport"
     });
     expect(plan.checks.find((check) => check.id === "config-diagnostics")).toMatchObject({
       tier: "recommended",
-      status: "warning",
+      status: "warn",
       message: expect.stringContaining(diagnostic.message),
     });
     expect(plan.nextSteps).toEqual(["stn doctor", "stn"]);

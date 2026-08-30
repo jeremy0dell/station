@@ -93,7 +93,7 @@ export async function checkSetupWorktrunkAutomation(input: {
       };
     }
     return {
-      status: "warning",
+      status: "warn",
       automationMode: mode.automationMode,
       flag: mode.flag,
       missingSubcommands: missing,
@@ -103,7 +103,7 @@ export async function checkSetupWorktrunkAutomation(input: {
     };
   } catch {
     return {
-      status: "warning",
+      status: "warn",
       automationMode: mode.automationMode,
       flag: mode.flag,
       message: `Could not verify that the installed wt supports ${mode.flag} for automated Worktrunk mutations.`,
@@ -127,7 +127,7 @@ export async function checkSetupWorktrunkShellIntegration(input: {
   const shell = activeShell(input.env?.SHELL);
   if (shell === undefined) {
     return {
-      status: "warning",
+      status: "warn",
       message: "Could not determine an active bash or zsh shell for Worktrunk integration.",
     };
   }
@@ -153,14 +153,14 @@ export async function checkSetupWorktrunkShellIntegration(input: {
       };
     }
     return {
-      status: "warning",
+      status: "warn",
       shell,
       rcPath,
       message: `Worktrunk shell integration is not installed for ${shell}.`,
     };
   } catch {
     return {
-      status: "warning",
+      status: "warn",
       shell,
       rcPath,
       message: `Could not verify Worktrunk shell integration for ${shell}.`,

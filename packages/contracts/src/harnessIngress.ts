@@ -1,6 +1,12 @@
-export type HarnessStatusIntent = "starting" | "working" | "idle" | "needs_attention" | "exited";
+import type { z } from "zod";
+import type { AgentState, ConfidenceSchema } from "./observations.js";
 
-export type HarnessStatusConfidence = "low" | "medium" | "high";
+export type HarnessStatusIntent = Extract<
+  AgentState,
+  "starting" | "working" | "idle" | "needs_attention" | "exited"
+>;
+
+export type HarnessStatusConfidence = z.infer<typeof ConfidenceSchema>;
 
 export type HarnessIngressRule<Provider extends string, EventType extends string> = {
   provider: Provider;

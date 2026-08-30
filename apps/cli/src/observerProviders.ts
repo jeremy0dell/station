@@ -552,7 +552,7 @@ function applyObserverPaths(
 
 function health(providerId: string, providerType: ProviderHealth["providerType"]): ProviderHealth {
   return {
-    providerId,
+    provider: providerId,
     providerType,
     status: "healthy",
     lastCheckedAt: toIsoTimestamp(systemClock.now()),
@@ -565,7 +565,7 @@ function unavailableHealth(
   capabilities: Record<string, boolean>,
 ): ProviderHealth {
   return {
-    providerId,
+    provider: providerId,
     providerType,
     status: "unavailable",
     lastCheckedAt: toIsoTimestamp(systemClock.now()),

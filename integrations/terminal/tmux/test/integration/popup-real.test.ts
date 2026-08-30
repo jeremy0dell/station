@@ -3228,7 +3228,7 @@ function deterministicDashboardSnapshot(projectRoot: string): StationSnapshot {
     providerHealth: {
       tmux: mockObserverSnapshot.providerHealth.tmux,
       native: {
-        providerId: "native",
+        provider: "native",
         providerType: "terminal",
         status: "healthy",
         lastCheckedAt: "2026-06-11T12:00:00.000Z",

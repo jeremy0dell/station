@@ -198,7 +198,7 @@ function providerHealth(
   override?: Partial<ProviderHealth>,
 ): ProviderHealth {
   return {
-    providerId: input.providerId,
+    provider: input.providerId,
     providerType: input.providerType,
     status: "healthy",
     lastCheckedAt: resolveNow(input.now),

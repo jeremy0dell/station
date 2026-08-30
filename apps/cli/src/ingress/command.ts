@@ -361,7 +361,6 @@ function invalidPayloadReceipt(
     hookId: deps.hookId?.() ?? `hook_invalid_${Date.now()}`,
     provider,
     event,
-    accepted: false,
     status: "rejected",
     receivedAt: toIsoTimestamp(clock.now()),
     error: {

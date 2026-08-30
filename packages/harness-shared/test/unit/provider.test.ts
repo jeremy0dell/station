@@ -77,7 +77,7 @@ describe("createTerminalBoundHarnessProvider", () => {
     });
 
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "test",
+      provider: "test",
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: now,

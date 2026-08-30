@@ -666,7 +666,7 @@ function harnessHealth(
   lastCheckedAt: string,
 ) {
   return {
-    providerId,
+    provider: providerId,
     providerType: "harness" as const,
     status,
     lastCheckedAt,

@@ -173,6 +173,61 @@ describe("SQLite-only Observer persistence behavior", () => {
     }
   });
 
+  it("drops legacy provider health observations when upgrading a version-18 database", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-provider-health-v18-"));
+    const path = join(directory, "observer.sqlite");
+    const legacyDatabase = openSqlDatabase(path);
+    try {
+      for (const migration of migrations.filter(({ version }) => version <= 18)) {
+        legacyDatabase.exec(migration.sql);
+        legacyDatabase
+          .prepare("INSERT INTO observer_migrations (version, name, applied_at) VALUES (?, ?, ?)")
+          .run(migration.version, migration.name, now);
+      }
+      const insert = legacyDatabase.prepare(`
+        INSERT INTO provider_observations
+          (id, provider, provider_type, entity_kind, entity_key, payload_json, observed_at)
+        VALUES (?, 'fake-harness', 'observer', ?, ?, ?, ?)
+      `);
+      insert.run(
+        "obs_legacy_health",
+        "provider_health",
+        "fake-harness",
+        JSON.stringify({
+          providerId: "fake-harness",
+          providerType: "harness",
+          status: "healthy",
+          lastCheckedAt: now,
+        }),
+        now,
+      );
+      insert.run("obs_worktree", "worktree", "wt_web", "{}", now);
+    } finally {
+      legacyDatabase.close();
+    }
+
+    const upgraded = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
+    try {
+      expect(upgraded.health()).toMatchObject({
+        schemaVersion: 19,
+        migrations: expect.arrayContaining([
+          expect.objectContaining({
+            version: 19,
+            name: "drop_legacy_provider_health_observations",
+          }),
+        ]),
+      });
+      expect(
+        upgraded.database
+          .prepare("SELECT entity_kind FROM provider_observations ORDER BY entity_kind")
+          .all(),
+      ).toEqual([{ entity_kind: "worktree" }]);
+    } finally {
+      upgraded.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("rolls back a trigger-rejected membership reassignment", async () => {
     const sqlite = openObserverSqlite();
     try {
@@ -624,6 +679,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         [16, "worktree_display_titles"],
         [17, "session_groups"],
         [18, "command_results"],
+        [19, "drop_legacy_provider_health_observations"],
       ]);
       await expect(persistence.listSessions()).resolves.toEqual([
         expect.objectContaining({
@@ -690,7 +746,7 @@ describe("SQLite-only Observer persistence behavior", () => {
           entityKind: "provider_health",
           entityKey: "reject-once",
           payload: {
-            providerId: "fake-harness",
+            provider: "fake-harness",
             providerType: "harness",
             status: "healthy",
             lastCheckedAt: now,
@@ -757,7 +813,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         entityKind: "provider_health" as const,
         entityKey: "reject-processing-once",
         payload: {
-          providerId: "fake-harness",
+          provider: "fake-harness",
           providerType: "harness" as const,
           status: "healthy" as const,
           lastCheckedAt: now,

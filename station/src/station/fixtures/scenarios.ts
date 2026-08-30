@@ -234,7 +234,7 @@ export function externalAgentSnapshot(): StationSnapshot {
     providerHealth: {
       ...snapshot.providerHealth,
       codex: {
-        providerId: "codex",
+        provider: "codex",
         providerType: "harness",
         status: "healthy",
         lastCheckedAt: SCENARIO_NOW,
@@ -269,7 +269,7 @@ export function attentionAndFailuresSnapshot(): StationSnapshot {
       projects: [STATION, OBSERVER],
       providerHealth: {
         codex: {
-          providerId: "codex",
+          provider: "codex",
           providerType: "harness",
           status: "degraded",
           lastCheckedAt: SCENARIO_NOW,
@@ -518,7 +518,7 @@ function projectView(
       layout: "agent-build-shell",
     },
     health: {
-      providerId: "worktrunk",
+      provider: "worktrunk",
       providerType: "worktree",
       status: "healthy",
       lastCheckedAt: SCENARIO_NOW,

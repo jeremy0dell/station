@@ -124,7 +124,7 @@ describe("primary workflow interaction parity", () => {
       providerHealth: {
         ...snapshot.providerHealth,
         codex: {
-          providerId: "codex",
+          provider: "codex",
           providerType: "harness" as const,
           status: "unavailable" as const,
           lastCheckedAt: snapshot.generatedAt,

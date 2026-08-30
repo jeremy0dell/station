@@ -30,7 +30,7 @@ const observer = {
 };
 
 const worktreeProviderHealth: ProviderHealth = {
-  providerId: "fake-worktree",
+  provider: "fake-worktree",
   providerType: "worktree",
   status: "healthy",
   lastCheckedAt: generatedAt,
@@ -407,7 +407,7 @@ describe("observer graph derivation", () => {
       status: "unavailable",
     };
     const harnessHealth: ProviderHealth = {
-      providerId: "fake-harness",
+      provider: "fake-harness",
       providerType: "harness",
       status: "unavailable",
       lastCheckedAt: generatedAt,

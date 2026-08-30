@@ -475,7 +475,7 @@ describe("client snapshot reducer", () => {
       type: "provider.healthChanged",
       provider: "tmux",
       health: {
-        providerId: "tmux",
+        provider: "tmux",
         providerType: "terminal",
         status: "healthy",
         lastCheckedAt: fixtureNow,

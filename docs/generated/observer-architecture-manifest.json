@@ -7156,6 +7156,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/019_drop_legacy_provider_health_observations.ts",
+      "exports": [
+        {
+          "name": "dropLegacyProviderHealthObservationsMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -7285,6 +7304,12 @@
           "resolvedPath": "apps/observer/src/migrations/018_command_results.ts",
           "edgeKind": "runtime",
           "bindings": ["commandResultsMigration"]
+        },
+        {
+          "specifier": "./019_drop_legacy_provider_health_observations.js",
+          "resolvedPath": "apps/observer/src/migrations/019_drop_legacy_provider_health_observations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["dropLegacyProviderHealthObservationsMigration"]
         },
         {
           "specifier": "./migration.js",

@@ -19,7 +19,7 @@ const describeReal = realE2eEnabled() ? describe : describe.skip;
 
 type ProviderHookReceipt = {
   hookId: string;
-  status: "ingested" | "spooled" | "rejected";
+  status: "accepted" | "spooled" | "rejected";
 };
 
 describeReal("real Worktrunk hook ingestion", () => {
@@ -88,14 +88,14 @@ describeReal("real Worktrunk hook ingestion", () => {
       event: "post-create",
       stdin: JSON.stringify({ branch: "station/hook-online" }),
     });
-    expect(online.status).toBe("ingested");
+    expect(online.status).toBe("accepted");
 
     await runStationJson(env, { configPath: config.configPath, args: ["observer", "stop"] });
     const offline = await runWorktrunkIngress(env, config, {
       event: "post-create",
       stdin: JSON.stringify({ branch: "station/hook-offline" }),
     });
-    expect(offline.status).toBe("ingested");
+    expect(offline.status).toBe("accepted");
     await runStationJson(env, { configPath: config.configPath, args: ["observer", "stop"] });
 
     const spoolRepo = await createRealTempRepo(env);

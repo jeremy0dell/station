@@ -3635,7 +3635,7 @@ function unavailableHarness(error: SafeError = unavailableHarnessError()): FakeH
 
 function healthyHarnessHealth(harness: HarnessProvider): ProviderHealth {
   return {
-    providerId: harness.id,
+    provider: harness.id,
     providerType: "harness",
     status: "healthy",
     lastCheckedAt: now,

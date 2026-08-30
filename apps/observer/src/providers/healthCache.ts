@@ -115,7 +115,7 @@ export class ProviderHealthCache {
           capabilities: result.value.capabilities ?? target.capabilities(),
         }
       : {
-          providerId: target.providerId,
+          provider: target.providerId,
           providerType: target.providerType,
           status: "unavailable",
           lastCheckedAt: result.timing.finishedAt,

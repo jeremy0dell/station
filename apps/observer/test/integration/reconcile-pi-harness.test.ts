@@ -82,8 +82,6 @@ describe("observer reconcile with Pi harness", () => {
 
     expect(receipt).toMatchObject({
       status: "accepted",
-      projected: false,
-      scheduledReconcile: true,
     });
     await expect(stateEvents.next()).resolves.toMatchObject({
       value: {
@@ -131,8 +129,6 @@ describe("observer reconcile with Pi harness", () => {
       ),
     ).resolves.toMatchObject({
       status: "accepted",
-      projected: false,
-      scheduledReconcile: true,
     });
     const completedSnapshot = await core.reconcile("pi-done-reconcile");
     expect(completedSnapshot.rows[0]?.agent).toMatchObject({

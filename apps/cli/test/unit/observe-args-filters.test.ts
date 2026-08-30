@@ -124,7 +124,7 @@ function providerEvent(status: "healthy" | "degraded"): StationEvent {
     type: "provider.healthChanged",
     provider: "codex",
     health: {
-      providerId: "codex",
+      provider: "codex",
       providerType: "harness",
       status,
       lastCheckedAt: "2026-06-05T12:00:00.000Z",

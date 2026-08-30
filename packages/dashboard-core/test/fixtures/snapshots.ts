@@ -148,7 +148,7 @@ export function createExternalAgentSnapshot(): StationSnapshot {
     providerHealth: {
       ...snapshot.providerHealth,
       codex: {
-        providerId: "codex",
+        provider: "codex",
         providerType: "harness",
         status: "healthy",
         lastCheckedAt: fixtureNow,
@@ -415,7 +415,7 @@ function countsForProject(rows: readonly WorktreeRow[]): ProjectView["counts"] {
 
 function healthyProvider(providerId: string): ProviderHealth {
   return {
-    providerId,
+    provider: providerId,
     providerType: providerId === "tmux" ? "terminal" : "harness",
     status: "healthy",
     lastCheckedAt: fixtureNow,

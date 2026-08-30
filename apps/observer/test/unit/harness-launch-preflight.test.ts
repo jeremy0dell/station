@@ -153,7 +153,7 @@ describe("assertHarnessLaunchPreconditionsOrThrow", () => {
     };
     const harness = new PreflightHarness({
       health: async () => ({
-        providerId: "fake-harness",
+        provider: "fake-harness",
         providerType: "harness",
         status: "unavailable",
         lastCheckedAt: now,
@@ -247,7 +247,7 @@ describe("assertHarnessLaunchPreconditionsOrThrow", () => {
     const second = assertHarnessLaunchPreconditionsOrThrow({ providers, providerId: harness.id });
     await vi.waitFor(() => expect(harness.healthCalls).toBe(1));
     release({
-      providerId: harness.id,
+      provider: harness.id,
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: now,
@@ -280,7 +280,7 @@ describe("assertHarnessLaunchPreconditionsOrThrow", () => {
       message: "Observer command was cancelled.",
     });
     release({
-      providerId: harness.id,
+      provider: harness.id,
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: now,

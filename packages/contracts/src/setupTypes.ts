@@ -4,11 +4,14 @@ export const CliSetupHarnessIdSchema = z.enum(["codex", "cursor", "opencode", "p
 
 export type CliSetupHarnessId = z.infer<typeof CliSetupHarnessIdSchema>;
 
+const SetupTierSchema = z.enum(["required", "recommended", "optional"]);
+
 export const CliSetupCheckSchema = z
   .object({
     id: z.string().min(1),
-    tier: z.enum(["required", "recommended", "optional"]),
-    status: z.enum(["ok", "missing", "warning", "skipped"]),
+    tier: SetupTierSchema,
+    // Setup checks retain missing/skipped states that have no doctor-check equivalent.
+    status: z.enum(["ok", "missing", "warn", "skipped"]),
     label: z.string().min(1),
     message: z.string().min(1),
     details: z.record(z.string(), z.string()).optional(),
@@ -19,7 +22,7 @@ export const CliSetupActionSchema = z
   .object({
     id: z.string().min(1),
     kind: z.enum(["brew-install", "run-command", "write-config", "append-file", "mkdir", "noop"]),
-    tier: z.enum(["required", "recommended", "optional"]),
+    tier: SetupTierSchema,
     selected: z.boolean(),
     label: z.string().min(1),
     message: z.string().min(1),

@@ -311,7 +311,7 @@ class EvidenceIndexBuilder {
         provider: row.terminal?.provider ?? row.agent?.harness,
         projectId: row.projectId,
         worktreeId: row.id,
-        runId: row.agent?.runId,
+        harnessRunId: row.agent?.runId,
         sessionId: row.agent?.sessionId,
         evidence,
       });
@@ -389,8 +389,8 @@ class EvidenceIndexBuilder {
     if (worktreeId !== undefined) item.worktreeId = worktreeId;
     const sessionId = input.sessionId ?? input.source?.sessionId;
     if (sessionId !== undefined) item.sessionId = sessionId;
-    if (input.targetId !== undefined) item.targetId = input.targetId;
-    if (input.runId !== undefined) item.runId = input.runId;
+    if (input.terminalTargetId !== undefined) item.terminalTargetId = input.terminalTargetId;
+    if (input.harnessRunId !== undefined) item.harnessRunId = input.harnessRunId;
     const diagnosticId = input.diagnosticId ?? input.source?.diagnosticId;
     if (diagnosticId !== undefined) item.diagnosticId = diagnosticId;
     if (input.evidence !== undefined) item.evidence = input.evidence;
@@ -508,8 +508,8 @@ type AddItemInput = {
   projectId?: string | undefined;
   worktreeId?: string | undefined;
   sessionId?: string | undefined;
-  targetId?: string | undefined;
-  runId?: string | undefined;
+  terminalTargetId?: string | undefined;
+  harnessRunId?: string | undefined;
   diagnosticId?: string | undefined;
   evidence?: Record<string, unknown> | undefined;
 };

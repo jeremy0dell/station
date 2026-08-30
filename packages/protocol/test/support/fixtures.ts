@@ -68,10 +68,8 @@ export function createFakeObserverApi(
       hookId: "hook_1",
       provider: event.provider,
       event: event.event,
-      accepted: true,
-      status: "ingested",
+      status: "accepted",
       receivedAt: event.receivedAt,
-      reconciled: true,
     }),
     reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => ({
       schemaVersion: STATION_SCHEMA_VERSION,
@@ -81,8 +79,6 @@ export function createFakeObserverApi(
       accepted: true,
       status: "accepted",
       receivedAt: report.observedAt,
-      projected: false,
-      scheduledReconcile: true,
     }),
     prepareExternalLaunch: async (params) => ({
       kind: "existing-session",

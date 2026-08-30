@@ -16,6 +16,7 @@ import { dropRecoveryBreadcrumbsMigration } from "./015_drop_recovery_breadcrumb
 import { worktreeDisplayTitlesMigration } from "./016_worktree_display_titles.js";
 import { sessionGroupsMigration } from "./017_session_groups.js";
 import { commandResultsMigration } from "./018_command_results.js";
+import { dropLegacyProviderHealthObservationsMigration } from "./019_drop_legacy_provider_health_observations.js";
 
 /** @knipignore Retains the historical migration type import surface. */
 export type { ObserverSqliteMigration } from "./migration.js";
@@ -39,6 +40,7 @@ export const migrations = [
   worktreeDisplayTitlesMigration,
   sessionGroupsMigration,
   commandResultsMigration,
+  dropLegacyProviderHealthObservationsMigration,
 ] as const;
 
 export const latestSchemaVersion = migrations[migrations.length - 1]?.version ?? 0;

@@ -390,7 +390,7 @@ async function attemptHookDelivery(
   const delivery = await deliverHook(paths, event, timeoutMs, expectedBuildVersion, deps);
   if (
     delivery.ok &&
-    (delivery.value.status === "ingested" || delivery.value.status === "rejected")
+    (delivery.value.status === "accepted" || delivery.value.status === "rejected")
   ) {
     return { receipt: delivery.value };
   }
@@ -432,7 +432,7 @@ async function deliverHook(
     async () => {
       const client = observerClient(paths.socketPath, timeoutMs, expectedBuildVersion, deps);
       const receipt = await client.ingestProviderHookEvent(event);
-      if (receipt.status !== "ingested" && receipt.status !== "rejected") {
+      if (receipt.status !== "accepted" && receipt.status !== "rejected") {
         throw (
           receipt.error ??
           safeErrorFromUnknown(receipt, {
@@ -478,11 +478,11 @@ async function logAndReturn(
     });
   try {
     const level =
-      receipt.status === "ingested" ? "info" : receipt.status === "spooled" ? "warn" : "error";
+      receipt.status === "accepted" ? "info" : receipt.status === "spooled" ? "warn" : "error";
     await logger.log({
       level,
       message:
-        receipt.status === "ingested"
+        receipt.status === "accepted"
           ? "Provider hook delivered to observer."
           : receipt.status === "spooled"
             ? "Provider hook spooled for later delivery."
@@ -514,7 +514,6 @@ function ignoredProviderHookReceipt(input: {
     hookId: input.hookId?.() ?? defaultHookId(),
     provider: input.provider,
     event: input.event,
-    accepted: false,
     status: "ignored",
     receivedAt: toIsoTimestamp(input.clock.now()),
   });

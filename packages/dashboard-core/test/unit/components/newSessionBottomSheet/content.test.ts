@@ -18,7 +18,7 @@ function reviewState(status: "healthy" | "degraded" | "unavailable" = "healthy")
     providerHealth: {
       ...snapshot.providerHealth,
       codex: {
-        providerId: "codex",
+        provider: "codex",
         providerType: "harness" as const,
         status,
         lastCheckedAt: snapshot.generatedAt,
