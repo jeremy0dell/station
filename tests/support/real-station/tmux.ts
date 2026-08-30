@@ -128,12 +128,15 @@ export async function killTmuxSession(
   sessionName: string,
 ): Promise<void> {
   try {
-    await runTmuxCommand(endpoint, ["kill-session", "-t", sessionName]);
+    await runTmuxCommand(endpoint, ["kill-session", "-t", `=${sessionName}`]);
   } catch (error) {
     const absent =
       isExactEndpointAbsence(error, endpoint) ||
       isExactTmuxFailure(error, 1, `can't find session: ${sessionName}`);
     if (!absent) throw error;
+  }
+  if (await tmuxSessionExists(endpoint, sessionName)) {
+    throw new Error(`tmux session remained present after kill-session: ${sessionName}`);
   }
 }
 
@@ -150,7 +153,12 @@ export async function tmuxSessionExists(
     await runTmuxCommand(endpoint, ["has-session", "-t", `=${sessionName}`]);
     return true;
   } catch (error) {
-    if (isExactTmuxFailure(error, 1, `can't find session: ${sessionName}`)) return false;
+    if (
+      isExactEndpointAbsence(error, endpoint) ||
+      isExactTmuxFailure(error, 1, `can't find session: ${sessionName}`)
+    ) {
+      return false;
+    }
     throw error;
   }
 }

@@ -44,6 +44,15 @@ import {
   writeSessionRescueManifest,
 } from "../../scripts/maintenance/session-rescue.mjs";
 import {
+  cliUxPilotDurationMs,
+  cliUxPilotEnvironment,
+  cliUxPilotModel,
+  cliUxPilotReasoning,
+  cliUxPilotSourceRef,
+  cliUxPilotTestFile,
+  parseCliUxPilotArgs,
+} from "../../scripts/test-runners/run-cli-ux-pilot.mjs";
+import {
   buildGuidedVitestArgs,
   guidedConfigPath,
   guidedTestFiles,
@@ -222,6 +231,75 @@ async function waitForRuntimeOwnerRecord(directory: string) {
 async function waitForExit(child: ReturnType<typeof spawn>) {
   await new Promise<void>((resolvePromise) => child.once("exit", () => resolvePromise()));
 }
+
+describe("CLI UX pilot runner", () => {
+  it("requires confirmation and has one fixed isolated-main five-minute lane", () => {
+    expect(parseCliUxPilotArgs([])).toEqual({ confirmed: false, help: false });
+    expect(parseCliUxPilotArgs(["--", "--yes"])).toEqual({ confirmed: true, help: false });
+    expect(parseCliUxPilotArgs(["--help"])).toEqual({ confirmed: false, help: true });
+    expect(() => parseCliUxPilotArgs(["--source-ref", "HEAD"])).toThrow(
+      "Unknown CLI UX pilot option: --source-ref",
+    );
+    expect(cliUxPilotSourceRef).toBe("origin/main");
+    expect(cliUxPilotDurationMs).toBe(300_000);
+    expect(cliUxPilotModel).toBe("gpt-5.6-luna");
+    expect(cliUxPilotReasoning).toBe("xhigh");
+    expect(cliUxPilotTestFile).toBe("tests/e2e/real/real-cli-ux-pilot.test.ts");
+  });
+
+  it("removes live/global and Claude context while pinning only the private Codex lane", () => {
+    const result = cliUxPilotEnvironment(
+      {
+        HOME: "/Users/test",
+        CLAUDE_CONFIG_DIR: "/global/claude",
+        CODEX_HOME: "/global/codex",
+        GIT_INDEX_FILE: "/global/git-index",
+        STATION_CONFIG_PATH: "/global/station.toml",
+        STATION_OBSERVER_SOCKET_PATH: "/global/observer.sock",
+        STATION_REAL_CLAUDE: "1",
+        STATION_REAL_E2E_KEEP_TEMP: "1",
+        STATION_CLAUDE_BIN: "/usr/bin/claude",
+        STATION_SESSION_ID: "ses_global",
+        TMUX: "/global/tmux",
+      },
+      {
+        codex: "/tools/codex",
+        tmux: "/tools/tmux",
+        worktrunk: "/tools/wt",
+      },
+      "a".repeat(40),
+    );
+
+    expect(result).toMatchObject({
+      HOME: "/Users/test",
+      STATION_CLI_UX_PILOT: "1",
+      STATION_CLI_UX_PILOT_DURATION_MS: "300000",
+      STATION_CLI_UX_PILOT_MODEL: "gpt-5.6-luna",
+      STATION_CLI_UX_PILOT_REASONING: "xhigh",
+      STATION_CLI_UX_PILOT_SOURCE_SHA: "a".repeat(40),
+      STATION_REAL_CODEX: "1",
+      STATION_REAL_E2E: "1",
+      STATION_REAL_WORKTRUNK: "1",
+      STATION_CODEX_BIN: "/tools/codex",
+      STATION_TMUX_BIN: "/tools/tmux",
+      STATION_WORKTRUNK_BIN: "/tools/wt",
+    });
+    for (const key of [
+      "CLAUDE_CONFIG_DIR",
+      "CODEX_HOME",
+      "GIT_INDEX_FILE",
+      "STATION_CLAUDE_BIN",
+      "STATION_CONFIG_PATH",
+      "STATION_OBSERVER_SOCKET_PATH",
+      "STATION_REAL_CLAUDE",
+      "STATION_REAL_E2E_KEEP_TEMP",
+      "STATION_SESSION_ID",
+      "TMUX",
+    ]) {
+      expect(result[key], key).toBeUndefined();
+    }
+  });
+});
 
 describe("agent cleanup/reset scripts", () => {
   it("defaults cleanup and reset to dry-run mode", () => {

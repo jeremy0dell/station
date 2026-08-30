@@ -38,6 +38,19 @@ bun run test:e2e:real:codex-hooks
 bun run test:e2e:real:codex-hooks:keep-temp
 ```
 
+The first-class Session and Group CLI pilot is a separately confirmed paid lane. It fetches,
+clones, installs, and builds exact `origin/main`; then one Codex/Luna-xhigh agent reads the
+preliminary Station CLI skill and performs the bounded P1 discovery cell against a private
+Observer, Worktrunk clone, config, Codex home, and tmux server. The runner closes the exact
+session at completion or after five minutes and prints separate application, agent, model, and
+session-close evidence. The outer runtime owner then proves process-group and private tmux cleanup
+before printing cleanup success. Claude is intentionally skipped and remains a TODO while no
+subscription is available:
+
+```bash
+bun run test:e2e:cli-ux:pilot -- --yes
+```
+
 The provider-neutral recovery acceptance is `real-native-session-recovery.test.ts`. Its Codex case
 runs in the normal local lane. Claude is separately opt-in because it requires a configured Claude
 account:
