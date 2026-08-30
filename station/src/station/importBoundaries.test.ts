@@ -777,7 +777,6 @@ describe("station view import boundaries", () => {
 
   it("keeps sheet action sizing and pointer wiring in shared controls", () => {
     const frame = "view/sheets/BottomSheetFrameView.tsx";
-    const primitives = "view/sheets/parts.tsx";
     const actionSheets = new Set([
       "view/sheets/AddProjectSheetView.tsx",
       "view/sheets/ForkSessionSheetView.tsx",
@@ -790,8 +789,7 @@ describe("station view import boundaries", () => {
       if (
         !rel.startsWith("view/sheets/") ||
         !file.endsWith(".tsx") ||
-        file.includes(".test.") ||
-        rel === primitives
+        file.includes(".test.")
       ) {
         continue;
       }

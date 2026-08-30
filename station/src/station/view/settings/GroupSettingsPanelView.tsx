@@ -10,9 +10,10 @@ import type {
 } from "@station/dashboard-core/state";
 import { GROUP_SETTINGS_ITEMS } from "@station/dashboard-core/state";
 import { toOpenTuiColor, useStationTheme } from "../../../theme/index.js";
+import { SheetButtonRow } from "../controls/sheetButtons.js";
+import { fit } from "../controls/sheetText.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
-import { fit, SheetButtonRow } from "../sheets/parts.js";
 import {
   stationMouseProps,
   useStationHoverState,

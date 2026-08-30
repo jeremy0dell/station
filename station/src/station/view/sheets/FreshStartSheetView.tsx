@@ -1,15 +1,14 @@
 import type { DashboardScreenView } from "@station/dashboard-core/state";
-import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
-import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { SheetButtonRow } from "../controls/sheetButtons.js";
+import { SheetMessageLine } from "../controls/sheetMessages.js";
 import {
-  compactSheetWidth,
   responsiveSheetFooterText,
   type ResponsiveSheetText,
-  SheetButtonRow,
   SheetFooter,
   SheetLabelValue,
-  SheetMessageLine,
-} from "./parts.js";
+} from "../controls/sheetText.js";
+import { bottomSheetContentWidth, compactSheetWidth } from "../layout/bottomSheetFrame.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 
 type FreshStartScreen = Extract<DashboardScreenView, { name: "freshStart" }>;
 

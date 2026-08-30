@@ -3,23 +3,15 @@ import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
-import { cellWidth } from "@station/dashboard-core/text";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
-import type { StationMouseTarget } from "../../input/stationMouse.js";
-import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
 import {
   nativeStationTheme,
   stationColorSnapshotValue,
   StationThemeProvider,
 } from "../../../theme/index.js";
-import {
-  fit,
-  responsiveSheetFooterText,
-  responsiveSheetText,
-  SheetButtonRow,
-  SheetChoiceLine,
-  type SheetButtonSpec,
-} from "./parts.js";
+import type { StationMouseTarget } from "../../input/stationMouse.js";
+import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
+import { SheetButtonRow, type SheetButtonSpec } from "./sheetButtons.js";
 
 const teardowns: Array<() => void> = [];
 afterEach(() => {
@@ -126,64 +118,5 @@ describe("SheetButtonRow", () => {
     expect(trailing?.bg === undefined ? undefined : rgbToHex(trailing.bg)).not.toBe(
       stationColorSnapshotValue(nativeStationTheme.action.primary),
     );
-  });
-});
-
-describe("responsive sheet text", () => {
-  const variants = {
-    expanded: "Expanded copy",
-    compact: "Compact",
-  } as const;
-
-  it("selects copy from measured available width", () => {
-    const expandedWidth = cellWidth(variants.expanded);
-    expect(responsiveSheetText(expandedWidth, variants)).toBe(variants.expanded);
-    const narrowerWidth = expandedWidth - cellWidth(" ");
-    expect(responsiveSheetText(narrowerWidth, variants)).toBe(variants.compact);
-  });
-
-  it("reserves the footer inset before selecting copy", () => {
-    const expandedFooter = ` ${variants.expanded}`;
-    expect(responsiveSheetFooterText(cellWidth(expandedFooter), variants)).toBe(variants.expanded);
-    expect(responsiveSheetFooterText(cellWidth(variants.expanded), variants)).toBe(
-      variants.compact,
-    );
-  });
-});
-
-describe("sheet terminal-cell fitting", () => {
-  it("fits wide and combining graphemes by cells without splitting them", () => {
-    expect(fit("界a", 3)).toBe("界a");
-    expect(cellWidth(fit("界a", 3))).toBe(3);
-    expect(fit("界a", 2)).toBe("界");
-    expect(cellWidth(fit("e\u0301", 2))).toBe(2);
-    expect(fit("e\u0301", 2)).toBe("e\u0301 ");
-  });
-
-  it("keeps a long wide-glyph choice inside one semantic box", async () => {
-    const setup = await testRender(
-      <StationThemeProvider theme={nativeStationTheme}>
-        <StationHoverProvider value>
-          <StationMouseProvider value={() => {}}>
-            <SheetChoiceLine
-              choiceKey="1"
-              label="界界界界界界界界 project with a long name"
-              detail="healthy"
-              width={20}
-              selected
-              itemId="wide-choice"
-            />
-          </StationMouseProvider>
-        </StationHoverProvider>
-      </StationThemeProvider>,
-      { width: 20, height: 2 },
-    );
-    teardowns.push(() => setup.renderer.destroy());
-    await setup.renderOnce();
-
-    expect(setup.captureCharFrame().split("\n")[1]?.trim()).toBe("");
-    expect(
-      setup.renderer.root.findDescendantById("station-semantic-item:wide-choice")?.height,
-    ).toBe(1);
   });
 });

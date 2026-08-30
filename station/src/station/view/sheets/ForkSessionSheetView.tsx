@@ -2,20 +2,18 @@
 // only submit invokes the managed-session capability, so Copy-focused Enter remains a core toggle.
 import { cellWidth } from "@station/dashboard-core/text";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
-import { EditableTextInputView } from "../EditableTextInputView.js";
-import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
-import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { SheetButtonRow, SheetControlRow } from "../controls/sheetButtons.js";
+import { SheetMessageLine } from "../controls/sheetMessages.js";
 import {
-  compactSheetWidth,
   responsiveSheetFooterText,
   responsiveSheetText,
   type ResponsiveSheetText,
-  SheetButtonRow,
-  SheetControlRow,
   SheetFooter,
   SheetLabelValue,
-  SheetMessageLine,
-} from "./parts.js";
+} from "../controls/sheetText.js";
+import { EditableTextInputView } from "../EditableTextInputView.js";
+import { bottomSheetContentWidth, compactSheetWidth } from "../layout/bottomSheetFrame.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 
 type ForkDetailsScreen = Extract<DashboardScreenView, { name: "fork"; step: "details" }>;
 

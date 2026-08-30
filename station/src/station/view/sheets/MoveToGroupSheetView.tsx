@@ -14,17 +14,13 @@ import type {
   DashboardSnapshotView,
   DashboardStateView,
 } from "@station/dashboard-core/state";
+import { SheetButtonRow, SheetControlRow } from "../controls/sheetButtons.js";
+import { SheetProgressFooter } from "../controls/sheetMessages.js";
+import { SheetChoiceLine } from "../controls/sheetPicker.js";
+import { SheetFooter, SheetLabelValue } from "../controls/sheetText.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
-import {
-  SheetButtonRow,
-  SheetChoiceLine,
-  SheetControlRow,
-  SheetFooter,
-  SheetLabelValue,
-  SheetProgressFooter,
-} from "./parts.js";
 
 type MoveToGroupScreen = Exclude<
   Extract<DashboardScreenView, { name: "moveToGroup" }>,

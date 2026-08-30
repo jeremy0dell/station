@@ -21,19 +21,14 @@ import type {
   NewSessionFlowStateView,
 } from "@station/dashboard-core/state";
 import { providerHealthColor, useStationTheme, type StationColor } from "../../../theme/index.js";
+import { SheetButtonRow, SheetControlRow } from "../controls/sheetButtons.js";
+import { SheetProgressFooter } from "../controls/sheetMessages.js";
+import { SheetChoiceLine } from "../controls/sheetPicker.js";
+import { SheetFooter, SheetLabelValue, SheetLine } from "../controls/sheetText.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
-import {
-  SheetButtonRow,
-  SheetChoiceLine,
-  SheetControlRow,
-  SheetFooter,
-  SheetLabelValue,
-  SheetLine,
-  SheetProgressFooter,
-} from "./parts.js";
 
 type NewSessionProjectView = DashboardSnapshotView["projects"][number];
 

@@ -3,10 +3,10 @@
 import { TextAttributes } from "@opentui/core";
 import type { ReactNode } from "react";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
+import { SheetText } from "../controls/sheetText.js";
 import { bottomSheetFrame } from "../layout/bottomSheetFrame.js";
 import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
 import { SemanticScrollRegion } from "../layout/scroll/SemanticScrollViewport.js";
-import { SheetText } from "./parts.js";
 
 export type BottomSheetFrameViewProps = {
   columns: number;

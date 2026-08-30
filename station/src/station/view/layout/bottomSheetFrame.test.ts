@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { bottomSheetContentWidth, bottomSheetFrame } from "./bottomSheetFrame.js";
+import {
+  bottomSheetContentWidth,
+  bottomSheetFrame,
+  compactSheetWidth,
+} from "./bottomSheetFrame.js";
 
 describe("bottom sheet render-boundary frame", () => {
   it("holds one preferred block size across wide and tall terminals", () => {
@@ -19,5 +23,7 @@ describe("bottom sheet render-boundary frame", () => {
     expect(bottomSheetFrame(40, 8)).toEqual({ width: 40, height: 8, contentWidth: 38 });
     expect(bottomSheetFrame(0, 0, 0)).toEqual({ width: 1, height: 1, contentWidth: 1 });
     expect(bottomSheetContentWidth(2)).toBe(1);
+    expect(compactSheetWidth(120)).toBe(46);
+    expect(compactSheetWidth(0)).toBe(1);
   });
 });
