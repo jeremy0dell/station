@@ -1,4 +1,17 @@
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +22,10 @@ import {
   runOwnedDisposableRuntime,
   runtimeOwnerRecordDirectory,
 } from "../../scripts/runtime-owner.mjs";
+import {
+  cliUxPilotOwnerStateDirectory,
+  finalizeCliUxPilotRoots,
+} from "../../scripts/test-runners/run-cli-ux-pilot.mjs";
 
 const temporaryRoots: string[] = [];
 
@@ -55,6 +72,123 @@ afterEach(async () => {
 });
 
 describe("disposable runtime ownership", () => {
+  it("owns the CLI UX pilot as a first-class disposable runtime role", async () => {
+    const root = await temporaryRoot();
+
+    const result = await runOwnedDisposableRuntime({
+      ...runtimeInput(root),
+      role: "cli-ux-pilot",
+    });
+
+    expect(result).toMatchObject({ exitCode: 0 });
+    expect(
+      (await lifecycleEvents(root)).every((event) => event.attributes.role === "cli-ux-pilot"),
+    ).toBe(true);
+  });
+
+  it("recovers a killed pilot launcher and removes its exact process, tmux, and root residue", async () => {
+    const fixtureRoot = await temporaryRoot();
+    const checkout = join(fixtureRoot, "checkout");
+    await mkdir(checkout, { mode: 0o700 });
+    const ownerStateDir = await cliUxPilotOwnerStateDirectory(checkout, fixtureRoot);
+    const firstRoot = await pilotRoot();
+    const firstRuntimeRoot = join(firstRoot.path, "runtime");
+    const firstTmuxRoot = join(firstRuntimeRoot, "stn-real-tmux-orphan");
+    const firstSocket = join(firstTmuxRoot, "server.sock");
+    const childPidPath = join(fixtureRoot, "child.pid");
+    const childScript = join(fixtureRoot, "child.mjs");
+    const ownerScript = join(fixtureRoot, "owner.mjs");
+    await mkdir(firstTmuxRoot, { recursive: true, mode: 0o700 });
+    await writeFile(firstSocket, "orphan\n", { mode: 0o600 });
+    await writeFile(
+      childScript,
+      `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(childPidPath)}, String(process.pid)); setInterval(() => {}, 1000);\n`,
+      { mode: 0o600 },
+    );
+    await writeFile(
+      ownerScript,
+      [
+        `import { runOwnedDisposableRuntime } from ${JSON.stringify(new URL("../../scripts/runtime-owner.mjs", import.meta.url).href)};`,
+        `await runOwnedDisposableRuntime(${JSON.stringify(pilotRuntimeInput({ checkout, ownerStateDir, root: firstRoot, runtimeRoot: firstRuntimeRoot, steps: [{ command: process.execPath, args: [childScript] }] }))});`,
+      ].join("\n"),
+      { mode: 0o600 },
+    );
+
+    const firstOwner = spawn(process.execPath, [ownerScript], { stdio: "ignore" });
+    let childPid: number | undefined;
+    let secondRoot: Awaited<ReturnType<typeof pilotRoot>> | undefined;
+    try {
+      childPid = Number(await waitForFile(childPidPath));
+      await waitForOwnerRecord(ownerStateDir);
+      firstOwner.kill("SIGKILL");
+      await waitForChildExit(firstOwner);
+      expect(firstOwner.signalCode).toBe("SIGKILL");
+
+      secondRoot = await pilotRoot();
+      const result = await runOwnedDisposableRuntime(
+        pilotRuntimeInput({
+          checkout,
+          ownerStateDir,
+          root: secondRoot,
+          runtimeRoot: join(secondRoot.path, "runtime"),
+          steps: [{ command: process.execPath, args: ["-e", ""] }],
+        }),
+      );
+      const fakeTmux = join(fixtureRoot, "fake-tmux.mjs");
+      await writeFile(
+        fakeTmux,
+        [
+          "#!/usr/bin/env node",
+          'import { existsSync, rmSync } from "node:fs";',
+          'const socket = process.argv[process.argv.indexOf("-S") + 1];',
+          "const command = process.argv.at(-1);",
+          'if (command === "kill-server") { rmSync(socket, { force: true }); process.exit(0); }',
+          'process.exit(command === "list-sessions" && existsSync(socket) ? 0 : 1);',
+          "",
+        ].join("\n"),
+        { mode: 0o700 },
+      );
+      await finalizeCliUxPilotRoots(result.cleanupRoots ?? [], process.env, fakeTmux);
+
+      await waitForProcessExit(childPid);
+      expect(existsSync(firstSocket)).toBe(false);
+      expect(existsSync(firstRoot.path)).toBe(false);
+      expect(existsSync(secondRoot.path)).toBe(false);
+      expect(await readdir(runtimeOwnerRecordDirectory(ownerStateDir))).toEqual([]);
+    } finally {
+      if (firstOwner.exitCode === null && firstOwner.signalCode === null)
+        firstOwner.kill("SIGKILL");
+      await waitForChildExit(firstOwner).catch(() => undefined);
+      if (childPid !== undefined && processExists(childPid)) process.kill(childPid, "SIGKILL");
+      await rm(firstRoot.path, { recursive: true, force: true });
+      if (secondRoot !== undefined) {
+        await rm(secondRoot.path, { recursive: true, force: true });
+      }
+    }
+  }, 15_000);
+
+  it("cleans a valid pilot root after refusing an earlier replaced root", async () => {
+    const replaced = await pilotRoot();
+    const originalPath = `${replaced.path}-original`;
+    const valid = await pilotRoot();
+    try {
+      await rename(replaced.path, originalPath);
+      await mkdir(replaced.path, { mode: 0o700 });
+      await writeFile(join(replaced.path, "preserve"), "yes\n", { mode: 0o600 });
+
+      await expect(
+        finalizeCliUxPilotRoots([replaced, valid], process.env, "/usr/bin/false"),
+      ).rejects.toThrow("CLI UX pilot root cleanup failed.");
+
+      expect(await readFile(join(replaced.path, "preserve"), "utf8")).toBe("yes\n");
+      expect(existsSync(valid.path)).toBe(false);
+    } finally {
+      await rm(replaced.path, { recursive: true, force: true });
+      await rm(originalPath, { recursive: true, force: true });
+      await rm(valid.path, { recursive: true, force: true });
+    }
+  });
+
   it("corroborates an owned child against its active record and process group", async () => {
     const root = await temporaryRoot();
     const marker = join(root, "corroborated");
@@ -231,3 +365,79 @@ describe("disposable runtime ownership", () => {
     ).toBe(true);
   });
 });
+
+async function pilotRoot() {
+  const path = await realpath(await mkdtemp(join(tmpdir(), "station-cli-ux-pilot-")));
+  const metadata = await lstat(path);
+  return { path, device: String(metadata.dev), inode: String(metadata.ino) };
+}
+
+function pilotRuntimeInput(input: {
+  checkout: string;
+  ownerStateDir: string;
+  root: { path: string; device: string; inode: string };
+  runtimeRoot: string;
+  steps: Array<{ command: string; args: string[] }>;
+}) {
+  return {
+    role: "cli-ux-pilot" as const,
+    checkoutRoot: input.checkout,
+    stateDir: input.ownerStateDir,
+    socketRoots: [input.runtimeRoot],
+    persistenceRoots: [input.root.path],
+    cleanupRoots: [input.root],
+    survivorPolicy: "preserve-persistent-station-runtime" as const,
+    terminalKey: "cli-ux-pilot",
+    recoveryKey: "origin/main",
+    correlation: {
+      traceId: "trc_cli_ux_pilot_recovery",
+      spanId: "spn_cli_ux_pilot_recovery",
+    },
+    launch: { cwd: input.checkout, steps: input.steps },
+  };
+}
+
+async function waitForFile(path: string): Promise<string> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      return await readFile(path, "utf8");
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
+  throw new Error(`Timed out waiting for fixture file: ${path}`);
+}
+
+async function waitForOwnerRecord(stateDir: string): Promise<void> {
+  const directory = runtimeOwnerRecordDirectory(stateDir);
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const entries = await readdir(directory).catch(() => []);
+    if (entries.length > 0) return;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
+  throw new Error("Timed out waiting for pilot owner record.");
+}
+
+async function waitForChildExit(child: ReturnType<typeof spawn>): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((resolvePromise) => child.once("exit", () => resolvePromise()));
+}
+
+async function waitForProcessExit(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (!processExists(pid)) return;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
+  throw new Error(`Timed out waiting for process ${pid} to exit.`);
+}
+
+function processExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === "ESRCH") return false;
+    throw error;
+  }
+}

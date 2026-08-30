@@ -109,6 +109,10 @@ from `test:all`:
   harnesses.
 - `bun run test:e2e:real` runs the product real E2E lane with Worktrunk, tmux,
   Codex, a built `bin/stn`, and isolated provider homes.
+- `bun run test:e2e:cli-ux:pilot -- --yes` clones and builds exact `origin/main`,
+  gives one real Codex agent the preliminary Station CLI skill, pins it to Luna
+  xhigh, and hard-stops its private tmux session after at most five minutes.
+  Claude is skipped and remains a TODO until an account is available.
 
 Use [Local development](../docs/local-development.md) for checkout-isolated
 runtime setup and [TUI development](../docs/tui.md) for native renderer and PTY
