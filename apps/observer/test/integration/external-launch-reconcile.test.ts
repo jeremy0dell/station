@@ -2,15 +2,16 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
-import type {
-  BuildHarnessLaunchRequest,
-  HarnessHooksStatus,
-  HarnessLaunchPlan,
-  HarnessRunObservation,
-  ProviderProjectConfig,
-  WorktreeObservation,
+import {
+  type BuildHarnessLaunchRequest,
+  type HarnessHooksStatus,
+  type HarnessLaunchPlan,
+  type HarnessRunObservation,
+  type ProviderProjectConfig,
+  STATION_SCHEMA_VERSION,
+  type WorktreeObservation,
 } from "@station/contracts";
-import { StationTerminalProvider } from "@station/terminal";
+import { StationTerminalProvider, stationTargetId } from "@station/terminal";
 import {
   createFakeHarnessRun,
   createFakeWorktree,
@@ -61,6 +62,113 @@ const config: StationConfig = {
 // spooled during an agent launch was never flushed. Prove the launch-triggered
 // reconcile drains the spool, the same as api.reconcile does.
 describe("observer external-launch reconcile", () => {
+  it("publishes the prepared launch before verification and recovers the same state on restart", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const fixture = createFixture(providerIngressSpoolDir(stateDir));
+    await fixture.api.reconcile("seed-authoritative-launch");
+    const scansBeforeLaunch = fixture.worktree.listCalls;
+    const events = fixture.api
+      .subscribe({ type: ["worktree.updated", "session.created"] })
+      [Symbol.asyncIterator]();
+
+    const result = await fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      title: "Projected launch",
+      group: { kind: "create", name: "Launch Group" },
+    });
+    if (result.kind !== "prepared") throw new Error("expected prepared launch");
+
+    expect(fixture.worktree.listCalls).toBe(scansBeforeLaunch);
+    expect(result.terminalTargetId).toBe(stationTargetId("wt_web_feature"));
+    const projected = await fixture.api.getSnapshot();
+    expect(projected).toMatchObject({
+      counts: { worktrees: 1, sessions: 1, agents: 1, unknown: 1 },
+      rows: [
+        {
+          id: "wt_web_feature",
+          title: "Projected launch",
+          terminal: { provider: "native", state: "open" },
+          agent: {
+            harness: "fake-harness",
+            sessionId: result.sessionId,
+            runId: `fake-harness:${result.terminalTargetId}`,
+            state: "unknown",
+          },
+        },
+      ],
+      sessions: [
+        {
+          id: result.sessionId,
+          title: "Projected launch",
+          status: { value: "unknown", source: "harness_process" },
+          harness: {
+            provider: "fake-harness",
+            runId: `fake-harness:${result.terminalTargetId}`,
+          },
+          terminal: { provider: "native", state: "open" },
+        },
+      ],
+      sessionGroups: [{ name: "Launch Group", sessionIds: [result.sessionId] }],
+    });
+    await expect(events.next()).resolves.toMatchObject({
+      value: {
+        type: "worktree.updated",
+        worktreeId: "wt_web_feature",
+        patch: { agent: { sessionId: result.sessionId }, title: "Projected launch" },
+      },
+    });
+    await expect(events.next()).resolves.toMatchObject({
+      value: { type: "session.created", session: { id: result.sessionId } },
+    });
+    await events.return?.();
+
+    const report = await fixture.api.reportHarnessEvent({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      reportId: "report_projected_launch_working",
+      provider: "fake-harness",
+      kind: "harness",
+      eventType: "agent.working",
+      observedAt: "2026-05-20T12:00:01.000Z",
+      status: {
+        value: "working",
+        confidence: "high",
+        reason: "The projected harness started working.",
+        source: "harness_event",
+        updatedAt: "2026-05-20T12:00:01.000Z",
+      },
+      correlation: { terminalTargetId: result.terminalTargetId },
+    });
+    expect(report).toMatchObject({ accepted: true });
+    await waitFor(
+      async () => (await fixture.api.getSnapshot()).sessions[0]?.status.value === "working",
+    );
+    expect(fixture.worktree.listCalls).toBe(scansBeforeLaunch);
+    expect((await fixture.api.getSnapshot()).sessions).toEqual([
+      expect.objectContaining({
+        id: result.sessionId,
+        status: expect.objectContaining({ value: "working", source: "harness_event" }),
+      }),
+    ]);
+
+    await fixture.api.reconcile("verify-authoritative-launch");
+    const verified = await fixture.api.getSnapshot();
+    const restartedCore = createObserverCore({
+      config: fixture.fixtureConfig,
+      providers: fixture.providers,
+      persistence: fixture.persistence,
+      clock: fixture.clock,
+    });
+    await restartedCore.reconcile("restart-recovery");
+    const recovered = restartedCore.getSnapshot();
+    expect(recovered.rows).toEqual(verified.rows);
+    expect(recovered.sessions).toEqual(verified.sessions);
+    expect(recovered.sessionGroups).toEqual(verified.sessionGroups);
+    expect(recovered.counts).toEqual(verified.counts);
+
+    fixture.sqlite.close();
+  });
+
   it("publishes the custom title and drains the hook spool after external launch", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
     const spoolDir = providerIngressSpoolDir(stateDir);
@@ -148,8 +256,14 @@ describe("observer external-launch reconcile", () => {
       },
     });
     if (result.kind !== "prepared") throw new Error("expected prepared fork launch");
-    await fixture.api.reconcile("verify-grouped-fork");
 
+    const projected = await fixture.api.getSnapshot();
+    const projectedGroup = projected.sessionGroups.find((group) => group.id === "group_source");
+    expect(new Set(projectedGroup?.sessionIds)).toEqual(
+      new Set(["ses_web_source", result.sessionId]),
+    );
+
+    await fixture.api.reconcile("verify-grouped-fork");
     const snapshot = await fixture.api.getSnapshot();
     const inheritedGroup = snapshot.sessionGroups.find((group) => group.id === "group_source");
     expect(inheritedGroup).toBeDefined();
@@ -398,7 +512,7 @@ describe("observer external-launch reconcile", () => {
     expect((await fixture.api.getSnapshot()).sessions).toEqual([
       expect.objectContaining({
         id: "ses_web_recoverable",
-        status: expect.objectContaining({ value: "none" }),
+        status: expect.objectContaining({ value: "unknown" }),
       }),
     ]);
     harness.addRun(
@@ -504,7 +618,7 @@ function createFixture(
       : { hookReconcileDebounceMs: options.hookReconcileDebounceMs }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
-  return { api, harness, persistence, sqlite, worktree };
+  return { api, harness, persistence, sqlite, worktree, providers, core, clock, fixtureConfig };
 }
 
 class CountingWorktreeProvider extends FakeWorktreeProvider {

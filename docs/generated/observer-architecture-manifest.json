@@ -2857,7 +2857,7 @@
           "name": "createWorktreeCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch, then returns the exact project and worktree identities created by the provider."
+          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch. Exact provider-returned launch evidence commits through the serialized snapshot writer before publication; ambiguous evidence and worktree-only creation retain synchronous reconciliation."
         },
         {
           "name": "CreateWorktreeCreateHandlerOptions",
@@ -2926,6 +2926,12 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["CreateWorktreeRequest", "ProviderProjectConfig"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["safeErrorFromUnknown"]
         },
         {
           "specifier": "@station/runtime",
@@ -4359,6 +4365,12 @@
           "purpose": null
         },
         {
+          "name": "CreatedWorktreeProjectionRejectionReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "createErrorEnvelope",
           "kind": "function",
           "role": null,
@@ -4446,7 +4458,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -5349,16 +5361,40 @@
           "purpose": null
         },
         {
+          "name": "PreparedExternalLaunchProjection",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "PreparedExternalLaunchProjectionRejectionReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "probeObserverSocket",
           "kind": "function",
           "role": "ADAPTER",
           "purpose": "Translates four-state Unix-socket evidence into Observer ownership states and an actionable inaccessible-socket diagnostic."
         },
         {
+          "name": "projectCreatedWorktreeOntoSnapshot",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "projectHarnessEventReportOntoSnapshot",
           "kind": "function",
           "role": "POLICY",
           "purpose": "Projects native-authorized harness status onto one current row and session."
+        },
+        {
+          "name": "projectPreparedExternalLaunchOntoSnapshot",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "projectProviderHealthOntoSnapshot",
@@ -5812,6 +5848,18 @@
         },
         {
           "name": "SessionTurnReadinessMutation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SnapshotProjectionCommitResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SnapshotProjectionResult",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -9619,6 +9667,12 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "SnapshotProjectionCommitResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         }
       ],
       "imports": [
@@ -9669,7 +9723,21 @@
           "specifier": "./graph.js",
           "resolvedPath": "apps/observer/src/reconcile/graph.ts",
           "edgeKind": "runtime",
-          "bindings": ["projectProviderHealthOntoSnapshot"]
+          "bindings": [
+            "projectCreatedWorktreeOntoSnapshot",
+            "projectPreparedExternalLaunchOntoSnapshot",
+            "projectProviderHealthOntoSnapshot"
+          ]
+        },
+        {
+          "specifier": "./graph.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "CreatedWorktreeProjectionRejectionReason",
+            "ObserverSessionMetadata",
+            "PreparedExternalLaunchProjectionRejectionReason"
+          ]
         },
         {
           "specifier": "./providerObservations.js",
@@ -9749,6 +9817,8 @@
             "StationEvent",
             "StationSnapshot",
             "StationSnapshotDebug",
+            "TerminalTargetObservation",
+            "WorktreeObservation",
             "WorktreeRow"
           ]
         },
@@ -9776,6 +9846,12 @@
           "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable."
         },
         {
+          "name": "CreatedWorktreeProjectionRejectionReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ObserverGraphInput",
           "kind": "type",
           "role": null,
@@ -9800,6 +9876,30 @@
           "purpose": null
         },
         {
+          "name": "PreparedExternalLaunchProjection",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "PreparedExternalLaunchProjectionRejectionReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "projectCreatedWorktreeOntoSnapshot",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "projectPreparedExternalLaunchOntoSnapshot",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "projectProviderHealthOntoSnapshot",
           "kind": "function",
           "role": null,
@@ -9810,6 +9910,12 @@
           "kind": "function",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "SnapshotProjectionResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         }
       ],
       "imports": [
@@ -9818,6 +9924,12 @@
           "resolvedPath": "apps/observer/src/reconcile/sessionActivation.ts",
           "edgeKind": "runtime",
           "bindings": ["harnessRunCanActivateSession", "terminalCanActivateSession"]
+        },
+        {
+          "specifier": "./sessionGroups.js",
+          "resolvedPath": "apps/observer/src/reconcile/sessionGroups.ts",
+          "edgeKind": "runtime",
+          "bindings": ["projectSessionGroups"]
         },
         {
           "specifier": "./snapshotCounts.js",
@@ -9850,6 +9962,7 @@
           "bindings": [
             "AGENT_STATUS",
             "STATION_SCHEMA_VERSION",
+            "terminalBoundHarnessRunObservation",
             "worktreeDisplayForAgentState",
             "worktreeHasLiveAgent"
           ]
@@ -9867,6 +9980,7 @@
             "ProviderId",
             "ProviderProjectConfig",
             "SafeError",
+            "SessionGroupView",
             "SessionRecoveryHandle",
             "SessionView",
             "SnapshotHarness",
@@ -10827,7 +10941,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -11205,7 +11319,7 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group."
+          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group. After the binding-token-qualified process launch succeeds, exact durable and managed-terminal evidence is projected before return; reconciliation verifies it and remains the fallback for any rejection."
         },
         {
           "name": "reportExternalExit",
@@ -11258,7 +11372,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["SessionSeedGroupProvenance", "SessionStore"]
+          "bindings": ["PersistedSession", "SessionSeedGroupProvenance", "SessionStore"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -11271,6 +11385,12 @@
           "resolvedPath": "apps/observer/src/reconcile/core.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "../reconcile/graph.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSessionMetadata"]
         },
         {
           "specifier": "../sessionRecovery/resolve.js",
@@ -11314,8 +11434,15 @@
             "ManagedOpenWorkspaceResult",
             "ManagedTerminalLifecycle",
             "SafeError",
-            "SessionView"
+            "SessionView",
+            "StationEvent"
           ]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["safeErrorFromUnknown"]
         },
         {
           "specifier": "@station/runtime",
@@ -15839,7 +15966,7 @@
       "declaration": "createWorktreeCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch, then returns the exact project and worktree identities created by the provider.",
+      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch. Exact provider-returned launch evidence commits through the serialized snapshot writer before publication; ambiguous evidence and worktree-only creation retain synchronous reconciliation.",
       "dependencies": []
     },
     {
@@ -16375,7 +16502,7 @@
       "declaration": "createObserverApi",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API.",
+      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, read-only singleton diagnostics, and adapter shutdown behind the application API.",
       "dependencies": [
         {
           "path": "apps/observer/src/diagnostics/collector.ts",
@@ -16503,7 +16630,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group.",
+      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group. After the binding-token-qualified process launch succeeds, exact durable and managed-terminal evidence is projected before return; reconciliation verifies it and remains the fallback for any rejection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",

@@ -15,6 +15,7 @@ import type {
   ReleaseManagedTerminalTargetRequest,
   SafeError,
   SessionRecoveryHandle,
+  StationEvent,
   StationSnapshot,
   TerminalAttachment,
   TerminalCapabilities,
@@ -328,12 +329,21 @@ function snapshotWith(
   return { rows, sessions } as unknown as StationSnapshot;
 }
 
-function fakeCore(rows: WorktreeRow[], sessions: StationSnapshot["sessions"] = []): ObserverCore {
+function fakeCore(
+  rows: WorktreeRow[],
+  sessions: StationSnapshot["sessions"] = [],
+  commitPreparedExternalLaunch: ObserverCore["commitPreparedExternalLaunch"] = async () => ({
+    status: "rejected",
+    events: [],
+    reason: "worktree_missing",
+  }),
+): ObserverCore {
   const snapshot = snapshotWith(rows, sessions);
   return {
     getProjects: () => [project],
     getSnapshot: () => snapshot,
     reconcile: async () => snapshot,
+    commitPreparedExternalLaunch,
     projectHarnessEventStatus: async () => ({}) as never,
     updateConfig: () => {},
     getHealth: () => ({}) as never,
@@ -454,10 +464,11 @@ function deps(
     sessions?: StationSnapshot["sessions"];
     sessionResumeAgentEnabled?: boolean;
     worktreeMutations?: WorktreeMutationCoordinator;
+    commitPreparedExternalLaunch?: ObserverCore["commitPreparedExternalLaunch"];
   } = {},
 ) {
   return {
-    core: fakeCore(rows, options.sessions),
+    core: fakeCore(rows, options.sessions, options.commitPreparedExternalLaunch),
     providers: registryWith(managedTerminal, harnesses),
     persistence,
     clock: { now: () => new Date(now) },
@@ -497,6 +508,165 @@ describe("ProviderRegistry managed terminal role", () => {
 });
 
 describe("prepareExternalLaunch", () => {
+  it("projects only after the token-qualified managed launch succeeds", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    const launch = vi.spyOn(station, "launchManagedProcess");
+    const event: StationEvent = {
+      type: "worktree.updated",
+      worktreeId: "wt_web_feature",
+      patch: { title: "Projected" },
+    };
+    const commit = vi.fn<ObserverCore["commitPreparedExternalLaunch"]>(async () => ({
+      status: "applied",
+      events: [event],
+    }));
+
+    const result = await prepareExternalLaunch(
+      deps([row()], station, undefined, undefined, {
+        commitPreparedExternalLaunch: commit,
+      }),
+      prepareParams,
+    );
+
+    expect(launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bindingToken: "binding_1",
+        terminalTarget: expect.objectContaining({
+          targetId: managedTargetId("wt_web_feature"),
+        }),
+      }),
+    );
+    expect(commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worktree: expect.objectContaining({
+          provider: "fake-worktree",
+          projectId: "web",
+          id: "wt_web_feature",
+          path: "/tmp/station/web/feature",
+        }),
+        terminalProviderId: "managed-test",
+        terminalTargetId: managedTargetId("wt_web_feature"),
+        terminalTarget: expect.objectContaining({
+          provider: "managed-test",
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          state: "open",
+          cwd: "/tmp/station/web/feature",
+          harnessBinding: {
+            role: "main-agent",
+            harnessProvider: "fake-harness",
+            worktreePath: "/tmp/station/web/feature",
+          },
+        }),
+        harnessProviderId: "fake-harness",
+        session: expect.objectContaining({
+          lifecycle: "open",
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          harness: "fake-harness",
+          terminalProvider: "managed-test",
+        }),
+      }),
+    );
+    expect(launch.mock.invocationCallOrder[0]).toBeLessThan(
+      commit.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(result.events).toEqual([event]);
+  });
+
+  it("preserves a prepared launch when projection rejects or throws", async () => {
+    const records: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
+    const logger = {
+      info: async () => {},
+      warn: async (message: string, attributes?: Record<string, unknown>) => {
+        records.push({ message, ...(attributes === undefined ? {} : { attributes }) });
+      },
+      error: async () => {},
+    };
+    const rejected = vi.fn<ObserverCore["commitPreparedExternalLaunch"]>(async () => ({
+      status: "rejected",
+      events: [],
+      reason: "terminal_target_mismatch",
+    }));
+    const rejectedDeps = {
+      ...deps([row()], new FakeManagedTerminalLifecycle(), undefined, undefined, {
+        commitPreparedExternalLaunch: rejected,
+      }),
+      logger,
+    };
+    await expect(prepareExternalLaunch(rejectedDeps, prepareParams)).resolves.toMatchObject({
+      outcome: { kind: "prepared" },
+      reconcile: true,
+    });
+
+    const failed = vi.fn<ObserverCore["commitPreparedExternalLaunch"]>(async () => {
+      throw new Error("private projection failure");
+    });
+    const failedDeps = {
+      ...deps([row()], new FakeManagedTerminalLifecycle(), undefined, undefined, {
+        commitPreparedExternalLaunch: failed,
+      }),
+      logger,
+    };
+    await expect(prepareExternalLaunch(failedDeps, prepareParams)).resolves.toMatchObject({
+      outcome: { kind: "prepared" },
+      reconcile: true,
+    });
+    expect(records).toEqual([
+      expect.objectContaining({
+        message: "External launch evidence required reconciliation fallback.",
+        attributes: expect.objectContaining({ reason: "terminal_target_mismatch" }),
+      }),
+      expect.objectContaining({
+        message: "External launch evidence required reconciliation fallback.",
+        attributes: expect.objectContaining({
+          error: expect.objectContaining({ code: "EXTERNAL_LAUNCH_PROJECTION_FAILED" }),
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(records)).not.toContain("private projection failure");
+  });
+
+  it("does not project a failed managed launch", async () => {
+    const commit = vi.fn<ObserverCore["commitPreparedExternalLaunch"]>();
+    const station = new FakeManagedTerminalLifecycle({
+      launchFailure: {
+        tag: "TerminalProviderError",
+        code: "LAUNCH_FAILED",
+        message: "Managed process launch failed.",
+      },
+    });
+    await expect(
+      prepareExternalLaunch(
+        deps([row()], station, undefined, undefined, {
+          commitPreparedExternalLaunch: commit,
+        }),
+        prepareParams,
+      ),
+    ).rejects.toMatchObject({ code: "LAUNCH_FAILED" });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it("does not project a successful launch result with mismatched binding identity", async () => {
+    const commit = vi.fn<ObserverCore["commitPreparedExternalLaunch"]>();
+    const station = new FakeManagedTerminalLifecycle();
+    vi.spyOn(station, "launchManagedProcess").mockImplementationOnce(async (request) => ({
+      terminalTargetId: "managed://other",
+      agentEndpointId: request.agentEndpointId,
+      started: false,
+    }));
+
+    await expect(
+      prepareExternalLaunch(
+        deps([row()], station, undefined, undefined, {
+          commitPreparedExternalLaunch: commit,
+        }),
+        prepareParams,
+      ),
+    ).resolves.toMatchObject({ outcome: { kind: "prepared" }, reconcile: true });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
   it("mints one session + one managed target + a launch plan", async () => {
     const station = new FakeManagedTerminalLifecycle();
     const harness = new CapturingHarness({ id: "fake-harness", now: () => new Date(now) });

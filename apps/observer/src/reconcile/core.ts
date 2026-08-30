@@ -7,6 +7,8 @@ import type {
   StationEvent,
   StationSnapshot,
   StationSnapshotDebug,
+  TerminalTargetObservation,
+  WorktreeObservation,
   WorktreeRow,
 } from "@station/contracts";
 import { ProviderProjectConfigSchema } from "@station/contracts";
@@ -31,7 +33,14 @@ import {
 import type { PersistedSessionTurnReadiness } from "../persistence/types.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
-import { projectProviderHealthOntoSnapshot } from "./graph.js";
+import {
+  type CreatedWorktreeProjectionRejectionReason,
+  type ObserverSessionMetadata,
+  type PreparedExternalLaunchProjectionRejectionReason,
+  projectCreatedWorktreeOntoSnapshot,
+  projectPreparedExternalLaunchOntoSnapshot,
+  projectProviderHealthOntoSnapshot,
+} from "./graph.js";
 import type { ProviderReadOptions } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import { runReconcileOnce } from "./run.js";
@@ -51,12 +60,29 @@ export type ObserverCoreHealth = {
   lastReconcile?: ReconcileTiming;
 };
 
+export type SnapshotProjectionCommitResult<TReason extends string> =
+  | { status: "applied"; events: StationEvent[] }
+  | { status: "already-exact"; events: [] }
+  | { status: "rejected"; events: []; reason: TReason };
+
 export type ObserverCore = {
   reconcile(reason?: string): Promise<StationSnapshot>;
   commitSessionGroupMutation(
     projectId: string,
     mutate: (snapshot: StationSnapshot) => Promise<SessionGroupView[]>,
   ): Promise<StationSnapshot>;
+  commitCreatedWorktreeObservation(input: {
+    projectId: string;
+    worktree: WorktreeObservation;
+  }): Promise<SnapshotProjectionCommitResult<CreatedWorktreeProjectionRejectionReason>>;
+  commitPreparedExternalLaunch(input: {
+    worktree: WorktreeObservation;
+    terminalProviderId: string;
+    terminalTargetId: string;
+    terminalTarget: TerminalTargetObservation;
+    harnessProviderId: string;
+    session: ObserverSessionMetadata;
+  }): Promise<SnapshotProjectionCommitResult<PreparedExternalLaunchProjectionRejectionReason>>;
   commitProviderHealthProbe(health: ProviderHealth): Promise<StationEvent | undefined>;
   projectHarnessEventStatus(report: HarnessEventReport): Promise<StatusProjectionResult>;
   clearTurnReadiness(input: { sessionId: string; token: string }): StationEvent | undefined;
@@ -170,6 +196,86 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
           sessionGroups,
         };
         return snapshot;
+      }),
+    commitCreatedWorktreeObservation: (created) =>
+      enqueueSnapshotWrite(async () => {
+        const projection = projectCreatedWorktreeOntoSnapshot({
+          snapshot,
+          project: projects.find((candidate) => candidate.id === created.projectId),
+          worktreeProviderId: input.providers.worktree.id,
+          worktree: created.worktree,
+          projectedAt: toIsoTimestamp(clock.now()),
+        });
+        if (projection.status === "rejected") {
+          return { status: "rejected", events: [], reason: projection.reason };
+        }
+        if (projection.status === "already-exact") {
+          return { status: "already-exact", events: [] };
+        }
+        snapshot = projection.snapshot;
+        return {
+          status: "applied",
+          events: [{ type: "worktree.added", row: projection.value }],
+        };
+      }),
+    commitPreparedExternalLaunch: (launch) =>
+      enqueueSnapshotWrite(async () => {
+        const sessionGroups =
+          input.persistence === undefined
+            ? snapshot.sessionGroups
+            : await input.persistence.listSessionGroups();
+        const harnessCapabilities = Object.fromEntries(
+          [...input.providers.harnesses.values()].map((provider) => [
+            provider.id,
+            provider.capabilities(),
+          ]),
+        );
+        const terminalCapabilities = input.providers.terminals
+          .get(launch.terminalProviderId)
+          ?.capabilities();
+        const projection = projectPreparedExternalLaunchOntoSnapshot({
+          snapshot,
+          projects,
+          project: projects.find((candidate) => candidate.id === launch.worktree.projectId),
+          worktreeProviderId: input.providers.worktree.id,
+          worktree: launch.worktree,
+          terminalProviderId: launch.terminalProviderId,
+          terminalTargetId: launch.terminalTargetId,
+          terminalTarget: launch.terminalTarget,
+          harnessProviderId: launch.harnessProviderId,
+          session: launch.session,
+          sessionGroups,
+          harnessCapabilities,
+          ...(terminalCapabilities === undefined ? {} : { terminalCapabilities }),
+          projectedAt: toIsoTimestamp(clock.now()),
+        });
+        if (projection.status === "rejected") {
+          return { status: "rejected", events: [], reason: projection.reason };
+        }
+        if (projection.status === "already-exact") {
+          return { status: "already-exact", events: [] };
+        }
+        const { row, session, created } = projection.value;
+        if (row.terminal === undefined || row.agent === undefined) {
+          throw new Error("Prepared launch projection omitted its terminal or agent correlation.");
+        }
+        snapshot = projection.snapshot;
+        const events: StationEvent[] = [
+          {
+            type: "worktree.updated",
+            worktreeId: row.id,
+            patch: {
+              title: row.title,
+              terminal: row.terminal,
+              agent: row.agent,
+              display: row.display,
+            },
+          },
+          created
+            ? { type: "session.created", session }
+            : { type: "session.updated", sessionId: session.id, patch: session },
+        ];
+        return { status: "applied", events };
       }),
     commitProviderHealthProbe: (health) =>
       enqueueSnapshotWrite(async (): Promise<StationEvent | undefined> => {

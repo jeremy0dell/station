@@ -7,9 +7,10 @@ import type {
   ManagedTerminalLifecycle,
   SafeError,
   SessionView,
+  StationEvent,
 } from "@station/contracts";
 import { terminalTargetObservationFromBinding, worktreeHasLiveAgent } from "@station/contracts";
-import type { RuntimeClock } from "@station/runtime";
+import { type RuntimeClock, safeErrorFromUnknown } from "@station/runtime";
 import { worktreeMissingError } from "../commands/errors.js";
 import { assertHarnessLaunchPreconditionsOrThrow } from "../commands/harnessLaunchPreflight.js";
 import { resolveHarnessProviderOrThrow } from "../commands/providers.js";
@@ -24,9 +25,14 @@ import {
   sessionSeedGroupPlacement,
   worktreeObservationFromRow,
 } from "../commands/session/shared.js";
-import type { SessionSeedGroupProvenance, SessionStore } from "../persistence/index.js";
+import type {
+  PersistedSession,
+  SessionSeedGroupProvenance,
+  SessionStore,
+} from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
+import type { ObserverSessionMetadata } from "../reconcile/graph.js";
 import { resolveSessionRecovery } from "../sessionRecovery/resolve.js";
 import type { StationLogger } from "../stationLogger.js";
 import { nowIso } from "../utils/time.js";
@@ -50,6 +56,7 @@ export type ExternalLaunchOutcome<T> = {
   outcome: T;
   /** Whether the caller should request a shared scheduled reconcile for this lifecycle change. */
   reconcile: boolean;
+  events?: StationEvent[];
 };
 
 /**
@@ -61,7 +68,9 @@ export type ExternalLaunchOutcome<T> = {
  * options, and releases only its replacement target generation on failure. Both launch paths
  * preflight only the selected provider. A fresh Station identity is atomically seeded with explicit
  * root placement or the requested source session's current Group before target publication, and
- * confirmed failed launch cleanup removes only its membership and owned inline Group.
+ * confirmed failed launch cleanup removes only its membership and owned inline Group. After the
+ * binding-token-qualified process launch succeeds, exact durable and managed-terminal evidence is
+ * projected before return; reconciliation verifies it and remains the fallback for any rejection.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -234,6 +243,7 @@ async function prepareExternalLaunchForWorktree(
   const seededAt = nowIso(deps.clock);
   let opened: ManagedOpenWorkspaceResult | undefined;
   let sessionSeeded = false;
+  let seededSession: PersistedSession | undefined;
   let groupProvenance: SessionSeedGroupProvenance | undefined;
   try {
     if (freshSession) {
@@ -249,14 +259,18 @@ async function prepareExternalLaunchForWorktree(
         clock: deps.clock,
       });
       sessionSeeded = true;
+      seededSession = seed.session;
       groupProvenance = seed.groupProvenance;
       if (params.title !== undefined && params.title !== row.title) {
         // New-session intent may replace reconcile's branch fallback before the target becomes visible.
-        await deps.persistence.renameSession({
+        const renamed = await deps.persistence.renameSession({
           sessionId,
           title: params.title,
           renamedAt: seededAt,
         });
+        if (renamed !== undefined) {
+          seededSession = renamed;
+        }
       }
     }
 
@@ -303,9 +317,80 @@ async function prepareExternalLaunchForWorktree(
       outcome.outputCompatibility = launched.outputCompatibility;
     }
 
+    let events: StationEvent[] = [];
+    if (
+      launched.terminalTargetId === opened.target.targetId &&
+      launched.agentEndpointId === opened.agentEndpointId
+    ) {
+      const projectedTerminalTarget = terminalTargetObservationFromBinding({
+        binding: opened.target,
+        worktree,
+        observedAt: nowIso(deps.clock),
+      });
+      try {
+        const projection = await deps.core.commitPreparedExternalLaunch({
+          worktree,
+          terminalProviderId: managedTerminal.id,
+          terminalTargetId: opened.target.targetId,
+          terminalTarget: projectedTerminalTarget,
+          harnessProviderId,
+          session: externalLaunchSessionMetadata({
+            sessionId,
+            projectId: project.id,
+            worktreeId: worktree.id,
+            title: row.title,
+            harness: harnessProviderId,
+            terminalProvider: managedTerminal.id,
+            seededAt,
+            ...(seededSession === undefined ? {} : { seededSession }),
+            ...(retainedSession === undefined ? {} : { retainedSession }),
+          }),
+        });
+        if (projection.status === "rejected") {
+          await deps.logger
+            ?.warn("External launch evidence required reconciliation fallback.", {
+              projectId: project.id,
+              worktreeId: worktree.id,
+              sessionId,
+              terminalTargetId: opened.target.targetId,
+              reason: projection.reason,
+            })
+            .catch(() => undefined);
+        } else {
+          events = projection.events;
+        }
+      } catch (cause) {
+        const error = safeErrorFromUnknown(cause, {
+          tag: "ObserverProjectionError",
+          code: "EXTERNAL_LAUNCH_PROJECTION_FAILED",
+          message: "Prepared external launch evidence could not be projected.",
+        });
+        await deps.logger
+          ?.warn("External launch evidence required reconciliation fallback.", {
+            projectId: project.id,
+            worktreeId: worktree.id,
+            sessionId,
+            terminalTargetId: opened.target.targetId,
+            error,
+          })
+          .catch(() => undefined);
+      }
+    } else {
+      await deps.logger
+        ?.warn("External launch evidence required reconciliation fallback.", {
+          projectId: project.id,
+          worktreeId: worktree.id,
+          sessionId,
+          terminalTargetId: opened.target.targetId,
+          reason: "launch_result_identity_mismatch",
+        })
+        .catch(() => undefined);
+    }
+
     return {
       outcome,
       reconcile: true,
+      ...(events.length === 0 ? {} : { events }),
     };
   } catch (error) {
     const targetReleaseConfirmed = await releaseOpenedTargetBestEffort({
@@ -322,6 +407,36 @@ async function prepareExternalLaunchForWorktree(
     }
     throw error;
   }
+}
+
+function externalLaunchSessionMetadata(input: {
+  sessionId: string;
+  projectId: string;
+  worktreeId: string;
+  title: string;
+  harness: string;
+  terminalProvider: string;
+  seededAt: string;
+  seededSession?: PersistedSession;
+  retainedSession?: SessionView;
+}): ObserverSessionMetadata {
+  const metadata: ObserverSessionMetadata = {
+    id: input.sessionId,
+    projectId: input.projectId,
+    worktreeId: input.worktreeId,
+    lifecycle: "open",
+    title: input.seededSession?.title ?? input.retainedSession?.title ?? input.title,
+    harness: input.seededSession?.harness ?? input.harness,
+    terminalProvider: input.seededSession?.terminalProvider ?? input.terminalProvider,
+    createdAt: input.seededSession?.createdAt ?? input.retainedSession?.createdAt ?? input.seededAt,
+    lastSeenAt:
+      input.seededSession?.lastSeenAt ?? input.retainedSession?.updatedAt ?? input.seededAt,
+  };
+  const state = input.seededSession?.state ?? input.retainedSession?.status.value;
+  if (state !== undefined) {
+    metadata.state = state;
+  }
+  return metadata;
 }
 
 async function releaseOpenedTargetBestEffort(input: {
