@@ -14,6 +14,9 @@ export function DashboardControlsView({
   dividerTitle?: string;
 }) {
   const dispatch = useStationMouse();
+  const dividerMouseProps = dividerTitle === undefined
+    ? {}
+    : stationMouseProps(dispatch, { kind: "scrollIndicator", direction: "down" });
   return (
     <box
       id="station-dashboard-controls"
@@ -24,12 +27,7 @@ export function DashboardControlsView({
       paddingRight={1}
       overflow="hidden"
     >
-      <box
-        flexShrink={0}
-        {...(dividerTitle === undefined
-          ? {}
-          : stationMouseProps(dispatch, { kind: "scrollIndicator", direction: "down" }))}
-      >
+      <box flexShrink={0} {...dividerMouseProps}>
         <DashboardDividerView
           {...(dividerTitle === undefined ? {} : { title: dividerTitle })}
         />
