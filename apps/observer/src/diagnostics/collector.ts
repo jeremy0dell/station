@@ -557,7 +557,7 @@ async function collectProviderHealth(
       health[provider.id] = result.value;
     } else {
       health[provider.id] = {
-        providerId: provider.id,
+        provider: provider.id,
         providerType,
         status: "unavailable",
         lastCheckedAt: toIsoTimestamp(clock.now()),

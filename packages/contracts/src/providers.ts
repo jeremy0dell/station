@@ -1,7 +1,6 @@
 import { isAbsolute } from "node:path";
 import { z } from "zod";
 import type { TerminalFocusOrigin } from "./commands/terminal.js";
-import type { SafeError } from "./errors.js";
 import { SafeErrorSchema } from "./errors.js";
 import type { HarnessRunId, ProviderId, SessionId, TerminalTargetId, WorktreeId } from "./ids.js";
 import {
@@ -21,7 +20,7 @@ import type {
   WorktreeObservation,
   WorktreePullRequest,
 } from "./observations.js";
-import { RepositoryRemoteSchema } from "./observations.js";
+import { GitShaSchema, RepositoryRemoteSchema } from "./observations.js";
 import type { ProviderHookHealth, ProviderHookReconciliationResult } from "./providerHooks.js";
 import type { HarnessResumeOptions } from "./recovery.js";
 import { nonEmptyStringSchema } from "./shared.js";
@@ -39,7 +38,7 @@ export const ProviderHealthStatusSchema = z.enum(["healthy", "degraded", "unavai
 
 export const ProviderHealthSchema = z
   .object({
-    providerId: ProviderIdSchema,
+    provider: ProviderIdSchema,
     providerType: ProviderTypeSchema,
     status: ProviderHealthStatusSchema,
     lastCheckedAt: TimestampSchema,
@@ -176,12 +175,16 @@ export type RemoveWorktreeResult = {
   reason?: string;
 };
 
-export type ProviderDoctorCheck = {
-  name: string;
-  status: "ok" | "warn" | "error";
-  message: string;
-  error?: SafeError;
-};
+export const DoctorCheckSchema = z
+  .object({
+    name: nonEmptyStringSchema,
+    status: z.enum(["ok", "warn", "error"]),
+    message: nonEmptyStringSchema,
+    error: SafeErrorSchema.optional(),
+  })
+  .strict();
+export type DoctorCheck = z.infer<typeof DoctorCheckSchema>;
+export type ProviderDoctorCheck = z.infer<typeof DoctorCheckSchema>;
 
 const providerHookAbsolutePathSchema = nonEmptyStringSchema.refine(
   isAbsolute,
@@ -317,12 +320,16 @@ export type TerminalFocusContext = {
   origin?: TerminalFocusOrigin;
 };
 
+export const HarnessModeSchema = z.enum(["interactive", "exec"]);
+
+export type HarnessMode = z.infer<typeof HarnessModeSchema>;
+
 export type BuildHarnessLaunchRequest = {
   project: ProviderProjectConfig;
   worktree: WorktreeObservation;
   terminalTarget?: TerminalTargetObservation;
   sessionId?: SessionId;
-  mode?: "interactive" | "exec";
+  mode?: HarnessMode;
   initialPrompt?: string;
   profile?: string;
   permissionMode?: HarnessPermissionMode;
@@ -338,7 +345,7 @@ export const HarnessLaunchPlanSchema = z
     args: z.array(z.string()),
     cwd: nonEmptyStringSchema.optional(),
     env: z.record(nonEmptyStringSchema, z.string()).optional(),
-    mode: z.enum(["interactive", "exec"]),
+    mode: HarnessModeSchema,
     displayTitle: nonEmptyStringSchema.optional(),
     providerData: z.unknown().optional(),
   })
@@ -400,10 +407,7 @@ export const RepositoryPullRequestRequestSchema = z
   .object({
     remote: RepositoryRemoteSchema,
     branch: nonEmptyStringSchema,
-    headSha: z
-      .string()
-      .regex(/^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/)
-      .optional(),
+    headSha: GitShaSchema.optional(),
     worktreeId: WorktreeIdSchema.optional(),
     projectId: ProjectIdSchema.optional(),
   })
@@ -418,10 +422,7 @@ export const RepositoryChecksRequestSchema = z
     remote: RepositoryRemoteSchema,
     pullRequestNumber: z.number().int().positive(),
     branch: nonEmptyStringSchema.optional(),
-    headSha: z
-      .string()
-      .regex(/^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/)
-      .optional(),
+    headSha: GitShaSchema.optional(),
     worktreeId: WorktreeIdSchema.optional(),
     projectId: ProjectIdSchema.optional(),
   })

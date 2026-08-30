@@ -48,7 +48,7 @@ describe("ScriptedAgentHarnessProvider", () => {
       canRunNonInteractive: true,
     });
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "scripted",
+      provider: "scripted",
       providerType: "harness",
       status: "healthy",
     });

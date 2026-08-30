@@ -186,8 +186,6 @@ function acceptedReceipt(report: HarnessEventReport) {
     accepted: true,
     status: "accepted" as const,
     receivedAt: now,
-    projected: false,
-    scheduledReconcile: false,
   };
 }
 

@@ -192,7 +192,7 @@ function snapshotFixture(): StationSnapshot {
           layout: "agent-only",
         },
         health: {
-          providerId: "worktrunk",
+          provider: "worktrunk",
           providerType: "worktree",
           status: "healthy",
           lastCheckedAt: now,

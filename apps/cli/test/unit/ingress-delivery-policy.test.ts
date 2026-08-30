@@ -47,7 +47,7 @@ describe("provider hook delivery policy", () => {
       deliverProviderHookWithSpooling(
         deliveryInput(fixture, "hook_finalized_command", state, deps, { observerCommand }),
       ),
-    ).resolves.toMatchObject({ status: "ingested" });
+    ).resolves.toMatchObject({ status: "accepted" });
     expect(observedCommand).toBe(observerCommand);
   });
 
@@ -81,7 +81,7 @@ describe("provider hook delivery policy", () => {
 
     await expect(
       deliverProviderHookWithSpooling(deliveryInput(fixture, "hook_losing_child", state, deps)),
-    ).resolves.toMatchObject({ status: "ingested" });
+    ).resolves.toMatchObject({ status: "accepted" });
     expect(childKills).toBe(1);
   });
 
@@ -115,7 +115,7 @@ describe("provider hook delivery policy", () => {
 
     await expect(
       deliverProviderHookWithSpooling(deliveryInput(fixture, "hook_legacy_pid", state, deps)),
-    ).resolves.toMatchObject({ status: "ingested" });
+    ).resolves.toMatchObject({ status: "accepted" });
     expect(childKills).toBe(1);
   });
 
@@ -151,8 +151,8 @@ describe("provider hook delivery policy", () => {
     gate.resolve();
 
     await expect(Promise.all([first, second])).resolves.toEqual([
-      expect.objectContaining({ hookId: "hook_concurrent_1", status: "ingested" }),
-      expect.objectContaining({ hookId: "hook_concurrent_2", status: "ingested" }),
+      expect.objectContaining({ hookId: "hook_concurrent_1", status: "accepted" }),
+      expect.objectContaining({ hookId: "hook_concurrent_2", status: "accepted" }),
     ]);
     expect(state.spawnCount).toBe(1);
     expect(state.spooled).toBe(0);
@@ -187,7 +187,7 @@ describe("provider hook delivery policy", () => {
 
     await expect(
       deliverProviderHookWithSpooling(deliveryInput(fixture, "hook_stale_lock", state, deps)),
-    ).resolves.toMatchObject({ hookId: "hook_stale_lock", status: "ingested" });
+    ).resolves.toMatchObject({ hookId: "hook_stale_lock", status: "accepted" });
     expect(state.spawnCount).toBe(1);
     expect(state.spooled).toBe(0);
   });
@@ -287,11 +287,11 @@ describe("provider hook delivery policy", () => {
     const input = deliveryInput(fixture, "hook_replacement", state, deps);
     input.deliver = async () => {
       deliveries += 1;
-      return { receipt: ingestedReceipt(input.event) };
+      return { receipt: acceptedReceipt(input.event) };
     };
 
     await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
-      status: "ingested",
+      status: "accepted",
     });
     expect(state.spawnCount).toBe(1);
     expect(deliveries).toBe(1);
@@ -345,11 +345,10 @@ describe("provider hook delivery policy", () => {
     const input = deliveryInput(fixture, "hook_handoff_refused", state, deps);
     input.deliver = async () => {
       deliveries += 1;
-      return { receipt: ingestedReceipt(input.event) };
+      return { receipt: acceptedReceipt(input.event) };
     };
 
     await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
-      accepted: false,
       status: "rejected",
       error: { code: "OBSERVER_HANDOFF_REFUSED" },
     });
@@ -383,11 +382,10 @@ describe("provider hook delivery policy", () => {
     const input = deliveryInput(fixture, "hook_schema_mismatch", state, deps);
     input.deliver = async () => {
       deliveries += 1;
-      return { receipt: ingestedReceipt(input.event) };
+      return { receipt: acceptedReceipt(input.event) };
     };
 
     await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
-      accepted: false,
       status: "rejected",
       error: { code: "PROTOCOL_SCHEMA_MISMATCH" },
     });
@@ -415,7 +413,7 @@ describe("provider hook delivery policy", () => {
       spawnObserver,
       clientFactory,
     });
-    input.deliver = vi.fn(async () => ({ receipt: ingestedReceipt(input.event) }));
+    input.deliver = vi.fn(async () => ({ receipt: acceptedReceipt(input.event) }));
     const lockDir = join(fixture.stateDir, "run", "hook-autostart.lock");
     try {
       await chmod(fixture.socketPath, 0o000);
@@ -423,7 +421,6 @@ describe("provider hook delivery policy", () => {
         hookId: "hook_inaccessible",
         provider: input.event.provider,
         event: input.event.event,
-        accepted: true,
         status: "spooled",
         error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
       });
@@ -453,11 +450,10 @@ describe("provider hook delivery policy", () => {
     input.autoStart = false;
     input.deliver = async () => {
       deliveries += 1;
-      return { receipt: ingestedReceipt(input.event) };
+      return { receipt: acceptedReceipt(input.event) };
     };
 
     await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
-      accepted: false,
       status: "rejected",
       error: { code: "OBSERVER_HANDOFF_REFUSED" },
     });
@@ -483,11 +479,10 @@ describe("provider hook delivery policy", () => {
     const input = deliveryInput(fixture, "hook_legacy_health", state, deps);
     input.deliver = async () => {
       deliveries += 1;
-      return { receipt: ingestedReceipt(input.event) };
+      return { receipt: acceptedReceipt(input.event) };
     };
 
     await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
-      accepted: false,
       status: "rejected",
       error: { code: "OBSERVER_HANDOFF_REFUSED" },
     });
@@ -516,7 +511,6 @@ describe("provider hook delivery policy", () => {
     });
 
     await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
-      accepted: false,
       status: "rejected",
       error: { code: "OBSERVER_BUILD_MISMATCH" },
     });
@@ -546,7 +540,7 @@ function deliveryInput(
     deps,
     deliver: async () => {
       if (!state.running) return { error: offlineError(event) };
-      return { receipt: ingestedReceipt(event) };
+      return { receipt: acceptedReceipt(event) };
     },
     spoolReceipt: async (error) => {
       state.spooled += 1;
@@ -578,16 +572,14 @@ function hookEvent(hookId: string): ProviderHookEvent {
   };
 }
 
-function ingestedReceipt(event: ProviderHookEvent): ProviderHookReceipt {
+function acceptedReceipt(event: ProviderHookEvent): ProviderHookReceipt {
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
     hookId: event.hookId ?? "hook_test",
     provider: event.provider,
     event: event.event,
-    accepted: true,
-    status: "ingested",
+    status: "accepted",
     receivedAt: event.receivedAt,
-    reconciled: false,
   };
 }
 
@@ -600,10 +592,8 @@ function spooledReceipt(
     hookId: event.hookId ?? "hook_test",
     provider: event.provider,
     event: event.event,
-    accepted: true,
     status: "spooled",
     receivedAt: event.receivedAt,
-    spooled: true,
   };
   if (error !== undefined) {
     receipt.error = error;

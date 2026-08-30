@@ -105,7 +105,7 @@ export type SetupPlanningFacts = {
     readonly ingress: "available" | "missing" | "checkout" | "installed";
     readonly tmuxPopup: "available" | "missing" | "checkout" | "installed";
   };
-  readonly worktrunkAutomation: "ready" | "warning" | "skipped";
+  readonly worktrunkAutomation: "ready" | "warn" | "skipped";
   readonly worktrunkShell: "ready" | "missing" | "skipped";
   readonly tmuxPopup: {
     readonly persisted: "ready" | "missing" | "conflict";

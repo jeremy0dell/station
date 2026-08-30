@@ -89,8 +89,6 @@ export async function processHarnessIngressReport(
     });
     const projectedReceipt = HarnessEventReportReceiptSchema.parse({
       ...receipt,
-      projected: false,
-      scheduledReconcile: true,
       error: projection.error,
     });
     deps.requestReconcile(reconcileReason);
@@ -125,11 +123,6 @@ export async function processHarnessIngressReport(
         .catch(() => undefined),
     );
   }
-  const projectedReceipt = HarnessEventReportReceiptSchema.parse({
-    ...receipt,
-    projected: projection.value.projected,
-    scheduledReconcile: true,
-  });
   deps.requestReconcile(reconcileReason);
-  return projectedReceipt;
+  return receipt;
 }

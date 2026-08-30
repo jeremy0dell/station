@@ -135,7 +135,6 @@ export function createProviderHookIngress(
           hookId: id,
           provider: event.provider,
           event: event.event,
-          accepted: false,
           status: "rejected",
           receivedAt: event.receivedAt,
           error: persistResult.error,
@@ -160,7 +159,6 @@ export function createProviderHookIngress(
             hookId: id,
             provider: event.provider,
             event: event.event,
-            accepted: false,
             status: "rejected",
             receivedAt: event.receivedAt,
             error,
@@ -187,11 +185,8 @@ export function createProviderHookIngress(
         hookId: id,
         provider: event.provider,
         event: event.event,
-        accepted: true,
-        status: "ingested",
+        status: "accepted",
         receivedAt: event.receivedAt,
-        reconciled: false,
-        deduped: persistResult.value.deduped,
       };
       return ProviderHookReceiptSchema.parse(receipt);
     },
@@ -222,7 +217,6 @@ async function ingestViaHookAdapter(
       hookId: event.hookId,
       provider: event.provider,
       event: event.event,
-      accepted: false,
       status: "ignored",
       receivedAt: event.receivedAt,
     });
@@ -252,7 +246,6 @@ async function ingestViaHookAdapter(
       hookId: event.hookId,
       provider: event.provider,
       event: event.event,
-      accepted: false,
       status: "rejected",
       receivedAt: event.receivedAt,
       error: safeErrorFromUnknown(result === undefined ? undefined : result.error, {
@@ -265,30 +258,14 @@ async function ingestViaHookAdapter(
   }
 
   const receipt = await input.reportHarnessEvent(result.report);
-  const status =
-    receipt.status === "accepted"
-      ? "ingested"
-      : receipt.status === "spooled"
-        ? "spooled"
-        : receipt.status;
   const hookReceipt: ProviderHookReceipt = {
     schemaVersion: STATION_SCHEMA_VERSION,
     hookId: event.hookId ?? receipt.reportId,
     provider: event.provider,
     event: event.event,
-    accepted: receipt.accepted,
-    status,
+    status: receipt.status,
     receivedAt: event.receivedAt,
   };
-  if (status === "ingested") {
-    hookReceipt.reconciled = false;
-  }
-  if (status === "spooled") {
-    hookReceipt.spooled = true;
-  }
-  if (receipt.deduped !== undefined) {
-    hookReceipt.deduped = receipt.deduped;
-  }
   if (receipt.error !== undefined) {
     hookReceipt.error = receipt.error;
   }
@@ -380,8 +357,6 @@ export function createHarnessEventReportIngestion(
           accepted: false,
           status: "rejected",
           receivedAt,
-          projected: false,
-          scheduledReconcile: false,
           error: persistResult.error,
         });
       }
@@ -395,8 +370,6 @@ export function createHarnessEventReportIngestion(
           accepted: true,
           status: "accepted",
           receivedAt,
-          projected: false,
-          scheduledReconcile: false,
           deduped: true,
         });
       }
@@ -409,8 +382,6 @@ export function createHarnessEventReportIngestion(
         accepted: true,
         status: "accepted",
         receivedAt,
-        projected: false,
-        scheduledReconcile: false,
         deduped: false,
       });
     },

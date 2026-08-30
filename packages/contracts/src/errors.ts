@@ -7,9 +7,10 @@ import {
   TimestampSchema,
   WorktreeIdSchema,
 } from "./ids.js";
+import { LogLevels } from "./logging.js";
 import { nonEmptyStringSchema, safeTextSchema } from "./shared.js";
 
-export const ErrorSeveritySchema = z.enum(["debug", "info", "warn", "error", "fatal"]);
+export const ErrorSeveritySchema = z.enum([...LogLevels, "fatal"]);
 
 export const WorktreeRemovalRefusalReasonSchema = z.enum([
   "ambiguous_identity",

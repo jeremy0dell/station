@@ -328,7 +328,7 @@ describe("observer reconcile with a station-hosted target", () => {
         tool_use_id: "toolu_station_1",
       }),
     );
-    expect(receipt).toMatchObject({ status: "accepted", scheduledReconcile: true });
+    expect(receipt).toMatchObject({ status: "accepted" });
 
     const snapshot = await core.reconcile("station-working");
     const row = snapshot.rows.find((candidate) => candidate.id === "wt_web_station");

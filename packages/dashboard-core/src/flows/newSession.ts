@@ -487,7 +487,7 @@ export function resolveNewSessionProjectAvailability(
           code: "WORKTREE_PROVIDER_UNAVAILABLE",
           message: "The worktree provider is unavailable.",
           hint: "Run station doctor for provider diagnostics.",
-          provider: project.health.providerId,
+          provider: project.health.provider,
         } satisfies SafeError),
     };
   }

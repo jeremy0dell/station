@@ -6,7 +6,7 @@ const now = "2026-05-20T12:00:00.000Z";
 
 function healthyResult(providerId: string): ProviderHealth {
   return {
-    providerId,
+    provider: providerId,
     providerType: "harness",
     status: "healthy",
     lastCheckedAt: now,

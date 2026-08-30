@@ -91,7 +91,7 @@ function snapshotWithCodexHealth(
     providerHealth: {
       ...snapshot.providerHealth,
       codex: {
-        providerId: "codex",
+        provider: "codex",
         providerType: "harness",
         status,
         lastCheckedAt: snapshot.generatedAt,

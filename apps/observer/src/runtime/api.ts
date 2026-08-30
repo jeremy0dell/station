@@ -149,7 +149,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     } catch (error) {
       await options.logger
         ?.error("Completed provider health probe could not be published.", {
-          provider: health.providerId,
+          provider: health.provider,
           error,
         })
         .catch(() => undefined);

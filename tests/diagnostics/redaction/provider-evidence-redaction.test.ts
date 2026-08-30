@@ -22,7 +22,7 @@ describe("provider evidence redaction", () => {
       snapshot: baseDiagnosticSnapshot({
         providerHealth: {
           "fake-harness": {
-            providerId: "fake-harness",
+            provider: "fake-harness",
             providerType: "harness",
             status: "unavailable",
             lastCheckedAt: diagnosticNow,

@@ -233,8 +233,6 @@ function acceptedReceipt(
     accepted: true,
     status: "accepted",
     receivedAt,
-    projected: false,
-    scheduledReconcile: !deduped,
     deduped,
   });
 }
@@ -252,8 +250,6 @@ function rejectedReceipt(
     accepted: false,
     status: "rejected",
     receivedAt,
-    projected: false,
-    scheduledReconcile: false,
     error,
   });
 }

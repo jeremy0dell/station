@@ -8,7 +8,7 @@
 
 export type ToolPresence = "present" | "absent";
 
-export type SetupCheckStatus = "ok" | "missing" | "warning" | "skipped";
+export type SetupCheckStatus = "ok" | "missing" | "warn" | "skipped";
 
 export type MachineProfileState = {
   platform: "darwin" | "linux";
@@ -126,7 +126,7 @@ export const machineProfiles: readonly MachineProfile[] = [
         harness: "ok",
         "diff-viewer": "ok",
         config: "missing",
-        "observer-socket-evidence": "warning",
+        "observer-socket-evidence": "warn",
       },
     },
   },

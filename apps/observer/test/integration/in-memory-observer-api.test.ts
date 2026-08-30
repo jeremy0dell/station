@@ -216,8 +216,16 @@ describe("Observer API composition with in-memory persistence", () => {
     const firstHook = await api.ingestProviderHookEvent(hook);
     const duplicateHook = await api.ingestProviderHookEvent(hook);
 
-    expect(firstHook).toMatchObject({ accepted: true, deduped: false });
-    expect(duplicateHook).toMatchObject({ accepted: true, deduped: true });
+    const expectedHookReceipt = {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "hook_memory_1",
+      provider: "fake-harness",
+      event: "run.updated",
+      status: "accepted",
+      receivedAt: now,
+    };
+    expect(firstHook).toEqual(expectedHookReceipt);
+    expect(duplicateHook).toEqual(expectedHookReceipt);
     await expect(hookReconcile).resolves.toMatchObject({
       value: { type: "observer.reconciled" },
     });

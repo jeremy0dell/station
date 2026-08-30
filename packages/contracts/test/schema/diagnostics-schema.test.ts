@@ -3,6 +3,7 @@ import {
   DebugBundleManifestSchema,
   DiagnosticDetailSchema,
   DiagnosticEvidenceIndexSchema,
+  DiagnosticEvidenceItemSchema,
   DiagnosticSnapshotSchema,
   DoctorOptionsSchema,
   DoctorReportSchema,
@@ -199,6 +200,30 @@ describe("diagnostics schemas", () => {
       await loadJson("diagnostic-evidence-index.json"),
       "diagnostic evidence index",
     );
+  });
+
+  it("uses qualified terminal and harness IDs in diagnostic evidence items", () => {
+    const item = {
+      id: "row-wt_web_task",
+      category: "row",
+      severity: "info",
+      message: "Row evidence.",
+      terminalTargetId: "tmux:station:@1:%2",
+      harnessRunId: "run_1",
+    };
+
+    expect(DiagnosticEvidenceItemSchema.parse(item)).toEqual(item);
+    expect(
+      DiagnosticEvidenceItemSchema.safeParse({
+        ...item,
+        terminalTargetId: undefined,
+        targetId: "target_1",
+      }).success,
+    ).toBe(false);
+    expect(
+      DiagnosticEvidenceItemSchema.safeParse({ ...item, harnessRunId: undefined, runId: "run_1" })
+        .success,
+    ).toBe(false);
   });
 
   it("parses requester-scoped provider hook runtimes strictly", () => {

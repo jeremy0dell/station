@@ -43,7 +43,7 @@ describe("OpenCodeHarnessProvider", () => {
     });
 
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "opencode",
+      provider: "opencode",
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: now,
@@ -67,7 +67,7 @@ describe("OpenCodeHarnessProvider", () => {
     });
 
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "opencode",
+      provider: "opencode",
       providerType: "harness",
       status: "unavailable",
       lastError: {

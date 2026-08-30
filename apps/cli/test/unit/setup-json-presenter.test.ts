@@ -181,12 +181,12 @@ describe("setup plan projection", () => {
       ["config", "ok"],
       ["station-launchers", "ok"],
       ["station-ui", "ok"],
-      ["worktrunk-shell-integration", "warning"],
-      ["tmux-popup-binding", "warning"],
+      ["worktrunk-shell-integration", "warn"],
+      ["tmux-popup-binding", "warn"],
       ["worktrunk-hooks", "ok"],
       ["harness-tracking:codex", "ok"],
       ["diff-viewer", "ok"],
-      ["doctor", "warning"],
+      ["doctor", "warn"],
     ]);
   });
 
@@ -322,7 +322,7 @@ describe("setup plan projection", () => {
 
     expect(plan.checks.find((check) => check.id === "observer-socket-evidence")).toMatchObject({
       tier: "recommended",
-      status: "warning",
+      status: "warn",
       message: expect.stringContaining("Fresh Observer startup can continue"),
     });
     expect(plan.summary).toMatchObject({ workflowReady: true, requiredOk: true });
@@ -977,7 +977,7 @@ describe("setup plan projection", () => {
     );
 
     expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
-      status: "warning",
+      status: "warn",
     });
     expect(plan.actions.find((action) => action.id === "link-station-launchers")).toBeUndefined();
     expect(plan.actions.find((action) => action.id === "worktrunk-hooks")).toBeUndefined();
@@ -1011,7 +1011,7 @@ describe("setup plan projection", () => {
 
     expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
       tier: "recommended",
-      status: "warning",
+      status: "warn",
       message:
         "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup. Use the installer's PATH guidance to repair bare launcher resolution.",
       details: {
@@ -1046,7 +1046,7 @@ describe("setup plan projection", () => {
     });
     expect(plan.actions.some((action) => action.id === "tmux-popup-binding")).toBe(false);
     expect(plan.checks.find((check) => check.id === "tmux-popup-binding")).toMatchObject({
-      status: "warning",
+      status: "warn",
       message: expect.stringContaining("persisted"),
     });
   });
@@ -1069,7 +1069,7 @@ describe("setup plan projection", () => {
     );
 
     expect(plan.checks.find((check) => check.id === "tmux-popup-binding")).toMatchObject({
-      status: "warning",
+      status: "warn",
       message: "tmux popup binding markers are duplicated.",
     });
     expect(
@@ -1128,14 +1128,14 @@ describe("setup plan projection", () => {
     const plan = buildSetupPlan(
       facts({
         worktrunkShellIntegration: {
-          status: "warning",
+          status: "warn",
           message: "Could not determine an active bash or zsh shell for Worktrunk integration.",
         },
       }),
     );
 
     expect(plan.checks.find((check) => check.id === "worktrunk-shell-integration")).toMatchObject({
-      status: "warning",
+      status: "warn",
     });
     expect(
       plan.actions.find((action) => action.id === "worktrunk-shell-integration"),
@@ -1171,7 +1171,7 @@ describe("setup plan projection", () => {
     );
 
     expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
-      status: "warning",
+      status: "warn",
       details: {
         station: "/tmp/station/bin/stn",
         ingress: "/tmp/station/bin/stn-ingress",
@@ -1255,7 +1255,7 @@ describe("setup plan projection", () => {
     );
 
     const warningIds = plan.checks
-      .filter((check) => check.status === "warning")
+      .filter((check) => check.status === "warn")
       .map((check) => check.id);
 
     expect(plan.checks.find((check) => check.id === "config")).toMatchObject({
@@ -1264,7 +1264,7 @@ describe("setup plan projection", () => {
     });
     expect(plan.checks.find((check) => check.id === "config-diagnostics")).toMatchObject({
       tier: "recommended",
-      status: "warning",
+      status: "warn",
       message: expect.stringContaining("Ignoring invalid [workspace] section."),
       details: { path: "/tmp/config.toml", project: "repo" },
     });
@@ -1411,7 +1411,7 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
         "Lifecycle hooks are enabled; automated Worktrunk mutations pass --yes to pre-approve prompts.",
     },
     worktrunkShellIntegration: {
-      status: "warning",
+      status: "warn",
       shell: "zsh",
       rcPath: "/tmp/home/.zshrc",
       message: "Worktrunk shell integration is not installed for zsh.",

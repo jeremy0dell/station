@@ -152,8 +152,6 @@ describe("observer reconcile with Codex harness", () => {
 
     expect(receipt).toMatchObject({
       status: "accepted",
-      projected: false,
-      scheduledReconcile: true,
     });
     await expect(stateEvents.next()).resolves.toMatchObject({
       value: {
@@ -261,7 +259,7 @@ describe("observer reconcile with Codex harness", () => {
       },
     });
 
-    expect(autoReceipt).toMatchObject({ status: "ingested", accepted: true });
+    expect(autoReceipt).toMatchObject({ status: "accepted" });
     await autoReconciled.next;
     await autoReconciled.close();
     expect(core.getSnapshot()).toMatchObject({
@@ -295,7 +293,7 @@ describe("observer reconcile with Codex harness", () => {
       },
     });
 
-    expect(userReceipt).toMatchObject({ status: "ingested", accepted: true });
+    expect(userReceipt).toMatchObject({ status: "accepted" });
     await userReconciled.next;
     await userReconciled.close();
     expect(core.getSnapshot()).toMatchObject({
@@ -652,7 +650,7 @@ describe("observer reconcile with Codex harness", () => {
     try {
       await core.reconcile("initial-native-codex-context");
 
-      const activeEvidence = await reportAndReconcile(
+      await reportAndReconcile(
         api,
         eventBus,
         codexLifecycleReport({
@@ -663,7 +661,6 @@ describe("observer reconcile with Codex harness", () => {
         }),
       );
       await waitFor(() => reconcileProbeCalls.length === 1);
-      expect(activeEvidence.receipt).toMatchObject({ projected: false });
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
         state: "working",
         reason: "Codex is about to use Bash.",
@@ -690,7 +687,6 @@ describe("observer reconcile with Codex harness", () => {
         }),
       );
       await waitFor(() => reconcileProbeCalls.length === 2);
-      expect(foreignStop.receipt).toMatchObject({ projected: false });
       expect(
         foreignStop.events.filter(
           (event) =>
@@ -736,7 +732,7 @@ describe("observer reconcile with Codex harness", () => {
         ]),
       );
 
-      const continuation = await reportAndReconcile(
+      await reportAndReconcile(
         api,
         eventBus,
         codexLifecycleReport({
@@ -747,7 +743,6 @@ describe("observer reconcile with Codex harness", () => {
         }),
       );
       await waitFor(() => reconcileProbeCalls.length === 3);
-      expect(continuation.receipt).toMatchObject({ projected: false });
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
         state: "working",
         reason: "Codex is about to use Bash.",
@@ -778,8 +773,6 @@ describe("observer reconcile with Codex harness", () => {
       await expect(api.reportHarnessEvent(legitimateStop)).resolves.toMatchObject({
         accepted: true,
         deduped: true,
-        projected: false,
-        scheduledReconcile: false,
       });
       await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
         expect.objectContaining({ token: "report_native_a_stop" }),
@@ -894,7 +887,7 @@ describe("observer reconcile with Codex harness", () => {
           receivedAt: "2026-05-21T12:00:01.000Z",
         }),
       );
-      expect(working.receipt).toMatchObject({ accepted: true, status: "ingested" });
+      expect(working.receipt).toMatchObject({ status: "accepted" });
       await waitFor(() => stateChangeCalls.length === 2);
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
         state: "working",
@@ -911,7 +904,7 @@ describe("observer reconcile with Codex harness", () => {
           receivedAt: "2026-05-21T12:00:02.000Z",
         }),
       );
-      expect(stopped.receipt).toMatchObject({ accepted: true, status: "ingested" });
+      expect(stopped.receipt).toMatchObject({ status: "accepted" });
       await waitFor(() => stateChangeCalls.length === 4 && notificationCalls.length === 1);
 
       const readyAgent = core.getSnapshot().rows[0]?.agent;
@@ -945,7 +938,6 @@ describe("observer reconcile with Codex harness", () => {
       );
 
       expect(delayed).toMatchObject({
-        accepted: false,
         status: "ignored",
         event: "SubagentStop",
       });
@@ -1653,7 +1645,7 @@ async function ingestRawHookAndWaitForReconcile(
 ) {
   const eventIterator = eventBus.subscribe()[Symbol.asyncIterator]();
   const receipt = await api.ingestProviderHookEvent(event);
-  expect(receipt).toMatchObject({ accepted: true, status: "ingested" });
+  expect(receipt).toMatchObject({ status: "accepted" });
   const events = [];
   while (true) {
     const next = await eventIterator.next();

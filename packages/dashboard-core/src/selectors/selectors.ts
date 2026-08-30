@@ -252,8 +252,8 @@ function configuredHarnesses(
   const healthHarnesses = Object.values(snapshot.providerHealth)
     .filter((health) => health.providerType === "harness")
     .map((health) => ({
-      id: health.providerId,
-      label: health.providerId,
+      id: health.provider,
+      label: health.provider,
     }));
 
   return healthHarnesses;

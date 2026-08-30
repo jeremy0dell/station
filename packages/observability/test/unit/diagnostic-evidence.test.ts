@@ -13,7 +13,7 @@ describe("diagnostic evidence index", () => {
       baseDiagnosticSnapshot({
         providerHealth: {
           worktrunk: {
-            providerId: "worktrunk",
+            provider: "worktrunk",
             providerType: "worktree",
             status: "unavailable",
             lastCheckedAt: diagnosticNow,
@@ -149,7 +149,7 @@ describe("diagnostic evidence index", () => {
         }),
         providerHealth: {
           "fake-harness": {
-            providerId: "fake-harness",
+            provider: "fake-harness",
             providerType: "harness",
             status: "unavailable",
             lastCheckedAt: diagnosticNow,
@@ -213,5 +213,9 @@ describe("diagnostic evidence index", () => {
     expect(index.questions.map((question) => question.id)).toEqual(
       expect.arrayContaining(["row-wt_web_stale-provider", "hook-spool-status"]),
     );
+    expect(index.items.find((item) => item.id === "row-wt_web_stale")).toMatchObject({
+      harnessRunId: "run_exit_1",
+    });
+    expect(index.items.find((item) => item.id === "row-wt_web_stale")).not.toHaveProperty("runId");
   });
 });

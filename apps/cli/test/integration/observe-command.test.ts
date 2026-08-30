@@ -409,7 +409,7 @@ function snapshotFixture(): StationSnapshot {
 
 function providerHealth(status: "healthy" | "degraded") {
   return {
-    providerId: "codex",
+    provider: "codex",
     providerType: "harness" as const,
     status,
     lastCheckedAt: now,

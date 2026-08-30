@@ -101,7 +101,7 @@ describe("CLI setup schemas", () => {
       expect(CliSetupCheckSchema.safeParse({ ...plan.checks[0], tier }).success).toBe(true);
       expect(CliSetupActionSchema.safeParse({ ...plan.actions[0], tier }).success).toBe(true);
     }
-    for (const status of ["ok", "missing", "warning", "skipped"]) {
+    for (const status of ["ok", "missing", "warn", "skipped"]) {
       expect(CliSetupCheckSchema.safeParse({ ...plan.checks[0], status }).success).toBe(true);
     }
     for (const kind of [

@@ -173,7 +173,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       }),
     commitProviderHealthProbe: (health) =>
       enqueueSnapshotWrite(async (): Promise<StationEvent | undefined> => {
-        const current = providerHealth[health.providerId];
+        const current = providerHealth[health.provider];
         if (
           current !== undefined &&
           Date.parse(current.lastCheckedAt) > Date.parse(health.lastCheckedAt)
@@ -182,7 +182,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         }
         const event: StationEvent = {
           type: "provider.healthChanged",
-          provider: health.providerId,
+          provider: health.provider,
           health,
         };
         // A reconcile can consume this exact cache object while its completion
@@ -193,10 +193,10 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         if (input.persistence !== undefined) {
           const retentionDays = providerObservationRetentionDays(config.observability?.retention);
           await input.persistence.recordProviderObservation({
-            provider: health.providerId,
+            provider: health.provider,
             providerType: "observer",
             entityKind: "provider_health",
-            entityKey: health.providerId,
+            entityKey: health.provider,
             payload: health,
             observedAt: health.lastCheckedAt,
             expiresAt: providerObservationExpiresAt(health.lastCheckedAt, retentionDays),

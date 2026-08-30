@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SafeErrorSchema } from "./errors.js";
+import { PtyHandoffKindSchema } from "./hostHandoff.js";
 import { TimestampSchema } from "./ids.js";
 import { LogComponentSchema } from "./logging.js";
 import { nonEmptyStringSchema } from "./shared.js";
@@ -70,7 +71,9 @@ export const UiLifecycleClientDetachReasonSchema = z.enum([
   "socket_closed",
   "stream_failed",
 ]);
-export const UiLifecyclePtyKindSchema = z.enum(["agent", "aux"]);
+export type UiLifecycleClientDetachReason = z.infer<typeof UiLifecycleClientDetachReasonSchema>;
+
+export const UiLifecyclePtyKindSchema = PtyHandoffKindSchema;
 export type UiLifecyclePtyKind = z.infer<typeof UiLifecyclePtyKindSchema>;
 
 export const UiRendererSignalSchema = z.enum([

@@ -43,7 +43,7 @@ describe("PiHarnessProvider", () => {
     });
 
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "pi",
+      provider: "pi",
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: now,
@@ -67,7 +67,7 @@ describe("PiHarnessProvider", () => {
     });
 
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "pi",
+      provider: "pi",
       providerType: "harness",
       status: "unavailable",
       lastError: {
@@ -112,7 +112,7 @@ describe("PiHarnessProvider", () => {
 
     const health = await provider.health();
     expect(health).toMatchObject({
-      providerId: "pi",
+      provider: "pi",
       providerType: "harness",
       status: "unavailable",
       lastError: {

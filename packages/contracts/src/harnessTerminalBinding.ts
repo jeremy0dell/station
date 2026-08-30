@@ -7,8 +7,7 @@ import type {
 } from "./observations.js";
 import { observedPathIsSameOrInside, sameObservedPath } from "./observedPaths.js";
 import type { HarnessDiscoveryContext } from "./providers.js";
-
-const nonEmptyStringSchema = z.string().min(1);
+import { nonEmptyStringSchema } from "./shared.js";
 
 export const TerminalHarnessBindingSchema = z
   .object({

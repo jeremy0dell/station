@@ -211,7 +211,7 @@ export async function harnessHealth<TOpts extends CommonHarnessProviderOptions>(
       options.runner,
     );
     const health: ProviderHealth = {
-      providerId: spec.id,
+      provider: spec.id,
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: checkedAt,
@@ -223,7 +223,7 @@ export async function harnessHealth<TOpts extends CommonHarnessProviderOptions>(
     return health;
   } catch (error) {
     return {
-      providerId: spec.id,
+      provider: spec.id,
       providerType: "harness",
       status: "unavailable",
       lastCheckedAt: checkedAt,

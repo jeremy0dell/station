@@ -29,7 +29,7 @@
     "supportsModifiedEnterSoftNewline": true
   },
   "providerHealth": {
-    "providerId": "codex",
+    "provider": "codex",
     "providerType": "harness",
     "status": "degraded",
     "lastCheckedAt": "2026-05-20T12:00:00.000Z",

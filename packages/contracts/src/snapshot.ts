@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentStatusLabelSchema } from "./agentStatus.js";
 import { ClientFeatureFlagsSchema } from "./featureFlags.js";
 import {
   HarnessRunIdSchema,
@@ -25,16 +26,24 @@ import {
   WorktreeSourceSchema,
   WorktreeStateSchema,
 } from "./observations.js";
-import { HarnessCapabilitiesSchema, ProviderHealthSchema } from "./providers.js";
+import {
+  HarnessCapabilitiesSchema,
+  ProviderHealthSchema,
+  ProviderProjectDefaultsSchema,
+} from "./providers.js";
 import { nonEmptyStringSchema, safeTextSchema } from "./shared.js";
 
-export const ProjectDefaultsSchema = z
-  .object({
-    harness: ProviderIdSchema,
-    terminal: ProviderIdSchema,
-    layout: nonEmptyStringSchema,
-  })
-  .strict();
+export const ProjectDefaultsSchema = ProviderProjectDefaultsSchema;
+
+const activityCountsShape = {
+  sessions: z.number().int().nonnegative(),
+  worktrees: z.number().int().nonnegative(),
+  agents: z.number().int().nonnegative(),
+  working: z.number().int().nonnegative(),
+  idle: z.number().int().nonnegative(),
+  attention: z.number().int().nonnegative(),
+  unknown: z.number().int().nonnegative(),
+} as const;
 
 export const ProjectViewSchema = z
   .object({
@@ -43,17 +52,7 @@ export const ProjectViewSchema = z
     root: nonEmptyStringSchema,
     defaults: ProjectDefaultsSchema,
     health: ProviderHealthSchema,
-    counts: z
-      .object({
-        sessions: z.number().int().nonnegative(),
-        worktrees: z.number().int().nonnegative(),
-        agents: z.number().int().nonnegative(),
-        working: z.number().int().nonnegative(),
-        idle: z.number().int().nonnegative(),
-        attention: z.number().int().nonnegative(),
-        unknown: z.number().int().nonnegative(),
-      })
-      .strict(),
+    counts: z.object(activityCountsShape).strict(),
   })
   .strict();
 
@@ -114,16 +113,7 @@ export const WorktreeAgentSchema = z
   })
   .strict();
 
-export const DisplayStatusLabelSchema = z.enum([
-  "no agent",
-  "starting",
-  "idle",
-  "working",
-  "needs attention",
-  "stuck",
-  "exited",
-  "unknown",
-]);
+export const DisplayStatusLabelSchema = AgentStatusLabelSchema;
 
 export const WorktreeDisplaySchema = z
   .object({
@@ -386,13 +376,7 @@ export const StationSnapshotSchema = z
     counts: z
       .object({
         projects: z.number().int().nonnegative(),
-        sessions: z.number().int().nonnegative(),
-        worktrees: z.number().int().nonnegative(),
-        agents: z.number().int().nonnegative(),
-        working: z.number().int().nonnegative(),
-        idle: z.number().int().nonnegative(),
-        attention: z.number().int().nonnegative(),
-        unknown: z.number().int().nonnegative(),
+        ...activityCountsShape,
       })
       .strict(),
     alerts: z.array(StationAlertSchema),

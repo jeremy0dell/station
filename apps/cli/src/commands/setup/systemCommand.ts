@@ -147,7 +147,7 @@ function toolchainSystemRow(
   label: TextSetupSystemRow["label"],
 ): TextSetupSystemRow {
   return {
-    status: fact.status === "ok" ? "ok" : "warning",
+    status: fact.status === "ok" ? "ok" : "warn",
     label,
     detail: `${toolchainStatusLabel(fact)} ${toolchainVersionLabel(fact)}`,
   };

@@ -122,7 +122,6 @@ async function settleUndelivered(
         hookId: input.event.hookId ?? `hook_rejected_${Date.now()}`,
         provider: input.event.provider,
         event: input.event.event,
-        accepted: false,
         status: "rejected",
         receivedAt: input.event.receivedAt,
         error,

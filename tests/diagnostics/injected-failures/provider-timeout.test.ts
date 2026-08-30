@@ -29,7 +29,7 @@ describe("provider timeout diagnostic", () => {
         },
         providerHealth: {
           "fake-worktree": {
-            providerId: "fake-worktree",
+            provider: "fake-worktree",
             providerType: "worktree",
             status: "unavailable",
             lastCheckedAt: diagnosticNow,

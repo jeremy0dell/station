@@ -766,7 +766,7 @@ export function observerPersistenceContract(
             expect(observations[1].payload).not.toHaveProperty("hasManagedAttachment");
           }
           expect(observations[4]).toMatchObject({
-            payload: { providerId: "fake-harness", status: "healthy" },
+            payload: { provider: "fake-harness", status: "healthy" },
           });
         });
       });
@@ -1102,7 +1102,7 @@ export function observerPersistenceContract(
           const invalid = {
             ...healthObservation("healthy"),
             payload: {
-              providerId: "fake-harness",
+              provider: "fake-harness",
               status: "healthy",
               lastCheckedAt: now,
             },
@@ -1145,7 +1145,7 @@ export function observerPersistenceContract(
             now,
           });
           const firstHealth = {
-            providerId: "fake-harness",
+            provider: "fake-harness",
             providerType: "harness" as const,
             status: "healthy" as const,
             lastCheckedAt: now,
@@ -1289,7 +1289,7 @@ export function observerPersistenceContract(
             harnessRuns: [run],
             providerHealth: {
               "fake-harness": {
-                providerId: "fake-harness",
+                provider: "fake-harness",
                 providerType: "harness",
                 status: "healthy",
                 lastCheckedAt: now,
@@ -1336,7 +1336,7 @@ export function observerPersistenceContract(
             harnessRuns: [run],
             providerHealth: {
               "fake-harness": {
-                providerId: "fake-harness",
+                provider: "fake-harness",
                 providerType: "harness",
                 status: "healthy",
                 lastCheckedAt: now,
@@ -3866,7 +3866,7 @@ function healthObservation(
     entityKind: "provider_health",
     entityKey: "fake-harness",
     payload: {
-      providerId: "fake-harness",
+      provider: "fake-harness",
       providerType: "harness",
       status,
       lastCheckedAt: observedAt,

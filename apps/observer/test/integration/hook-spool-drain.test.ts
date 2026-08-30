@@ -113,8 +113,7 @@ describe("observer hook spool drain", () => {
         hookId: `hook_${event.event}`,
         provider: event.provider,
         event: event.event,
-        accepted: event.event !== "worktree.rejected",
-        status: event.event === "worktree.rejected" ? "rejected" : "ingested",
+        status: event.event === "worktree.rejected" ? "rejected" : "accepted",
         receivedAt: event.receivedAt,
         ...(event.event === "worktree.rejected"
           ? {
@@ -125,7 +124,7 @@ describe("observer hook spool drain", () => {
                 provider: event.provider,
               },
             }
-          : { reconciled: false }),
+          : {}),
       }),
     });
 
@@ -167,7 +166,6 @@ describe("observer hook spool drain", () => {
           hookId: event.hookId ?? "spool_ignored",
           provider: event.provider,
           event: event.event,
-          accepted: false,
           status: "ignored",
           receivedAt: event.receivedAt,
         }),
@@ -286,10 +284,8 @@ describe("observer hook spool drain", () => {
             hookId: event.hookId ?? "hook_startup",
             provider: event.provider,
             event: event.event,
-            accepted: true,
-            status: "ingested",
+            status: "accepted",
             receivedAt: event.receivedAt,
-            reconciled: false,
           };
         },
       },
@@ -369,8 +365,6 @@ describe("observer hook spool drain", () => {
           accepted: false,
           status: "rejected",
           receivedAt: now,
-          projected: false,
-          scheduledReconcile: false,
           error: {
             tag: "HarnessEventReportIngestionError",
             code: "HARNESS_EVENT_REPORT_INGESTION_FAILED",
@@ -523,8 +517,6 @@ function acceptedHarnessReportReceipt(report: HarnessEventReport): HarnessEventR
     accepted: true,
     status: "accepted",
     receivedAt: now,
-    projected: false,
-    scheduledReconcile: false,
   };
 }
 

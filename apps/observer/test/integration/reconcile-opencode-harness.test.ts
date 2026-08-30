@@ -76,8 +76,7 @@ describe("observer reconcile with OpenCode harness", () => {
     });
 
     expect(receipt).toMatchObject({
-      status: "ingested",
-      accepted: true,
+      status: "accepted",
     });
     expect(receipt).not.toHaveProperty("error");
     const snapshot = await core.reconcile("opencode-hook-event");

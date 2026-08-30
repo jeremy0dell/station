@@ -1107,10 +1107,10 @@ function persistReconcileResult(
     for (const health of Object.values(input.providerHealth)) {
       insertProviderObservation(state, {
         id: options.idFactory.observationId(),
-        provider: health.providerId,
+        provider: health.provider,
         providerType: "observer",
         entityKind: "provider_health",
-        entityKey: health.providerId,
+        entityKey: health.provider,
         payload: health,
         observedAt: health.lastCheckedAt,
         expiresAt: reconcileObservationExpiresAt(input, health.lastCheckedAt),

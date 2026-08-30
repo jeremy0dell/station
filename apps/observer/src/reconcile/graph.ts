@@ -250,15 +250,15 @@ export function projectProviderHealthOntoSnapshot(input: {
 }): StationSnapshot {
   const providerHealth: Record<string, ProviderHealth> = {
     ...input.snapshot.providerHealth,
-    [input.health.providerId]: input.health,
+    [input.health.provider]: input.health,
   };
   const providerAlertIds = new Set([
-    providerHealthAlertId(input.health.providerId, "degraded"),
-    providerHealthAlertId(input.health.providerId, "unavailable"),
+    providerHealthAlertId(input.health.provider, "degraded"),
+    providerHealthAlertId(input.health.provider, "unavailable"),
   ]);
   const alerts = [
     ...input.snapshot.alerts.filter((alert) => !providerAlertIds.has(alert.id)),
-    ...alertsFromProviderHealth({ [input.health.providerId]: input.health }, input.projectedAt),
+    ...alertsFromProviderHealth({ [input.health.provider]: input.health }, input.projectedAt),
   ];
   const healthy =
     !alerts.some((alert) => alert.severity === "error") &&
@@ -273,7 +273,7 @@ export function projectProviderHealthOntoSnapshot(input: {
     },
     providerHealth,
     projects: input.snapshot.projects.map((project) =>
-      project.health.providerId === input.health.providerId
+      project.health.provider === input.health.provider
         ? { ...project, health: input.health }
         : project,
     ),
@@ -825,7 +825,7 @@ function warningFor(
 
 function unknownProviderHealth(input: ObserverGraphInput): ProviderHealth {
   return {
-    providerId: input.worktreeProviderId,
+    provider: input.worktreeProviderId,
     providerType: "worktree",
     status: "unknown",
     lastCheckedAt: input.generatedAt,
@@ -840,12 +840,12 @@ function alertsFromProviderHealth(
     .filter((health) => health.status === "unavailable" || health.status === "degraded")
     .map((health) => {
       const alert: StationAlert = {
-        id: providerHealthAlertId(health.providerId, health.status),
+        id: providerHealthAlertId(health.provider, health.status),
         severity: health.status === "unavailable" ? "error" : "warn",
         message:
           health.lastError?.message ??
-          `The ${health.providerType} provider ${health.providerId} is ${health.status}.`,
-        provider: health.providerId,
+          `The ${health.providerType} provider ${health.provider} is ${health.status}.`,
+        provider: health.provider,
         createdAt: generatedAt,
       };
       if (health.lastError?.code !== undefined) {
@@ -933,7 +933,7 @@ export function safeErrorToProviderHealth(input: {
   latencyMs?: number;
 }): ProviderHealth {
   const health: ProviderHealth = {
-    providerId: input.providerId,
+    provider: input.providerId,
     providerType: input.providerType,
     status: "unavailable",
     lastCheckedAt: input.lastCheckedAt,

@@ -445,10 +445,8 @@ function fakeApi(
       hookId: "hook_1",
       provider: event.provider,
       event: event.event,
-      accepted: true,
-      status: "ingested",
+      status: "accepted",
       receivedAt: event.receivedAt,
-      reconciled: true,
     }));
   return {
     health: overrides.health ?? (async () => fakeHealth()),
@@ -484,8 +482,6 @@ function fakeApi(
         accepted: true,
         status: "accepted",
         receivedAt: report.observedAt,
-        projected: false,
-        scheduledReconcile: true,
       })),
     getSessionRecoveryReadiness:
       overrides.getSessionRecoveryReadiness ??
@@ -633,10 +629,8 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
       hookId: "hook_1",
       provider: event.provider,
       event: event.event,
-      accepted: true,
-      status: "ingested",
+      status: "accepted",
       receivedAt: event.receivedAt,
-      reconciled: true,
     }),
     reportHarnessEvent: async (report: HarnessEventReport) => ({
       schemaVersion: STATION_SCHEMA_VERSION,
@@ -646,8 +640,6 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
       accepted: true,
       status: "accepted",
       receivedAt: report.observedAt,
-      projected: false,
-      scheduledReconcile: true,
     }),
     getSessionRecoveryReadiness: async () => ({ resumeEnabled: true, harnesses: [] }),
     getSessionRecoveryInventory: async () => ({

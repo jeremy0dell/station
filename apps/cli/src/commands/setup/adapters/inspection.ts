@@ -456,7 +456,7 @@ function normalizeWorktrunkShell(facts: SetupFacts): SetupPlanningFacts["worktru
   switch (status) {
     case "ok":
       return "ready";
-    case "warning":
+    case "warn":
       return "missing";
     case "skipped":
       return "skipped";
@@ -482,7 +482,7 @@ function normalizeTmuxLive(facts: SetupFacts): SetupPlanningFacts["tmuxPopup"]["
 
 function normalizeWorktrunkHooks(facts: SetupFacts): SetupPlanningFacts["worktrunkHooks"] {
   if (facts.worktrunk.status !== "ok") return "not-applicable";
-  if (facts.config.status !== "valid" || facts.worktrunkAutomation.status === "warning") {
+  if (facts.config.status !== "valid" || facts.worktrunkAutomation.status === "warn") {
     return "missing";
   }
   return "ready";

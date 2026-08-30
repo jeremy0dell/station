@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type ProviderId, ProviderIdSchema, TimestampSchema } from "./ids.js";
 import type { SessionRecoveryHandle } from "./recovery.js";
-import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
+import { nonEmptyStringSchema, sha256HexSchema, userFacingTitleSchema } from "./shared.js";
 
 export const SessionRecoveryHarnessReadinessSchema = z
   .object({
@@ -58,7 +58,7 @@ export const SessionRescueManifestEntrySchema = z.discriminatedUnion("type", [
       path: nonEmptyStringSchema,
       type: z.literal("file"),
       size: z.number().int().nonnegative(),
-      sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+      sha256: sha256HexSchema,
     })
     .strict(),
   z
@@ -66,7 +66,7 @@ export const SessionRescueManifestEntrySchema = z.discriminatedUnion("type", [
       path: nonEmptyStringSchema,
       type: z.literal("symlink"),
       target: z.string(),
-      sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+      sha256: sha256HexSchema,
     })
     .strict(),
 ]);
@@ -110,7 +110,7 @@ export const SessionMigrationLockSchema = z
 export const SessionMigrationSealSchema = z
   .object({
     sealedAt: TimestampSchema,
-    digest: z.string().regex(/^[0-9a-f]{64}$/u),
+    digest: sha256HexSchema,
     sessions: z.array(nonEmptyStringSchema),
     files: z.array(SessionRescueManifestEntrySchema),
   })
@@ -120,11 +120,9 @@ export const SessionMigrationJournalEntrySchema = z
   .object({
     at: TimestampSchema,
     phase: nonEmptyStringSchema,
+    // "complete" is frozen across journals and rescue manifests read by strict upgrade tooling.
     status: z.enum(["started", "complete", "failed", "interrupted"]),
-    digest: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/u)
-      .optional(),
+    digest: sha256HexSchema.optional(),
     sealedRoot: nonEmptyStringSchema.optional(),
     sessionId: nonEmptyStringSchema.optional(),
     titleEvidence: z

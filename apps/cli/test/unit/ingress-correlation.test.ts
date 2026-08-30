@@ -67,7 +67,6 @@ describe("provider hook ingress correlation", () => {
     );
 
     expect(receipt).toMatchObject({
-      accepted: false,
       status: "ignored",
       provider,
       event: expectedEvent,
@@ -242,7 +241,6 @@ describe("provider hook ingress correlation", () => {
       hookId,
       provider,
       event: expectedEvent,
-      accepted: false,
       status: "ignored",
       receivedAt: now,
     });
@@ -301,7 +299,6 @@ describe("provider hook ingress correlation", () => {
     expect(receipt).toMatchObject({
       provider: "codex",
       event: "PermissionRequest",
-      accepted: false,
       status: "ignored",
     });
     expect(enrichmentCalls).toBe(0);
@@ -399,7 +396,6 @@ describe("provider hook ingress correlation", () => {
       hookId: "hook_logging_failure",
       provider: "cursor",
       event: "beforeShellExecution",
-      accepted: false,
       status: "ignored",
       receivedAt: now,
     });

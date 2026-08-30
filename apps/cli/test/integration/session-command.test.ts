@@ -1074,7 +1074,7 @@ function sessionSnapshot(): StationSnapshot {
         root: "/projects/web",
         defaults: { harness: "codex", terminal: "tmux", layout: "agent-build-shell" },
         health: {
-          providerId: "worktrunk",
+          provider: "worktrunk",
           providerType: "worktree",
           status: "healthy",
           lastCheckedAt: now,
@@ -1095,7 +1095,7 @@ function sessionSnapshot(): StationSnapshot {
         root: "/projects/api",
         defaults: { harness: "claude", terminal: "tmux", layout: "agent-build-shell" },
         health: {
-          providerId: "worktrunk",
+          provider: "worktrunk",
           providerType: "worktree",
           status: "healthy",
           lastCheckedAt: now,

@@ -42,6 +42,7 @@ import {
   ProviderHealthSchema,
   ProviderHookArtifactOwnershipSchema,
   ProviderHookEventSchema,
+  ProviderHookKindSchema,
   ProviderHookReceiptSchema,
   ProviderHookSpoolRecordSchema,
   ProviderProjectConfigSchema,
@@ -1971,6 +1972,8 @@ describe("contract schemas", () => {
     for (const [name, hookEvent] of Object.entries(hookEvents)) {
       expectParses(ProviderHookEventSchema, hookEvent, `hook event ${name}`);
     }
+    expect(ProviderHookKindSchema.options).toEqual(["worktree", "terminal", "harness"]);
+    expect(ProviderHookKindSchema.safeParse("provider").success).toBe(false);
 
     expectFails(
       ProviderHookEventSchema,
@@ -1996,10 +1999,8 @@ describe("contract schemas", () => {
         hookId: "hook_1",
         provider: "worktrunk",
         event: "worktree.created",
-        accepted: true,
-        status: "ingested",
+        status: "accepted",
         receivedAt: "2026-05-20T12:02:00.000Z",
-        reconciled: true,
       },
       "hook receipt",
     );
@@ -2011,7 +2012,6 @@ describe("contract schemas", () => {
         hookId: "hook_ignored_1",
         provider: "codex",
         event: "PreToolUse",
-        accepted: false,
         status: "ignored",
         receivedAt: "2026-05-20T12:02:00.000Z",
       },
@@ -2188,8 +2188,6 @@ describe("contract schemas", () => {
         accepted: true,
         status: "accepted",
         receivedAt: "2026-05-20T12:02:00.000Z",
-        projected: false,
-        scheduledReconcile: true,
       },
       "harness event report receipt",
     );

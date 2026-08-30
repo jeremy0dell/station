@@ -42,7 +42,7 @@ describe("fake providers", () => {
       }),
     ]);
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "fake-worktree",
+      provider: "fake-worktree",
       providerType: "worktree",
       status: "healthy",
       lastCheckedAt: now,

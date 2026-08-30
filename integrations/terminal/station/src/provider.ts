@@ -115,7 +115,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
 
   async health(): Promise<ProviderHealth> {
     return {
-      providerId: this.id,
+      provider: this.id,
       providerType: "terminal",
       status: "healthy",
       lastCheckedAt: toIsoTimestamp(this.#clock.now()),

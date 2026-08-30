@@ -397,7 +397,7 @@ function cachedProviderHealth(input: {
     return cached;
   }
   return {
-    providerId: input.providerId,
+    provider: input.providerId,
     providerType: input.providerType,
     status: "unknown",
     lastCheckedAt: toIsoTimestamp(input.clock.now()),

@@ -20,6 +20,7 @@ import {
 } from "./snapshot.js";
 
 export const WorktreeAgentStateChangeSourceSchema = z.enum(["harness_event_report", "reconcile"]);
+// Existing spellings are frozen compatibility vocabulary; new event types use lowercase dot segments.
 export const StationEventTypeSchema = z.enum([
   "observer.started",
   "observer.reconciled",

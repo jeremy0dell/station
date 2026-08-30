@@ -119,7 +119,7 @@ describe("CodexHarnessProvider", () => {
     });
 
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "codex",
+      provider: "codex",
       providerType: "harness",
       status: "healthy",
       lastCheckedAt: now,
@@ -143,7 +143,7 @@ describe("CodexHarnessProvider", () => {
     });
 
     await expect(provider.health()).resolves.toMatchObject({
-      providerId: "codex",
+      provider: "codex",
       providerType: "harness",
       status: "unavailable",
       lastError: {

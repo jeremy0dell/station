@@ -443,7 +443,7 @@ describe("CLI setup command", () => {
     const plan = CliSetupPlanSchema.parse(result.output);
 
     expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
-      status: "warning",
+      status: "warn",
       details: {
         station: join(runtimeBin, "stn"),
         ingress: providerHookIngressLauncher,
@@ -503,7 +503,7 @@ describe("CLI setup command", () => {
     expect(check.code).toBe(0);
     expect(finalPlan.summary.requiredOk).toBe(true);
     expect(finalPlan.checks.find((item) => item.id === "station-launchers")).toMatchObject({
-      status: "warning",
+      status: "warn",
       details: {
         station: stationLauncher,
         ingress: providerHookIngressLauncher,

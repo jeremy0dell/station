@@ -40,9 +40,7 @@ describe("observer provider hook ingress", () => {
     });
 
     expect(receipt).toMatchObject({
-      accepted: true,
-      status: "ingested",
-      reconciled: false,
+      status: "accepted",
     });
     await expect(nextEvent).resolves.toMatchObject({
       value: { type: "providerHook.ingested", provider: "worktrunk" },
@@ -103,8 +101,6 @@ describe("observer provider hook ingress", () => {
     expect(receipt).toMatchObject({
       accepted: true,
       status: "accepted",
-      projected: false,
-      scheduledReconcile: true,
     });
     await expect(events.next()).resolves.toMatchObject({
       value: {
@@ -203,7 +199,7 @@ describe("observer provider hook ingress", () => {
       receivedAt: now,
       payload: { owned: true },
     });
-    expect(receipt).toMatchObject({ accepted: true, status: "ingested" });
+    expect(receipt).toMatchObject({ status: "accepted" });
     await expect(persisted).resolves.toMatchObject({
       value: { type: "harness.eventReported", reportId: "fake:hook_adapter_1" },
     });
@@ -234,7 +230,7 @@ describe("observer provider hook ingress", () => {
       receivedAt: now,
       payload: { owned: false },
     });
-    expect(ignored).toMatchObject({ accepted: false, status: "ignored" });
+    expect(ignored).toMatchObject({ status: "ignored" });
 
     await reports.return?.();
     sqlite.close();
@@ -274,7 +270,6 @@ describe("observer provider hook ingress", () => {
         receivedAt: now,
       }),
     ).resolves.toMatchObject({
-      accepted: false,
       status: "rejected",
       error: { code: "HARNESS_REPORT_INGRESS_UNAVAILABLE" },
     });
@@ -327,7 +322,6 @@ describe("observer provider hook ingress", () => {
     expect(receipt).toMatchObject({
       accepted: true,
       status: "accepted",
-      scheduledReconcile: true,
     });
     await expect(api.health()).resolves.toMatchObject({
       harnessIngressQueue: {
@@ -429,8 +423,8 @@ describe("observer provider hook ingress", () => {
     const first = await api.ingestProviderHookEvent(event);
     const second = await api.ingestProviderHookEvent(event);
 
-    expect(first).toMatchObject({ status: "ingested", deduped: false });
-    expect(second).toMatchObject({ status: "ingested", deduped: true, reconciled: false });
+    expect(first).toMatchObject({ status: "accepted" });
+    expect(second).toMatchObject({ status: "accepted" });
     await expect(reconciled.next).resolves.toMatchObject({
       value: { type: "observer.reconciled" },
     });
@@ -493,13 +487,16 @@ describe("observer provider hook ingress", () => {
     };
 
     await expect(ingress.ingest(event, { triggerReconcile: false })).resolves.toMatchObject({
-      deduped: false,
+      status: "accepted",
     });
     await expect(ingress.ingest(event, { triggerReconcile: false })).resolves.toMatchObject({
-      deduped: true,
+      status: "accepted",
     });
 
     await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+    await expect(persistence.listEvents({ type: "providerHook.ingested" })).resolves.toHaveLength(
+      1,
+    );
     await expect(
       persistence.listProviderObservations({ entityKind: "harness_event" }),
     ).resolves.toEqual([]);
@@ -634,7 +631,7 @@ describe("observer provider hook ingress", () => {
       payload: { state: "idle" },
     });
 
-    expect(receipt).toMatchObject({ status: "ingested", reconciled: false });
+    expect(receipt).toMatchObject({ status: "accepted" });
     await expect(reconciled.next).resolves.toMatchObject({
       value: { type: "observer.reconciled" },
     });
@@ -805,8 +802,6 @@ function acceptedReportReceipt(
     accepted: true,
     status: "accepted",
     receivedAt: now,
-    projected: false,
-    scheduledReconcile: false,
   };
 }
 

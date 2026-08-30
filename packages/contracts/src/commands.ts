@@ -36,6 +36,7 @@ import {
   WorktreeForkCommandResultSchema,
 } from "./commands/worktree.js";
 
+// Existing persisted spellings are frozen; new command types use lowercase dot segments.
 export const StationCommandTypeSchema = z.enum([
   "worktree.create",
   "worktree.fork",

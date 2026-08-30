@@ -61,7 +61,7 @@ function projectJsonSetupPlan(input: JsonSetupPresenterInput): CliSetupPlan {
     workflowReady: readiness.workflowReady,
     requiredOk: readiness.workflowReady,
     requiredMissing: readiness.requiredMissing,
-    warnings: checks.filter((check) => check.status === "warning").length,
+    warnings: checks.filter((check) => check.status === "warn").length,
     selectedActions: actions.filter((action) => action.selected).length,
     selectionSource: harnessSelection.source,
     configPath: facts.configPath,
@@ -149,7 +149,7 @@ function setupChecks(
     {
       id: "doctor",
       tier: "recommended",
-      status: "warning",
+      status: "warn",
       label: "stn doctor",
       message: "Run stn doctor after setup to validate the observer runtime.",
     },
@@ -171,7 +171,7 @@ function socketEvidenceCheck(facts: SetupFacts): CliSetupCheck {
   return {
     id: "observer-socket-evidence",
     tier: "recommended",
-    status: "warning",
+    status: "warn",
     label: "Observer socket evidence",
     message: `Fresh Observer startup can continue, but stale-socket recovery and build handoff are blocked until lsof is executable at ${facts.socketEvidence.command}. Install lsof, then rerun stn setup check (Debian/Ubuntu: sudo apt-get install lsof; Fedora/RHEL: sudo dnf install lsof).`,
     details,
@@ -195,7 +195,7 @@ function tmuxPopupBindingCheck(facts: SetupFacts): CliSetupCheck {
   if (facts.tmuxBinding.status === "conflict") {
     return {
       ...base,
-      status: "warning",
+      status: "warn",
       message: facts.tmuxBinding.message,
     };
   }
@@ -209,14 +209,14 @@ function tmuxPopupBindingCheck(facts: SetupFacts): CliSetupCheck {
   if (facts.launchers.tmuxPopup.status !== "ok") {
     return {
       ...base,
-      status: "warning",
+      status: "warn",
       message: "Resolve the stn-tmux-popup launcher, then rerun stn setup to install the binding.",
     };
   }
   if (facts.tmuxBinding.status === "missing") {
     return {
       ...base,
-      status: "warning",
+      status: "warn",
       message: facts.tmuxBinding.message,
     };
   }
@@ -227,7 +227,7 @@ function tmuxPopupBindingCheck(facts: SetupFacts): CliSetupCheck {
         : "could not be verified in the current tmux server";
     return {
       ...base,
-      status: "warning",
+      status: "warn",
       message: `tmux popup binding is persisted but ${liveMessage}; rerun stn setup to repair it.`,
     };
   }
@@ -295,7 +295,7 @@ function launcherCheck(facts: SetupFacts): CliSetupCheck {
     return {
       id: "station-launchers",
       tier: "recommended",
-      status: "warning",
+      status: "warn",
       label: "STATION launchers",
       message: warningMessage,
       details,
@@ -341,7 +341,7 @@ function stationUiCheck(facts: SetupFacts): CliSetupCheck {
     return {
       id: "station-ui",
       tier: "recommended",
-      status: "warning",
+      status: "warn",
       label: "STATION UI dependencies",
       message: `${stationUiInstallHint} Until then bare stn cannot render the terminal UI (stn doctor reports this as STATION_UI_NOT_INSTALLED).`,
     };
@@ -369,7 +369,7 @@ function worktrunkHooksCheck(facts: SetupFacts): CliSetupCheck {
     return {
       id: "worktrunk-hooks",
       tier: "recommended",
-      status: "warning",
+      status: "warn",
       label: "Worktrunk hooks",
       message: "Recommended: install Worktrunk lifecycle hooks during setup.",
     };
@@ -470,7 +470,7 @@ function harnessTrackingPresentation(
   harnessLabel: string,
   required: boolean,
 ): Pick<CliSetupCheck, "status" | "message"> {
-  const unavailableStatus = required ? "missing" : "warning";
+  const unavailableStatus = required ? "missing" : "warn";
   switch (assessment.state) {
     case "not-applicable":
       return {
@@ -753,7 +753,7 @@ function configDiagnosticsChecks(facts: SetupFacts): CliSetupCheck[] {
     {
       id: "config-diagnostics",
       tier: "recommended",
-      status: "warning",
+      status: "warn",
       label: "STATION config diagnostics",
       message: `Config loaded with ${diagnostics.length} diagnostic(s): ${diagnostics
         .map((diagnostic) => diagnostic.message)
