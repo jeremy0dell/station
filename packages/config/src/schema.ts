@@ -11,7 +11,6 @@ export {
   type Automation,
   DEFAULT_SCROLLBACK_LINES,
   DEFAULT_WORKSPACE_CONFIG,
-  MAX_SCROLLBACK_LINES,
   type ScrollOnOutputMode,
   type WorkspaceConfig,
   WorkspaceConfigSchema,

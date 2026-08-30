@@ -15,10 +15,8 @@ import { z } from "zod";
 export const SCROLL_ON_OUTPUT_MODES = ["freeze", "shift", "follow"] as const;
 export type ScrollOnOutputMode = (typeof SCROLL_ON_OUTPUT_MODES)[number];
 
-/** Default normal-buffer history retained by each native pane screen. */
+/** Normal-buffer history retained by each native pane screen. */
 export const DEFAULT_SCROLLBACK_LINES = 10_000;
-/** Initial safety ceiling; raise only with representative multi-pane memory and reflow evidence. */
-export const MAX_SCROLLBACK_LINES = 10_000;
 
 /**
  * One automation pane: split from `origin` or `previous`, write or execute its
@@ -79,7 +77,7 @@ export const WorkspaceConfigSchema = z
       .number()
       .int()
       .min(0)
-      .max(MAX_SCROLLBACK_LINES)
+      .max(DEFAULT_SCROLLBACK_LINES)
       .default(DEFAULT_SCROLLBACK_LINES),
     overlay_width_percent: z.number().int().min(10).max(100).default(60),
     overlay_height_percent: z.number().int().min(10).max(100).default(60),

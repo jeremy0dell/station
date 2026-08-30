@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  DEFAULT_SCROLLBACK_LINES,
-  MAX_SCROLLBACK_LINES,
-} from "../../config/stationConfig.js";
+import { DEFAULT_SCROLLBACK_LINES } from "../../config/stationConfig.js";
 import { waitFor } from "../testing/waitFor.js";
 import { createStationVtScreen } from "./screen.js";
 
@@ -43,7 +40,7 @@ describe("vt screen throughput", () => {
       scrollback: Number.NaN,
     });
     try {
-      expect(aboveMaximum.unsafeEngine.options.scrollback).toBe(MAX_SCROLLBACK_LINES);
+      expect(aboveMaximum.unsafeEngine.options.scrollback).toBe(DEFAULT_SCROLLBACK_LINES);
       expect(belowMinimum.unsafeEngine.options.scrollback).toBe(0);
       expect(fractional.unsafeEngine.options.scrollback).toBe(2);
       expect(nonFinite.unsafeEngine.options.scrollback).toBe(DEFAULT_SCROLLBACK_LINES);
@@ -72,13 +69,13 @@ describe("vt screen throughput", () => {
 
       screen.resize({ cols: 60, rows: 24 });
       await screen.whenIdle();
-      expect(screen.bufferStats().baseY).toBeLessThanOrEqual(MAX_SCROLLBACK_LINES);
-      expect(screen.bufferStats().length).toBeLessThanOrEqual(MAX_SCROLLBACK_LINES + 24);
+      expect(screen.bufferStats().baseY).toBeLessThanOrEqual(DEFAULT_SCROLLBACK_LINES);
+      expect(screen.bufferStats().length).toBeLessThanOrEqual(DEFAULT_SCROLLBACK_LINES + 24);
 
       screen.resize({ cols: 120, rows: 24 });
       await screen.whenIdle();
-      expect(screen.bufferStats().baseY).toBeLessThanOrEqual(MAX_SCROLLBACK_LINES);
-      expect(screen.bufferStats().length).toBeLessThanOrEqual(MAX_SCROLLBACK_LINES + 24);
+      expect(screen.bufferStats().baseY).toBeLessThanOrEqual(DEFAULT_SCROLLBACK_LINES);
+      expect(screen.bufferStats().length).toBeLessThanOrEqual(DEFAULT_SCROLLBACK_LINES + 24);
     } finally {
       screen.dispose();
     }
