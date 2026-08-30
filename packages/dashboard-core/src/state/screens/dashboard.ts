@@ -1,8 +1,5 @@
-import type { ProjectId, SessionGroupId } from "@station/contracts";
-import { createNewSessionFlow, createNewSessionNameToken } from "../../flows/newSession.js";
 import { selectDashboardSlots } from "../../selectors/dashboardSlots.js";
 import { choiceValueByKey } from "../../selectors/selectors.js";
-import { safeErrorToToast } from "../../services/errors/errors.js";
 import { activateFocusedDashboardCell } from "../dashboardCells.js";
 import {
   focusNextNeedsMe,
@@ -12,10 +9,10 @@ import {
 import { matchDashboardBinding, type TuiDashboardAction } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
 import { activateDashboardRow } from "../rowActivation.js";
-import { addTuiToast } from "../toasts.js";
 import type { TuiRuntimeContext, TuiTransition } from "../transition.js";
 import type { DashboardState } from "../types.js";
 import { openAddProject } from "./addProjectScreen.js";
+import { openNewSession } from "./newSession.js";
 import {
   clearDashboardPersistentFilter,
   openDashboardPersistentFilter,
@@ -200,35 +197,4 @@ function activateDashboardSlot(
   }
 
   return activateDashboardRow(state, row);
-}
-
-export function openNewSession(
-  state: DashboardState,
-  options: { projectId?: ProjectId; groupId?: SessionGroupId } = {},
-): TuiTransition {
-  if (state.snapshot === undefined) {
-    return { state };
-  }
-
-  const flow = createNewSessionFlow(state.snapshot, createNewSessionNameToken(), options);
-  if (flow === undefined) {
-    return {
-      state: addTuiToast(
-        state,
-        safeErrorToToast({
-          tag: "CommandValidationError",
-          code: "PROJECT_NOT_CONFIGURED",
-          message: "No project is configured for a new session.",
-          hint: "Add a project to config.toml and run station reconcile.",
-        }),
-      ),
-    };
-  }
-
-  return {
-    state: {
-      ...state,
-      screen: { name: "newSession", flow },
-    },
-  };
 }

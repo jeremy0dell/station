@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createInitialTuiState, replaceSnapshot } from "../../../../src/state/screen.js";
-import { openNewSession } from "../../../../src/state/screens/dashboard.js";
+import { openNewSession } from "../../../../src/state/screens/newSession.js";
 import {
   NEW_SESSION_CREATE_GROUP_CHOICE_ID,
   NEW_SESSION_GROUP_LIST_ID,

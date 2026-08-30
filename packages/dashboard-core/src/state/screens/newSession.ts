@@ -1,5 +1,6 @@
-import type { SafeError } from "@station/contracts";
+import type { ProjectId, SafeError, SessionGroupId } from "@station/contracts";
 import {
+  createNewSessionFlow,
   createNewSessionNameToken,
   type NewSessionActionId,
   type NewSessionFlowAction,
@@ -11,8 +12,10 @@ import {
   transitionNewSessionFlow,
   validateNewSessionCreate,
 } from "../../flows/newSession.js";
+import { safeErrorToToast } from "../../services/errors/errors.js";
 import type { TuiKey } from "../keys.js";
 import { seedNewSessionPickerCursor } from "../selection/specs/newSession.js";
+import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState } from "../types.js";
 
@@ -20,6 +23,37 @@ export const newSessionScreenBehavior = {
   dashboardHoverEnabled: false,
   clickAway: cancelNewSession,
 };
+
+export function openNewSession(
+  state: DashboardState,
+  options: { projectId?: ProjectId; groupId?: SessionGroupId } = {},
+): TuiTransition {
+  if (state.snapshot === undefined) {
+    return { state };
+  }
+
+  const flow = createNewSessionFlow(state.snapshot, createNewSessionNameToken(), options);
+  if (flow === undefined) {
+    return {
+      state: addTuiToast(
+        state,
+        safeErrorToToast({
+          tag: "CommandValidationError",
+          code: "PROJECT_NOT_CONFIGURED",
+          message: "No project is configured for a new session.",
+          hint: "Add a project to config.toml and run station reconcile.",
+        }),
+      ),
+    };
+  }
+
+  return {
+    state: {
+      ...state,
+      screen: { name: "newSession", flow },
+    },
+  };
+}
 
 export function handleNewSessionKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "newSession") {
