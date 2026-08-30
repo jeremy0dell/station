@@ -166,13 +166,14 @@ function selectContextMenuItem(
       return;
     case "renameSession":
       if (dashboardRuntime !== undefined) {
+        dismissCurrentAttention(effects);
+        // Overlay-open synchronization restores row focus through the dashboard screen.
+        effects.store.actions.openOverlay(STATION_OVERLAY_ID);
         dashboardRuntime.actions.dispatch({
           type: "renameSession.openEdit",
           rowId: action.sessionId,
           returnTo: "dashboard",
         });
-        dismissCurrentAttention(effects);
-        effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
     case "moveToGroup":

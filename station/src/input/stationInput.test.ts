@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
+import { createOverlayRowFocusReconciler } from "../state/reconcilers/overlayRowFocus.js";
 import { selectActivePaneId, selectStationOverlayVisible } from "../state/selectors.js";
 import { createStationStore } from "../state/store.js";
 import {
@@ -356,7 +357,7 @@ describe("createStationInputRuntime", () => {
     expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: MAIN_PANE_ID });
   });
 
-  it("context-menu Rename from a primary-agent pane opens directly and Esc closes to the dashboard", () => {
+  it("right-click Rename from a primary-agent pane opens directly and Esc closes to the dashboard", () => {
     const snapshot = manyProjectsSnapshot();
     const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
@@ -372,12 +373,22 @@ describe("createStationInputRuntime", () => {
       sessionId: "ses_wt_station_idle",
       terminalTargetId: "native:wt_station_idle",
     });
+    const dispose = createOverlayRowFocusReconciler(store, dashboardRuntime);
 
     expect(runtime.dispatchMouse({ kind: "pane", paneId }, RIGHT_DOWN)).toBe(true);
-    expect(runtime.handleSequence("\r")).toBe(true);
+    expect(
+      runtime.dispatchMouse(
+        { kind: "contextMenuItem", itemId: "station.renameSession" },
+        LEFT_DOWN,
+      ),
+    ).toBe(true);
 
     expect(store.getState().input.contextMenu).toBeNull();
     expect(selectStationOverlayVisible(store.getState())).toBe(true);
+    expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
+      rowId: dashboardRowIds.session("ses_wt_station_idle"),
+      cellId: "identity",
+    });
     expect(dashboardRuntime.state.getState().screen).toMatchObject({
       name: "renameSession",
       step: "editName",
@@ -387,6 +398,11 @@ describe("createStationInputRuntime", () => {
 
     expect(runtime.handleSequence("\x1b")).toBe(true);
     expect(dashboardRuntime.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
+      rowId: dashboardRowIds.session("ses_wt_station_idle"),
+      cellId: "identity",
+    });
+    dispose();
   });
 
   it("runs an automation: splits a shell pane and executes its command with a trailing Enter", async () => {
