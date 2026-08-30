@@ -253,6 +253,39 @@ describe("CLI manual-smoke commands", () => {
     expect(textOutput(currentManual)).toContain("Detached placement is source-free");
   });
 
+  it("resolves every nested Group help topic before config or Observer startup", async () => {
+    const spawnObserver = vi.fn();
+    const topics = [
+      ["group", "--help"],
+      ["group", "list", "--help"],
+      ["group", "get", "--help"],
+      ["group", "create", "--help"],
+      ["group", "rename", "--help"],
+      ["group", "members", "--help"],
+      ["group", "members", "add", "--help"],
+      ["group", "members", "remove", "--help"],
+      ["group", "reparent", "--help"],
+      ["group", "delete", "--help"],
+    ];
+
+    for (const topic of topics) {
+      const result = await runCli(["--config", "/missing/config.toml", ...topic], {
+        observerDeps: { spawnObserver },
+      });
+      expect(result).toMatchObject({ code: 0, outputFormat: "text" });
+      expect(textOutput(result)).toContain("Usage:");
+      expect(textOutput(result)).toContain("stn group");
+    }
+
+    const manual = await runCli(["--config", "/missing/config.toml", "group", "--man"], {
+      observerDeps: { spawnObserver },
+    });
+    expect(textOutput(manual)).toContain("Cross-project Stacks");
+    expect(textOutput(manual)).toContain("does not close or remove sessions");
+    expect(textOutput(manual)).toContain("refresh failure or projection mismatch");
+    expect(spawnObserver).not.toHaveBeenCalled();
+  });
+
   it("documents exact session discovery, rename, and non-destructive close before startup", async () => {
     const spawnObserver = vi.fn();
     const list = await runCli(["--config", "/missing/config.toml", "session", "list", "--help"], {

@@ -230,6 +230,43 @@ describe("session discovery commands", () => {
     }
   });
 
+  it("keeps existing session summaries unchanged when the snapshot contains Groups", async () => {
+    const fixture = await createTempState();
+    const initial = sessionSnapshot();
+    const grouped = StationSnapshotSchema.parse({
+      ...initial,
+      sessionGroups: [
+        {
+          id: "grp_web",
+          projectId: "web",
+          name: "Web work",
+          sessionIds: ["ses_station"],
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    });
+
+    try {
+      const baseline = await runSessionCommand(
+        ["list", "--json"],
+        { config: fixture.config },
+        snapshotObserverDeps(fixture.socketPath, [initial]),
+      );
+      const withGroups = await runSessionCommand(
+        ["list", "--json"],
+        { config: fixture.config },
+        snapshotObserverDeps(fixture.socketPath, [grouped]),
+      );
+
+      expect(structuredResult(withGroups).sessions).toEqual(structuredResult(baseline).sessions);
+      expect(structuredResult(withGroups).sessions[0]).not.toHaveProperty("groupId");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it.each([
     [["--project", "web"], ["ses_station"]],
     [["--provider", "claude"], ["external-run-42"]],
