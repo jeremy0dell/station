@@ -249,6 +249,21 @@ action backed by `session.close({ mode: "harness" })` was considered and cut dur
 review because it reintroduced a second user-facing lifecycle action. Keep it out of
 menus and user-facing docs unless the product explicitly re-adds it.
 
+### Session Group versus project display grouping and Stack
+
+A **Session Group** is a durable, project-local definition whose direct members are canonical
+`SessionId`s. It may have a parent Group, but it never owns the session, worktree, terminal,
+harness, or provider lifecycle. Use `stn group` for exact Group discovery and recorded membership,
+rename, reparent, and delete operations.
+
+Project display grouping is different: `[projects.display]` `group` and `sort_order` organize
+whole configured projects for dashboard presentation. They do not define dynamic session
+membership and must not be used as a Group selector.
+
+A future **Stack** is a separate cross-project workflow lens for related sessions, such as a
+multi-repository feature or end-to-end test. It is not a Session Group, does not change canonical
+project-local membership, and is not exposed by the current Group CLI.
+
 ### Id Model
 
 `StationId<TKind>` (`packages/contracts/src/ids.ts`) is a compile-time-only brand: `string & { readonly [stationIdKind]?: TKind }`. The `?` keeps it **intentionally leaky** — a raw string assigns to a branded type with no parse step.

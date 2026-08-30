@@ -5,6 +5,7 @@ export * from "./commands/debugLogs.js";
 export * from "./commands/debugTrace.js";
 export * from "./commands/doctor.js";
 export * from "./commands/eventHooks.js";
+export * from "./commands/group.js";
 export * from "./commands/notify.js";
 export * from "./commands/observe/index.js";
 export * from "./commands/observer.js";
