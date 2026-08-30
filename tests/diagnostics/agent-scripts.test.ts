@@ -48,6 +48,7 @@ import {
   cliUxPilotEnvironment,
   cliUxPilotModel,
   cliUxPilotReasoning,
+  cliUxPilotRuntimeRootPrefix,
   cliUxPilotSourceRef,
   cliUxPilotTestFile,
   parseCliUxPilotArgs,
@@ -245,6 +246,13 @@ describe("CLI UX pilot runner", () => {
     expect(cliUxPilotModel).toBe("gpt-5.6-luna");
     expect(cliUxPilotReasoning).toBe("xhigh");
     expect(cliUxPilotTestFile).toBe("tests/e2e/real/real-cli-ux-pilot.test.ts");
+    expect(
+      join(
+        `${cliUxPilotRuntimeRootPrefix}${"x".repeat(6)}`,
+        `stn-real-tmux-${"x".repeat(6)}`,
+        "server.sock",
+      ).length,
+    ).toBeLessThan(104);
   });
 
   it("removes live/global and Claude context while pinning only the private Codex lane", () => {

@@ -24,6 +24,7 @@ import {
 } from "../../scripts/runtime-owner.mjs";
 import {
   cliUxPilotOwnerStateDirectory,
+  cliUxPilotRuntimeRootPrefix,
   finalizeCliUxPilotRoots,
 } from "../../scripts/test-runners/run-cli-ux-pilot.mjs";
 
@@ -91,9 +92,9 @@ describe("disposable runtime ownership", () => {
     const checkout = join(fixtureRoot, "checkout");
     await mkdir(checkout, { mode: 0o700 });
     const ownerStateDir = await cliUxPilotOwnerStateDirectory(checkout, fixtureRoot);
-    const firstRoot = await pilotRoot();
-    const firstRuntimeRoot = join(firstRoot.path, "runtime");
-    const firstTmuxRoot = join(firstRuntimeRoot, "stn-real-tmux-orphan");
+    const firstIsolatedRoot = await pilotRoot();
+    const firstRuntimeRoot = await pilotRoot(cliUxPilotRuntimeRootPrefix);
+    const firstTmuxRoot = join(firstRuntimeRoot.path, "stn-real-tmux-orphan");
     const firstSocket = join(firstTmuxRoot, "server.sock");
     const childPidPath = join(fixtureRoot, "child.pid");
     const childScript = join(fixtureRoot, "child.mjs");
@@ -109,14 +110,16 @@ describe("disposable runtime ownership", () => {
       ownerScript,
       [
         `import { runOwnedDisposableRuntime } from ${JSON.stringify(new URL("../../scripts/runtime-owner.mjs", import.meta.url).href)};`,
-        `await runOwnedDisposableRuntime(${JSON.stringify(pilotRuntimeInput({ checkout, ownerStateDir, root: firstRoot, runtimeRoot: firstRuntimeRoot, steps: [{ command: process.execPath, args: [childScript] }] }))});`,
+        `await runOwnedDisposableRuntime(${JSON.stringify(pilotRuntimeInput({ checkout, ownerStateDir, isolatedRoot: firstIsolatedRoot, runtimeRoot: firstRuntimeRoot, steps: [{ command: process.execPath, args: [childScript] }] }))});`,
       ].join("\n"),
       { mode: 0o600 },
     );
 
     const firstOwner = spawn(process.execPath, [ownerScript], { stdio: "ignore" });
     let childPid: number | undefined;
-    let secondRoot: Awaited<ReturnType<typeof pilotRoot>> | undefined;
+    let secondIsolatedRoot: Awaited<ReturnType<typeof pilotRoot>> | undefined;
+    let secondRuntimeRoot: Awaited<ReturnType<typeof pilotRoot>> | undefined;
+    let legacyRoot: Awaited<ReturnType<typeof pilotRoot>> | undefined;
     try {
       childPid = Number(await waitForFile(childPidPath));
       await waitForOwnerRecord(ownerStateDir);
@@ -124,16 +127,21 @@ describe("disposable runtime ownership", () => {
       await waitForChildExit(firstOwner);
       expect(firstOwner.signalCode).toBe("SIGKILL");
 
-      secondRoot = await pilotRoot();
+      secondIsolatedRoot = await pilotRoot();
+      secondRuntimeRoot = await pilotRoot(cliUxPilotRuntimeRootPrefix);
       const result = await runOwnedDisposableRuntime(
         pilotRuntimeInput({
           checkout,
           ownerStateDir,
-          root: secondRoot,
-          runtimeRoot: join(secondRoot.path, "runtime"),
+          isolatedRoot: secondIsolatedRoot,
+          runtimeRoot: secondRuntimeRoot,
           steps: [{ command: process.execPath, args: ["-e", ""] }],
         }),
       );
+      legacyRoot = await pilotRoot();
+      const legacyTmuxRoot = join(legacyRoot.path, "runtime", "stn-real-tmux-legacy");
+      await mkdir(legacyTmuxRoot, { recursive: true, mode: 0o700 });
+      await writeFile(join(legacyTmuxRoot, "server.sock"), "legacy\n", { mode: 0o600 });
       const fakeTmux = join(fixtureRoot, "fake-tmux.mjs");
       await writeFile(
         fakeTmux,
@@ -148,29 +156,39 @@ describe("disposable runtime ownership", () => {
         ].join("\n"),
         { mode: 0o700 },
       );
-      await finalizeCliUxPilotRoots(result.cleanupRoots ?? [], process.env, fakeTmux);
+      await finalizeCliUxPilotRoots(
+        [...(result.cleanupRoots ?? []), legacyRoot],
+        process.env,
+        fakeTmux,
+      );
 
       await waitForProcessExit(childPid);
       expect(existsSync(firstSocket)).toBe(false);
-      expect(existsSync(firstRoot.path)).toBe(false);
-      expect(existsSync(secondRoot.path)).toBe(false);
+      expect(existsSync(firstIsolatedRoot.path)).toBe(false);
+      expect(existsSync(firstRuntimeRoot.path)).toBe(false);
+      expect(existsSync(secondIsolatedRoot.path)).toBe(false);
+      expect(existsSync(secondRuntimeRoot.path)).toBe(false);
+      expect(existsSync(legacyRoot.path)).toBe(false);
       expect(await readdir(runtimeOwnerRecordDirectory(ownerStateDir))).toEqual([]);
     } finally {
       if (firstOwner.exitCode === null && firstOwner.signalCode === null)
         firstOwner.kill("SIGKILL");
       await waitForChildExit(firstOwner).catch(() => undefined);
       if (childPid !== undefined && processExists(childPid)) process.kill(childPid, "SIGKILL");
-      await rm(firstRoot.path, { recursive: true, force: true });
-      if (secondRoot !== undefined) {
-        await rm(secondRoot.path, { recursive: true, force: true });
-      }
+      await rm(firstIsolatedRoot.path, { recursive: true, force: true });
+      await rm(firstRuntimeRoot.path, { recursive: true, force: true });
+      if (secondIsolatedRoot !== undefined)
+        await rm(secondIsolatedRoot.path, { recursive: true, force: true });
+      if (secondRuntimeRoot !== undefined)
+        await rm(secondRuntimeRoot.path, { recursive: true, force: true });
+      if (legacyRoot !== undefined) await rm(legacyRoot.path, { recursive: true, force: true });
     }
   }, 15_000);
 
   it("cleans a valid pilot root after refusing an earlier replaced root", async () => {
     const replaced = await pilotRoot();
     const originalPath = `${replaced.path}-original`;
-    const valid = await pilotRoot();
+    const valid = await pilotRoot(cliUxPilotRuntimeRootPrefix);
     try {
       await rename(replaced.path, originalPath);
       await mkdir(replaced.path, { mode: 0o700 });
@@ -366,8 +384,8 @@ describe("disposable runtime ownership", () => {
   });
 });
 
-async function pilotRoot() {
-  const path = await realpath(await mkdtemp(join(tmpdir(), "station-cli-ux-pilot-")));
+async function pilotRoot(prefix = join(tmpdir(), "station-cli-ux-pilot-")) {
+  const path = await realpath(await mkdtemp(prefix));
   const metadata = await lstat(path);
   return { path, device: String(metadata.dev), inode: String(metadata.ino) };
 }
@@ -375,17 +393,17 @@ async function pilotRoot() {
 function pilotRuntimeInput(input: {
   checkout: string;
   ownerStateDir: string;
-  root: { path: string; device: string; inode: string };
-  runtimeRoot: string;
+  isolatedRoot: { path: string; device: string; inode: string };
+  runtimeRoot: { path: string; device: string; inode: string };
   steps: Array<{ command: string; args: string[] }>;
 }) {
   return {
     role: "cli-ux-pilot" as const,
     checkoutRoot: input.checkout,
     stateDir: input.ownerStateDir,
-    socketRoots: [input.runtimeRoot],
-    persistenceRoots: [input.root.path],
-    cleanupRoots: [input.root],
+    socketRoots: [input.runtimeRoot.path],
+    persistenceRoots: [input.isolatedRoot.path, input.runtimeRoot.path],
+    cleanupRoots: [input.isolatedRoot, input.runtimeRoot],
     survivorPolicy: "preserve-persistent-station-runtime" as const,
     terminalKey: "cli-ux-pilot",
     recoveryKey: "origin/main",

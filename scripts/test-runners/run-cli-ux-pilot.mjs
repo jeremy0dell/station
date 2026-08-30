@@ -15,6 +15,7 @@ export const cliUxPilotDurationMs = 300_000;
 export const cliUxPilotModel = "gpt-5.6-luna";
 export const cliUxPilotReasoning = "xhigh";
 export const cliUxPilotTestFile = "tests/e2e/real/real-cli-ux-pilot.test.ts";
+export const cliUxPilotRuntimeRootPrefix = "/tmp/stn-cli-ux-runtime-";
 
 const gitLocalEnvironmentVariables = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
@@ -141,9 +142,14 @@ async function main() {
     inode: String(isolatedRootMetadata.ino),
   };
   const isolatedCheckout = join(isolatedRoot, "checkout");
-  const runtimeRoot = join(isolatedRoot, "runtime");
+  const runtimeRoot = await mkdtemp(cliUxPilotRuntimeRootPrefix);
+  const runtimeRootMetadata = await lstat(runtimeRoot);
+  const runtimeRootIdentity = {
+    path: await realpath(runtimeRoot),
+    device: String(runtimeRootMetadata.dev),
+    inode: String(runtimeRootMetadata.ino),
+  };
   const ownerStateDir = await cliUxPilotOwnerStateDirectory();
-  await mkdir(runtimeRoot, { recursive: true, mode: 0o700 });
   await chmod(runtimeRoot, 0o700);
   let ownerStarted = false;
   let ownerResult;
@@ -187,8 +193,8 @@ async function main() {
       checkoutRoot,
       stateDir: ownerStateDir,
       socketRoots: [runtimeRoot],
-      persistenceRoots: [isolatedRoot],
-      cleanupRoots: [isolatedRootIdentity],
+      persistenceRoots: [isolatedRoot, runtimeRoot],
+      cleanupRoots: [isolatedRootIdentity, runtimeRootIdentity],
       survivorPolicy: "preserve-persistent-station-runtime",
       terminalKey: "cli-ux-pilot",
       recoveryKey: cliUxPilotSourceRef,
@@ -223,13 +229,18 @@ async function main() {
 
   let cleanupFailure;
   try {
-    const cleanupRoots = ownerResult?.cleanupRoots ?? (ownerStarted ? [] : [isolatedRootIdentity]);
+    const cleanupRoots =
+      ownerResult?.cleanupRoots ??
+      (ownerStarted ? [] : [isolatedRootIdentity, runtimeRootIdentity]);
     await finalizeCliUxPilotRoots(cleanupRoots, runnerEnv, tools.tmux);
   } catch (error) {
     cleanupFailure = error;
   }
   if (existsSync(isolatedRoot)) {
     process.stderr.write(`Retained isolated checkout for failure triage: ${isolatedRoot}\n`);
+  }
+  if (existsSync(runtimeRoot)) {
+    process.stderr.write(`Retained private runtime for failure recovery: ${runtimeRoot}\n`);
   }
   if (runFailure !== undefined && cleanupFailure !== undefined) {
     throw new AggregateError([runFailure, cleanupFailure], "CLI UX pilot and cleanup failed.");
@@ -366,14 +377,18 @@ async function finalizeCliUxPilotRoot(expected, env, tmuxBin) {
     throw error;
   }
   const canonicalRoot = await realpath(expected.path);
-  const canonicalTemporaryDirectory = await realpath(tmpdir());
-  if (
-    dirname(canonicalRoot) !== canonicalTemporaryDirectory ||
-    !basename(canonicalRoot).startsWith("station-cli-ux-pilot-")
-  ) {
+  const allowedRoot = [
+    [await realpath(tmpdir()), "station-cli-ux-pilot-"],
+    [await realpath("/tmp"), "stn-cli-ux-runtime-"],
+  ].some(
+    ([parent, prefix]) =>
+      dirname(canonicalRoot) === parent && basename(canonicalRoot).startsWith(prefix),
+  );
+  if (!allowedRoot) {
     throw new Error(`Refusing unexpected CLI UX pilot cleanup root: ${expected.path}`);
   }
   assertExactPilotRoot(metadata, canonicalRoot, expected);
+  await closePrivateTmuxEndpoints(canonicalRoot, env, tmuxBin);
   await closePrivateTmuxEndpoints(join(canonicalRoot, "runtime"), env, tmuxBin);
   const finalMetadata = await lstat(canonicalRoot);
   assertExactPilotRoot(finalMetadata, canonicalRoot, expected);
