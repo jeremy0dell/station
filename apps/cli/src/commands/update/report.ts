@@ -15,7 +15,7 @@ import type { PlannedUpdateChannel } from "../../update/channelDetection.js";
 import type { UpdateRequest } from "./args.js";
 import type { HostHandoffScenario } from "./scenario.js";
 
-export type { UpdateCommandReport, UpdateCommandStep } from "@station/contracts";
+export type { UpdateCommandStep } from "@station/contracts";
 
 const updateFailureFallback = {
   tag: "UpdateError",

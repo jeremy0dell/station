@@ -37,7 +37,6 @@ export type HostCompatibilityIdentity = z.infer<typeof HostCompatibilityIdentity
 export const HostCorrelationIdentitySchema = UiRunContextSchema.extend({
   connectionId: idSchema,
 }).strict();
-export type HostCorrelationIdentity = z.infer<typeof HostCorrelationIdentitySchema>;
 
 /** Compatibility and diagnostic correlation carried on every operational Host request. */
 export const HostClientIdentitySchema = HostCompatibilityIdentitySchema.merge(
@@ -199,9 +198,6 @@ export type HostControlState = z.infer<typeof HostControlStateSchema>;
 /** Claim uses only the connection-scoped Host attachment identity; stale viewers present no epoch. */
 export const HostClaimControlParamsSchema = z.object({ attachmentId: idSchema }).strict();
 
-/** Successful control claim returns the current role and newly granted epoch. */
-export const HostClaimControlResultSchema = HostControlStateSchema;
-
 /** Capability-bound input mutation; no bare PTY identity is accepted. */
 export const HostWriteParamsSchema = HostAttachmentCapabilitySchema.extend({
   data: z.string(),
@@ -292,7 +288,6 @@ export const HostBeginHandoffParamsSchema = z
     fidelity: HostHandoffFidelitySchema.default("processes"),
   })
   .strict();
-export type HostBeginHandoffParams = z.infer<typeof HostBeginHandoffParamsSchema>;
 
 export const HostBeginHandoffResultSchema = z
   .object({
@@ -334,10 +329,6 @@ export const HostAdoptRegistryParamsSchema = z
     manifest: PtyHandoffManifestSchema,
   })
   .strict();
-export type HostAdoptRegistryParams = z.infer<typeof HostAdoptRegistryParamsSchema>;
-
-export const HostAdoptRegistryResultSchema = HostAbortHandoffResultSchema;
-export type HostAdoptRegistryResult = z.infer<typeof HostAdoptRegistryResultSchema>;
 
 /** Exact PTY-lifetime reference plus the requested initial mutation role. */
 export const HostAttachParamsSchema = HostPtyRefSchema.extend({

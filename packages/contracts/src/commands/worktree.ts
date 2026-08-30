@@ -63,8 +63,6 @@ export const WorktreeCreateCommandResultSchema = z
   })
   .strict();
 
-export type WorktreeCreateCommandResult = z.infer<typeof WorktreeCreateCommandResultSchema>;
-
 export const WorktreeForkCommandResultSchema = z
   .object({
     type: z.literal("worktree.fork"),
@@ -72,5 +70,3 @@ export const WorktreeForkCommandResultSchema = z
     worktreeId: WorktreeIdSchema,
   })
   .strict();
-
-export type WorktreeForkCommandResult = z.infer<typeof WorktreeForkCommandResultSchema>;

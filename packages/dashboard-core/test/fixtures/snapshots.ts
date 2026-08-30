@@ -87,21 +87,6 @@ export function createGroupedDashboardSnapshot(): StationSnapshot {
   };
 }
 
-export function createManySlotDashboardSnapshot(): StationSnapshot {
-  const base = createDashboardSnapshot();
-  return snapshotFromRows([
-    ...base.rows,
-    ...Array.from({ length: 4 }, (_, index) =>
-      row({
-        id: `wt_web_slot_${index}`,
-        projectId: "web",
-        branch: `zz-slot-${index}`,
-        state: "idle",
-      }),
-    ),
-  ]);
-}
-
 export function createCommandSnapshot(
   state: "none" | "idle" = "idle",
   options: { dirty?: boolean } = {},

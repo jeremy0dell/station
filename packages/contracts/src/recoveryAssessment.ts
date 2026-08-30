@@ -71,8 +71,6 @@ export const SessionRecoveryHandleResolutionSchema = z.discriminatedUnion("kind"
     })
     .strict(),
 ]);
-export type SessionRecoveryHandleResolution = z.infer<typeof SessionRecoveryHandleResolutionSchema>;
-
 export const ObserverSessionRecoveryAssessmentSchema = z
   .object({
     sessionId: SessionIdSchema,

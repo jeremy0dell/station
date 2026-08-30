@@ -1,6 +1,6 @@
 import { cellWidth, clipCells } from "../../text/cells.js";
 
-export { cellWidth, clipCells, truncateCells } from "../../text/cells.js";
+export { cellWidth, truncateCells } from "../../text/cells.js";
 
 // Semantic only — dashboard-core stays color-value-free; renderer theme adapters resolve roles.
 export type RowColor = "blue" | "cyan" | "gray" | "green" | "red" | "yellow" | "purple";

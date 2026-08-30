@@ -23,8 +23,6 @@ import {
 import { UpdateArtifactSchema } from "./updateArtifact.js";
 
 export const UpdateRuntimeBuildRelationSchema = z.enum(["matching-target", "different", "unknown"]);
-export type UpdateRuntimeBuildRelation = z.infer<typeof UpdateRuntimeBuildRelationSchema>;
-
 const unknownObserverSchema = z
   .object({
     status: z.literal("unknown"),
@@ -73,10 +71,6 @@ export const UpdateReapSessionRecoveryAssessmentSchema =
   ObserverSessionRecoveryAssessmentSchema.omit({ handleResolution: true })
     .extend({ handleResolution: UpdateReapRecoveryHandleResolutionSchema })
     .strict();
-export type UpdateReapSessionRecoveryAssessment = z.infer<
-  typeof UpdateReapSessionRecoveryAssessmentSchema
->;
-
 /** Public recovery projection: exact decisions and counts without execution-facing handle IDs. */
 export const UpdateReapRecoveryAssessmentSchema = z
   .object({
