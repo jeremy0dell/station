@@ -7,7 +7,7 @@ import {
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import { ProviderRegistry } from "../../src/providers/registry";
-import { resolveSessionRecovery } from "../../src/sessionRecovery";
+import { resolveSessionRecovery } from "../../src/sessionRecovery/resolve";
 import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 
 const now = "2026-08-08T12:00:00.000Z";

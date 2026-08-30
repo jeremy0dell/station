@@ -1,6 +1,6 @@
 import type { SessionRecoveryHandle } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import { selectNewestSessionRecoveryCandidate } from "../../src/sessionRecoverySelection";
+import { selectNewestSessionRecoveryCandidate } from "../../src/sessionRecovery/selection";
 
 const newest = "2026-08-20T12:00:00.000Z";
 const older = "2026-08-20T11:00:00.000Z";
