@@ -83,6 +83,59 @@ describe("real Station config support", () => {
     endpointRoots.push(second.tmuxEndpoint.rootPath);
     expect(second.tmuxEndpoint.rootPath).not.toBe(fixture.tmuxEndpoint.rootPath);
   });
+
+  it("enables selected-harness recovery independently from persistent native agents", async () => {
+    root = await mkdtemp(join(tmpdir(), "station-real-config-recovery-"));
+    const tmuxBin = join(root, "tmux");
+    await writeFile(tmuxBin, "#!/bin/sh\nexit 0\n", "utf8");
+    await chmod(tmuxBin, 0o700);
+    const repo: RealTempRepo = {
+      root,
+      repoPath: join(root, "repo"),
+      realE2eDir: join(root, "repo", ".station-real-e2e"),
+      baseBranch: "main",
+      cleanup: async () => undefined,
+    };
+    const env: RealE2eEnvironment = {
+      repoRoot: "/station",
+      stationBin: "/station/bin/stn",
+      stationIngressBin: "/station/bin/stn-ingress",
+      tmuxBin,
+      worktrunkBin: "/usr/local/bin/wt",
+    };
+
+    const recovery = await writeRealStationConfig({
+      env,
+      repo,
+      harnessProvider: "codex",
+      codexCommand: "/usr/local/bin/codex",
+      recovery: true,
+    });
+    endpointRoots.push(recovery.tmuxEndpoint.rootPath);
+    const recoveryText = await readFile(recovery.configPath, "utf8");
+    expect(recoveryText).toContain(
+      '[harness.codex]\nenabled = true\ncommand = "/usr/local/bin/codex"',
+    );
+    expect(recoveryText).toContain("install_hooks = false\nresume = true");
+    expect(recoveryText).toContain(
+      "[feature_flags]\nsession_resume_agent = true\nstation_persistent_agents = false",
+    );
+
+    const persistent = await writeRealStationConfig({
+      env,
+      repo,
+      harnessProvider: "codex",
+      codexCommand: "/usr/local/bin/codex",
+      stationPersistentAgents: true,
+      tmuxSession: "station-real-persistent",
+    });
+    endpointRoots.push(persistent.tmuxEndpoint.rootPath);
+    const persistentText = await readFile(persistent.configPath, "utf8");
+    expect(persistentText).not.toContain("resume = true");
+    expect(persistentText).toContain(
+      "[feature_flags]\nsession_resume_agent = false\nstation_persistent_agents = true",
+    );
+  });
 });
 
 const directoryMode = async (path: string): Promise<number> => (await stat(path)).mode & 0o777;

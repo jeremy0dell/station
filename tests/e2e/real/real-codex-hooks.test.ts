@@ -4,12 +4,13 @@ import {
   type StationCommand,
   type StationSnapshot,
 } from "@station/contracts";
-import { buildWorkbenchWindowName } from "@station/tmux";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { assertDebugBundleContains, findRowByBranch } from "../../support/real-station/assertions";
 import {
+  continuePastCodexStartupPrompts,
   createCodexSentinel,
   createRealCodexFixture,
+  readCodexSessionStartWitness,
   waitForCodexSentinel,
   writeFailureBundle,
 } from "../../support/real-station/codex";
@@ -21,14 +22,9 @@ import {
 } from "../../support/real-station/env";
 import { createRealNotifyHookCapture, waitForNotifyEvent } from "../../support/real-station/notify";
 import { CleanupStack, runStationJson } from "../../support/real-station/process";
+import { createRealIngressWitness } from "../../support/real-station/recovery";
 import { createRealTempRepo, uniqueBranch } from "../../support/real-station/repo";
-import {
-  activeTmuxPane,
-  captureTmuxPane,
-  closeRealTmuxEndpoint,
-  type RealTmuxEndpoint,
-  sendTmuxKeys,
-} from "../../support/real-station/tmux";
+import { closeRealTmuxEndpoint } from "../../support/real-station/tmux";
 import { removeRealWorktrunkWorktree } from "../../support/real-station/worktrunk";
 
 const describeReal = realE2eEnabled() ? describe : describe.skip;
@@ -55,7 +51,8 @@ describeReal("real Codex hook ingestion", () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
-    const codex = await createRealCodexFixture({ env, repo });
+    const ingress = await createRealIngressWitness({ env, rootPath: repo.root });
+    const codex = await createRealCodexFixture({ env: ingress.env, repo });
     const testEnv = codex.env;
     const notify = await createRealNotifyHookCapture(repo.root);
     const config = await writeRealStationConfig({
@@ -69,7 +66,7 @@ describeReal("real Codex hook ingestion", () => {
       },
     });
     cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
-    await codex.installHooks(config);
+    const hooks = await codex.installHooks(config);
     cleanup.defer(async () => {
       await runStationJson(testEnv, {
         configPath: config.configPath,
@@ -128,6 +125,20 @@ describeReal("real Codex hook ingestion", () => {
         harness: "codex",
         state: "idle",
         sessionId: expect.any(String),
+      });
+      await expect(
+        readCodexSessionStartWitness({
+          ingress,
+          hooks,
+          cwd: idleRow.path,
+          source: "startup",
+        }),
+      ).resolves.toMatchObject({
+        profile: "station",
+        mode: "interactive",
+        target: { kind: "native-session", id: expect.any(String) },
+        hooks,
+        delivery: { exitStatus: 0 },
       });
       await expect(
         waitForNotifyEvent(notify.logPath, (event) => notifyEventMatches(event, "codex"), 60_000),
@@ -229,34 +240,6 @@ async function waitForRowTerminalAttachment(input: {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   throw new Error(`Timed out waiting for Codex row ${input.branch} to get terminal attachment.`);
-}
-
-async function continuePastCodexStartupPrompts(
-  endpoint: RealTmuxEndpoint,
-  tmuxSession: string,
-  row: StationSnapshot["rows"][number],
-): Promise<void> {
-  const target = await activeTmuxPane(
-    endpoint,
-    `${tmuxSession}:${buildWorkbenchWindowName({
-      projectId: row.projectId,
-      branch: row.branch,
-      worktreeId: row.id,
-      path: row.path,
-    })}.0`,
-  );
-  const deadline = Date.now() + 30_000;
-  while (Date.now() <= deadline) {
-    const captured = await captureTmuxPane({ endpoint, target });
-    if (captured.includes("Do you trust the contents of this directory?")) {
-      await sendTmuxKeys({ endpoint, target, keys: ["1", "Enter"] });
-    }
-    if (captured.includes("hooks need review") && captured.includes("Press t to trust all")) {
-      await sendTmuxKeys({ endpoint, target, keys: ["t"] });
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
 }
 
 function notifyEventMatches(event: unknown, harness: string): boolean {

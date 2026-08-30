@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  codexSessionStartWitnessFromAttempts,
   createCodexSentinel,
   createRealCodexFixture,
 } from "../../../../tests/support/real-station/codex.js";
@@ -60,5 +61,48 @@ describe("real Station Codex support", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("parses an exact Codex SessionStart witness and retains delivery artifacts", () => {
+    const rawInput = JSON.stringify({
+      session_id: "native-codex-1",
+      transcript_path: null,
+      cwd: "/repo/worktree",
+      model: "gpt-5.6-sol",
+      permission_mode: "bypassPermissions",
+      hook_event_name: "SessionStart",
+      source: "startup",
+    });
+    const witness = codexSessionStartWitnessFromAttempts(
+      [
+        {
+          id: "00000000-0000-4000-8000-000000000001",
+          invokedAt: "2026-01-01T00:00:00.000Z",
+          argv: ["codex"],
+          rawInput,
+          exitStatus: 0,
+          signal: null,
+          stdout: '{"accepted":true}',
+          stderr: "",
+        },
+      ],
+      {
+        hooks: { hookConfigPath: "/private/config.toml", hookScriptPath: "/private/hook.sh" },
+        cwd: "/repo/worktree",
+        source: "startup",
+      },
+    );
+
+    expect(witness).toMatchObject({
+      provider: "codex",
+      target: { kind: "native-session", id: "native-codex-1" },
+      profile: "station",
+      mode: "interactive",
+      source: "startup",
+      model: "gpt-5.6-sol",
+      permissionMode: "bypassPermissions",
+      hooks: { hookConfigPath: "/private/config.toml", hookScriptPath: "/private/hook.sh" },
+      delivery: { exitStatus: 0, stdout: '{"accepted":true}' },
+    });
   });
 });

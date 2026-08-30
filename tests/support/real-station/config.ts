@@ -30,6 +30,8 @@ export type WriteRealStationConfigOptions = {
   installCodexHooks?: boolean;
   installOpenCodeHooks?: boolean;
   useLifecycleHooks?: boolean;
+  recovery?: boolean;
+  stationPersistentAgents?: boolean;
   tmuxSession?: string;
   eventHook?: {
     command: string;
@@ -81,6 +83,7 @@ export async function writeRealStationConfig(
     "",
     ...harnessLines,
     ...eventHookConfigLines(options),
+    ...featureFlagConfigLines(options),
     "[[projects]]",
     `id = ${tomlString(projectId)}`,
     'label = "station real E2E"',
@@ -122,6 +125,18 @@ export async function writeRealStationConfig(
   };
 }
 
+function featureFlagConfigLines(options: WriteRealStationConfigOptions): string[] {
+  if (options.recovery !== true && options.stationPersistentAgents !== true) {
+    return [];
+  }
+  return [
+    "[feature_flags]",
+    `session_resume_agent = ${options.recovery === true ? "true" : "false"}`,
+    `station_persistent_agents = ${options.stationPersistentAgents === true ? "true" : "false"}`,
+    "",
+  ];
+}
+
 function eventHookConfigLines(options: WriteRealStationConfigOptions): string[] {
   if (options.eventHook === undefined) {
     return [];
@@ -148,6 +163,7 @@ function harnessConfigLines(
       `command = ${tomlString(options.claudeCommand ?? requireToolPath(options.env, "claude"))}`,
       'permission_mode = "yolo"',
       `install_hooks = ${options.installClaudeHooks === true ? "true" : "false"}`,
+      ...(options.recovery === true ? ["resume = true"] : []),
       "",
     ];
   }
@@ -157,6 +173,7 @@ function harnessConfigLines(
       "[harness.pi]",
       "enabled = true",
       `command = ${tomlString(options.piCommand ?? requireToolPath(options.env, "pi"))}`,
+      ...(options.recovery === true ? ["resume = true"] : []),
       "",
     ];
   }
@@ -169,6 +186,7 @@ function harnessConfigLines(
       'sandbox_mode = "workspace-write"',
       'approval_policy = "never"',
       `install_hooks = ${options.installOpenCodeHooks === true ? "true" : "false"}`,
+      ...(options.recovery === true ? ["resume = true"] : []),
       "",
     ];
   }
@@ -189,6 +207,7 @@ function harnessConfigLines(
     'sandbox_mode = "workspace-write"',
     'approval_policy = "never"',
     `install_hooks = ${options.installCodexHooks === true ? "true" : "false"}`,
+    ...(options.recovery === true ? ["resume = true"] : []),
     "",
   ];
 }

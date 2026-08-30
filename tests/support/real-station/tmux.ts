@@ -137,6 +137,39 @@ export async function killTmuxSession(
   }
 }
 
+export type ExactTmuxSessionLoss = {
+  sessionName: string;
+  lostAt: string;
+};
+
+export async function tmuxSessionExists(
+  endpoint: RealTmuxEndpoint,
+  sessionName: string,
+): Promise<boolean> {
+  try {
+    await runTmuxCommand(endpoint, ["has-session", "-t", `=${sessionName}`]);
+    return true;
+  } catch (error) {
+    if (isExactTmuxFailure(error, 1, `can't find session: ${sessionName}`)) return false;
+    throw error;
+  }
+}
+
+export async function destroyExactTmuxSession(
+  endpoint: RealTmuxEndpoint,
+  sessionName: string,
+): Promise<ExactTmuxSessionLoss> {
+  if (!(await tmuxSessionExists(endpoint, sessionName))) {
+    throw new Error(`tmux session did not exist before terminal loss: ${sessionName}`);
+  }
+  const lostAt = new Date().toISOString();
+  await runTmuxCommand(endpoint, ["kill-session", "-t", `=${sessionName}`]);
+  if (await tmuxSessionExists(endpoint, sessionName)) {
+    throw new Error(`tmux session remained present after terminal loss: ${sessionName}`);
+  }
+  return { sessionName, lostAt };
+}
+
 export async function killTmuxWindow(endpoint: RealTmuxEndpoint, target: string): Promise<void> {
   await runTmuxCommand(endpoint, ["kill-window", "-t", target]);
 }

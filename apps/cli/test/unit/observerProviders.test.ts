@@ -489,6 +489,18 @@ describe("observer providers", () => {
       stateDir: observerPaths.stateDir,
       hookSpoolDir: observerPaths.hookSpoolDir,
     });
+    expect(
+      ["claude", "codex", "cursor", "opencode", "pi"].map((provider) => [
+        provider,
+        registry.harnesses.get(provider)?.capabilities().canResume,
+      ]),
+    ).toEqual([
+      ["claude", true],
+      ["codex", true],
+      ["cursor", true],
+      ["opencode", true],
+      ["pi", true],
+    ]);
 
     const scripted = registry.harnesses.get("scripted");
     await expect(scripted?.buildLaunch(launchRequest("scripted"))).resolves.toMatchObject({
