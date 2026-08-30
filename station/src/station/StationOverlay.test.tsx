@@ -196,6 +196,65 @@ describe("StationOverlay", () => {
     expect(calls).toEqual([{ kind: "station", target: { kind: "screenBackdrop" } }]);
   });
 
+  it("clicks away from staged filter conditions through the rendered FILTER header", async () => {
+    const { runtime: store } = makeStationTestRuntime();
+    const calls: Array<{ target: MouseTargetRef; event: StationMouseEvent }> = [];
+    const setup = await renderOverlay((target, event) => {
+      calls.push({ target, event });
+      if (target.kind === "station") {
+        routeStationMouse(target.target, event, store);
+      }
+      return true;
+    }, store);
+    await act(async () => {
+      store.actions.handleKey({ input: "/" });
+      store.actions.handleKey({ input: "draft" });
+      store.actions.handleKey({ input: "i", ctrl: true });
+      store.actions.handleKey({ input: "S" });
+      store.actions.handleKey({ input: "3" });
+      store.actions.handleKey({ input: "\r", return: true });
+      store.actions.handleKey({ input: "S" });
+      store.actions.handleKey({ input: "5" });
+      await setup.flush();
+    });
+    const frame = setup.captureCharFrame();
+    const filter = cellFor(frame, "FILTER /draft");
+    const condition = cellFor(frame, "STATUS CONDITION");
+    const filterColumn = filter.col + Math.floor("FILTER /draft".length / 2);
+
+    expect(filter.row).toBeLessThan(condition.row);
+    expect(frame).toContain("[✓] Working");
+    expect(frame).toContain("[✓] Idle");
+    expect(store.state.getState().screen).toMatchObject({
+      conditionEditor: { stage: "values", selectedIds: ["working", "idle"] },
+    });
+
+    calls.splice(0);
+    await setup.mockMouse.click(filterColumn, filter.row, MouseButtons.LEFT);
+
+    expect(calls).toEqual([
+      {
+        target: { kind: "station", target: { kind: "screenBackdrop" } },
+        event: {
+          type: "down",
+          button: "left",
+          rawButton: 0,
+          x: filterColumn,
+          y: filter.row,
+          modifiers: { shift: false, alt: false, ctrl: false },
+        },
+      },
+    ]);
+    expect(store.state.getState().screen).toEqual({
+      name: "persistentFilter",
+      draft: { value: "draft", cursor: 5 },
+      draftConditions: [
+        { field: "status", values: [{ id: "working", label: "Working" }] },
+      ],
+    });
+    expect(setup.captureCharFrame()).not.toContain("STATUS CONDITION");
+  });
+
   it("routes obscured title-row clicks through the inner screen backdrop", async () => {
     const { runtime: store } = makeStationTestRuntime();
     const calls: Array<{ target: MouseTargetRef; event: StationMouseEvent }> = [];
