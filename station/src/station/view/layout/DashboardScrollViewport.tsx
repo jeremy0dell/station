@@ -1,7 +1,7 @@
 import type { DashboardRowId } from "@station/dashboard-core/selectors";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { SemanticScrollViewport } from "./SemanticScrollViewport.js";
-import type { DashboardScrollController } from "./scrollViewport.js";
+import type { DashboardScrollController } from "./dashboardScrollController.js";
 
 export function useDashboardVisibleRows(
   controller: DashboardScrollController,
@@ -20,7 +20,7 @@ export function DashboardScrollViewport({
   children: ReactNode;
 }) {
   return (
-    <SemanticScrollViewport controller={controller} itemIds={itemIds}>
+    <SemanticScrollViewport controller={controller} itemIds={itemIds} scrollbar="gutter">
       {children}
     </SemanticScrollViewport>
   );

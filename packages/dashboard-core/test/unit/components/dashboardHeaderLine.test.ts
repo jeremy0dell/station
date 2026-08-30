@@ -3,6 +3,7 @@ import {
   fleetCountsLabel,
   headerStrip,
   projectHeaderLabelParts,
+  scrollIndicatorLabel,
 } from "../../../src/components/Dashboard/content.js";
 import { createGroupedDashboardSnapshot } from "../../fixtures/snapshots.js";
 
@@ -56,6 +57,14 @@ describe("fleetCountsLabel", () => {
     expect(fleetCountsLabel({ projects: 1, sessions: 1, agents: 1 }, 60)).toBe(
       "1 project · 1 session · 1 agent",
     );
+  });
+});
+
+describe("scrollIndicatorLabel", () => {
+  it("falls back to structural continuation without inventing a session count", () => {
+    const overflow = { above: 0, below: 0, visible: 4, total: 4 };
+    expect(scrollIndicatorLabel("above", overflow)).toBe("▲ more above");
+    expect(scrollIndicatorLabel("below", overflow)).toBe("▼ more below");
   });
 });
 

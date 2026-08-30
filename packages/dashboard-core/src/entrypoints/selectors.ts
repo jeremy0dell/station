@@ -99,10 +99,7 @@ export {
   selectDashboardSessionRows,
   sessionRowDisplayTitle,
 } from "../selectors/dashboardSessionRows.js";
-export type {
-  DashboardSessionOverflow,
-  DashboardSlots,
-} from "../selectors/dashboardSlots.js";
+export type { DashboardSessionOverflow, DashboardSlots } from "../selectors/dashboardSlots.js";
 export {
   selectDashboardSlots,
   selectDashboardSlotsForTree,

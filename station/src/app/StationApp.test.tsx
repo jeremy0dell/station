@@ -62,7 +62,7 @@ describe("Station app composition", () => {
     await waitFor(() => overlayVisible(station));
     const frame = await waitForFrame(
       station,
-      (candidate) => candidate.includes("FLEET") && candidate.includes("showing 5 of 10"),
+      (candidate) => candidate.includes("FLEET") && candidate.includes("showing 6 of 10"),
     );
 
     expect(frame).not.toContain(STATION_ICON);
@@ -85,7 +85,7 @@ describe("Station app composition", () => {
     await waitFor(() => overlayVisible(station));
     const frame = await waitForFrame(
       station,
-      (candidate) => candidate.includes("FLEET") && candidate.includes("showing 2 of 10"),
+      (candidate) => candidate.includes("FLEET") && candidate.includes("showing 3 of 10"),
     );
 
     expect(frame).not.toContain(STATION_ICON);

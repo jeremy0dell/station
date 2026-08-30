@@ -21,7 +21,7 @@ import { FakeTuiObserverService } from "./fakeObserverService.js";
 import {
   createDashboardScrollController,
   type DashboardScrollController,
-} from "../../view/layout/scrollViewport.js";
+} from "../../view/layout/dashboardScrollController.js";
 
 export type MakeStationTestRuntimeOptions = {
   /** Source snapshot; `null` exercises the no-snapshot states. Default: manyProjectsSnapshot(). */

@@ -1,83 +1,9 @@
 import { Renderable, type BaseRenderable, type ScrollBoxRenderable } from "@opentui/core";
-import type { DashboardVisibleRowsSource } from "@station/dashboard-core/runtime";
-import type { DashboardRowId } from "@station/dashboard-core/selectors";
-
-export type SemanticItemGeometry<ItemId extends string> = {
-  readonly id: ItemId;
-  readonly top: number;
-  readonly bottom: number;
-};
-
-/** Inclusive intersection at the top and exclusive intersection at the bottom. */
-export function intersectingSemanticItems<ItemId extends string>(
-  viewport: { readonly top: number; readonly bottom: number },
-  items: readonly SemanticItemGeometry<ItemId>[],
-): ItemId[] {
-  return items
-    .filter((item) => item.bottom > viewport.top && item.top < viewport.bottom)
-    .map((item) => item.id);
-}
-
-/**
- * Resolves a viewport against top-to-bottom, non-overlapping semantic boxes.
- * With constant-time geometry lookup, steady-state work is logarithmic in all items plus the
- * intersecting boxes. The controller below maintains that lookup at the renderer boundary.
- */
-export function intersectingOrderedSemanticItems<ItemId extends string>(
-  viewport: { readonly top: number; readonly bottom: number },
-  itemIds: readonly ItemId[],
-  geometryFor: (id: ItemId) => SemanticItemGeometry<ItemId> | undefined,
-): ItemId[] {
-  let low = 0;
-  let high = itemIds.length;
-  while (low < high) {
-    const middle = Math.floor((low + high) / 2);
-    const id = itemIds[middle];
-    const item = id === undefined ? undefined : geometryFor(id);
-    if (item === undefined) {
-      return intersectingSemanticItems(
-        viewport,
-        itemIds.flatMap((candidateId) => {
-          const candidate = geometryFor(candidateId);
-          return candidate === undefined ? [] : [candidate];
-        }),
-      );
-    }
-    if (item.bottom <= viewport.top) low = middle + 1;
-    else high = middle;
-  }
-
-  const visible: ItemId[] = [];
-  for (let index = low; index < itemIds.length; index += 1) {
-    const id = itemIds[index];
-    if (id === undefined) break;
-    const item = geometryFor(id);
-    if (item === undefined) continue;
-    if (item.top >= viewport.bottom) break;
-    if (item.bottom > viewport.top) visible.push(id);
-  }
-  return visible;
-}
-
-/** Cell delta that reveals a semantic box; oversized boxes align their leading edge. */
-export function semanticRevealDelta(
-  viewport: { readonly top: number; readonly bottom: number },
-  item: { readonly top: number; readonly bottom: number },
-  alignment: "nearest" | "start" | "end" = "nearest",
-): number {
-  const itemHeight = item.bottom - item.top;
-  const viewportHeight = viewport.bottom - viewport.top;
-  if (itemHeight >= viewportHeight) {
-    return item.bottom > viewport.top && item.top < viewport.bottom
-      ? 0
-      : item.top - viewport.top;
-  }
-  if (alignment === "start") return item.top - viewport.top;
-  if (alignment === "end") return item.bottom - viewport.bottom;
-  if (item.top < viewport.top) return item.top - viewport.top;
-  if (item.bottom > viewport.bottom) return item.bottom - viewport.bottom;
-  return 0;
-}
+import {
+  intersectingOrderedSemanticItems,
+  semanticRevealDelta,
+  type SemanticItemGeometry,
+} from "./semanticScrollGeometry.js";
 
 export function semanticItemRenderableId(id: string): string {
   return `station-semantic-item:${id}`;
@@ -111,6 +37,7 @@ export function createScrollViewportController<
   let visibleIds: readonly ItemId[] | undefined;
   let followedId: ItemId | undefined;
   let followAlignment: "start" | "end" | undefined;
+  let synchronizedScrollTop: number | undefined;
   let reflowQueued = false;
   let itemIndexDirty = true;
   const itemById = new Map<ItemId, Renderable>();
@@ -191,7 +118,12 @@ export function createScrollViewportController<
   };
   const synchronize = (): void => {
     ensureItemIndex();
+    synchronizedScrollTop = viewport?.scrollTop;
     synchronizeIndexed();
+  };
+  const stopFollowing = (): void => {
+    followedId = undefined;
+    followAlignment = undefined;
   };
   const revealFollowedItemIndexed = (): void => {
     if (
@@ -229,6 +161,7 @@ export function createScrollViewportController<
   const reflow = (): void => {
     ensureItemIndex();
     revealFollowedItemIndexed();
+    synchronizedScrollTop = viewport?.scrollTop;
     synchronizeIndexed();
   };
 
@@ -251,6 +184,7 @@ export function createScrollViewportController<
       viewport = undefined;
       orderedIds = [];
       followAlignment = undefined;
+      synchronizedScrollTop = undefined;
       clearItemIndex();
       itemIndexDirty = true;
       if (visibleIds === undefined) return;
@@ -259,7 +193,13 @@ export function createScrollViewportController<
     },
     reflow,
     synchronize: (): void => {
-      followAlignment = undefined;
+      if (
+        viewport !== undefined &&
+        synchronizedScrollTop !== undefined &&
+        viewport.scrollTop !== synchronizedScrollTop
+      ) {
+        stopFollowing();
+      }
       synchronize();
     },
     subscribe: (listener): (() => void) => {
@@ -268,14 +208,16 @@ export function createScrollViewportController<
     },
     snapshot: () => visibleIds,
     scrollBy: (cells): void => {
-      followAlignment = undefined;
+      const previousScrollTop = viewport?.scrollTop;
       viewport?.scrollBy(cells);
+      if (viewport?.scrollTop !== previousScrollTop) stopFollowing();
       synchronize();
     },
     scrollPage: (direction): void => {
-      followAlignment = undefined;
+      const previousScrollTop = viewport?.scrollTop;
       const page = Math.max(1, (viewport?.viewport.height ?? 1) - 1);
       viewport?.scrollBy(direction * page);
+      if (viewport?.scrollTop !== previousScrollTop) stopFollowing();
       synchronize();
     },
     follow: (itemId): void => {
@@ -284,20 +226,9 @@ export function createScrollViewportController<
       if (itemId === undefined) return;
       ensureItemIndex();
       revealFollowedItemIndexed();
+      synchronizedScrollTop = viewport?.scrollTop;
       synchronizeIndexed();
     },
-  };
-}
-
-export type DashboardScrollController = ScrollViewportController<DashboardRowId> & {
-  readonly visibleRows: DashboardVisibleRowsSource;
-};
-
-export function createDashboardScrollController(): DashboardScrollController {
-  const controller = createScrollViewportController<DashboardRowId>();
-  return {
-    ...controller,
-    visibleRows: { visibleRowIds: controller.visibility.visibleItemIds },
   };
 }
 

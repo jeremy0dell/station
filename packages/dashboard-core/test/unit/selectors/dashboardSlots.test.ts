@@ -6,6 +6,7 @@ import {
 import { dashboardRowIds, selectDashboardTree } from "../../../src/selectors/dashboardTree.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
 import {
+  createCommandSnapshot,
   createDashboardSnapshot,
   createGroupedDashboardSnapshot,
 } from "../../fixtures/snapshots.js";
@@ -128,6 +129,18 @@ describe("dashboard semantic slots", () => {
     expect(slots.sessionOverflow).toEqual({ above: 2, below: 3, visible: 2, total: 7 });
   });
 
+  it("retains structural overflow after the final visible session", () => {
+    const snapshot = createCommandSnapshot();
+    const state = createInitialTuiState({ initialSnapshot: snapshot });
+    const slots = selectDashboardSlots(snapshot, state, state.screen, [
+      dashboardRowIds.project("web"),
+      dashboardRowIds.session("ses_wt_web_idle"),
+    ]);
+
+    expect(slots.sessionOverflow.below).toBe(0);
+    expect(slots.semanticOverflow).toEqual({ above: false, below: true });
+  });
+
   it("uses the full semantic projection until a renderer reports visibility", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({ initialSnapshot: snapshot });
@@ -135,6 +148,7 @@ describe("dashboard semantic slots", () => {
 
     expect(slots.rowChoices).toHaveLength(7);
     expect(slots.sessionOverflow).toEqual({ above: 0, below: 0, visible: 7, total: 7 });
+    expect(slots.semanticOverflow).toEqual({ above: false, below: false });
   });
 
   it("keeps a measured empty viewport distinct from unmeasured visibility", () => {
@@ -145,6 +159,7 @@ describe("dashboard semantic slots", () => {
     expect(slots.rowChoices).toEqual([]);
     expect(slots.displayRowChoices).toEqual([]);
     expect(slots.sessionOverflow).toEqual({ above: 0, below: 7, visible: 0, total: 7 });
+    expect(slots.semanticOverflow).toEqual({ above: false, below: false });
   });
 
   it("passes through applied filter projection without fabricating layout nodes", () => {

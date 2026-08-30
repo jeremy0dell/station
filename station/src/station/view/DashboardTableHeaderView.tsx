@@ -12,7 +12,7 @@ export function DashboardTableHeaderView({ model }: { model: DashboardTableHeade
     case "columns":
       return <ColumnHeaderRow layout={model.layout} />;
     case "aboveOverflow":
-      return <DashboardScrollIndicatorView direction="above" overflow={model.overflow} />;
+      return <DashboardScrollIndicatorView direction="above" overflow={model.overflow} visible />;
     default:
       return assertNeverDashboardTableHeaderModel(model);
   }
@@ -25,26 +25,28 @@ function assertNeverDashboardTableHeaderModel(_model: never): never {
 export function DashboardScrollIndicatorView({
   direction,
   overflow,
+  visible,
 }: {
   direction: "above" | "below";
   overflow: DashboardSessionOverflow;
+  visible: boolean;
 }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
-  const hiddenSessions = direction === "above" ? overflow.above : overflow.below;
-  if (hiddenSessions === 0) return null;
   return (
-    <text
-      height={1}
-      flexShrink={0}
-      fg={toOpenTuiColor(theme.text.muted)}
-      {...stationMouseProps(dispatch, {
-        kind: "scrollIndicator",
-        direction: direction === "above" ? "up" : "down",
-      })}
-    >
-      {scrollIndicatorLabel(direction, overflow)}
-    </text>
+    <box height={1} flexShrink={0}>
+      {visible ? (
+        <text
+          fg={toOpenTuiColor(theme.text.muted)}
+          {...stationMouseProps(dispatch, {
+            kind: "scrollIndicator",
+            direction: direction === "above" ? "up" : "down",
+          })}
+        >
+          {scrollIndicatorLabel(direction, overflow)}
+        </text>
+      ) : null}
+    </box>
   );
 }
 

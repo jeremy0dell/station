@@ -21,7 +21,7 @@ import {
 } from "../mouse.js";
 import { C0 } from "../../terminal/protocol/syntax.js";
 import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
-import type { DashboardScrollController } from "../../station/view/layout/scrollViewport.js";
+import type { DashboardScrollController } from "../../station/view/layout/dashboardScrollController.js";
 
 type StationDashboardInput = {
   state: DashboardStateSource;

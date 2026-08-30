@@ -13,7 +13,7 @@ import type { StationStore } from "../state/store.js";
 import type { StationClient } from "../sources/types.js";
 import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import type { ManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
-import type { DashboardScrollController } from "../station/view/layout/scrollViewport.js";
+import type { DashboardScrollController } from "../station/view/layout/dashboardScrollController.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import type {
   StationTerminalProcess,
