@@ -161,6 +161,10 @@ export function DashboardView({
           flexShrink={0}
           position="relative"
           {...(conditionPanelActive ? { zIndex: 10 } : {})}
+          // The elevated header must own click-away because it sits above the screen backdrop.
+          {...(conditionPanelActive
+            ? stationMouseProps(dispatch, { kind: "screenBackdrop" })
+            : {})}
         >
           {tableHeader === undefined ? null : <DashboardTableHeaderView model={tableHeader} />}
           {conditionPanelActive ? (
