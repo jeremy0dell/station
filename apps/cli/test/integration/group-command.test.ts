@@ -10,7 +10,8 @@ import { SessionGroupCreateCommandResultSchema, StationSnapshotSchema } from "@s
 import type { TerminalCommandRecord } from "@station/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
-import { renderGroupCommandText, runGroupCommand } from "../../src/commands/group.js";
+import { runGroupCommand } from "../../src/commands/group/command.js";
+import { renderGroupCommandText } from "../../src/commands/group/text.js";
 import type { ObserverProcessDeps } from "../../src/commands/observerProcess.js";
 
 const now = "2026-08-30T12:00:00.000Z";

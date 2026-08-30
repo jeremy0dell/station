@@ -13859,7 +13859,7 @@
       ]
     },
     {
-      "path": "apps/cli/src/commands/group.ts",
+      "path": "apps/cli/src/commands/group/command.ts",
       "declaration": "runGroupCommand",
       "kind": "function",
       "role": "ADAPTER",

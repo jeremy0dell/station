@@ -1,12 +1,25 @@
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
-import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
+import type {
+  CliCommandNode,
+  CliCommandOption,
+  CliCommandRunContext,
+} from "../cliCommand/types.js";
 import { commandExecutionCorrelation } from "../command.js";
-import {
-  type GroupCommandOptions,
-  type GroupCommandResult,
-  renderGroupCommandText,
-  runGroupCommand,
-} from "../group.js";
+import { parseGroupArgs } from "../group/args.js";
+import { runGroupCommand } from "../group/command.js";
+import type { GroupCommandOptions } from "../group/options.js";
+import { groupCommandExitCode } from "../group/result.js";
+import { renderGroupCommandText } from "../group/text.js";
+
+const jsonOption = {
+  name: "--json",
+  description: "Print the structured command and convergence result.",
+} satisfies CliCommandOption;
+const timeoutOption = {
+  name: "--timeout-ms <ms>",
+  description: "Override snapshot, command, completion, and refresh timeout.",
+} satisfies CliCommandOption;
+const mutationOptions = [timeoutOption, jsonOption] as const;
 
 export const groupCliCommand: CliCommandNode = {
   name: "group",
@@ -67,11 +80,7 @@ export const groupCliCommand: CliCommandNode = {
           name: "--session <sessionId>",
           description: "Add one currently ungrouped same-project session.",
         },
-        {
-          name: "--timeout-ms <ms>",
-          description: "Override snapshot, command, completion, and refresh timeout.",
-        },
-        { name: "--json", description: "Print the structured command and convergence result." },
+        ...mutationOptions,
       ],
       examples: ['stn group create "$PROJECT_ID" "Review" --json'],
       notes: [
@@ -83,13 +92,7 @@ export const groupCliCommand: CliCommandNode = {
       name: "rename",
       description: "Rename one exact Group using its current version.",
       usage: ["stn group rename <groupId> <name> [--timeout-ms <ms>] [--json]"],
-      options: [
-        {
-          name: "--timeout-ms <ms>",
-          description: "Override snapshot, command, completion, and refresh timeout.",
-        },
-        { name: "--json", description: "Print the structured command and convergence result." },
-      ],
+      options: mutationOptions,
       examples: ['stn group rename "$GROUP_ID" "Ready for review" --json'],
     },
     {
@@ -108,26 +111,14 @@ export const groupCliCommand: CliCommandNode = {
           name: "add",
           description: "Add or atomically move one or more direct session members.",
           usage: ["stn group members add <groupId> <sessionId>... [--timeout-ms <ms>] [--json]"],
-          options: [
-            {
-              name: "--timeout-ms <ms>",
-              description: "Override snapshot, command, completion, and refresh timeout.",
-            },
-            { name: "--json", description: "Print the structured command and convergence result." },
-          ],
+          options: mutationOptions,
           examples: ['stn group members add "$GROUP_ID" "$SESSION_ID" --json'],
         },
         {
           name: "remove",
           description: "Remove one or more direct session members without stopping them.",
           usage: ["stn group members remove <groupId> <sessionId>... [--timeout-ms <ms>] [--json]"],
-          options: [
-            {
-              name: "--timeout-ms <ms>",
-              description: "Override snapshot, command, completion, and refresh timeout.",
-            },
-            { name: "--json", description: "Print the structured command and convergence result." },
-          ],
+          options: mutationOptions,
           examples: ['stn group members remove "$GROUP_ID" "$SESSION_ID" --json'],
         },
       ],
@@ -144,11 +135,7 @@ export const groupCliCommand: CliCommandNode = {
           name: "--root",
           description: "Remove the current parent and place the Group at project root.",
         },
-        {
-          name: "--timeout-ms <ms>",
-          description: "Override snapshot, command, completion, and refresh timeout.",
-        },
-        { name: "--json", description: "Print the structured command and convergence result." },
+        ...mutationOptions,
       ],
       examples: ['stn group reparent "$GROUP_ID" --root --json'],
       notes: [
@@ -160,13 +147,7 @@ export const groupCliCommand: CliCommandNode = {
       description:
         "Delete one Group definition while preserving sessions and descendants' organization.",
       usage: ["stn group delete <groupId> [--timeout-ms <ms>] [--json]"],
-      options: [
-        {
-          name: "--timeout-ms <ms>",
-          description: "Override snapshot, command, completion, and refresh timeout.",
-        },
-        { name: "--json", description: "Print the structured command and convergence result." },
-      ],
+      options: mutationOptions,
       examples: ['stn group delete "$GROUP_ID" --json'],
       notes: [
         "Deletion only dispatches sessionGroup.delete. Direct members become ungrouped and direct children move to the deleted Group's parent or project root; sessions, terminals, worktrees, agents, Hosts, and providers remain untouched.",
@@ -176,19 +157,14 @@ export const groupCliCommand: CliCommandNode = {
 };
 
 async function runGroupCliCommand(context: CliCommandRunContext) {
+  const parsed = parseGroupArgs(context.args);
   const options: GroupCommandOptions = loadedCommandOptions(context);
-  const result = await runGroupCommand(context.args, options, context.options.observerDeps);
-  const json = context.args.includes("--json");
+  const result = await runGroupCommand(parsed, options, context.options.observerDeps);
+  const correlation = "outcome" in result ? commandExecutionCorrelation(result.outcome) : undefined;
   const base = {
     code: groupCommandExitCode(result),
-    output: json ? result : renderGroupCommandText(result),
-    outputFormat: json ? ("json" as const) : ("text" as const),
+    output: parsed.outputFormat === "json" ? result : renderGroupCommandText(result),
+    ...(parsed.outputFormat === "text" ? { outputFormat: "text" as const } : {}),
   };
-  if (!("outcome" in result)) return base;
-  return { ...base, correlation: commandExecutionCorrelation(result.outcome) };
-}
-
-function groupCommandExitCode(result: GroupCommandResult): number {
-  if (!("outcome" in result)) return 0;
-  return result.outcome.status === "rejected" || result.outcome.status === "failed" ? 1 : 0;
+  return correlation === undefined ? base : { ...base, correlation };
 }
