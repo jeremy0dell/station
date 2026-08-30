@@ -2,16 +2,11 @@ import { TextAttributes } from "@opentui/core";
 import {
   dashboardRowIds,
   dashboardTableHeaderModel,
-  emptyProjectLabel,
   fleetCountsLabel,
   FIRST_RUN_BODY_LABEL,
   selectFleetSummary,
-  withRowGridSelectionSlot,
-  type DashboardRowId,
   type DashboardSlots,
-  type DashboardTreeBranch,
   type DashboardTreeProjection,
-  type DashboardTreeRow,
   type FleetSummary,
   type RowGridLayout,
 } from "@station/dashboard-core/selectors";
@@ -22,10 +17,6 @@ import type {
   DashboardViewState,
 } from "@station/dashboard-core/state";
 import { DashboardTableHeaderView } from "./DashboardTableHeaderView.js";
-import { GroupFrameView, groupFrameContentColumns } from "./GroupFrameView.js";
-import { GroupHeaderView } from "./GroupHeaderView.js";
-import { ProjectHeaderView } from "./ProjectHeaderView.js";
-import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
 import { FLEET_STATUS_ORDER, STATION_STATUS_UI } from "../statusUi.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
@@ -35,7 +26,8 @@ import {
   useStationMouse,
   stationMouseProps,
 } from "./stationMouseContext.js";
-import { memo, useLayoutEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo } from "react";
+import { DashboardTreeView } from "./dashboard/DashboardTreeView.js";
 import { DashboardScrollViewport } from "./layout/scroll/DashboardScrollViewport.js";
 import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import type { DashboardScrollController } from "./layout/scroll/dashboardScrollController.js";
@@ -175,7 +167,7 @@ export function DashboardView({
         </box>
       ) : (
         <DashboardScrollViewport controller={layout} itemIds={itemIds}>
-          <DashboardBody
+          <DashboardTreeView
             columns={contentColumns}
             roots={tree.roots}
             layoutByItem={layoutByItem}
@@ -207,7 +199,6 @@ export function DashboardView({
     </box>
   );
 }
-
 // Pinned fleet triage bar: glyph + colour reinforce each status lane. ready/
 // working/needs-you/idle always show; unknown/exited appear only when non-zero
 // (M2's lane order — before idle). The right side carries the fleet totals.
@@ -264,269 +255,6 @@ function FleetBar({
   );
 }
 
-function DashboardBody({
-  columns,
-  roots,
-  layoutByItem,
-  keyByRow,
-}: {
-  columns: number;
-  roots: readonly DashboardTreeBranch[];
-  layoutByItem: ReadonlyMap<string, RowGridLayout>;
-  keyByRow: ReadonlyMap<string, string>;
-}) {
-  return (
-    <box flexDirection="column" width="100%" gap={1}>
-      {roots.map((branch) => (
-        <DashboardBranchView
-          key={branch.row.id}
-          columns={columns}
-          branch={branch}
-          layoutByItem={layoutByItem}
-          keyByRow={keyByRow}
-        />
-      ))}
-    </box>
-  );
-}
-
-function DashboardBranchView({
-  columns,
-  branch,
-  layoutByItem,
-  keyByRow,
-}: {
-  columns: number;
-  branch: DashboardTreeBranch;
-  layoutByItem: ReadonlyMap<string, RowGridLayout>;
-  keyByRow: ReadonlyMap<string, string>;
-}) {
-  const row = branch.row;
-  if (row.payload.type === "projectHeader") {
-    return (
-      <ProjectBranchView
-        columns={columns}
-        branch={branch}
-        layoutByItem={layoutByItem}
-        keyByRow={keyByRow}
-      />
-    );
-  }
-  if (row.payload.type === "groupHeader") {
-    return (
-      <GroupBranchView
-        columns={columns}
-        branch={branch}
-        layoutByItem={layoutByItem}
-        keyByRow={keyByRow}
-      />
-    );
-  }
-  return (
-    <DashboardLeaf
-      row={row}
-      layout={layoutByItem.get(row.id)}
-      keyByRow={keyByRow}
-    />
-  );
-}
-
-function ProjectBranchView({
-  columns,
-  branch,
-  layoutByItem,
-  keyByRow,
-}: {
-  columns: number;
-  branch: DashboardTreeBranch;
-  layoutByItem: ReadonlyMap<string, RowGridLayout>;
-  keyByRow: ReadonlyMap<string, string>;
-}) {
-  const row = branch.row;
-  if (row.payload.type !== "projectHeader") return null;
-  return (
-    <box id={`station-dashboard-project:${row.id}`} flexDirection="column" width="100%">
-      <ProjectHeaderView
-        renderableId={semanticItemRenderableId(row.id)}
-        columns={columns}
-        rowId={row.id}
-        project={row.payload.project}
-        collapsed={row.payload.collapsed}
-        groupCount={row.payload.groupCount}
-        persistentFilterMatch={row.payload.persistentFilterMatch}
-        focusedCellId={row.focusedCellId}
-      />
-      {branch.children.map((child) => (
-        <DashboardBranchView
-          key={child.row.id}
-          columns={columns}
-          branch={child}
-          layoutByItem={layoutByItem}
-          keyByRow={keyByRow}
-        />
-      ))}
-    </box>
-  );
-}
-
-function GroupBranchView({
-  columns,
-  branch,
-  layoutByItem,
-  keyByRow,
-}: {
-  columns: number;
-  branch: DashboardTreeBranch;
-  layoutByItem: ReadonlyMap<string, RowGridLayout>;
-  keyByRow: ReadonlyMap<string, string>;
-}) {
-  const row = branch.row;
-  if (row.payload.type !== "groupHeader") return null;
-  const renderableId = `station-dashboard-group:${row.id}`;
-  const header = (
-    <GroupHeaderView
-      renderableId={semanticItemRenderableId(row.id)}
-      columns={row.payload.collapsed ? columns : groupFrameContentColumns(columns)}
-      rowId={row.id}
-      payload={row.payload}
-      cells={row.cells}
-      focusedCellId={row.focusedCellId}
-    />
-  );
-  if (row.payload.collapsed) {
-    return (
-      <box id={renderableId} flexDirection="column" width="100%">
-        {header}
-      </box>
-    );
-  }
-  return (
-    <GroupFrameView
-      renderableId={renderableId}
-      focus={{
-        focusedHeader: row.focusedCellId !== undefined,
-        containsFocusedRow: row.containsFocusedRow === true,
-      }}
-    >
-      {header}
-      {branch.children.map((child) => (
-        <DashboardBranchView
-          key={child.row.id}
-          columns={columns}
-          branch={child}
-          layoutByItem={layoutByItem}
-          keyByRow={keyByRow}
-        />
-      ))}
-    </GroupFrameView>
-  );
-}
-
-function DashboardLeaf({
-  row,
-  layout,
-  keyByRow,
-}: {
-  row: DashboardTreeRow;
-  layout: RowGridLayout | undefined;
-  keyByRow: ReadonlyMap<string, string>;
-}) {
-  const theme = useStationTheme();
-  switch (row.payload.type) {
-    case "emptyProject":
-      return (
-        <box id={semanticItemRenderableId(row.id)} flexDirection="row">
-          <text fg={toOpenTuiColor(theme.text.muted)}>{emptyProjectLabel()}</text>
-          <EmptySessionButton
-            rowId={row.id}
-            focused={row.focusedCellId === "addSession"}
-          />
-        </box>
-      );
-    case "session":
-      return layout === undefined ? null : (
-        <SessionRowLine
-          rowId={row.id}
-          layout={layout}
-          slot={keyByRow.get(row.payload.row.id)}
-          focused={row.focusedCellId === "identity"}
-        />
-      );
-    case "createLocalRow": {
-      // Local create rows have no slot and no activation target.
-      if (layout === undefined) return null;
-      return (
-        <box
-          id={semanticItemRenderableId(row.id)}
-          flexDirection="column"
-          width="100%"
-        >
-          <text fg={toOpenTuiColor(theme.text.primary)}>
-            <Segments segments={layout.segments} />
-          </text>
-          {row.payload.row.status === "failed" ? (
-            <text fg={toOpenTuiColor(theme.status.danger)}>{row.payload.row.error.message}</text>
-          ) : null}
-        </box>
-      );
-    }
-    case "projectHeader":
-    case "groupHeader":
-      return null;
-  }
-}
-
-const SessionRowLine = memo(function SessionRowLine({
-  rowId,
-  layout,
-  slot,
-  focused,
-}: {
-  rowId: DashboardRowId;
-  layout: RowGridLayout;
-  slot: string | undefined;
-  focused?: boolean;
-}) {
-  const theme = useStationTheme();
-  const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
-  const visibleLayout = useMemo(
-    () => withRowGridSelectionSlot(layout, slot),
-    [layout, slot],
-  );
-  // Persistent cursor fill sits under the transient hover fill.
-  const background = hover
-    ? { backgroundColor: toOpenTuiColor(theme.interaction.hover) }
-    : focused === true
-      ? { backgroundColor: toOpenTuiColor(theme.interaction.keyboardFocus) }
-      : {};
-  // Compact row-grid presentation is an intentional single-cell-high leaf layout.
-  return (
-    <box
-      id={semanticItemRenderableId(rowId)}
-      flexDirection="row"
-      height={1}
-      width="100%"
-      {...background}
-    >
-      <box
-        flexGrow={1}
-        onMouseOver={() => setHover(true)}
-        onMouseOut={() => setHover(false)}
-      >
-        <text
-          width="100%"
-          fg={toOpenTuiColor(theme.text.primary)}
-          {...stationMouseProps(dispatch, { kind: "dashboardCell", rowId, cellId: "identity" })}
-        >
-          <Segments segments={visibleLayout.segments} />
-        </text>
-        <SegmentLinkTargets segments={visibleLayout.segments} />
-      </box>
-    </box>
-  );
-});
-
 function FirstProjectButton({ columns }: { columns: number }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
@@ -543,32 +271,6 @@ function FirstProjectButton({ columns }: { columns: number }) {
       onMouseOut={() => setHover(false)}
     >
       {truncateCells(label, columns)}
-    </text>
-  );
-}
-
-const EMPTY_SESSION_BUTTON_LABEL = "[ + add session ]";
-
-/** Paints and activates only the empty project's bounded Add Session cells. */
-function EmptySessionButton({ rowId, focused }: { rowId: DashboardRowId; focused: boolean }) {
-  const theme = useStationTheme();
-  const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
-  const background = hover
-    ? { bg: toOpenTuiColor(theme.action.primary) }
-    : focused
-      ? { bg: toOpenTuiColor(theme.interaction.compactFocus) }
-      : {};
-  return (
-    <text
-      flexShrink={0}
-      fg={toOpenTuiColor(hover ? theme.text.inverse : theme.action.primary)}
-      {...background}
-      {...stationMouseProps(dispatch, { kind: "dashboardCell", rowId, cellId: "addSession" })}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-    >
-      {EMPTY_SESSION_BUTTON_LABEL}
     </text>
   );
 }

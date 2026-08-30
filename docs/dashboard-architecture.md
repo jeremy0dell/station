@@ -198,13 +198,15 @@ still comes exclusively from `snapshot.sessionGroups`. A focused direct visible 
 The selectors entrypoint exposes branded dashboard row IDs, dashboard cell IDs,
 decorated tree rows, their exact `rowById` lookup, and nested `roots`. Renderers do
 not construct or parse row IDs and do not reconstruct ancestry from a flat list.
-`ProjectBranchView` owns its header and descendant branches. `GroupBranchView`
-owns one `GroupFrameView` containing the Group header and every direct child, so
-the border is part of that structure rather than painted line records or per-child
-rails. Root and framed compact session leaves resolve against their actual
-container widths. Quiet frames use the hairline role, a focused Group header uses
-the working role, and member focus dims that working frame while the member keeps
-ordinary keyboard-focus or hover treatment.
+`DashboardTreeView` owns recursive Project and Group traversal; its private
+`ProjectBranchView` owns its header and descendants, while `GroupBranchView` owns
+one `GroupFrameView` containing the Group header and every direct child.
+`DashboardLeafView` owns session, local-create, and empty-Project leaves. The Group
+border is therefore part of the tree rather than painted line records or per-child
+rails, and compact leaves resolve against their actual container widths. Quiet
+frames use the hairline role, a focused Group header uses the working role, and
+member focus dims that working frame while the member keeps ordinary keyboard-focus
+or hover treatment.
 
 Station mounts the complete semantic component tree in one OpenTUI scroll box.
 `station/view/layout/scroll/scrollViewport.ts` is the sole dashboard translation between
