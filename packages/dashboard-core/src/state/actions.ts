@@ -1,7 +1,7 @@
 import type { ProjectId, SessionGroupId, SessionId } from "@station/contracts";
 import type { CreateGroupActionId } from "../components/GroupCreateSheet/content.js";
 import type { AddProjectActionId } from "../flows/addProject/actions.js";
-import type { NewSessionActionId } from "../flows/newSession.js";
+import type { NewSessionActionId } from "../flows/newSession/actions.js";
 import type { DashboardCellId, DashboardRowId } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
 import { activateDashboardCell } from "./dashboardCells.js";

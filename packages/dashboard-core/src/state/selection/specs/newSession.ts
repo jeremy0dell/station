@@ -4,9 +4,9 @@ import {
   chooseNewSessionGroupById,
   chooseNewSessionProjectById,
   chooseNewSessionUngrouped,
-  createNewSessionNameToken,
   transitionNewSessionFlow,
-} from "../../../flows/newSession.js";
+} from "../../../flows/newSession/flow.js";
+import { createNewSessionNameToken } from "../../../flows/newSession/names.js";
 import {
   selectNewSessionGroupChoices,
   selectNewSessionProject,

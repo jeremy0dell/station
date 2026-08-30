@@ -1,9 +1,6 @@
 import type { ProviderId, SafeError, SessionGroupId } from "@station/contracts";
-import {
-  createNewSessionNameToken,
-  generatedSessionBranch,
-  resolveNewSessionProjectAvailability,
-} from "../../flows/newSession.js";
+import { createNewSessionNameToken, generatedSessionBranch } from "../../flows/newSession/names.js";
+import { resolveNewSessionProjectAvailability } from "../../flows/newSession/validation.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import type { CreateQuickSessionInGroupOperation } from "../operations/types.js";
 import { addTuiToast } from "../toasts.js";

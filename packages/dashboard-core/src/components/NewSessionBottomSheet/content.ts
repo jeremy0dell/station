@@ -1,13 +1,15 @@
 import type { ProviderHealth } from "@station/contracts";
 import {
   type NewSessionActionId,
-  type NewSessionEditGroupDraftStateView,
-  type NewSessionEditNameFocus,
-  type NewSessionEditNameStateView,
-  type NewSessionReviewFocus,
-  type NewSessionReviewStateView,
   newSessionActionEnabled,
-} from "../../flows/newSession.js";
+} from "../../flows/newSession/actions.js";
+import type {
+  NewSessionEditGroupDraftStateView,
+  NewSessionEditNameFocus,
+  NewSessionEditNameStateView,
+  NewSessionReviewFocus,
+  NewSessionReviewStateView,
+} from "../../flows/newSession/model.js";
 import {
   selectNewSessionHarnessOptions,
   selectNewSessionProject,

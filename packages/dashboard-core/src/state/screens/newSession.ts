@@ -1,7 +1,5 @@
 import type { ProjectId, SafeError, SessionGroupId } from "@station/contracts";
 import {
-  createNewSessionFlow,
-  createNewSessionNameToken,
   type NewSessionActionId,
   type NewSessionFlowAction,
   type NewSessionInputIntent,
@@ -9,9 +7,10 @@ import {
   newSessionActionForInput,
   newSessionIntentForAction,
   newSessionIntentForInput,
-  transitionNewSessionFlow,
-  validateNewSessionCreate,
-} from "../../flows/newSession.js";
+} from "../../flows/newSession/actions.js";
+import { createNewSessionFlow, transitionNewSessionFlow } from "../../flows/newSession/flow.js";
+import { createNewSessionNameToken } from "../../flows/newSession/names.js";
+import { validateNewSessionCreate } from "../../flows/newSession/validation.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import type { TuiKey } from "../keys.js";
 import { seedNewSessionPickerCursor } from "../selection/specs/newSession.js";

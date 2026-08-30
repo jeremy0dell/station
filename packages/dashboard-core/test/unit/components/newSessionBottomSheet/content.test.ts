@@ -7,7 +7,7 @@ import {
 import {
   createNewSessionFlow,
   transitionNewSessionFlow,
-} from "../../../../src/flows/newSession.js";
+} from "../../../../src/flows/newSession/flow.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 function reviewState(status: "healthy" | "degraded" | "unavailable" = "healthy") {
