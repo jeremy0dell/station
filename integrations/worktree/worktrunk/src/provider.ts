@@ -39,7 +39,10 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import { missingWorktrunkAutomationFlagSupport, worktrunkAutomationMode } from "./automation.js";
-import { worktrunkCommandFailure } from "./commandFailure.js";
+import {
+  isWorktrunkConcurrentCreateRegistryFailure,
+  worktrunkCommandFailure,
+} from "./commandFailure.js";
 import {
   type CheckWorktrunkDependencyOptions,
   checkWorktrunkDependency,
@@ -55,6 +58,10 @@ import {
   type WorktrunkHookExpectation,
   type WorktrunkProviderOptions,
 } from "./types.js";
+import {
+  createWorktreeRegistryMutationCoordinator,
+  type WorktreeRegistryMutationCoordinator,
+} from "./worktreeRegistryMutationCoordinator.js";
 
 type WorktrunkRunPolicy = {
   retries?: number;
@@ -83,7 +90,10 @@ type StaleRegistrationInspection =
  * Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition
  * expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk
  * project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated
- * before Worktrunk runs, and removal freshly revalidates native Git identity, path, and branch before mutation.
+ * before Worktrunk runs. Concurrent creates share only an in-flight managed-path identity probe and retain
+ * their common-case mutation overlap. Reads and removals drain active creates; the exact nested Git
+ * sibling-registration race does the same before Worktrunk resumes its half-created branch. Removal freshly
+ * revalidates native Git identity, path, and branch before mutation.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -98,6 +108,8 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #resolveRegistrationIdentity: (worktreePath: string) => Promise<string | undefined>;
   readonly #platform: NodeJS.Platform;
   readonly #managedPathProjectIdentifiers = new Map<string, string | null>();
+  readonly #managedPathProjectIdentifierProbes = new Map<string, Promise<void>>();
+  readonly #registryMutations: WorktreeRegistryMutationCoordinator;
 
   constructor(options: WorktrunkProviderOptions = {}) {
     this.#command = options.command ?? process.env.STATION_WORKTRUNK_BIN ?? "wt";
@@ -110,6 +122,7 @@ export class WorktrunkProvider implements WorktreeProvider {
     this.#resolveRegistrationIdentity =
       options.resolveRegistrationIdentity ?? nativeGitRegistrationIdentity;
     this.#platform = options.platform ?? process.platform;
+    this.#registryMutations = createWorktreeRegistryMutationCoordinator();
   }
 
   capabilities(): WorktreeCapabilities {
@@ -255,7 +268,9 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {
-    return this.#listWorktrees(project, { retries: 1 });
+    return this.#registryMutations.runExclusive(project.id, () =>
+      this.#listWorktrees(project, { retries: 1 }),
+    );
   }
 
   async #listWorktrees(
@@ -314,25 +329,51 @@ export class WorktrunkProvider implements WorktreeProvider {
     const base = request.base ?? request.project.worktrunk.base;
     const pathEnv = worktreePathEnv(request.project, request.branch, request.path);
     const managedPathArgs = await this.#managedWorktreePathArgs(request.project, pathEnv);
-    const output = await this.#run(
-      this.#args([
-        ...managedPathArgs,
-        "switch",
-        ...this.#automationHookArgs(),
-        "--create",
-        request.branch,
-        ...(base === undefined ? [] : ["--base", base]),
-        "--no-cd",
-        "--format=json",
-      ]),
-      request.project.root,
-      {
-        code: "WORKTRUNK_COMMAND_FAILED",
-        message: "Worktrunk failed to create a worktree.",
-        ...(base === undefined ? {} : { unresolvedBase: base }),
-      },
-      {},
-      pathEnv,
+    const automationArgs = this.#automationHookArgs();
+    const output = await this.#registryMutations.runCreate(
+      request.project.id,
+      () =>
+        this.#run(
+          this.#args([
+            ...managedPathArgs,
+            "switch",
+            ...automationArgs,
+            "--create",
+            request.branch,
+            ...(base === undefined ? [] : ["--base", base]),
+            "--no-cd",
+            "--format=json",
+          ]),
+          request.project.root,
+          {
+            code: "WORKTRUNK_COMMAND_FAILED",
+            message: "Worktrunk failed to create a worktree.",
+            ...(base === undefined ? {} : { unresolvedBase: base }),
+          },
+          {},
+          pathEnv,
+        ),
+      (error) =>
+        error instanceof WorktrunkProviderError &&
+        isWorktrunkConcurrentCreateRegistryFailure(error),
+      () =>
+        this.#run(
+          this.#args([
+            ...managedPathArgs,
+            "switch",
+            ...automationArgs,
+            request.branch,
+            "--no-cd",
+            "--format=json",
+          ]),
+          request.project.root,
+          {
+            code: "WORKTRUNK_COMMAND_FAILED",
+            message: "Worktrunk failed to finish a worktree after a concurrent Git registry race.",
+          },
+          {},
+          pathEnv,
+        ),
     );
 
     const commandObservations = parseCommandObservation(output.stdout, {
@@ -454,6 +495,12 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {
+    return this.#registryMutations.runExclusive(request.project.id, () =>
+      this.#removeWorktree(request),
+    );
+  }
+
+  async #removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {
     const project = request.project;
     await this.#assertProjectRootUsable(project);
     if (!isSafeWorktrunkObservationPath(request.expectedPath)) {
@@ -564,7 +611,7 @@ export class WorktrunkProvider implements WorktreeProvider {
       return [];
     }
     if (!this.#managedPathProjectIdentifiers.has(project.id)) {
-      await this.#readWorktrees(project, { retries: 0 });
+      await this.#ensureManagedPathProjectIdentifier(project);
     }
     const identifier = this.#managedPathProjectIdentifiers.get(project.id);
     if (identifier === undefined || identifier === null) {
@@ -572,6 +619,23 @@ export class WorktrunkProvider implements WorktreeProvider {
     }
     // Worktrunk applies a user [projects.<id>] path after the environment, so use its higher-precedence command config too.
     return ["--config-set", worktrunkProjectPathOverride(identifier, worktreePath)];
+  }
+
+  async #ensureManagedPathProjectIdentifier(project: ProviderProjectConfig): Promise<void> {
+    const current = this.#managedPathProjectIdentifierProbes.get(project.id);
+    if (current !== undefined) {
+      await current;
+      return;
+    }
+    const probe = this.#readWorktrees(project, { retries: 0 }).then(() => undefined);
+    this.#managedPathProjectIdentifierProbes.set(project.id, probe);
+    try {
+      await probe;
+    } finally {
+      if (this.#managedPathProjectIdentifierProbes.get(project.id) === probe) {
+        this.#managedPathProjectIdentifierProbes.delete(project.id);
+      }
+    }
   }
 
   #automationHookArgs(): string[] {

@@ -4,7 +4,10 @@ import {
   safeErrorFromUnknown,
 } from "@station/runtime";
 import { describe, expect, it } from "vitest";
-import { worktrunkCommandFailure } from "../../src/commandFailure.js";
+import {
+  isWorktrunkConcurrentCreateRegistryFailure,
+  worktrunkCommandFailure,
+} from "../../src/commandFailure.js";
 
 const fallback = {
   code: "WORKTRUNK_COMMAND_FAILED" as const,
@@ -144,5 +147,59 @@ describe("Worktrunk command failure mapping", () => {
       code: "WORKTRUNK_CANCELLED",
       message: "Worktrunk command was cancelled.",
     });
+  });
+
+  it("recognizes only the nested Git sibling-registration create race", () => {
+    const race = mapFailure(
+      safeErrorFromUnknown(
+        externalCommandErrorFromUnknown(
+          {
+            code: 128,
+            stderr: [
+              "Failed to create worktree for feature from base main",
+              "fatal: failed to read .git/worktrees/sibling/commondir: No such file or directory",
+              "Failed command, exit code 128:",
+              "git worktree add -b feature -- /tmp/project/feature main",
+            ].join("\n"),
+          },
+          {
+            command: "wt",
+            args: ["switch", "--create", "feature"],
+            cwd: "/tmp/project",
+          },
+        ),
+        {
+          tag: "WorktreeProviderError",
+          code: fallback.code,
+          message: fallback.message,
+          provider: "worktrunk",
+        },
+      ),
+    );
+    const unrelated = mapFailure(
+      safeErrorFromUnknown(
+        externalCommandErrorFromUnknown(
+          {
+            code: 128,
+            stderr:
+              "fatal: failed to read .git/worktrees/sibling/commondir: No such file or directory",
+          },
+          {
+            command: "wt",
+            args: ["switch", "--create", "feature"],
+            cwd: "/tmp/project",
+          },
+        ),
+        {
+          tag: "WorktreeProviderError",
+          code: fallback.code,
+          message: fallback.message,
+          provider: "worktrunk",
+        },
+      ),
+    );
+
+    expect(isWorktrunkConcurrentCreateRegistryFailure(race)).toBe(true);
+    expect(isWorktrunkConcurrentCreateRegistryFailure(unrelated)).toBe(false);
   });
 });

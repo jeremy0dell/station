@@ -368,6 +368,76 @@ describe("WorktrunkProvider", () => {
     });
   });
 
+  it("shares the in-flight managed-path identity probe before concurrent creates", async () => {
+    const managedProject = {
+      ...project,
+      worktrunk: {
+        ...project.worktrunk,
+        managedRoot: "/tmp/home/.worktrees/web",
+        includeMain: false,
+        includeExternal: false,
+      },
+    };
+    const listStarted = Promise.withResolvers<void>();
+    const releaseList = Promise.withResolvers<void>();
+    const createsSaturated = Promise.withResolvers<void>();
+    const releaseCreates = Promise.withResolvers<void>();
+    let listCalls = 0;
+    let activeCreates = 0;
+    let maxActiveCreates = 0;
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.command === "git") return result(input, "false\n");
+        if (input.args?.includes("list")) {
+          listCalls += 1;
+          listStarted.resolve();
+          await releaseList.promise;
+          return result(
+            input,
+            JSON.stringify([
+              {
+                path: "/tmp/station/web",
+                branch: "main",
+                is_main: true,
+                repo: { host: "github.com", owner: "acme", name: "web" },
+              },
+            ]),
+          );
+        }
+        activeCreates += 1;
+        maxActiveCreates = Math.max(maxActiveCreates, activeCreates);
+        if (activeCreates === 2) createsSaturated.resolve();
+        await releaseCreates.promise;
+        activeCreates -= 1;
+        const branchIndex = input.args?.indexOf("--create") ?? -1;
+        const branch = input.args?.[branchIndex + 1];
+        return result(
+          input,
+          JSON.stringify([{ path: input.env?.WORKTRUNK_WORKTREE_PATH, branch }]),
+        );
+      },
+    });
+
+    const first = provider.createWorktree({ project: managedProject, branch: "first" });
+    const second = provider.createWorktree({ project: managedProject, branch: "second" });
+    await listStarted.promise;
+    await Promise.resolve();
+    expect(listCalls).toBe(1);
+    releaseList.resolve();
+    await createsSaturated.promise;
+    releaseCreates.resolve();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expect.objectContaining({ branch: "first" }),
+      expect.objectContaining({ branch: "second" }),
+    ]);
+    expect(listCalls).toBe(1);
+    expect(maxActiveCreates).toBe(2);
+  });
+
   it("overrides path-keyed Worktrunk project templates for repositories without remotes", async () => {
     const calls: ExternalCommandInput[] = [];
     const managedProject = {
@@ -573,6 +643,124 @@ describe("WorktrunkProvider", () => {
         "--format=json",
       ],
     ]);
+  });
+
+  it("drains concurrent creates before resuming a branch left by Git registry initialization", async () => {
+    const calls: string[] = [];
+    const bothStarted = Promise.withResolvers<void>();
+    const releaseOlder = Promise.withResolvers<void>();
+    let activeInitials = 0;
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.command === "git") return result(input, "false\n");
+        const args = input.args ?? [];
+        const branch = args.find((arg) => arg === "raced" || arg === "older");
+        const initial = args.includes("--create");
+        if (initial) {
+          activeInitials += 1;
+          calls.push(`initial:${branch}`);
+          if (activeInitials === 2) bothStarted.resolve();
+          await bothStarted.promise;
+          if (branch === "older") {
+            await releaseOlder.promise;
+            calls.push("settled:older");
+            activeInitials -= 1;
+            return result(
+              input,
+              JSON.stringify([{ path: "/tmp/station/web/older", branch: "older" }]),
+            );
+          }
+          activeInitials -= 1;
+          throw Object.assign(new Error("wt failed"), {
+            code: 128,
+            stderr: [
+              "Failed to create worktree for raced from base main",
+              "fatal: failed to read .git/worktrees/older/commondir: Undefined error: 0",
+              "Failed command, exit code 128:",
+              "git worktree add -b raced -- /tmp/station/web/raced main",
+            ].join("\n"),
+          });
+        }
+        calls.push(`recovery:${branch}`);
+        return result(input, JSON.stringify([{ path: "/tmp/station/web/raced", branch: "raced" }]));
+      },
+    });
+
+    const older = provider.createWorktree({ project, branch: "older" });
+    const raced = provider.createWorktree({ project, branch: "raced" });
+    await bothStarted.promise;
+    await Promise.resolve();
+    expect(calls).toEqual(expect.arrayContaining(["initial:older", "initial:raced"]));
+    expect(calls).not.toContain("recovery:raced");
+    releaseOlder.resolve();
+
+    await expect(Promise.all([older, raced])).resolves.toEqual([
+      expect.objectContaining({ branch: "older", path: "/tmp/station/web/older" }),
+      expect.objectContaining({ branch: "raced", path: "/tmp/station/web/raced" }),
+    ]);
+    expect(calls.indexOf("settled:older")).toBeLessThan(calls.indexOf("recovery:raced"));
+  });
+
+  it("drains active creates before removal revalidation touches the Git registry", async () => {
+    const targetPath = "/tmp/station/web/.worktrees/target";
+    const createPath = "/tmp/station/web/.worktrees/new";
+    const createStarted = Promise.withResolvers<void>();
+    const releaseCreate = Promise.withResolvers<void>();
+    const calls: string[] = [];
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.command === "git") return result(input, "false\n");
+        if (input.args?.includes("list")) {
+          calls.push("list");
+          return result(
+            input,
+            JSON.stringify([
+              { path: targetPath, branch: "target" },
+              { path: createPath, branch: "new" },
+            ]),
+          );
+        }
+        if (input.args?.includes("--create")) {
+          calls.push("create:start");
+          createStarted.resolve();
+          await releaseCreate.promise;
+          calls.push("create:settled");
+          return result(input, JSON.stringify([{ path: createPath, branch: "new" }]));
+        }
+        calls.push("remove");
+        return result(input, "{}");
+      },
+    });
+    const [target] = await provider.listWorktrees(tmpProject);
+    expect(target).toBeDefined();
+    if (target === undefined) throw new Error("Expected a selected removal target.");
+    calls.length = 0;
+
+    const creating = provider.createWorktree({ project: tmpProject, branch: "new" });
+    await createStarted.promise;
+    const removing = provider.removeWorktree({
+      project: tmpProject,
+      worktreeId: target.id,
+      expectedPath: target.path,
+      expectedBranch: target.branch,
+      expectedRegistrationIdentity: target.registrationIdentity ?? "missing-registration",
+      force: true,
+    });
+    await Promise.resolve();
+    expect(calls).toEqual(["create:start"]);
+    releaseCreate.resolve();
+
+    await expect(Promise.all([creating, removing])).resolves.toEqual([
+      expect.objectContaining({ branch: "new" }),
+      { worktreeId: target.id, removed: true },
+    ]);
+    expect(calls).toEqual(["create:start", "create:settled", "list", "remove"]);
   });
 
   it("retains a created worktree when its Git registration cannot be verified", async () => {

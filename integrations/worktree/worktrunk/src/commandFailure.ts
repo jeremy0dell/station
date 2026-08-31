@@ -79,6 +79,25 @@ export function worktrunkCommandFailure(
   });
 }
 
+export function isWorktrunkConcurrentCreateRegistryFailure(error: WorktrunkProviderError): boolean {
+  for (const detail of error.diagnosticDetails ?? []) {
+    if (detail.type !== "external_command" || detail.operation !== "provider.worktrunk.switch") {
+      continue;
+    }
+    const diagnostic = stripVTControlCharacters(
+      [detail.stdoutSnippet, detail.stderrSnippet].filter((part) => part !== undefined).join("\n"),
+    );
+    if (
+      /failed to create worktree/i.test(diagnostic) &&
+      /fatal: failed to read .*\.git\/worktrees\/[^/\r\n]+\/commondir:/i.test(diagnostic) &&
+      /git worktree add\b/i.test(diagnostic)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function enrichedCommandDiagnostic(
   input: WorktrunkCommandFailureInput,
 ): ExternalCommandDiagnosticDetail {
