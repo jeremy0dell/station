@@ -278,6 +278,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
         options,
         harnessIngressQueue,
         metadataRefresh,
+        reconcileScheduler,
         stopProviderHealthPublication,
         clock,
       ),
@@ -609,10 +610,15 @@ async function buildStop(
   options: CreateObserverApiOptions,
   harnessIngressQueue: HarnessIngressQueue,
   metadataRefresh: WorktreeMetadataRefreshService | undefined,
+  reconcileScheduler: ReturnType<typeof createReconcileScheduler>,
   stopProviderHealthPublication: () => Promise<void>,
   clock: RuntimeClock,
 ): Promise<ObserverStopReceipt> {
   await options.onShutdownStarted?.();
+  // Close reconcile admission before the drains below: metadata refresh and drained
+  // ingress reports both call requestReconcile, and a reconcile started during shutdown
+  // can outlive it into the SQLite close.
+  await reconcileScheduler.shutdown();
   const providerHealthStopped = stopProviderHealthPublication();
   await harnessIngressQueue.shutdown();
   await metadataRefresh?.shutdown();

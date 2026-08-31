@@ -441,7 +441,10 @@ defined startup failure path and shutdown owner.
 
 ### Shutdown
 
-The API stop path first aborts and awaits duplicate inspection, then stops
+The API stop path first aborts and awaits duplicate inspection, then closes
+reconcile-scheduler admission and drains its in-flight run — the ingress and
+metadata drains below still request reconciles, and a reconcile started during
+shutdown must not outlive it into the SQLite close — then stops
 provider-health publication, drains harness ingress, marks metadata refresh
 terminal, aborts active local and repository reads, shuts down ref invalidation,
 and waits for the refresh flight before process shutdown. Ref-watcher shutdown
