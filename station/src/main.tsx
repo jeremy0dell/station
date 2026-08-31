@@ -2,10 +2,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
+import type { StationHostConvergenceCommand } from "@station/contracts";
 import { createStationHostClient } from "@station/host";
 import { componentLogPath, createJsonlLogger, toSafeError } from "@station/observability";
 import { stationBuildInfo } from "@station/runtime";
-import { ensureStationHostRunning } from "@station/terminal";
+import { convergeStationHost } from "@station/terminal";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
 import { loadStationTuiConfig } from "./config/tuiConfig.js";
@@ -191,40 +192,21 @@ async function startStationMain(
 
   const createHostClient = (socketPath: string) =>
     createStationHostClient({ socketPath, uiContext });
-  const handoffBusyHost = async (input: {
-    socketPath: string;
-    expectedBuildVersion: string;
-  }) => {
-    const handoffClient = createStationHostClient({
-      socketPath: input.socketPath,
-      expectedBuildVersion: input.expectedBuildVersion,
-      uiContext,
+  const convergeExactHost = async (command: StationHostConvergenceCommand) => {
+    const stationConfig = await stationConfigLoading;
+    return convergeStationHost({
+      command,
+      targetBuild: command.targetBuild,
+      socketPath: command.socketPath,
+      stateDir: stationConfig.stateDir,
+      hostCommand: stationHostSuccessorCommand(env),
     });
-    try {
-      const stationConfig = await stationConfigLoading;
-      const ensured = await ensureStationHostRunning(
-        {
-          socketPath: input.socketPath,
-          stateDir: stationConfig.stateDir,
-          hostCommand: stationHostSuccessorCommand(env),
-          expectedBuildVersion: input.expectedBuildVersion,
-          handoff: { fidelity: "processes" },
-        },
-        { clientFactory: () => handoffClient },
-      );
-      if (ensured.status === "unavailable") {
-        throw ensured.error;
-      }
-      return await ensured.client.list();
-    } finally {
-      handoffClient.dispose();
-    }
   };
   const listHostPtys = (socketPath: string) =>
     listLiveHostPtys(socketPath, {
       env,
       createClient: createHostClient,
-      handoffBusyHost,
+      convergeExactHost,
     });
   const createHostTerminal = (terminalOptions: HostAttachedTerminalOptions) =>
     createHostAttachedTerminal({ ...terminalOptions, uiContext });

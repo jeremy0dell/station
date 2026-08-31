@@ -33,12 +33,15 @@ export const HostCompatibilityIdentitySchema = z
   .strict();
 export type HostCompatibilityIdentity = z.infer<typeof HostCompatibilityIdentitySchema>;
 
-/** Content-free UI and connection identity used only for lifecycle correlation. */
+/** Caller-asserted UI and connection metadata used only for lifecycle correlation. */
 export const HostCorrelationIdentitySchema = UiRunContextSchema.extend({
   connectionId: idSchema,
 }).strict();
 
-/** Compatibility and diagnostic correlation carried on every operational Host request. */
+/**
+ * Caller-asserted compatibility and correlation metadata carried on operational
+ * Host requests. It is not admission or authentication evidence.
+ */
 export const HostClientIdentitySchema = HostCompatibilityIdentitySchema.merge(
   HostCorrelationIdentitySchema,
 ).strict();
@@ -259,9 +262,9 @@ export type HostCompatibility =
 /**
  * POLICY
  *
- * Decide host reuse, idle replace eligibility, or refuse from opaque health
- * without inferring SemVer compatibility. Live handoff is only considered when
- * this returns `replace`; protocol mismatch stays a visible refuse.
+ * Decides generic Host reuse, idle replacement eligibility, or refusal from
+ * opaque health without inferring SemVer compatibility. Immutable identity and
+ * exact convergence are intentionally outside this compatibility policy.
  */
 export function classifyHostCompatibility(
   health: HostHealthResult,

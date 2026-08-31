@@ -3,6 +3,7 @@ import { type SafeError, SafeErrorSchema } from "./errors.js";
 import { ObserverStartupEvidenceSchema } from "./observer.js";
 import { ProviderHookReconciliationResultSchema } from "./providerHooks.js";
 import { compareCodeUnitStrings } from "./shared.js";
+import { StationHostConvergenceFailureSummarySchema } from "./stationHostConvergence.js";
 import {
   UpdateChannelIdSchema,
   UpdateCommandArgvSchema,
@@ -38,6 +39,7 @@ const resultSchema = z
     error: SafeErrorSchema.optional(),
     cause: SafeErrorSchema.optional(),
     startupEvidence: ObserverStartupEvidenceSchema.optional(),
+    hostConvergenceFailure: StationHostConvergenceFailureSummarySchema.optional(),
   })
   .strict();
 
@@ -88,7 +90,10 @@ export const UpdateReportIdentityAliasLabels = {
 } as const;
 type IdentityField = keyof typeof UpdateReportIdentityAliasLabels;
 type IdentityMap = (field: IdentityField, value: string) => string;
-type IdentityPass = { map: IdentityMap; seen: WeakMap<object, Set<IdentityField>> };
+type IdentityPass = {
+  map: IdentityMap;
+  seen: WeakMap<object, Set<IdentityField>>;
+};
 type IdentityRecord = Partial<Record<IdentityField, string | undefined>>;
 type BoundaryPath = { key: PropertyKey; parent: BoundaryPath | undefined };
 type TerminalIdentity = Pick<
@@ -142,6 +147,9 @@ function mapReportIdentities(report: PreviewReport | ResultReport, map: Identity
     for (const error of report.warnings) mapSafeError(error, pass);
     if (report.error !== undefined) mapSafeError(report.error, pass);
     if (report.cause !== undefined) mapSafeError(report.cause, pass);
+    if (report.hostConvergenceFailure !== undefined) {
+      mapSafeError(report.hostConvergenceFailure.error, pass);
+    }
     if (
       report.hookReconciliation?.status === "write-failed" ||
       report.hookReconciliation?.status === "post-write-doctor-failed" ||

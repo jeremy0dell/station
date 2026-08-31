@@ -110,8 +110,7 @@ function updateDeps(
         currentBuildInfo: input.currentBuildInfo,
       };
       if (loaded.configPath !== undefined) preflightOptions.configPath = loaded.configPath;
-      const clientFactory = hostDeps?.clientFactory;
-      if (clientFactory !== undefined) preflightOptions.hostInspectionDeps = { clientFactory };
+      if (hostDeps?.inspectHost !== undefined) preflightOptions.inspectHost = hostDeps.inspectHost;
       const ports = createUpdateRecoveryPreflightPorts(preflightOptions);
       return runUpdateRecoveryPreflight({ ...input, ports });
     };

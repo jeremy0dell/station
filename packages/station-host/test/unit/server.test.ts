@@ -5,6 +5,7 @@ import {
   HostAttachAckSchema,
   type HostAttachmentSource,
   type HostClientIdentity,
+  type HostConnectionOwner,
   type HostControlState,
   type HostFrame,
   type HostHandlers,
@@ -43,12 +44,12 @@ function ptyExpectation(ptyId: string) {
   return { ...ptyIdentity(ref.terminalTargetId), ...ref };
 }
 
-function wire(handlers: Omit<HostHandlers, "hostIdentity">, logger: HostServerLogger = {}) {
+function wire(handlers: Omit<HostHandlers, "hostCompatibility">, logger: HostServerLogger = {}) {
   const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
   void serveHostConnection(
     server,
     {
-      hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      hostCompatibility: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
       ...handlers,
       unary: {
         "host.health": () => ({
@@ -148,7 +149,7 @@ function delay(ms: number): Promise<"timeout"> {
 
 function disposalHandlers(buildVersion: string): HostHandlers {
   return {
-    hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion },
+    hostCompatibility: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion },
     unary: {
       "host.health": () => ({ ok: true, protocolVersion: HOST_PROTOCOL_VERSION, buildVersion }),
       "host.list": () => ({ ptys: [] }),
@@ -157,6 +158,45 @@ function disposalHandlers(buildVersion: string): HostHandlers {
 }
 
 describe("serveHostConnection", () => {
+  it("assigns one opaque owner per physical connection through response and teardown", async () => {
+    const pairA = inMemoryNdjsonConnectionPair();
+    const pairB = inMemoryNdjsonConnectionPair();
+    const handled: HostConnectionOwner[] = [];
+    const after: HostConnectionOwner[] = [];
+    const closed: HostConnectionOwner[] = [];
+    const handlers: HostHandlers = {
+      hostCompatibility: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      unary: {
+        "host.health": (_params, _client, owner) => {
+          handled.push(owner);
+          return { ok: true, protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" };
+        },
+      },
+      afterUnaryResponseSent: (_method, owner) => after.push(owner),
+      onConnectionClosed: (owner) => closed.push(owner),
+    };
+    const servedA = serveHostConnection(pairA.server, handlers);
+    const servedB = serveHostConnection(pairB.server, handlers);
+    const responsesA = pairA.client.messages()[Symbol.asyncIterator]();
+    const responsesB = pairB.client.messages()[Symbol.asyncIterator]();
+
+    pairA.client.send(hostRequest("a1", "host.health"));
+    await responsesA.next();
+    pairA.client.send(hostRequest("a2", "host.health"));
+    await responsesA.next();
+    pairB.client.send(hostRequest("b1", "host.health"));
+    await responsesB.next();
+
+    expect(handled[0]).toBe(handled[1]);
+    expect(handled[0]).not.toBe(handled[2]);
+    expect(after).toEqual(handled);
+    pairA.client.close();
+    pairB.client.close();
+    await Promise.all([servedA, servedB]);
+    expect(closed).toHaveLength(2);
+    expect(closed).toEqual(expect.arrayContaining([handled[0], handled[2]]));
+  });
+
   it("does not report a cross-build health-only client when it disposes", async () => {
     const errors: Array<Parameters<NonNullable<HostServerLogger["onError"]>>[0]> = [];
     const lifecycle: Array<Parameters<NonNullable<HostServerLogger["onLifecycle"]>>[0]> = [];
@@ -224,7 +264,7 @@ describe("serveHostConnection", () => {
   it("rejects operational requests without correlation identity", async () => {
     const { client, server } = inMemoryNdjsonConnectionPair();
     void serveHostConnection(server, {
-      hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      hostCompatibility: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
       unary: { "host.list": () => ({ ptys: [] }) },
     });
 
@@ -240,11 +280,11 @@ describe("serveHostConnection", () => {
     client.close();
   });
 
-  it("allows handoff lifecycle methods without correlation identity", async () => {
+  it("allows cross-build negotiation without operational client metadata", async () => {
     const { client, server } = inMemoryNdjsonConnectionPair();
     const calls: string[] = [];
     void serveHostConnection(server, {
-      hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      hostCompatibility: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
       unary: {
         "host.beginHandoff": () => {
           calls.push("begin");
@@ -291,7 +331,7 @@ describe("serveHostConnection", () => {
       id: "abort",
       ok: true,
     });
-    // adoptRegistry is identity-bound, not a lifecycle exemption.
+    // Registry adoption remains a same-build operation; it is not successor negotiation.
     client.send(hostRequest("adopt", "host.adoptRegistry", { manifest: {} }));
     expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
       id: "adopt",
@@ -306,7 +346,7 @@ describe("serveHostConnection", () => {
     const identity = TEST_CLIENT_IDENTITY;
     const { client, server } = inMemoryNdjsonConnectionPair();
     void serveHostConnection(server, {
-      hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      hostCompatibility: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
       unary: { "host.list": () => ({ ptys: [] }) },
     });
     const responses = client.messages()[Symbol.asyncIterator]();
@@ -347,7 +387,7 @@ describe("serveHostConnection", () => {
     void serveHostConnection(
       server,
       {
-        hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+        hostCompatibility: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
         unary: { "host.list": () => ({ ptys: [] }) },
       },
       { onLifecycle: (event) => lifecycle.push(event) },
@@ -381,7 +421,7 @@ describe("serveHostConnection", () => {
     void serveHostConnection(
       server,
       {
-        hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+        hostCompatibility: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
         attach: (params, attachmentId) => {
           state = { ...state, attachmentId };
           return {
@@ -723,7 +763,7 @@ describe("serveHostConnection", () => {
   it("rejects unknown and cross-connection attachment capabilities as control revoked", async () => {
     const { client, server } = inMemoryNdjsonConnectionPair();
     void serveHostConnection(server, {
-      hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      hostCompatibility: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
       unary: { "host.list": () => ({ ptys: [] }) },
     });
     const responses = client.messages()[Symbol.asyncIterator]();

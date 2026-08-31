@@ -134,7 +134,11 @@ async function runOwnedUpdateSmoke(argv) {
   const ownerLogOffset = await fileSizeOrZero(ownerLogPath);
   const evidenceDir = optionalAbsoluteEnvironment("STATION_BINARY_SMOKE_EVIDENCE_DIR");
   if (evidenceDir !== undefined) {
-    await reserveBinarySmokeEvidenceDestination({ evidenceDir, smokeRoot: root, runId });
+    await reserveBinarySmokeEvidenceDestination({
+      evidenceDir,
+      smokeRoot: root,
+      runId,
+    });
   }
 
   let result;
@@ -150,7 +154,10 @@ async function runOwnedUpdateSmoke(argv) {
       survivorPolicy: "preserve-persistent-station-runtime",
       terminalKey: "update-smoke-runner",
       recoveryKey: options.scenarios,
-      correlation: { traceId: `trc_${randomUUID()}`, spanId: `spn_${randomUUID()}` },
+      correlation: {
+        traceId: `trc_${randomUUID()}`,
+        spanId: `spn_${randomUUID()}`,
+      },
       launch: {
         cwd: repoRoot,
         steps: [{ command: process.execPath, args: [runnerPath, ...argv] }],
@@ -220,7 +227,11 @@ async function runOwnedUpdateSmoke(argv) {
         warnings: ownerError === undefined ? [] : [`runtime owner: ${errorMessage(ownerError)}`],
       });
     } else if (!failed) {
-      await releaseBinarySmokeEvidenceReservation({ evidenceDir, smokeRoot: root, runId });
+      await releaseBinarySmokeEvidenceReservation({
+        evidenceDir,
+        smokeRoot: root,
+        runId,
+      });
     }
   }
 
@@ -241,7 +252,11 @@ async function runUpdateSmoke(options) {
     options.scenarios === "no-host"
       ? [{ name: "tmux-no-host", invocation: "tmux", busyHost: false }]
       : [
-          { name: "external-busy-host", invocation: "external", busyHost: true },
+          {
+            name: "external-busy-host",
+            invocation: "external",
+            busyHost: true,
+          },
           { name: "tmux-busy-host", invocation: "tmux", busyHost: true },
           { name: "tmux-no-host", invocation: "tmux", busyHost: false },
         ];
@@ -497,8 +512,9 @@ async function runScenario(input) {
       );
     }
 
-    const expectedUpdateCode =
-      input.busyHost && input.options.busyHostOutcome === "preserved-refusal" ? 1 : 0;
+    const preservedRefusal =
+      input.busyHost && input.options.busyHostOutcome === "preserved-refusal";
+    const expectedUpdateCode = preservedRefusal ? 1 : 0;
     const updateResult =
       input.invocation === "external"
         ? await run(installedBinary, ["update", "--json"], {
@@ -513,41 +529,75 @@ async function runScenario(input) {
             scenarioRoot,
           );
     assertEqual(updateResult.code, expectedUpdateCode, `${input.name} update exit code`);
-    const report = parseComposedUpdateReport(
-      parseJson(updateResult.stdout, `${input.name} update report`),
-      input.options.incumbentVersion,
-    );
-    assertUpdateReport(report, input, installedBinary, configPath);
-    if (expectedUpdateCode === 0) {
+    if (preservedRefusal) {
+      assertEqual(updateResult.stdout, "", `${input.name} refused update stdout`);
+      assertIncludes(
+        updateResult.stderr,
+        "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
+        `${input.name} refused update code`,
+      );
+      assertIncludes(
+        updateResult.stderr,
+        "Host terminals are not all eligible for live handoff.",
+        `${input.name} refused update reason`,
+      );
+      assertDeepEqual(
+        await captureDryRunState(dryRunStateInput),
+        beforeDryRun,
+        `${input.name} refused update persistent and runtime state`,
+      );
+    } else {
+      const report = parseComposedUpdateReport(
+        parseJson(updateResult.stdout, `${input.name} update report`),
+        input.options.incumbentVersion,
+      );
+      assertUpdateReport(report, input, installedBinary, configPath);
       assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
     }
     if (transportDir !== undefined) {
       await assertExactTransportRequests(transportDir, input);
     }
 
-    const targetObserver = await waitForObserver(observerClient, input.target.version);
-    diagnostics.observerPid = targetObserver.pid;
-    await recordProcessIdentity(processIdentities, "target-observer", targetObserver.pid);
-    assertObserverBuildIdentity(
-      targetObserver.version,
-      input.target.buildIdentity,
-      `${input.name} target Observer`,
-    );
-    assertNotEqual(
-      targetObserver.pid,
-      incumbentObserver.pid,
-      `${input.name} Observer replacement PID`,
-    );
-    assertEqual(
-      await waitForExactProcessExit(processIdentities.get("incumbent-observer"), 10_000),
-      true,
-      `${input.name} incumbent Observer exit`,
-    );
-    assertDeepEqual(
-      readUnixSocketHolderPids(socketPath),
-      [targetObserver.pid],
-      `${input.name} target Observer holder`,
-    );
+    if (preservedRefusal) {
+      const preservedObserver = await waitForObserver(
+        observerClient,
+        input.options.incumbentVersion,
+      );
+      assertEqual(
+        preservedObserver.pid,
+        incumbentObserver.pid,
+        `${input.name} incumbent Observer identity preserved`,
+      );
+      assertDeepEqual(
+        readUnixSocketHolderPids(socketPath),
+        [incumbentObserver.pid],
+        `${input.name} incumbent Observer holder preserved`,
+      );
+    } else {
+      const targetObserver = await waitForObserver(observerClient, input.target.version);
+      diagnostics.observerPid = targetObserver.pid;
+      await recordProcessIdentity(processIdentities, "target-observer", targetObserver.pid);
+      assertObserverBuildIdentity(
+        targetObserver.version,
+        input.target.buildIdentity,
+        `${input.name} target Observer`,
+      );
+      assertNotEqual(
+        targetObserver.pid,
+        incumbentObserver.pid,
+        `${input.name} Observer replacement PID`,
+      );
+      assertEqual(
+        await waitForExactProcessExit(processIdentities.get("incumbent-observer"), 10_000),
+        true,
+        `${input.name} incumbent Observer exit`,
+      );
+      assertDeepEqual(
+        readUnixSocketHolderPids(socketPath),
+        [targetObserver.pid],
+        `${input.name} target Observer holder`,
+      );
+    }
 
     if (input.busyHost && input.options.busyHostOutcome === "full-handoff") {
       assertEqual(
@@ -642,7 +692,7 @@ async function runScenario(input) {
       tmuxTempDir,
       tmuxServer,
       name: input.name,
-      expectNativeRefusal: input.busyHost && input.options.busyHostOutcome === "preserved-refusal",
+      expectNativeRefusal: false,
       processIdentities,
     });
     if (input.busyHost) {
@@ -681,9 +731,12 @@ async function runScenario(input) {
     await observerClient.stop();
     await waitForMissing(socketPath, 10_000);
     assertEqual(
-      await waitForExactProcessExit(processIdentities.get("target-observer"), 10_000),
+      await waitForExactProcessExit(
+        processIdentities.get(preservedRefusal ? "incumbent-observer" : "target-observer"),
+        10_000,
+      ),
       true,
-      `${input.name} target Observer cleanup`,
+      `${input.name} active Observer cleanup`,
     );
   } catch (error) {
     failure = error;
@@ -715,7 +768,10 @@ async function runScenario(input) {
       }
       const wrapperPath = join(tmuxTempDir, "tmux-private");
       if (!(await pathExists(wrapperPath))) return;
-      await run(wrapperPath, ["kill-server"], { env, allowedExitCodes: [0, 1] });
+      await run(wrapperPath, ["kill-server"], {
+        env,
+        allowedExitCodes: [0, 1],
+      });
       const probe = await run(wrapperPath, ["has-session"], {
         env,
         allowedExitCodes: [0, 1],
@@ -728,7 +784,10 @@ async function runScenario(input) {
     });
     await cleanupAction(cleanupWarnings, "Host cleanup", async () => {
       if (!(await pathExists(hostSocketPath))) return;
-      const raw = createStationHostClient({ socketPath: hostSocketPath, timeoutMs: 2000 });
+      const raw = createStationHostClient({
+        socketPath: hostSocketPath,
+        timeoutMs: 2000,
+      });
       const health = await raw.health();
       raw.dispose();
       if (health.buildVersion === undefined) throw new Error("Host cleanup found legacy health.");
@@ -899,7 +958,11 @@ async function cloneCurrentSource(destination) {
     const source = join(repoRoot, relativePath);
     const target = join(destination, relativePath);
     await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-    await cp(source, target, { dereference: false, preserveTimestamps: true, recursive: true });
+    await cp(source, target, {
+      dereference: false,
+      preserveTimestamps: true,
+      recursive: true,
+    });
   }
 }
 
@@ -1016,12 +1079,21 @@ async function snapshotEntry(path) {
     mode: String(metadata.mode),
   };
   if (metadata.isFile()) {
-    return { ...common, kind: "file", size: String(metadata.size), sha256: await sha256File(path) };
+    return {
+      ...common,
+      kind: "file",
+      size: String(metadata.size),
+      sha256: await sha256File(path),
+    };
   }
   if (metadata.isSymbolicLink())
     return { ...common, kind: "symlink", target: await readlink(path) };
   if (metadata.isDirectory()) {
-    return { ...common, kind: "directory", entries: (await readdir(path)).sort() };
+    return {
+      ...common,
+      kind: "directory",
+      entries: (await readdir(path)).sort(),
+    };
   }
   if (metadata.isSocket()) return { ...common, kind: "socket" };
   return { ...common, kind: "other", size: String(metadata.size) };
@@ -1097,15 +1169,22 @@ async function assertExactTransportRequests(transportDir, input) {
     .split(/\r?\n/u)
     .filter(Boolean)
     .sort();
+  const detectionRequests = [
+    releaseApiTagUrl(`v${input.options.incumbentVersion}`),
+    releaseApiTagUrl(`v${input.options.incumbentVersion}`),
+    "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
+    "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
+  ];
   const expected = [
-    releaseApiTagUrl(`v${input.options.incumbentVersion}`),
-    releaseApiTagUrl(`v${input.options.incumbentVersion}`),
-    "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
-    "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
-    releaseDownloadUrl(input.target.tag, "install.sh"),
-    releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
-    releaseDownloadUrl(input.target.tag, archiveName),
-    releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
+    ...detectionRequests,
+    ...(input.busyHost && input.options.busyHostOutcome === "preserved-refusal"
+      ? []
+      : [
+          releaseDownloadUrl(input.target.tag, "install.sh"),
+          releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
+          releaseDownloadUrl(input.target.tag, archiveName),
+          releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
+        ]),
   ].sort();
   assertDeepEqual(actual, expected, `${input.name} exact update transport requests`);
 }
@@ -1380,8 +1459,9 @@ async function runPaneChild(encodedPayload) {
   }
   await writeFile(payload.stdoutPath, result?.stdout ?? "", { mode: 0o600 });
   await writeFile(payload.stderrPath, result?.stderr ?? "", { mode: 0o600 });
+  const statusTempPath = `${payload.statusPath}.writing`;
   await writeFile(
-    payload.statusPath,
+    statusTempPath,
     `${JSON.stringify({
       schemaVersion: 1,
       code: result?.code ?? 1,
@@ -1390,6 +1470,7 @@ async function runPaneChild(encodedPayload) {
     })}\n`,
     { mode: 0o600 },
   );
+  await rename(statusTempPath, payload.statusPath);
 }
 
 async function stopTmuxServer(server) {
@@ -1461,7 +1542,10 @@ async function verifyBareLaunches(input) {
     {
       env: input.expectNativeRefusal
         ? input.env
-        : { ...input.env, STATION_DASHBOARD_COMMAND: `${touch} ${shellQuote(nativeCanary)}` },
+        : {
+            ...input.env,
+            STATION_DASHBOARD_COMMAND: `${touch} ${shellQuote(nativeCanary)}`,
+          },
       timeoutMs: 30_000,
       allowedExitCodes: [input.expectNativeRefusal ? 1 : 0],
     },
@@ -1570,7 +1654,7 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
       "completed",
       "completed",
       "completed",
-      refusal ? "failed" : input.busyHost ? "completed" : "skipped",
+      refusal ? "failed" : "completed",
     ],
     `${input.name} exact update step outcomes`,
   );
@@ -1947,7 +2031,11 @@ function parseArgs(argv) {
   } else {
     validateTag(publicTag, "--public-target-tag");
     assertBuildIdentity(targetBuildIdentity, "--target-build-identity");
-    target = { mode: "public", tag: publicTag, buildIdentity: targetBuildIdentity };
+    target = {
+      mode: "public",
+      tag: publicTag,
+      buildIdentity: targetBuildIdentity,
+    };
   }
   if (sourceVersion !== undefined && targetBuildIdentity !== undefined) {
     throw new Error("--target-build-identity is only valid for staged or public targets.");
@@ -2107,7 +2195,12 @@ async function run(command, args, options = {}) {
         rejectRun(error);
         return;
       }
-      const result = { code: code ?? signalExitCode(signal), signal, stdout, stderr };
+      const result = {
+        code: code ?? signalExitCode(signal),
+        signal,
+        stdout,
+        stderr,
+      };
       if (timedOut) {
         rejectRun(new SmokeTimeoutError(command, args, result, timeoutMs));
         return;

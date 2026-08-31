@@ -1,14 +1,16 @@
 import type { StationConfig } from "@station/config";
 import type { HostHandoffFidelity, UpdateConvergencePlanningInput } from "@station/contracts";
+import type { StationBuildInfo } from "@station/runtime";
 import type { PlannedUpdateChannel } from "../../update/channelDetection.js";
 import { updateErrorFromUnknown } from "../../update/updateError.js";
 import { type HostCommandDeps, runHostCommand } from "../host/index.js";
 import type { UpdateRequest } from "./args.js";
 
+/** Describes whether runtime crossover must re-establish exact Host ownership after preflight. */
 export type HostHandoffScenario =
   | { kind: "not-requested" }
   | { kind: "not-needed" }
-  | { kind: "handoff"; fidelity: HostHandoffFidelity };
+  | { kind: "converge"; fidelity: HostHandoffFidelity };
 
 export type UpdateScenario =
   | { kind: "already-current"; hostHandoff: HostHandoffScenario }
@@ -27,6 +29,7 @@ type UpdateScenarioInput = {
   selected: PlannedUpdateChannel;
   request: UpdateRequest;
   installation: UpdateConvergencePlanningInput["installation"];
+  currentBuildInfo: StationBuildInfo;
   config: StationConfig;
   hostDeps?: HostCommandDeps;
 };
@@ -35,41 +38,26 @@ async function resolveHostHandoff(input: UpdateScenarioInput): Promise<HostHando
   const { selected, request } = input;
   if (request.handoff === undefined) return { kind: "not-requested" };
 
-  // Prove handoff viability before any install channel can mutate the current build.
+  // Prove preservation viability now; the successor must independently converge fresh evidence.
   const targetDeps: HostCommandDeps = {
     ...input.hostDeps,
     expectedBuildVersion: selected.plan.targetVersion,
+    expectedBuildIdentity: input.currentBuildInfo.buildIdentity,
   };
-  const status = await runHostCommand(["status"], { config: input.config }, targetDeps);
-  if (status.action !== "status") throw new Error("Host status returned the wrong action.");
-  if (status.probe === "absent" || status.probe === "stale") {
-    return { kind: "not-needed" };
-  }
-  if (status.probe !== "listening" || status.compatibility === undefined) {
-    throw updateErrorFromUnknown(undefined, {
-      code: "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
-      message: "The active Station Host could not be inspected before update.",
-      hint: "Run stn host status and resolve its reported socket error before retrying.",
-    });
-  }
-  if (status.compatibility.action === "reuse") {
-    return { kind: "not-needed" };
-  }
-  if (status.livePtyCount === undefined) {
-    throw updateErrorFromUnknown(undefined, {
-      code: "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
-      message: "The active Station Host inventory could not be inspected before update.",
-      hint: status.error ?? "Run stn host status and resolve its reported error before retrying.",
-    });
-  }
-  if (status.livePtyCount === 0) return { kind: "not-needed" };
   const planned = await runHostCommand(
-    ["handoff", "--dry-run", "--fidelity", request.handoff],
+    [
+      "handoff",
+      "--dry-run",
+      "--update-crossover",
+      ...(selected.plan.status === "current" ? [] : ["--replacement-required"]),
+      "--fidelity",
+      request.handoff,
+    ],
     { config: input.config },
     targetDeps,
   );
   if (planned.action === "handoff" && planned.status === "planned") {
-    return { kind: "handoff", fidelity: request.handoff };
+    return { kind: "converge", fidelity: request.handoff };
   }
   throw updateErrorFromUnknown(undefined, {
     code: "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
@@ -87,7 +75,10 @@ export async function resolveUpdateScenario(input: UpdateScenarioInput): Promise
   const { selected, request, installation } = input;
 
   if (selected.plan.status === "current") {
-    return { kind: "already-current", hostHandoff: await resolveHostHandoff(input) };
+    return {
+      kind: "already-current",
+      hostHandoff: await resolveHostHandoff(input),
+    };
   }
 
   if (installation.whenRequired === "defer") {

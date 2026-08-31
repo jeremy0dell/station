@@ -1,5 +1,9 @@
 import { HOST_PROTOCOL_VERSION } from "@station/contracts";
-import { createStationHostClient, serveHostConnection } from "@station/host";
+import {
+  openStationHostLifecycleSession,
+  type StationHostLifecycleSession,
+  serveHostConnection,
+} from "@station/host";
 import { inMemoryNdjsonConnectionPair } from "@station/protocol";
 import { type InspectStationHostDeps, inspectStationHost } from "@station/terminal";
 import { describe, expect, it, vi } from "vitest";
@@ -44,7 +48,7 @@ function exactDeps(
     { status: "listening", endpoint },
   ];
   let probeIndex = 0;
-  let clientIndex = 0;
+  let sessionIndex = 0;
   return {
     probeEndpoint: vi.fn(async (path) => {
       calls.push(`probe:${path}`);
@@ -52,8 +56,8 @@ function exactDeps(
         ReturnType<NonNullable<InspectStationHostDeps["probeEndpoint"]>>
       >;
     }),
-    clientFactory: (path, expectedBuildVersion) => {
-      const index = clientIndex++;
+    openSession: async ({ socketPath: path, expectedBuildVersion }) => {
+      const index = sessionIndex++;
       calls.push(`factory:${index}:${path}:${expectedBuildVersion}`);
       let healthIndex = 0;
       return {
@@ -73,7 +77,7 @@ function exactDeps(
           return value as typeof inventory;
         },
         dispose: () => calls.push(`dispose:${index}`),
-      };
+      } as unknown as StationHostLifecycleSession;
     },
   };
 }
@@ -108,11 +112,11 @@ describe("inspectStationHost", () => {
       { socketPath, expectedBuildVersion: "1.0.0+requester" },
       {
         probeEndpoint: async () => ({ status: "listening", endpoint }),
-        clientFactory: (path, expectedBuildVersion) => {
+        openSession: async ({ socketPath: path, expectedBuildVersion, deadlineMs }) => {
           factoryBuilds.push(expectedBuildVersion);
           const pair = inMemoryNdjsonConnectionPair();
           void serveHostConnection(pair.server, {
-            hostIdentity: {
+            hostCompatibility: {
               protocolVersion: HOST_PROTOCOL_VERSION,
               buildVersion: runningBuildVersion,
             },
@@ -124,9 +128,10 @@ describe("inspectStationHost", () => {
               },
             },
           });
-          return createStationHostClient({
+          return openStationHostLifecycleSession({
             socketPath: path,
             expectedBuildVersion,
+            deadlineMs,
             connect: async () => pair.client,
           });
         },
@@ -158,18 +163,18 @@ describe("inspectStationHost", () => {
       { status: "inaccessible", error: { tag: "HostError", code: "DENIED", message: "no" } },
     ],
   ])("returns initial non-listening evidence without creating a client", async (probe, expected) => {
-    const clientFactory = vi.fn();
+    const openSession = vi.fn();
     await expect(
       inspectStationHost(
         { socketPath, expectedBuildVersion: "requester" },
-        { probeEndpoint: async () => probe as never, clientFactory },
+        { probeEndpoint: async () => probe as never, openSession },
       ),
     ).resolves.toEqual(expected);
-    expect(clientFactory).not.toHaveBeenCalled();
+    expect(openSession).not.toHaveBeenCalled();
   });
 
   it("rejects socket-path substitution before opening a client", async () => {
-    const clientFactory = vi.fn();
+    const openSession = vi.fn();
     await expect(
       inspectStationHost(
         { socketPath, expectedBuildVersion: "requester" },
@@ -178,11 +183,11 @@ describe("inspectStationHost", () => {
             status: "listening",
             endpoint: { ...endpoint, socketPath: "/state/substituted.sock" },
           }),
-          clientFactory,
+          openSession,
         },
       ),
     ).resolves.toMatchObject({ status: "unknown", reason: "endpoint-drift" });
-    expect(clientFactory).not.toHaveBeenCalled();
+    expect(openSession).not.toHaveBeenCalled();
   });
 
   it.each([

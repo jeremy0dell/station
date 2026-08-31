@@ -62,11 +62,14 @@ export const PtyHandoffEntrySchema = z
   .strict();
 export type PtyHandoffEntry = z.infer<typeof PtyHandoffEntrySchema>;
 
-/** ptyId to entry; every field an adopter needs to rebind a parked bridge. */
+/** ptyId to entry; every independent PTY and bridge identity is unique within one manifest. */
 export const PtyHandoffManifestSchema = z
   .record(nonEmptyStringSchema, PtyHandoffEntrySchema)
   .superRefine((manifest, context) => {
     const targets = new Set<string>();
+    const ptyInstances = new Set<string>();
+    const controlSockets = new Set<string>();
+    const bridgePids = new Set<number>();
     for (const [ptyId, entry] of Object.entries(manifest)) {
       if (targets.has(entry.identity.terminalTargetId)) {
         context.addIssue({
@@ -76,6 +79,30 @@ export const PtyHandoffManifestSchema = z
         });
       }
       targets.add(entry.identity.terminalTargetId);
+      if (ptyInstances.has(entry.ptyInstanceId)) {
+        context.addIssue({
+          code: "custom",
+          path: [ptyId, "ptyInstanceId"],
+          message: "A handoff manifest cannot contain duplicate PTY instance ids.",
+        });
+      }
+      ptyInstances.add(entry.ptyInstanceId);
+      if (controlSockets.has(entry.controlSocket)) {
+        context.addIssue({
+          code: "custom",
+          path: [ptyId, "controlSocket"],
+          message: "A handoff manifest cannot contain duplicate bridge control sockets.",
+        });
+      }
+      controlSockets.add(entry.controlSocket);
+      if (bridgePids.has(entry.bridgePid)) {
+        context.addIssue({
+          code: "custom",
+          path: [ptyId, "bridgePid"],
+          message: "A handoff manifest cannot contain duplicate bridge process ids.",
+        });
+      }
+      bridgePids.add(entry.bridgePid);
     }
   });
 export type PtyHandoffManifest = z.infer<typeof PtyHandoffManifestSchema>;
@@ -123,6 +150,8 @@ export const PtyBridgeAdoptCommandSchema = z
     ptyInstanceId: PtyInstanceIdSchema,
   })
   .strict();
+/** Read-only parked-bridge liveness and identity probe. */
+export const PtyBridgeStatusCommandSchema = z.object({ type: z.literal("exit-status") }).strict();
 /** Strict bridge control status; ownership changes only after its PTY instance is verified. */
 export const PtyBridgeStatusSchema = z
   .object({

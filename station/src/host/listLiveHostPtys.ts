@@ -1,4 +1,11 @@
 import { existsSync } from "node:fs";
+import type {
+  StationHostConvergenceCommand,
+  StationHostConvergenceResult,
+  StationHostInspectionResult,
+  StationHostTargetBuild,
+  StationHostTerminalLifetime,
+} from "@station/contracts";
 import {
   assertHostReusable,
   classifyHostCompatibility,
@@ -9,9 +16,9 @@ import {
   type HostListEntry,
 } from "@station/host";
 import { stationBuildInfo } from "@station/runtime";
+import { inspectStationHost } from "@station/terminal";
 
-/** One bounded boot negotiation: reuse an exact host, stop an idle old build,
- * and let compatibility failures escape before Station can restore cold. */
+/** One bounded default boot negotiation; exact-gated convergence has its own command deadline. */
 export const HOST_LIST_TIMEOUT_MS = 1000;
 
 type ListClient = {
@@ -20,140 +27,169 @@ type ListClient = {
   stopIfIdle(requestingBuildVersion: string): Promise<{ stopping: true }>;
   dispose(): void;
 };
-
-export type BusyHostHandoffInput = {
-  socketPath: string;
-  expectedBuildVersion: string;
-};
-
 export type ListLiveHostPtysDeps = {
-  /** Test seam; production dials the host unix socket. */
   createClient?: (socketPath: string) => ListClient;
   timeoutMs?: number;
   expectedBuildVersion?: string;
+  expectedBuildIdentity?: string;
   env?: Readonly<Record<string, string | undefined>>;
-  /** Runs only after bounded admission finds an eligible busy replacement Host. */
-  handoffBusyHost?: (
-    input: BusyHostHandoffInput,
-  ) => Promise<readonly HostListEntry[]>;
+  inspectHost?: typeof inspectStationHost;
+  convergeExactHost?: (
+    command: StationHostConvergenceCommand,
+  ) => Promise<StationHostConvergenceResult>;
+  now?: () => number;
 };
 
-type HostPtyNegotiation =
-  | { kind: "listed"; entries: readonly HostListEntry[] }
-  | { kind: "cold" }
-  | { kind: "handoff"; refusal: unknown };
+/**
+ * ADAPTER
+ *
+ * Keeps default display-compatible boot unchanged. Exact `STATION_HOST_HANDOFF=1` instead requires
+ * immutable inspection and canonical convergence, with no `host.list` or cold fallback.
+ */
+export async function listLiveHostPtys(
+  socketPath: string,
+  deps: ListLiveHostPtysDeps = {},
+): Promise<readonly HostListEntry[] | undefined> {
+  if (!existsSync(socketPath)) return undefined;
+  const targetBuild = resolveTargetBuild(deps);
+  if ((deps.env ?? process.env).STATION_HOST_HANDOFF === "1")
+    return listExactHostPtys(socketPath, targetBuild, deps);
+  return listCompatibleHostPtys(socketPath, targetBuild.buildVersion, deps);
+}
 
-function hostCompatibilityUnconfirmed() {
-  return stationHostSafeError(
-    "HOST_VERSION_INCOMPATIBLE",
-    "Station host upgrade could not be completed safely.",
-    {
-      hint:
-        "The existing host and terminals were preserved. Retry, or reopen with the running build.",
-    },
-  );
+function resolveTargetBuild(deps: ListLiveHostPtysDeps): StationHostTargetBuild {
+  if (deps.expectedBuildVersion !== undefined && deps.expectedBuildIdentity !== undefined) {
+    return {
+      buildVersion: deps.expectedBuildVersion,
+      buildIdentity: deps.expectedBuildIdentity,
+    };
+  }
+  const build = stationBuildInfo();
+  return {
+    buildVersion: deps.expectedBuildVersion ?? build.version,
+    buildIdentity: deps.expectedBuildIdentity ?? build.buildIdentity,
+  };
+}
+
+async function listExactHostPtys(
+  socketPath: string,
+  targetBuild: StationHostTargetBuild,
+  deps: ListLiveHostPtysDeps,
+): Promise<readonly HostListEntry[]> {
+  const inspection = await (deps.inspectHost ?? inspectStationHost)({
+    socketPath,
+    expectedBuildVersion: targetBuild.buildVersion,
+    deadlineMs: (deps.now ?? Date.now)() + 5_000,
+  });
+  if (inspection.status !== "exact") throw exactInspectionFailure(inspection);
+  const evidence = inspection.evidence;
+  if (
+    evidence.health.buildVersion === targetBuild.buildVersion &&
+    evidence.buildIdentity === targetBuild.buildIdentity
+  )
+    return evidence.terminals.map(publicHostEntry);
+  if (
+    evidence.terminals.length > 0 &&
+    !evidence.terminals.every(
+      ({ alive, handoffSupport }) => alive && handoffSupport.kind === "bridge-releasable",
+    )
+  )
+    throw stationHostSafeError(
+      "HOST_UPGRADE_BLOCKED",
+      "The exact Host terminal registry is not eligible for live handoff.",
+    );
+  if (deps.convergeExactHost === undefined)
+    throw stationHostSafeError(
+      "HOST_VERSION_INCOMPATIBLE",
+      "Exact Host convergence is unavailable in this Station composition.",
+    );
+  const common = {
+    targetBuild,
+    socketPath,
+    expected: evidence,
+    deadlineMs: (deps.now ?? Date.now)() + 12_000,
+  };
+  const command: StationHostConvergenceCommand =
+    evidence.terminals.length === 0
+      ? { ...common, action: "replace-idle" }
+      : { ...common, action: "handoff", fidelity: "processes" };
+  const result = await deps.convergeExactHost(command);
+  if (result.status === "failed") throw result.error;
+  return result.finalEvidence.terminals.map(publicHostEntry);
+}
+
+async function listCompatibleHostPtys(
+  socketPath: string,
+  expectedBuildVersion: string,
+  deps: ListLiveHostPtysDeps,
+): Promise<readonly HostListEntry[] | undefined> {
+  const timeoutMs = deps.timeoutMs ?? HOST_LIST_TIMEOUT_MS;
+  const client =
+    deps.createClient?.(socketPath) ??
+    createStationHostClient({ socketPath, expectedBuildVersion });
+  const state = { incompatibleHostDetected: false };
+  const operation = negotiateHostPtys(client, expectedBuildVersion, state);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<readonly HostListEntry[] | undefined>((resolve, reject) => {
+    timer = setTimeout(
+      () =>
+        state.incompatibleHostDetected
+          ? reject(hostCompatibilityUnconfirmed())
+          : resolve(undefined),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([operation, timeout]);
+  } catch (error) {
+    if (isStationHostCompatibilityError(error)) throw error;
+    if (state.incompatibleHostDetected) throw hostCompatibilityUnconfirmed();
+    return undefined;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    client.dispose();
+  }
 }
 
 async function negotiateHostPtys(
   client: ListClient,
   expectedBuildVersion: string,
   state: { incompatibleHostDetected: boolean },
-  handoffEnabled: boolean,
-): Promise<HostPtyNegotiation> {
+): Promise<readonly HostListEntry[] | undefined> {
   const health = await client.health();
   const compatibility = classifyHostCompatibility(health, expectedBuildVersion);
-
-  switch (compatibility.action) {
-    case "reuse":
-      return { kind: "listed", entries: await client.list() };
-    case "replace":
-      state.incompatibleHostDetected = true;
-      try {
-        await client.stopIfIdle(expectedBuildVersion);
-        return { kind: "cold" };
-      } catch (error) {
-        if (
-          handoffEnabled &&
-          isStationHostCompatibilityError(error) &&
-          error.code === "HOST_UPGRADE_BLOCKED"
-        ) {
-          return { kind: "handoff", refusal: error };
-        }
-        throw error;
-      }
-    case "refuse":
-      state.incompatibleHostDetected = true;
-      assertHostReusable(health, expectedBuildVersion);
-      return { kind: "cold" };
+  if (compatibility.action === "reuse") return client.list();
+  state.incompatibleHostDetected = true;
+  if (compatibility.action === "refuse") {
+    assertHostReusable(health, expectedBuildVersion);
+    return undefined;
   }
+  await client.stopIfIdle(expectedBuildVersion);
+  return undefined;
 }
 
-/**
- * ADAPTER
- *
- * Lists reusable Host PTYs after bounded compatibility admission. Exact
- * `STATION_HOST_HANDOFF=1` may negotiate one busy same-protocol replacement
- * outside that bound; successor listing failures stay visible to prevent cold restore.
- */
-export async function listLiveHostPtys(
-  socketPath: string,
-  deps: ListLiveHostPtysDeps = {},
-): Promise<readonly HostListEntry[] | undefined> {
-  if (!existsSync(socketPath)) {
-    return undefined;
-  }
-  const timeoutMs = deps.timeoutMs ?? HOST_LIST_TIMEOUT_MS;
-  const expectedBuildVersion = deps.expectedBuildVersion ?? stationBuildInfo().version;
-  const client =
-    deps.createClient?.(socketPath) ??
-    createStationHostClient({ socketPath, expectedBuildVersion });
-  const state = { incompatibleHostDetected: false };
-  const operation = negotiateHostPtys(
-    client,
-    expectedBuildVersion,
-    state,
-    (deps.env ?? process.env).STATION_HOST_HANDOFF === "1",
+function publicHostEntry(terminal: StationHostTerminalLifetime): HostListEntry {
+  const {
+    handoffSupport: _handoffSupport,
+    ...entry
+  } = terminal;
+  return entry;
+}
+
+function exactInspectionFailure(inspection: StationHostInspectionResult) {
+  if (inspection.status === "inaccessible" || inspection.status === "unknown") return inspection.error;
+  return stationHostSafeError(
+    "HOST_VERSION_INCOMPATIBLE",
+    "Exact Host evidence disappeared or became stale during native startup.",
   );
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<HostPtyNegotiation>((resolve, reject) => {
-    timeoutId = setTimeout(() => {
-      if (state.incompatibleHostDetected) {
-        reject(hostCompatibilityUnconfirmed());
-      } else {
-        resolve({ kind: "cold" });
-      }
-    }, timeoutMs);
-  });
+}
 
-  let result: HostPtyNegotiation;
-  try {
-    // Promise.race observes a losing operation's late rejection after the timeout settles.
-    result = await Promise.race([operation, timeout]);
-  } catch (error) {
-    if (isStationHostCompatibilityError(error)) {
-      throw error;
-    }
-    if (state.incompatibleHostDetected) {
-      throw hostCompatibilityUnconfirmed();
-    }
-    return undefined;
-  } finally {
-    if (timeoutId !== undefined) {
-      clearTimeout(timeoutId);
-    }
-    // Closes the socket — also cancels the in-flight list() on the timeout path.
-    client.dispose();
-  }
-
-  switch (result.kind) {
-    case "listed":
-      return result.entries;
-    case "cold":
-      return undefined;
-    case "handoff":
-      if (deps.handoffBusyHost === undefined) {
-        throw result.refusal;
-      }
-      return deps.handoffBusyHost({ socketPath, expectedBuildVersion });
-  }
+function hostCompatibilityUnconfirmed() {
+  return stationHostSafeError(
+    "HOST_VERSION_INCOMPATIBLE",
+    "Station host upgrade could not be completed safely.",
+    {
+      hint: "The existing host and terminals were preserved. Retry, or reopen with the running build.",
+    },
+  );
 }

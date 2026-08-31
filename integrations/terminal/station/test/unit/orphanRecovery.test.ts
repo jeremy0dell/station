@@ -2,10 +2,30 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { PtyBridgeParkState, PtyHandoffManifest } from "@station/contracts";
-import { HOST_PROTOCOL_VERSION, type StationHostClient } from "@station/host";
+import {
+  HOST_PROTOCOL_VERSION,
+  type StationHostClient,
+  type StationHostLifecycleSession,
+} from "@station/host";
+import type { ChildProcessLike } from "@station/terminal";
 import { describe, expect, it, vi } from "vitest";
 import { createStationHostController } from "../../src/host/hostController.js";
-import { loadParkedOrphanManifest } from "../../src/host/orphanRecovery.js";
+import {
+  adoptParkedOrphanManifest,
+  loadParkedOrphanManifest,
+  loadParkedOrphanRecoveryEvidence,
+} from "../../src/host/orphanRecovery.js";
+
+class FakeChild extends EventEmitter {
+  pid = 42;
+  kill(): boolean {
+    this.emit("exit", 0, null);
+    return true;
+  }
+  unref(): this {
+    return this;
+  }
+}
 
 describe("loadParkedOrphanManifest", () => {
   it("returns only non-exited strict park records with their expected control socket", async () => {
@@ -29,6 +49,9 @@ describe("loadParkedOrphanManifest", () => {
         controlSocket,
         identity: expect.objectContaining({ sessionId: "ses_feature" }),
       }),
+    });
+    await expect(loadParkedOrphanRecoveryEvidence(stateDir)).resolves.toMatchObject({
+      payloadPids: { "pty-live": park.pid },
     });
   });
 
@@ -56,6 +79,36 @@ describe("loadParkedOrphanManifest", () => {
       code: "HOST_HANDOFF_MANIFEST_INVALID",
     });
   });
+
+  it.each([
+    "ptyInstanceId",
+    "controlSocket",
+    "bridgePid",
+  ] as const)("fails closed when strict park records duplicate %s", async (field) => {
+    const stateDir = await mkdtemp(path.join(tmpdir(), "station-orphan-recovery-duplicate-"));
+    const directory = path.join(stateDir, "run", "pty-bridges");
+    await mkdir(directory, { recursive: true });
+    const first = parkRecord(path.join(directory, "pty-first.sock"));
+    const second = {
+      ...parkRecord(path.join(directory, "pty-second.sock")),
+      ptyInstanceId: "instance-pty-2",
+      bridgePid: 13,
+      identity: {
+        ...first.identity,
+        terminalTargetId: "native:wt_second",
+        sessionId: "ses_second",
+      },
+    };
+    if (field === "ptyInstanceId") second.ptyInstanceId = first.ptyInstanceId;
+    if (field === "controlSocket") second.controlSocket = first.controlSocket;
+    if (field === "bridgePid") second.bridgePid = first.bridgePid;
+    await writeFile(path.join(directory, "pty-first.park.json"), JSON.stringify(first));
+    await writeFile(path.join(directory, "pty-second.park.json"), JSON.stringify(second));
+
+    await expect(loadParkedOrphanManifest(stateDir)).rejects.toMatchObject({
+      code: "HOST_HANDOFF_MANIFEST_INVALID",
+    });
+  });
 });
 
 describe("createStationHostController orphan recovery", () => {
@@ -73,16 +126,24 @@ describe("createStationHostController orphan recovery", () => {
       failed: [],
     }));
     const client = fakeHostClient({ adoptRegistry });
+    const socketPath = path.join(stateDir, "station-host.sock");
+    const endpoint = { socketPath, ino: 1n, birthtimeNs: 2n };
+    const lifecycle = fakeLifecycleSession();
     const controller = createStationHostController(
       {
-        socketPath: path.join(stateDir, "station-host.sock"),
+        socketPath,
         stateDir,
         hostCommand: ["station-host"],
         expectedBuildVersion: "test-build",
       },
       {
         clientFactory: () => client,
-        spawnHost: () => ({ pid: 42, unref: () => undefined }),
+        spawnHost: () => new FakeChild() as unknown as ChildProcessLike,
+        readiness: {
+          probeEndpoint: async () => ({ status: "listening", endpoint }),
+          openSession: async () => lifecycle,
+          readHolders: async () => [42],
+        },
       },
     );
 
@@ -93,6 +154,35 @@ describe("createStationHostController orphan recovery", () => {
         identity: expect.objectContaining({ sessionId: "ses_feature" }),
       }),
     });
+  });
+});
+
+describe("adoptParkedOrphanManifest", () => {
+  it("requires the exact expected PTY set and no failed entries", async () => {
+    const manifest = { "pty-live": parkManifestEntry("/tmp/pty-live.sock") };
+    await expect(
+      adoptParkedOrphanManifest(
+        { adoptRegistry: async () => ({ adopted: [], failed: [] }) },
+        manifest,
+      ),
+    ).rejects.toMatchObject({ code: "HOST_HANDOFF_MANIFEST_INVALID" });
+    await expect(
+      adoptParkedOrphanManifest(
+        {
+          adoptRegistry: async () => ({
+            adopted: ["pty-live"],
+            failed: [{ ptyId: "pty-live", reason: "failed" }],
+          }),
+        },
+        manifest,
+      ),
+    ).rejects.toMatchObject({ code: "HOST_HANDOFF_MANIFEST_INVALID" });
+    await expect(
+      adoptParkedOrphanManifest(
+        { adoptRegistry: async () => ({ adopted: ["pty-other"], failed: [] }) },
+        manifest,
+      ),
+    ).rejects.toMatchObject({ code: "HOST_HANDOFF_MANIFEST_INVALID" });
   });
 });
 
@@ -120,7 +210,10 @@ function fakeHostClient(overrides: Partial<StationHostClient> = {}): StationHost
       pid: 1,
     }),
     list: async () => [],
-    recoveryInventory: async () => ({ buildIdentity: "a".repeat(64), ptys: [] }),
+    recoveryInventory: async () => ({
+      buildIdentity: "a".repeat(64),
+      ptys: [],
+    }),
     focus: async () => undefined,
     close: async () => ({ closed: true }),
     attach: async () => {
@@ -128,6 +221,43 @@ function fakeHostClient(overrides: Partial<StationHostClient> = {}): StationHost
     },
     dispose: () => undefined,
     ...overrides,
+  };
+}
+
+function fakeLifecycleSession(): StationHostLifecycleSession {
+  return {
+    health: async () => ({
+      ok: true,
+      protocolVersion: HOST_PROTOCOL_VERSION,
+      buildVersion: "test-build",
+    }),
+    recoveryInventory: async () => ({
+      buildIdentity: "a".repeat(64),
+      ptys: [],
+    }),
+    stopIfIdle: async () => ({ stopping: true }),
+    beginHandoff: async () => ({
+      status: "refused",
+      error: { tag: "HostError", code: "NOT_USED", message: "not used" },
+    }),
+    completeHandoff: async () => ({ stopping: true }),
+    abortHandoff: async () => ({ adopted: [], failed: [] }),
+    adoptRegistry: async () => ({ adopted: [], failed: [] }),
+    dispose: () => undefined,
+  };
+}
+
+function parkManifestEntry(controlSocket: string): PtyHandoffManifest[string] {
+  const park = parkRecord(controlSocket);
+  return {
+    bridgeProtocolVersion: 2,
+    bridgePid: park.bridgePid,
+    controlSocket,
+    command: park.command,
+    cols: park.cols,
+    rows: park.rows,
+    ptyInstanceId: park.ptyInstanceId,
+    identity: park.identity,
   };
 }
 
@@ -156,3 +286,5 @@ function parkRecord(controlSocket: string): PtyBridgeParkState {
     exited: false,
   };
 }
+
+import { EventEmitter } from "node:events";

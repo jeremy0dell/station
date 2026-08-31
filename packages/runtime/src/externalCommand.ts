@@ -43,6 +43,7 @@ export type ExternalCommandInput = {
   maxOutputChars?: number;
   stdin?: string;
   signal?: AbortSignal;
+  /** Only clean, unsignaled exits may be admitted as allowed results. */
   allowedExitCodes?: number[];
   stdio?: "pipe" | "inherit";
 };
@@ -398,7 +399,11 @@ function allowedExitCodeResultFromUnknown(
   const cause = normalizeProcessError(error);
 
   const exitCode = cause.exitCode ?? (typeof cause.code === "number" ? cause.code : undefined);
-  if (exitCode === undefined || input.allowedExitCodes?.includes(exitCode) !== true) {
+  if (
+    exitCode === undefined ||
+    cause.signal !== undefined ||
+    input.allowedExitCodes?.includes(exitCode) !== true
+  ) {
     return undefined;
   }
 

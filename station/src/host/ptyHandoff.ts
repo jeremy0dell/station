@@ -33,6 +33,8 @@ export type PtyAdoptionTarget = {
   ptyId: string;
   /** Exact PTY lifetime the parked bridge must prove before yielding ownership. */
   ptyInstanceId: string;
+  /** Exact bridge process the incumbent manifest attested for this PTY lifetime. */
+  bridgePid: number;
   command: string;
   controlSocketPath: string;
   size: StationTerminalSize;
@@ -50,6 +52,20 @@ export type PtyAdoptionReport = {
   adopted: string[];
   failed: Array<{ ptyId: string; reason: string }>;
 };
+
+/** Internal release failure whose parked PTYs still require incumbent restoration. */
+export class PtyHandoffRestorationError extends StationHostProviderError {
+  readonly remainingManifest: PtyHandoffManifest;
+
+  constructor(remainingManifest: PtyHandoffManifest, cause: unknown) {
+    super(
+      "HOST_HANDOFF_INVALID_STATE",
+      "Station Host could not restore every terminal after handoff release failed.",
+      { cause },
+    );
+    this.remainingManifest = remainingManifest;
+  }
+}
 
 /** The per-lane pieces adoption assembles before the table activates the entry. */
 export type AdoptedEntryInit = {
@@ -212,7 +228,16 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
         });
       } catch (error) {
         // Ownership already left the table; restore before surfacing the failure.
-        await adoptRegistry(manifest);
+        let restoration: PtyAdoptionReport;
+        try {
+          restoration = await adoptRegistry(manifest);
+        } catch (restorationError) {
+          throw new PtyHandoffRestorationError(manifest, restorationError);
+        }
+        const remainingManifest = unadoptedPtyHandoffManifest(manifest, restoration.adopted);
+        if (Object.keys(remainingManifest).length > 0) {
+          throw new PtyHandoffRestorationError(remainingManifest, error);
+        }
         throw error;
       }
       emit("pty.handoff.released", { count: parked.released.length, fidelity });
@@ -221,6 +246,21 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
 
     adoptRegistry,
   };
+}
+
+/** Preserve exact manifest evidence only for PTYs not proven adopted by a completed report. */
+export function unadoptedPtyHandoffManifest(
+  manifest: PtyHandoffManifest,
+  adoptedPtyIds: readonly string[],
+): PtyHandoffManifest {
+  const adopted = new Set(adoptedPtyIds);
+  const remaining: PtyHandoffManifest = {};
+  for (const [ptyId, entry] of Object.entries(manifest)) {
+    if (!adopted.has(ptyId)) {
+      remaining[ptyId] = entry;
+    }
+  }
+  return remaining;
 }
 
 type BuildEntryResult =
@@ -456,6 +496,7 @@ async function adoptOneEntry(input: {
     terminal = await input.adoptTerminal({
       ptyId,
       ptyInstanceId: handoffEntry.ptyInstanceId,
+      bridgePid: handoffEntry.bridgePid,
       command: handoffEntry.command,
       controlSocketPath: handoffEntry.controlSocket,
       size: { cols: handoffEntry.cols, rows: handoffEntry.rows },

@@ -95,7 +95,7 @@ export function isStationHostCompatibilityError(error: unknown): error is SafeEr
   );
 }
 
-/** Build the canonical compatibility error, or return undefined when reuse is safe. */
+/** Build the display-compatibility error, or return undefined when generic reuse is safe. */
 export function stationHostCompatibilityError(
   health: HostHealthResult,
   expectedBuildVersion: string,
@@ -121,7 +121,7 @@ export function stationHostCompatibilityError(
   );
 }
 
-/** Require exact protocol/build reuse and throw the canonical compatibility SafeError otherwise. */
+/** Require current protocol and display-version reuse; immutable identity is out of scope. */
 export function assertHostReusable(health: HostHealthResult, expectedBuildVersion: string): void {
   const error = stationHostCompatibilityError(health, expectedBuildVersion);
   if (error !== undefined) {

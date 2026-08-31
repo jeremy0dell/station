@@ -8,6 +8,8 @@ import {
   projectPublicUpdateReport,
   providerHookReconciliationSucceeded,
   type SafeError,
+  type StationHostConvergenceFailureSummary,
+  StationHostUpdateCrossoverResultSchema,
   type UpdateArtifact,
   UpdateConvergencePlanningInputSchema,
   type UpdateReapRecoveryPreflight,
@@ -146,6 +148,7 @@ export async function runUpdateCommand(
     selected,
     request,
     installation,
+    currentBuildInfo,
     config: options.config,
     ...(deps.hostDeps === undefined ? {} : { hostDeps: deps.hostDeps }),
   });
@@ -176,7 +179,9 @@ async function executeSelectedUpdate(
 ): Promise<CliRunResult> {
   let applied: UpdateApplyReportBase;
   try {
-    applied = await selected.apply({ drivePackageManager: scenario.drivePackageManager });
+    applied = await selected.apply({
+      drivePackageManager: scenario.drivePackageManager,
+    });
   } catch (error) {
     const recoveryCommands = selected.applyRecoveryCommands?.(error) ?? [
       retryUpdateCommand(selected.plan.currentCli, options.configPath, request),
@@ -252,10 +257,11 @@ async function crossOverRuntime(
     String(OBSERVER_CROSSOVER_TIMEOUT_MS),
   ]);
   const hostCommand =
-    plan.hostHandoff.kind === "handoff"
+    plan.hostHandoff.kind === "converge"
       ? stationCommand(plan.launcher, options.configPath, [
           "host",
           "handoff",
+          "--update-crossover",
           "--fidelity",
           plan.hostHandoff.fidelity,
         ])
@@ -322,7 +328,22 @@ async function crossOverRuntime(
 
   if (hostCommand !== undefined) {
     try {
-      await runCrossover(hostCommand, plan.completionStatus, commandRunner);
+      const failure = await runHostCrossover(hostCommand, plan.completionStatus, commandRunner);
+      if (failure !== undefined) {
+        return failedUpdateResult(
+          report,
+          "host-handoff",
+          updateErrorFromUnknown(undefined, {
+            code: "UPDATE_RUNTIME_CROSSOVER_FAILED",
+            message: runtimeCrossoverFailureMessage(plan.completionStatus),
+          }),
+          [hostCommand],
+          request.output,
+          undefined,
+          failure.convergenceFailure,
+          failure.error,
+        );
+      }
     } catch (error) {
       return failedUpdateResult(report, "host-handoff", error, [hostCommand], request.output);
     }
@@ -476,22 +497,40 @@ function hookReconciliationRecoveryCommands(
   return [...prerequisiteCommands, reconcileCommand, ...runtimeCommands];
 }
 
-async function runCrossover(
+async function runHostCrossover(
   command: UpdateCommandArgv,
   completionStatus: RuntimeCrossoverPlan["completionStatus"],
   runner: ExternalCommandRunner | undefined,
-) {
+): Promise<
+  | {
+      error: SafeError;
+      convergenceFailure?: StationHostConvergenceFailureSummary;
+    }
+  | undefined
+> {
   const [executable, ...args] = command;
   try {
-    await runExternalCommand(
+    const result = await runExternalCommand(
       {
         command: executable,
         args,
         timeoutMs: 60_000,
         maxOutputChars: 64 * 1024,
+        allowedExitCodes: [1],
       },
       runner,
     );
+    const parsed = StationHostUpdateCrossoverResultSchema.parse(JSON.parse(result.stdout));
+    if (result.exitCode === 0 && parsed.status === "completed") return undefined;
+    if (result.exitCode === 1 && parsed.status === "failed") {
+      return {
+        error: parsed.error,
+        ...(parsed.convergenceFailure === undefined
+          ? {}
+          : { convergenceFailure: parsed.convergenceFailure }),
+      };
+    }
+    throw new Error("Host crossover result contradicted its process exit status.");
   } catch (error) {
     throw updateErrorFromUnknown(error, {
       code: "UPDATE_RUNTIME_CROSSOVER_FAILED",

@@ -14387,20 +14387,12 @@
       ]
     },
     {
-      "path": "apps/cli/src/commands/host/index.ts",
+      "path": "apps/cli/src/commands/host/runHostCommand.ts",
       "declaration": "runHostCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. Mutating handoff defers policy to `ensureStationHostRunning`; this layer only projects the ensure outcome.",
-      "dependencies": [
-        {
-          "path": "packages/station-host/src/protocol.ts",
-          "declaration": "classifyHostCompatibility",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        }
-      ]
+      "purpose": "Projects exact inspection and convergence into the stable CLI object and text contract.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/commands/observer.ts",
@@ -14899,7 +14891,7 @@
       "purpose": "Resolves the non-dry update path and preflights default Host preservation before mutation.",
       "dependencies": [
         {
-          "path": "apps/cli/src/commands/host/index.ts",
+          "path": "apps/cli/src/commands/host/runHostCommand.ts",
           "declaration": "runHostCommand",
           "kind": "function",
           "role": "ADAPTER",
@@ -18003,12 +17995,77 @@
       ]
     },
     {
+      "path": "integrations/terminal/station/src/host/convergeStationHost.ts",
+      "declaration": "convergeStationHost",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Contextually parses and snapshots exact authority before binding local adapters.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
+          "declaration": "executeStationHostConvergence",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
+          "declaration": "StationHostConvergencePorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/inspectStationHost.ts",
+          "declaration": "inspectStationHost",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+          "declaration": "readStationHostEndpoint",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+          "declaration": "readStationHostEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+          "declaration": "startStationHostWithOwnershipProof",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/lifecycleSession.ts",
+          "declaration": "openStationHostLifecycleSession",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "integrations/terminal/station/src/host/ensureHostRunning.ts",
       "declaration": "ensureStationHostRunning",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Preserves inaccessible Host ownership and defers definite stale reclaim to the child binder while retaining compatibility-aware idle replacement and an opt-in busy-host live handoff path. Pre-commit failure restores the incumbent refusal; after completion commits, parked PTYs remain available to a successor.",
+      "purpose": "Preserves inaccessible ownership and provides compatibility-only absent/stale start, current protocol and display-version reuse, atomic idle replacement, and busy refusal.",
       "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+          "declaration": "startStationHostWithOwnershipProof",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
         {
           "path": "packages/protocol/src/transport.ts",
           "declaration": "probeUnixSocket",
@@ -18026,11 +18083,98 @@
       ]
     },
     {
+      "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
+      "declaration": "executeStationHostConvergence",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Sequences one-deadline incumbent release, direct-child ownership transfer, exact adoption, and independent proof of the successor's complete terminal lifetimes. Mutation delivery makes the prior incumbent disposition unknown until fresh evidence proves otherwise. A transferred or concurrent proven successor is never signaled.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
+          "declaration": "StationHostConvergencePorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
+      "declaration": "StationHostConvergencePorts",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies pinned sessions, direct-child ownership proof, independent inspection, and one clock.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/terminal/station/src/host/hostProcess.ts",
+      "declaration": "startStationHostProcess",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Retains one exact child. It performs no probe/lookup; transfer consumes proved holders and cleanup signals only that retained child.",
+      "dependencies": []
+    },
+    {
       "path": "integrations/terminal/station/src/host/inspectStationHost.ts",
       "declaration": "inspectStationHost",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Reads one current Host lifetime without starting, replacing, handing off, or retaining a connection. Exact evidence is correlated to the configured socket path across both probes.",
+      "purpose": "Reads one current Host lifetime without mutation or retained authority. Discovery and exact inventory use disposable, non-reconnecting sessions bounded by one absolute deadline.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+          "declaration": "readStationHostEndpoint",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/lifecycleSession.ts",
+          "declaration": "openStationHostLifecycleSession",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/orphanRecovery.ts",
+      "declaration": "adoptParkedOrphanManifest",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Adopts exactly the unique parked PTY set; acknowledgements never authorize less.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/terminal/station/src/host/preflightParkedOrphanRecovery.ts",
+      "declaration": "executeParkedOrphanRecoveryPreflight",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Proves every durable live park is currently reachable and still identifies the same bridge and PTY without starting a Host or requesting ownership transfer. Unowned parks must also be disjoint from every independently unique lifetime identity in the current Host inventory.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/terminal/station/src/host/preflightParkedOrphanRecovery.ts",
+      "declaration": "preflightParkedOrphanRecovery",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Binds durable filesystem evidence, local bridge status, and the absolute preflight clock.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/preflightParkedOrphanRecovery.ts",
+          "declaration": "executeParkedOrphanRecoveryPreflight",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+      "declaration": "readStationHostEndpoint",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Binds a configured path to one physical socket lifetime before a deadline.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",
@@ -18038,8 +18182,142 @@
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "readUnixSocketHolderPidsAsync",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+      "declaration": "readStationHostEvidence",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Reads exact Host evidence on one supplied physical lifecycle session.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+          "declaration": "readStationHostEndpoint",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/recoverExactStationHostOrphans.ts",
+      "declaration": "executeExactStationHostOrphanRecovery",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Starts the exact target when durable parks require it, then adopts every validated unowned park whose independent lifetime identities are disjoint from the pinned Host inventory, on one identity-proven physical session, and independently verifies the resulting inventory.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/terminal/station/src/host/recoverExactStationHostOrphans.ts",
+      "declaration": "recoverExactStationHostOrphans",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Parses target identity and binds local process, socket, evidence, and adoption adapters.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/inspectStationHost.ts",
+          "declaration": "inspectStationHost",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/orphanRecovery.ts",
+          "declaration": "adoptParkedOrphanManifest",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+          "declaration": "readStationHostEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/recoverExactStationHostOrphans.ts",
+          "declaration": "executeExactStationHostOrphanRecovery",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+          "declaration": "startStationHostWithOwnershipProof",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/lifecycleSession.ts",
+          "declaration": "openStationHostLifecycleSession",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+      "declaration": "startStationHostWithOwnershipProof",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Starts one direct child and transfers it only after the endpoint and health remain stable across canonical socket-holder evidence before the startup cutoff.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/hostProcess.ts",
+          "declaration": "startStationHostProcess",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+          "declaration": "readStationHostEndpoint",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+          "declaration": "StationHostStartupProofPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "readUnixSocketHolderPidsAsync",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/lifecycleSession.ts",
+          "declaration": "openStationHostLifecycleSession",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+      "declaration": "StationHostStartupProofPorts",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies the clock, endpoint evidence, holder evidence, and pinned session needed to prove a freshly started Host owns its configured socket.",
+      "dependencies": []
     },
     {
       "path": "integrations/terminal/station/src/provider.ts",
@@ -18389,6 +18667,14 @@
       "dependencies": []
     },
     {
+      "path": "packages/protocol/src/transport.ts",
+      "declaration": "readUnixSocketHolderPidsAsync",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Reads canonical lsof evidence without blocking the deadline or caller-abort clock turn.",
+      "dependencies": []
+    },
+    {
       "path": "packages/runtime/src/hookSetup.ts",
       "declaration": "classifyProviderHookArtifactOwnership",
       "kind": "function",
@@ -18591,11 +18877,43 @@
       "dependencies": []
     },
     {
+      "path": "packages/station-host/src/clientIdentity.ts",
+      "declaration": "createHostClientIdentity",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Builds one immutable diagnostic identity for a physical Host client connection.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/station-host/src/lifecycleSession.ts",
+      "declaration": "openStationHostLifecycleSession",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Opens one non-reconnecting lifecycle client whose requests share one absolute deadline and physical NDJSON connection. Correlation failures poison it; malformed begin success permits only a same-connection abort before disposal.",
+      "dependencies": [
+        {
+          "path": "packages/station-host/src/clientIdentity.ts",
+          "declaration": "createHostClientIdentity",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "packages/station-host/src/protocol.ts",
       "declaration": "classifyHostCompatibility",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Decide host reuse, idle replace eligibility, or refuse from opaque health without inferring SemVer compatibility. Live handoff is only considered when this returns `replace`; protocol mismatch stays a visible refuse.",
+      "purpose": "Decides generic Host reuse, idle replacement eligibility, or refusal from opaque health without inferring SemVer compatibility. Immutable identity and exact convergence are intentionally outside this compatibility policy.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/station-host/src/server.ts",
+      "declaration": "serveHostConnection",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Dispatches Host requests concurrently so long-lived `host.attach` streams do not block write/resize/detach on the same multiplexed socket. Socket access is the admission boundary; accepted connections receive an opaque continuity token, while operational requests bind only caller-asserted compatibility and correlation metadata. Teardown restores only that connection's pre-complete handoff authority after attachment tasks settle.",
       "dependencies": []
     }
   ]

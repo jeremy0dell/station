@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { waitFor } from "../../testing/waitFor.js";
-import { PtyBridgeProtocolVersion } from "@station/contracts";
+import { PtyBridgeParkStateSchema, PtyBridgeProtocolVersion } from "@station/contracts";
 import { adoptLocalPtyBridge } from "../ptyBridgeAdoption.js";
 
 const BRIDGE_PATH = fileURLToPath(new URL("../localPtyBridge.cjs", import.meta.url));
@@ -108,6 +108,10 @@ async function waitForReady(spawned: OrphanSpawn): Promise<void> {
 async function park(spawned: OrphanSpawn): Promise<void> {
   spawned.bridge.stdin.end();
   await waitFor(() => existsSync(spawned.controlSocketPath), 5_000);
+}
+
+async function readParkState(path: string) {
+  return PtyBridgeParkStateSchema.parse(JSON.parse(await readFile(path, "utf8")));
 }
 
 function connectControl(socketPath: string): Promise<net.Socket> {
@@ -320,6 +324,7 @@ describe("localPtyBridge orphan mode", () => {
       const terminal = await adoptLocalPtyBridge({
         id: "pty-1",
         ptyInstanceId: PTY_INSTANCE_ID,
+        bridgePid: (await readParkState(parkStatePath)).bridgePid,
         command: "/bin/sh",
         controlSocketPath,
         size: { cols: 80, rows: 24 },
@@ -387,6 +392,7 @@ describe("localPtyBridge orphan mode", () => {
       const first = await adoptLocalPtyBridge({
         id: "pty-1",
         ptyInstanceId: PTY_INSTANCE_ID,
+        bridgePid: (await readParkState(spawned.parkStatePath)).bridgePid,
         command: "/bin/sh",
         controlSocketPath: spawned.controlSocketPath,
         size: { cols: 80, rows: 24 },
@@ -406,6 +412,7 @@ describe("localPtyBridge orphan mode", () => {
       const second = await adoptLocalPtyBridge({
         id: "pty-1",
         ptyInstanceId: PTY_INSTANCE_ID,
+        bridgePid: (await readParkState(spawned.parkStatePath)).bridgePid,
         command: "/bin/sh",
         controlSocketPath: spawned.controlSocketPath,
         size: { cols: 80, rows: 24 },
@@ -526,9 +533,11 @@ describe("localPtyBridge orphan mode", () => {
       { ...baseStatus, adopted: false },
       { ...baseStatus, bridgeProtocol: PtyBridgeProtocolVersion + 1 },
       { ...baseStatus, ptyInstanceId: "wrong-instance" },
+      { ...baseStatus, bridgePid: 457 },
       { ...baseStatus, extra: true },
       { type: "status" },
     ];
+    const replyCount = replies.length;
     const server = net.createServer((socket) => {
       socket.once("data", () => {
         socket.end(`${JSON.stringify(replies.shift())}\n`);
@@ -536,12 +545,13 @@ describe("localPtyBridge orphan mode", () => {
     });
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
     try {
-      for (let attempt = 0; attempt < 5; attempt += 1) {
+      for (let attempt = 0; attempt < replyCount; attempt += 1) {
         let rejected = false;
         try {
           await adoptLocalPtyBridge({
             id: "pty-1",
             ptyInstanceId: PTY_INSTANCE_ID,
+            bridgePid: 456,
             command: "/bin/sh",
             controlSocketPath: socketPath,
             size: { cols: 80, rows: 24 },
@@ -605,6 +615,7 @@ describe("localPtyBridge orphan mode", () => {
       const terminal = await adoptLocalPtyBridge({
         id: "pty-1",
         ptyInstanceId: PTY_INSTANCE_ID,
+        bridgePid: (await readParkState(spawned.parkStatePath)).bridgePid,
         command: "/bin/sh",
         controlSocketPath: spawned.controlSocketPath,
         size: { cols: 80, rows: 24 },

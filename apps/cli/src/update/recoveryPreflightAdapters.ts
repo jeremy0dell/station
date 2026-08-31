@@ -29,7 +29,7 @@ import { redactedPreflightError } from "./recoveryPreflight.js";
 export type CreateUpdateRecoveryPreflightPortsOptions = {
   config: StationConfig;
   configPath?: string;
-  hostInspectionDeps?: Pick<InspectStationHostDeps, "clientFactory">;
+  hostInspectionDeps?: InspectStationHostDeps;
   inspectObserverOwner?: () => Promise<ExactObserverOwnershipEvidence>;
   providers: ProviderRegistry;
   inspectHost?: typeof inspectStationHost;
@@ -162,7 +162,7 @@ async function inspectHostRecoveryEvidence(input: {
   artifacts: { installed: UpdateArtifact; target: UpdateArtifact };
   currentBuildIdentity: StationBuildIdentity;
   inspectHost: typeof inspectStationHost;
-  inspectionDeps?: Pick<InspectStationHostDeps, "clientFactory">;
+  inspectionDeps?: InspectStationHostDeps;
 }): Promise<UpdateReapHostEvidence> {
   const inspection = await input.inspectHost(
     {

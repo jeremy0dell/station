@@ -1,13 +1,14 @@
 import type { PtyHandoffEntry } from "@station/contracts";
 import type { HostSpawnParams } from "@station/host";
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createScriptedTerminal, type ScriptedTerminal } from "../../terminal/testing/scriptedTerminal.js";
 import type { StationTerminalProcess } from "../../terminal/types.js";
 import { waitFor } from "../../terminal/testing/waitFor.js";
 import { writeScrollbackExport } from "../orphanBridges.js";
+import { PtyHandoffRestorationError } from "../ptyHandoff.js";
 import { createPtyTable, type PtyAdoptionTarget, type PtyAdoptedTerminal } from "../ptyTable.js";
 
 const baseParams: HostSpawnParams = {
@@ -26,9 +27,10 @@ const baseParams: HostSpawnParams = {
 };
 
 function handoffEntry(ptyId: string, overrides: Partial<PtyHandoffEntry> = {}): PtyHandoffEntry {
+  const sequence = Number.parseInt(ptyId.slice("pty-".length), 10);
   return {
     bridgeProtocolVersion: 2,
-    bridgePid: 4242,
+    bridgePid: 4_242 + sequence,
     controlSocket: `/state/run/pty-bridges/${ptyId}.sock`,
     command: "claude",
     cols: 80,
@@ -149,6 +151,7 @@ describe("createPtyTable registry adoption", () => {
     expect(pool.adoptedTargets[0]).toMatchObject({
       ptyId: "pty-3",
       ptyInstanceId: "instance-pty-3",
+      bridgePid: 4_245,
     });
 
     const controller = await table.attach(table.list()[0]!, "att-registry", "controller");
@@ -577,6 +580,65 @@ describe("createPtyTable registry adoption", () => {
     expect(released).toEqual(false);
     expect(table.list()).toHaveLength(2);
     expect(events).toContain("pty.handoff.refused-partial");
+    table.disposeAll();
+  });
+
+  it("retains only unrestored parks when release-readiness rollback is partial", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-release-rollback-"));
+    let bridgePid = 2_000;
+    const table = createPtyTable({
+      orphanBridges: { directory },
+      createTerminal: () => {
+        const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+        bridgePid += 1;
+        return {
+          ...scripted.terminal,
+          bridgePid,
+          releaseToOrphan() {
+            scripted.terminal.dispose();
+            return true;
+          },
+        };
+      },
+      adoptTerminal: async (target) => {
+        if (target.ptyId === "pty-1") {
+          throw new Error("bridge unavailable");
+        }
+        const scripted = createScriptedTerminal(target.size);
+        return {
+          ...scripted.terminal,
+          bridgePid: 3_000,
+          releaseToOrphan() {
+            scripted.terminal.dispose();
+            return true;
+          },
+        };
+      },
+    });
+    const first = table.spawn(baseParams);
+    const second = table.spawn({
+      ...baseParams,
+      terminalTargetId: "native:wt-2",
+      worktreeId: "wt-2",
+      sessionId: "ses-2",
+      kind: "aux",
+    });
+    // A park artifact without its promised listener deterministically refuses release readiness.
+    await writeFile(join(directory, `${first.ptyId}.park.json`), "{}");
+    await writeFile(join(directory, `${second.ptyId}.park.json`), "{}");
+
+    let failure: unknown;
+    try {
+      await table.releaseRegistryForHandoff("processes");
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure instanceof PtyHandoffRestorationError).toBe(true);
+    if (!(failure instanceof PtyHandoffRestorationError)) {
+      throw new Error("Expected partial restoration evidence.");
+    }
+    expect(Object.keys(failure.remainingManifest)).toEqual([first.ptyId]);
+    expect(table.list().map(({ ptyId }) => ptyId)).toEqual([second.ptyId]);
     table.disposeAll();
   });
 

@@ -19,7 +19,9 @@ import type {
 } from "../../src/update/updateChannel.js";
 
 const config = {
-  observer: { socketPath: `/tmp/station-update-command-${process.pid}/observer.sock` },
+  observer: {
+    socketPath: `/tmp/station-update-command-${process.pid}/observer.sock`,
+  },
 } as StationConfig;
 const testBuildInfo = () => ({
   compiled: false,
@@ -167,7 +169,11 @@ describe("stn update command", () => {
           current: { version: "1.0.0" },
           target: { version: "1.0.0" },
           steps: [
-            { id: "detect", status: "completed", detail: "Detected installer-binary ownership." },
+            {
+              id: "detect",
+              status: "completed",
+              detail: "Detected installer-binary ownership.",
+            },
             {
               id: "plan",
               status: "completed",
@@ -190,8 +196,8 @@ describe("stn update command", () => {
             },
             {
               id: "host-handoff",
-              status: "skipped",
-              detail: "No live Host handoff is needed.",
+              status: "completed",
+              detail: "The Host completed exact ownership convergence with processes fidelity.",
             },
           ],
           warnings: [],
@@ -217,6 +223,20 @@ describe("stn update command", () => {
           args: ["--config", "/tmp/config.toml", "observer", "start", "--timeout-ms", "20000"],
         }),
       );
+      expect(commandRunner).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "/opt/stn",
+          args: [
+            "--config",
+            "/tmp/config.toml",
+            "host",
+            "handoff",
+            "--update-crossover",
+            "--fidelity",
+            "processes",
+          ],
+        }),
+      );
       expect(liveHost.clientFactory).toHaveBeenCalled();
     } finally {
       await liveHost.close();
@@ -225,7 +245,9 @@ describe("stn update command", () => {
 
   it("keeps an already-current dry-run free of hook, Observer, and Host effects", async () => {
     const fixture = probeFixture("installer-binary", { planStatus: "current" });
-    const liveHost = await createLiveHostFixture({ listError: new Error("must not inspect Host") });
+    const liveHost = await createLiveHostFixture({
+      listError: new Error("must not inspect Host"),
+    });
     const commandRunner = vi.fn();
     try {
       const result = await runUpdateCommand(
@@ -289,7 +311,15 @@ describe("stn update command", () => {
       expect(commands.map(({ args }) => args)).toEqual([
         ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
         ["--config", "/tmp/config.toml", "observer", "start", "--timeout-ms", "20000"],
-        ["--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "processes"],
+        [
+          "--config",
+          "/tmp/config.toml",
+          "host",
+          "handoff",
+          "--update-crossover",
+          "--fidelity",
+          "processes",
+        ],
       ]);
     } finally {
       await liveHost.close();
@@ -313,7 +343,10 @@ describe("stn update command", () => {
       channel: "installer-binary",
       current: { version: "1.0.0" },
       target: { version: "1.1.0" },
-      plan: { outcome: "actionable", phases: { artifactApplication: { action: "apply" } } },
+      plan: {
+        outcome: "actionable",
+        phases: { artifactApplication: { action: "apply" } },
+      },
     });
     expect(fixture.apply).not.toHaveBeenCalled();
     expect(commandRunner).not.toHaveBeenCalled();
@@ -383,7 +416,10 @@ describe("stn update command", () => {
         phases: {
           artifactApplication: {
             action: "apply",
-            command: { kind: "manager", argv: ["/opt/mise", "upgrade", "station"] },
+            command: {
+              kind: "manager",
+              argv: ["/opt/mise", "upgrade", "station"],
+            },
           },
         },
       },
@@ -468,6 +504,21 @@ describe("stn update command", () => {
           "20000",
         ],
       }),
+      expect.objectContaining({
+        command: "/opt/mise",
+        args: [
+          "exec",
+          "--",
+          "stn",
+          "--config",
+          "/tmp/config.toml",
+          "host",
+          "handoff",
+          "--update-crossover",
+          "--fidelity",
+          "processes",
+        ],
+      }),
     ]);
   });
 
@@ -529,6 +580,16 @@ describe("stn update command", () => {
             "restart",
             "--timeout-ms",
             "20000",
+          ],
+          [
+            "/opt/stn",
+            "--config",
+            "/tmp/config.toml",
+            "host",
+            "handoff",
+            "--update-crossover",
+            "--fidelity",
+            "processes",
           ],
         ],
         steps: [
@@ -675,6 +736,7 @@ describe("stn update command", () => {
             "/tmp/config.toml",
             "host",
             "handoff",
+            "--update-crossover",
             "--fidelity",
             "processes",
           ],
@@ -840,11 +902,130 @@ describe("stn update command", () => {
       expect(commands.map(({ args }) => args)).toEqual([
         ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
         ["--config", "/tmp/config.toml", "observer", "restart", "--timeout-ms", "20000"],
-        ["--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "processes"],
+        [
+          "--config",
+          "/tmp/config.toml",
+          "host",
+          "handoff",
+          "--update-crossover",
+          "--fidelity",
+          "processes",
+        ],
       ]);
     } finally {
       await liveHost.close();
     }
+  });
+
+  it("converges Host ownership after a same-display revision update", async () => {
+    const liveHost = await createLiveHostFixture();
+    const fixture = probeFixture("dev-checkout", {
+      currentVersion: "1.0.0",
+      targetVersion: "1.0.0",
+      currentRevision: "revision-a",
+      targetRevision: "revision-b",
+      applyReport: {
+        channel: "dev-checkout",
+        status: "updated",
+        previousVersion: "1.0.0",
+        installedVersion: "1.0.0",
+        successorCli: ["/opt/stn"],
+        warnings: [],
+      },
+    });
+    const commands: ExternalCommandInput[] = [];
+    try {
+      const result = await runUpdateCommand(
+        ["--json"],
+        liveHostCommandOptions(liveHost.state.config),
+        {
+          probes: [fixture.probe],
+          buildInfo: testBuildInfo,
+          hostDeps: liveHost.hostDeps,
+          commandRunner: async (input) => {
+            commands.push(input);
+            return commandResult(input);
+          },
+        },
+      );
+
+      expect(result.output).toMatchObject({
+        status: "updated",
+        current: { version: "1.0.0", revision: "revision-a" },
+        target: { version: "1.0.0", revision: "revision-b" },
+      });
+      expect((result.output as { steps: unknown[] }).steps).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "host-handoff", status: "completed" }),
+        ]),
+      );
+      expect(commands.at(-1)?.args).toEqual([
+        "--config",
+        "/tmp/config.toml",
+        "host",
+        "handoff",
+        "--update-crossover",
+        "--fidelity",
+        "processes",
+      ]);
+      expect(liveHost.clientFactory).toHaveBeenCalledWith({
+        socketPath: stationHostSocketPath(liveHost.state.config),
+        expectedBuildVersion: "1.0.0",
+      });
+    } finally {
+      await liveHost.close();
+    }
+  });
+
+  it.each([
+    "absent",
+    "idle",
+  ] as const)("re-inspects through the successor after a %s Host preflight", async (preflightState) => {
+    const fixture = probeFixture("installer-binary");
+    const inspectHost = vi.fn(async () => {
+      if (preflightState === "absent") return { status: "absent" as const };
+      const socketPath = stationHostSocketPath(config);
+      return {
+        status: "exact" as const,
+        evidence: {
+          endpoint: { socketPath, ino: 1n, birthtimeNs: 1n },
+          health: {
+            ok: true as const,
+            protocolVersion: HOST_PROTOCOL_VERSION,
+            buildVersion: "1.0.0",
+          },
+          buildIdentity: testBuildInfo().buildIdentity,
+          terminals: [],
+        },
+      };
+    });
+    const commands: ExternalCommandInput[] = [];
+
+    const result = await runUpdateCommand(["--json"], commandOptions(), {
+      probes: [fixture.probe],
+      buildInfo: testBuildInfo,
+      hostDeps: { inspectHost },
+      commandRunner: async (input) => {
+        commands.push(input);
+        return commandResult(input);
+      },
+    });
+
+    expect(result.output).toMatchObject({ status: "updated" });
+    expect((result.output as { steps: unknown[] }).steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "host-handoff", status: "completed" }),
+      ]),
+    );
+    expect(commands.at(-1)?.args).toEqual([
+      "--config",
+      "/tmp/config.toml",
+      "host",
+      "handoff",
+      "--update-crossover",
+      "--fidelity",
+      "processes",
+    ]);
   });
 
   it("fails closed by default while --no-handoff skips Host preflight with a warning", async () => {
@@ -882,6 +1063,32 @@ describe("stn update command", () => {
     }
   });
 
+  it("does not install when a durable parked bridge is not viable for recovery", async () => {
+    const liveHost = await createLiveHostFixture();
+    const fixture = probeFixture("installer-binary");
+    try {
+      await expect(
+        runUpdateCommand(["--json"], liveHostCommandOptions(liveHost.state.config), {
+          probes: [fixture.probe],
+          buildInfo: testBuildInfo,
+          hostDeps: {
+            ...liveHost.hostDeps,
+            preflightHostOrphans: async () => {
+              throw {
+                tag: "TerminalProviderError",
+                code: "HOST_HANDOFF_MANIFEST_INVALID",
+                message: "A parked terminal was not reachable for update recovery.",
+              };
+            },
+          },
+        }),
+      ).rejects.toMatchObject({ code: "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED" });
+      expect(fixture.apply).not.toHaveBeenCalled();
+    } finally {
+      await liveHost.close();
+    }
+  });
+
   it("retains a recovery command when Host handoff fails after Observer crossover", async () => {
     const liveHost = await createLiveHostFixture();
     const fixture = probeFixture("installer-binary");
@@ -911,7 +1118,16 @@ describe("stn update command", () => {
         output: {
           status: "failed",
           recoveryCommands: [
-            ["/opt/stn", "--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "screen"],
+            [
+              "/opt/stn",
+              "--config",
+              "/tmp/config.toml",
+              "host",
+              "handoff",
+              "--update-crossover",
+              "--fidelity",
+              "screen",
+            ],
           ],
           steps: [
             { id: "detect", status: "completed" },
@@ -921,6 +1137,79 @@ describe("stn update command", () => {
             { id: "observer-restart", status: "completed" },
             { id: "host-handoff", status: "failed" },
           ],
+        },
+      });
+    } finally {
+      await liveHost.close();
+    }
+  });
+
+  it("retains structured Host convergence failure truth from the successor launcher", async () => {
+    const liveHost = await createLiveHostFixture();
+    const fixture = probeFixture("installer-binary");
+    const error = {
+      tag: "TerminalProviderError",
+      code: "HOST_HANDOFF_MANIFEST_INVALID",
+      message: "Successor adoption acknowledgement was incomplete.",
+    };
+    try {
+      const result = await runUpdateCommand(
+        ["--json"],
+        liveHostCommandOptions(liveHost.state.config),
+        {
+          probes: [fixture.probe],
+          buildInfo: testBuildInfo,
+          hostDeps: liveHost.hostDeps,
+          commandRunner: async (input) => {
+            if (input.args?.includes("--update-crossover") !== true) return commandResult(input);
+            return {
+              command: input.command,
+              args: input.args ?? [],
+              stdout: JSON.stringify({
+                schemaVersion: 1,
+                status: "failed",
+                error,
+                convergenceFailure: {
+                  status: "failed",
+                  action: "handoff",
+                  phase: "adoption",
+                  incumbentDisposition: "released",
+                  terminalDisposition: "parked",
+                  recoveryAuthority: "none",
+                  terminalCount: 1,
+                  terminalRecoveryCounts: {
+                    incumbent: 0,
+                    parked: 1,
+                    successor: 0,
+                    unknown: 0,
+                  },
+                  handoffReceipt: { retained: false, terminalCount: 0 },
+                  error,
+                },
+              }),
+              stderr: "",
+              exitCode: 1,
+            };
+          },
+        },
+      );
+
+      expect(result).toMatchObject({
+        code: 1,
+        output: {
+          status: "failed",
+          error: { code: "UPDATE_RUNTIME_CROSSOVER_FAILED" },
+          cause: { code: "HOST_HANDOFF_MANIFEST_INVALID" },
+          hostConvergenceFailure: {
+            phase: "adoption",
+            incumbentDisposition: "released",
+            terminalDisposition: "parked",
+            recoveryAuthority: "none",
+            error: { code: "HOST_HANDOFF_MANIFEST_INVALID" },
+            terminalCount: 1,
+            terminalRecoveryCounts: { parked: 1 },
+            handoffReceipt: { retained: false, terminalCount: 0 },
+          },
         },
       });
     } finally {
@@ -966,10 +1255,16 @@ describe("update channel selection", () => {
       code: "UPDATE_CHANNEL_AMBIGUOUS",
     });
     await expect(
-      selectUpdateChannel({ probes: [installer, npm], requested: "npm-global" }),
+      selectUpdateChannel({
+        probes: [installer, npm],
+        requested: "npm-global",
+      }),
     ).resolves.toMatchObject({ channel: "npm-global" });
     await expect(
-      selectUpdateChannel({ probes: [missingProbe("mise")], requested: "mise" }),
+      selectUpdateChannel({
+        probes: [missingProbe("mise")],
+        requested: "mise",
+      }),
     ).rejects.toMatchObject({ code: "UPDATE_CHANNEL_NOT_DETECTED" });
   });
 });
@@ -983,7 +1278,11 @@ function commandOptions() {
 }
 
 function liveHostCommandOptions(config: StationConfig) {
-  return { config, configPath: "/tmp/config.toml", cliEntryPath: "/repo/apps/cli/dist/main.js" };
+  return {
+    config,
+    configPath: "/tmp/config.toml",
+    cliEntryPath: "/repo/apps/cli/dist/main.js",
+  };
 }
 
 function previewPreflight(kind: "absent" | "converged" | "blocked" | "leave-in-place") {
@@ -1140,6 +1439,10 @@ function probeFixture(
   channel: UpdateChannelId,
   overrides: {
     planStatus?: UpdatePlanBase["status"];
+    currentVersion?: string;
+    targetVersion?: string;
+    currentRevision?: string;
+    targetRevision?: string;
     managerCommand?: readonly [string, ...string[]];
     applyReport?: UpdateApplyReportBase;
     applyRecoveryCommands?: (error: unknown) => readonly UpdateCommandArgv[] | undefined;
@@ -1148,9 +1451,14 @@ function probeFixture(
   const plan: UpdatePlanBase = {
     channel,
     status: overrides.planStatus ?? "update-available",
-    currentVersion: "1.0.0",
-    targetVersion: overrides.planStatus === "current" ? "1.0.0" : "1.1.0",
+    currentVersion: overrides.currentVersion ?? "1.0.0",
+    targetVersion:
+      overrides.targetVersion ?? (overrides.planStatus === "current" ? "1.0.0" : "1.1.0"),
     currentCli: ["/opt/stn"],
+    ...(overrides.currentRevision === undefined
+      ? {}
+      : { currentRevision: overrides.currentRevision }),
+    ...(overrides.targetRevision === undefined ? {} : { targetRevision: overrides.targetRevision }),
     ...(overrides.managerCommand === undefined ? {} : { managerCommand: overrides.managerCommand }),
   };
   const apply = vi.fn(
@@ -1158,8 +1466,8 @@ function probeFixture(
       (overrides.applyReport ?? {
         channel,
         status: "installed",
-        previousVersion: "1.0.0",
-        installedVersion: "1.1.0",
+        previousVersion: plan.currentVersion,
+        installedVersion: plan.targetVersion,
         successorCli: ["/opt/stn"],
         warnings: [],
       }) satisfies UpdateApplyReportBase,
@@ -1191,6 +1499,8 @@ function commandResult(
   const observerCrossover =
     input.args?.includes("observer") === true &&
     (input.args.includes("start") || input.args.includes("restart"));
+  const hostCrossover =
+    input.args?.includes("host") === true && input.args.includes("--update-crossover");
   return {
     command: input.command,
     args: input.args ?? [],
@@ -1211,7 +1521,9 @@ function commandResult(
               ...(observerVersion === undefined ? {} : { version: observerVersion }),
             },
           })
-        : "",
+        : hostCrossover
+          ? JSON.stringify({ schemaVersion: 1, status: "completed" })
+          : "",
     stderr: "",
     exitCode: 0,
   };
@@ -1234,50 +1546,60 @@ async function createLiveHostFixture(
 ) {
   const state = await createTempState();
   const socketPath = stationHostSocketPath(state.config);
-  const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
-  const clientFactory = vi.fn(
-    () =>
-      ({
-        health: async () => ({
-          ok: true,
+  const server = await listenUnixSocket({
+    socketPath,
+    onConnection: () => undefined,
+  });
+  const clientFactory = vi.fn(async () => {
+    if (options.listError !== undefined) {
+      return {
+        status: "unknown" as const,
+        reason: "inventory-failed" as const,
+        error: {
+          tag: "TerminalProviderError",
+          code: "HOST_REQUEST_FAILED",
+          message: options.listError.message,
+        },
+      };
+    }
+    return {
+      status: "exact" as const,
+      evidence: {
+        endpoint: { socketPath, ino: 1n, birthtimeNs: 1n },
+        health: {
+          ok: true as const,
           protocolVersion: HOST_PROTOCOL_VERSION,
           buildVersion: options.hostBuildVersion ?? "1.0.0",
-        }),
-        list: async () => {
-          if (options.listError !== undefined) throw options.listError;
-          return [{ ptyId: "pty-1", pid: 42, alive: true }];
         },
-        recoveryInventory: async () => {
-          if (options.listError !== undefined) throw options.listError;
-          return {
-            buildIdentity: "b".repeat(64),
-            ptys: [
-              {
-                kind: "agent",
-                terminalTargetId: "target-1",
-                ptyId: "pty-1",
-                ptyInstanceId: "instance-1",
-                worktreeId: "worktree-1",
-                projectId: "project-1",
-                sessionId: "session-1",
-                worktreePath: "/repo/one",
-                harnessProvider: "codex",
-                pid: 42,
-                alive: true,
-                cols: 80,
-                rows: 24,
-                handoffSupport: { kind: "bridge-releasable" },
-              },
-            ],
-          };
-        },
-        dispose: () => undefined,
-      }) as never,
-  );
+        buildIdentity: "a".repeat(64),
+        terminals: [
+          {
+            kind: "agent" as const,
+            terminalTargetId: "target-1",
+            ptyId: "pty-1",
+            ptyInstanceId: "instance-1",
+            worktreeId: "worktree-1",
+            projectId: "project-1",
+            sessionId: "session-1",
+            worktreePath: "/repo/one",
+            harnessProvider: "codex",
+            pid: 42,
+            alive: true,
+            cols: 80,
+            rows: 24,
+            handoffSupport: { kind: "bridge-releasable" as const },
+          },
+        ],
+      },
+    };
+  });
   return {
     state,
     clientFactory,
-    hostDeps: { clientFactory },
+    hostDeps: {
+      inspectHost: clientFactory,
+      expectedBuildIdentity: "a".repeat(64),
+    },
     close: () => server.close(),
   };
 }

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStationHostClient, type HostListEntry } from "@station/host";
-import { ensureStationHostRunning } from "@station/terminal";
+import { convergeStationHost, inspectStationHost } from "@station/terminal";
 import { buildLayoutSnapshot } from "./layoutSnapshot.js";
 import { applyRestoreSeeds, planLayoutRestoreWarm } from "./restoreLayout.js";
 import { createStationStore } from "../store.js";
@@ -211,6 +211,8 @@ if (SMOKE) {
       let successorClient: ReturnType<typeof createStationHostClient> | undefined;
       let registry: ReturnType<typeof createPtyRegistry> | undefined;
       let childPid = 0;
+      const previousOverride = process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE;
+      const previousPtyImpl = process.env.STATION_PTY_IMPL;
       try {
         await waitFor(async () => {
           try {
@@ -260,48 +262,64 @@ if (SMOKE) {
         await incumbentAttachment.detach();
         expect(processAlive(childPid)).toBe(true);
 
-        const ensured = await ensureStationHostRunning(
-          {
+        const inspection = await inspectStationHost({
+          socketPath,
+          expectedBuildVersion: buildB,
+          deadlineMs: Date.now() + 5_000,
+        });
+        if (inspection.status !== "exact") {
+          throw new Error(`Incumbent inspection was ${inspection.status}.`);
+        }
+        process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE = "1";
+        process.env.STATION_PTY_IMPL = "bridge";
+        const targetBuild = { buildVersion: buildB, buildIdentity: buildIdentityB };
+        const converged = await convergeStationHost({
+          command: {
+            action: "handoff",
+            targetBuild,
             socketPath,
-            stateDir,
-            hostCommand: [
-              process.env.STATION_BUN ?? "bun",
-              HOST_ENTRY,
-              "--build-version",
-              buildB,
-              "--build-identity",
-              buildIdentityB,
-            ],
-            expectedBuildVersion: buildB,
-            timeoutMs: 10_000,
-            handoff: { fidelity: "processes" },
+            expected: inspection.evidence,
+            fidelity: "processes",
+            deadlineMs: Date.now() + 15_000,
           },
-          {
-            spawnHost: ({ argv, spawnOptions }) => {
-              const [command, ...args] = argv;
-              const child = spawn(command, args, {
-                ...spawnOptions,
-                env: {
-                  ...process.env,
-                  STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE: "1",
-                  STATION_PTY_IMPL: "bridge",
-                },
-              });
-              hosts.push(child);
-              return child;
-            },
-          },
-        );
-        if (ensured.status !== "running") {
+          targetBuild,
+          socketPath,
+          stateDir,
+          hostCommand: [
+            process.env.STATION_BUN ?? "bun",
+            HOST_ENTRY,
+            "--build-version",
+            buildB,
+            "--build-identity",
+            buildIdentityB,
+          ],
+        });
+        if (converged.status !== "completed") {
           throw new Error(
-            `${ensured.error.code}: ${ensured.error.message}${
-              ensured.error.hint === undefined ? "" : ` ${ensured.error.hint}`
+            `${converged.error.code}: ${converged.error.message}${
+              converged.error.hint === undefined ? "" : ` ${converged.error.hint}`
             }`,
           );
         }
-        expect(ensured.status).toBe("running");
-        expect(ensured.ensuredBy).toBe("handoff");
-        successorClient = ensured.client;
+        expect(converged.action).toBe("handoff");
+        if (converged.action !== "handoff") throw new Error("Expected handoff convergence.");
+        expect(converged.handoffReceipt.terminals).toEqual([
+          {
+            terminalTargetId: spawned.terminalTargetId,
+            ptyId: spawned.ptyId,
+            ptyInstanceId: spawned.ptyInstanceId,
+          },
+        ]);
+        expect(converged.finalEvidence).toMatchObject({
+          endpoint: { socketPath },
+          health: { buildVersion: buildB },
+          buildIdentity: buildIdentityB,
+        });
+        expect(converged.finalEvidence.endpoint).not.toEqual(inspection.evidence.endpoint);
+        successorClient = createStationHostClient({
+          socketPath,
+          expectedBuildVersion: buildB,
+        });
 
         const successorInventory = await successorClient.list();
         const adopted = successorInventory.find((entry) => entry.ptyId === spawned.ptyId);
@@ -354,6 +372,10 @@ if (SMOKE) {
         if (childPid > 0 && processAlive(childPid)) {
           process.kill(childPid, "SIGTERM");
         }
+        if (previousOverride === undefined) delete process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE;
+        else process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE = previousOverride;
+        if (previousPtyImpl === undefined) delete process.env.STATION_PTY_IMPL;
+        else process.env.STATION_PTY_IMPL = previousPtyImpl;
         await rm(stateDir, { recursive: true, force: true });
       }
     }, 45_000);

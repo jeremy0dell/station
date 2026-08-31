@@ -1,16 +1,46 @@
+import { EventEmitter } from "node:events";
 import { chmod, lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HOST_PROTOCOL_VERSION, type StationHostClient, stationHostSafeError } from "@station/host";
+import { HOST_PROTOCOL_VERSION } from "@station/contracts";
+import {
+  type StationHostClient,
+  type StationHostLifecycleSession,
+  stationHostSafeError,
+} from "@station/host";
 import { listenUnixSocket, probeUnixSocket } from "@station/protocol";
 import {
   type ChildProcessLike,
   ensureStationHostRunning,
   type SpawnStationHostInput,
 } from "@station/terminal";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  createListeningStationHostFixture,
+  listeningStationHostCommand,
+} from "../support/listeningStationHostFixture.js";
 
 const expectedBuildVersion = "test-build";
+
+class FakeChild extends EventEmitter {
+  pid: number | undefined;
+  readonly signals: Array<NodeJS.Signals | number | undefined> = [];
+  constructor(
+    pid = 42,
+    private readonly settleOnSignal = true,
+  ) {
+    super();
+    this.pid = pid;
+  }
+  kill(signal?: NodeJS.Signals | number): boolean {
+    this.signals.push(signal);
+    if (this.settleOnSignal) this.emit("exit", 0, signal ?? null);
+    return true;
+  }
+  unref(): this {
+    return this;
+  }
+}
 
 function fakeClient(overrides: Partial<StationHostClient> = {}): StationHostClient {
   return {
@@ -20,13 +50,8 @@ function fakeClient(overrides: Partial<StationHostClient> = {}): StationHostClie
       buildVersion: expectedBuildVersion,
     }),
     stopIfIdle: async () => ({ stopping: true }),
-    beginHandoff: async () => ({
-      manifest: {},
-      fidelity: "processes" as const,
-      released: [],
-      skipped: [],
-    }),
-    completeHandoff: async () => ({ stopping: true as const }),
+    beginHandoff: async () => ({ manifest: {}, fidelity: "processes", released: [], skipped: [] }),
+    completeHandoff: async () => ({ stopping: true }),
     abortHandoff: async () => ({ adopted: [], failed: [] }),
     adoptRegistry: async () => ({ adopted: [], failed: [] }),
     spawn: async () => ({
@@ -43,6 +68,26 @@ function fakeClient(overrides: Partial<StationHostClient> = {}): StationHostClie
       throw new Error("not used");
     },
     dispose: () => undefined,
+    ...overrides,
+  };
+}
+
+function lifecycleSession(
+  buildVersion = expectedBuildVersion,
+  overrides: Partial<StationHostLifecycleSession> = {},
+): StationHostLifecycleSession {
+  return {
+    health: vi.fn(async () => ({ ok: true, protocolVersion: HOST_PROTOCOL_VERSION, buildVersion })),
+    recoveryInventory: vi.fn(async () => ({ buildIdentity: "a".repeat(64), ptys: [] })),
+    stopIfIdle: vi.fn(async () => ({ stopping: true })),
+    beginHandoff: vi.fn(async () => ({
+      status: "refused",
+      error: stationHostSafeError("HOST_UPGRADE_BLOCKED", "not used"),
+    })),
+    completeHandoff: vi.fn(async () => ({ stopping: true })),
+    abortHandoff: vi.fn(async () => ({ adopted: [], failed: [] })),
+    adoptRegistry: vi.fn(async () => ({ adopted: [], failed: [] })),
+    dispose: vi.fn(),
     ...overrides,
   };
 }
@@ -70,8 +115,38 @@ async function liveSocket(): Promise<{ socketPath: string; close(): Promise<void
   };
 }
 
-describe("ensureStationHostRunning", () => {
-  it("reports unavailable when no host entry is configured", async () => {
+function readyEvidence(socketPath: string, pid = 42, buildVersion = expectedBuildVersion) {
+  const endpoint = { socketPath, ino: 11n, birthtimeNs: 22n };
+  const session = lifecycleSession(buildVersion);
+  const sequence: string[] = [];
+  return {
+    endpoint,
+    session,
+    sequence,
+    readiness: {
+      now: () => 1_000,
+      probeEndpoint: vi.fn(async () => {
+        sequence.push(sequence.length === 0 ? "endpoint-before" : "endpoint-after");
+        return { status: "listening" as const, endpoint };
+      }),
+      openSession: vi.fn(async (input) => {
+        sequence.push("open");
+        expect(input.deadlineMs).toBe(11_000);
+        return session;
+      }),
+      readHolders: vi.fn(async (_path, deadlineMs) => {
+        sequence.push("holder");
+        expect(deadlineMs).toBe(11_000);
+        return [pid];
+      }),
+    },
+  };
+}
+
+describe("ensureStationHostRunning compatibility policy", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("reports unavailable when no Host entry is configured", async () => {
     const handle = await ensureStationHostRunning(
       {
         socketPath: absentSocketPath(),
@@ -81,222 +156,207 @@ describe("ensureStationHostRunning", () => {
       },
       { clientFactory: () => fakeClient() },
     );
-    expect(handle.status).toBe("unavailable");
-    if (handle.status === "unavailable") {
-      expect(handle.error.code).toBe("HOST_UNREACHABLE");
+    expect(handle).toMatchObject({ status: "unavailable", error: { code: "HOST_UNREACHABLE" } });
+  });
+
+  it("cold-starts only after causal readiness, then returns the shared client", async () => {
+    const socketPath = absentSocketPath();
+    const ready = readyEvidence(socketPath);
+    const shared = fakeClient();
+    const child = new FakeChild();
+    const spawnHost = vi.fn(
+      (_input: SpawnStationHostInput) => child as unknown as ChildProcessLike,
+    );
+    const handle = await ensureStationHostRunning(
+      {
+        socketPath,
+        stateDir: tmpdir(),
+        hostCommand: ["bun", "/tmp/hostMain.ts"],
+        expectedBuildVersion,
+      },
+      {
+        clientFactory: () => shared,
+        spawnHost,
+        readiness: ready.readiness,
+        now: () => 1_000,
+      },
+    );
+
+    expect(handle).toEqual({ status: "running", socketPath, client: shared, ensuredBy: "start" });
+    expect(spawnHost).toHaveBeenCalledWith({
+      argv: ["bun", "/tmp/hostMain.ts", "--socket", socketPath, "--state-dir", tmpdir()],
+      spawnOptions: { detached: true, stdio: "ignore" },
+    });
+    expect(ready.sequence).toEqual(["endpoint-before", "open", "holder", "endpoint-after"]);
+    expect(ready.session.health).toHaveBeenCalledTimes(2);
+    expect(ready.session.dispose).toHaveBeenCalledOnce();
+    expect(child.signals).toEqual([]);
+  });
+
+  it("admits a real listening direct child only through canonical holder evidence", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-host-causal-fixture-"));
+    const socketPath = join(directory, "host.sock");
+    const fixture = createListeningStationHostFixture();
+    const session = lifecycleSession();
+    try {
+      await expect(
+        ensureStationHostRunning(
+          {
+            socketPath,
+            stateDir: directory,
+            hostCommand: listeningStationHostCommand(),
+            expectedBuildVersion,
+            timeoutMs: 2_000,
+          },
+          {
+            clientFactory: () => fakeClient(),
+            spawnHost: fixture.spawnHost,
+            readiness: { openSession: async () => session },
+          },
+        ),
+      ).resolves.toMatchObject({ status: "running", ensuredBy: "start" });
+      expect(session.health).toHaveBeenCalledTimes(2);
+      expect(session.dispose).toHaveBeenCalledOnce();
+    } finally {
+      await fixture.stop();
+      await rm(directory, { recursive: true, force: true });
     }
   });
 
-  it("spawns the host detached and reports running once healthy", async () => {
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    const handle = await ensureStationHostRunning(
-      {
-        socketPath: absentSocketPath(),
-        stateDir: tmpdir(),
-        hostCommand: ["bun", "/tmp/hostMain.ts"],
-        expectedBuildVersion,
-      },
-      { clientFactory: () => fakeClient(), spawnHost },
-    );
-    expect(handle).toMatchObject({ status: "running", ensuredBy: "start" });
-    expect(spawnHost).toHaveBeenCalledTimes(1);
-    expect(spawnHost.mock.calls[0]?.[0]).toEqual({
-      argv: ["bun", "/tmp/hostMain.ts", "--socket", expect.any(String), "--state-dir", tmpdir()],
-      spawnOptions: { detached: true, stdio: "ignore" },
-    });
-  });
-
-  it("keeps a disposable runtime owner's Host in the foreground process group", async () => {
+  it("snapshots command, environment selection, callbacks, and options before awaiting", async () => {
     vi.stubEnv("STATION_RUNTIME_OWNER_FOREGROUND", "1");
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-
-    const handle = await ensureStationHostRunning(
+    const socketPath = absentSocketPath();
+    const ready = readyEvidence(socketPath);
+    const readiness = { ...ready.readiness };
+    const hostCommand = ["bun", "/tmp/original.ts"] as [string, string];
+    const child = new FakeChild();
+    const spawnHost = vi.fn(() => child as unknown as ChildProcessLike);
+    const pending = ensureStationHostRunning(
+      { socketPath, stateDir: "/original-state", hostCommand, expectedBuildVersion },
       {
-        socketPath: absentSocketPath(),
-        stateDir: tmpdir(),
-        hostCommand: ["bun", "/tmp/hostMain.ts"],
-        expectedBuildVersion,
-      },
-      { clientFactory: () => fakeClient(), spawnHost },
-    );
-
-    expect(handle).toMatchObject({ status: "running", ensuredBy: "start" });
-    expect(spawnHost.mock.calls[0]?.[0].spawnOptions).toEqual({
-      detached: false,
-      stdio: "ignore",
-    });
-  });
-
-  it("kills the spawned child and reports unavailable when it never gets healthy", async () => {
-    const kill = vi.fn();
-    const spawnHost = (_input: SpawnStationHostInput): ChildProcessLike => ({
-      pid: 999,
-      unref: () => undefined,
-      kill,
-    });
-    const handle = await ensureStationHostRunning(
-      {
-        socketPath: absentSocketPath(),
-        stateDir: tmpdir(),
-        hostCommand: ["bun", "/tmp/hostMain.ts"],
-        expectedBuildVersion,
-        timeoutMs: 120,
-      },
-      {
-        clientFactory: () =>
-          fakeClient({
-            health: async () => {
-              throw new Error("not up");
-            },
-          }),
+        clientFactory: () => fakeClient(),
         spawnHost,
+        readiness,
+        now: () => 1_000,
       },
     );
-    expect(handle.status).toBe("unavailable");
-    expect(kill).toHaveBeenCalled();
+    hostCommand[0] = "mutated";
+    readiness.probeEndpoint = async () => {
+      throw new Error("mutated callback must not run");
+    };
+    vi.unstubAllEnvs();
+
+    await expect(pending).resolves.toMatchObject({ status: "running" });
+    expect(spawnHost).toHaveBeenCalledWith({
+      argv: ["bun", "/tmp/original.ts", "--socket", socketPath, "--state-dir", "/original-state"],
+      spawnOptions: { detached: false, stdio: "ignore" },
+    });
   });
 
-  it("reuses a host only when protocol and build versions exactly match", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    const stopIfIdle = vi.fn(async () => ({ stopping: true as const }));
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    const client = fakeClient({ stopIfIdle });
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-        },
-        { clientFactory: () => client, spawnHost },
-      );
-
-      expect(handle).toMatchObject({
-        status: "running",
+  it("signals only the retained direct child when readiness fails", async () => {
+    const socketPath = absentSocketPath();
+    const child = new FakeChild();
+    const handle = await ensureStationHostRunning(
+      {
         socketPath,
+        stateDir: tmpdir(),
+        hostCommand: ["station-host"],
+        expectedBuildVersion,
+      },
+      {
+        clientFactory: () => fakeClient(),
+        spawnHost: () => child as unknown as ChildProcessLike,
+        readiness: {
+          now: () => 1_000,
+          probeEndpoint: async () => {
+            throw new Error("evidence unavailable");
+          },
+        },
+        now: () => 1_000,
+      },
+    );
+    expect(handle).toMatchObject({ status: "unavailable" });
+    expect(child.signals).toEqual(["SIGTERM"]);
+  });
+
+  it("reuses display compatibility without exact identity inspection", async () => {
+    const socket = await liveSocket();
+    const recoveryInventory = vi.fn();
+    const spawnHost = vi.fn();
+    const client = fakeClient({ recoveryInventory });
+    try {
+      await expect(
+        ensureStationHostRunning(
+          {
+            socketPath: socket.socketPath,
+            stateDir: tmpdir(),
+            hostCommand: ["station-host"],
+            expectedBuildVersion,
+          },
+          { clientFactory: () => client, spawnHost },
+        ),
+      ).resolves.toEqual({
+        status: "running",
+        socketPath: socket.socketPath,
         client,
         ensuredBy: "reuse",
       });
-      expect(stopIfIdle).not.toHaveBeenCalled();
+      expect(recoveryInventory).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
     } finally {
       await socket.close();
     }
   });
 
-  it("preserves inaccessible Host ownership without health, spawn, or unlink", async () => {
+  it("atomically replaces an idle incompatible display build", async () => {
     const socket = await liveSocket();
-    const { socketPath } = socket;
-    const before = await lstat(socketPath, { bigint: true });
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    const clientFactory = vi.fn(() => {
-      throw new Error("inaccessible ownership must not create a client");
-    });
-    try {
-      await chmod(socketPath, 0o000);
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-        },
-        { clientFactory, spawnHost },
-      );
-
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: { code: "HOST_UNREACHABLE", hint: expect.stringContaining("do not unlink") },
-      });
-      const after = await lstat(socketPath, { bigint: true });
-      expect({ ino: after.ino, birthtimeNs: after.birthtimeNs }).toEqual({
-        ino: before.ino,
-        birthtimeNs: before.birthtimeNs,
-      });
-      expect(clientFactory).not.toHaveBeenCalled();
-      expect(spawnHost).not.toHaveBeenCalled();
-    } finally {
-      await chmod(socketPath, 0o600);
-      await socket.close();
-    }
-  });
-
-  it("stops an idle same-protocol host before spawning and validating the requested build", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    let healthCalls = 0;
-    const stopIfIdle = vi.fn(async (requestingBuildVersion: string) => {
-      expect(requestingBuildVersion).toBe(expectedBuildVersion);
+    const ready = readyEvidence(socket.socketPath);
+    const stopIfIdle = vi.fn(async () => {
       await socket.close();
       return { stopping: true as const };
     });
     const client = fakeClient({
-      health: async () => {
-        healthCalls += 1;
-        return {
-          ok: true,
-          protocolVersion: HOST_PROTOCOL_VERSION,
-          buildVersion: healthCalls === 1 ? "older-build" : expectedBuildVersion,
-        };
-      },
+      health: async () => ({
+        ok: true,
+        protocolVersion: HOST_PROTOCOL_VERSION,
+        buildVersion: "older-build",
+      }),
       stopIfIdle,
     });
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
+    const child = new FakeChild();
+    const handle = await ensureStationHostRunning(
+      {
+        socketPath: socket.socketPath,
+        stateDir: tmpdir(),
+        hostCommand: ["station-host"],
+        expectedBuildVersion,
+      },
+      {
+        clientFactory: () => client,
+        spawnHost: () => child as unknown as ChildProcessLike,
+        readiness: ready.readiness,
+        now: () => 1_000,
+      },
     );
-
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-        },
-        { clientFactory: () => client, spawnHost },
-      );
-
-      expect(handle.status).toBe("running");
-      expect(stopIfIdle).toHaveBeenCalledTimes(1);
-      expect(spawnHost).toHaveBeenCalledTimes(1);
-      expect(stopIfIdle.mock.invocationCallOrder[0]).toBeLessThan(
-        spawnHost.mock.invocationCallOrder[0] ?? 0,
-      );
-      expect(healthCalls).toBe(2);
-    } finally {
-      await socket.close();
-    }
+    expect(handle).toMatchObject({ status: "running", ensuredBy: "idle-replace" });
+    expect(stopIfIdle).toHaveBeenCalledWith(expectedBuildVersion);
+    expect(child.signals).toEqual([]);
   });
 
-  it("preserves a different-build host when live PTYs block its idle shutdown", async () => {
+  it("preserves a busy incompatible Host and never begins handoff or spawns", async () => {
     const socket = await liveSocket();
-    const { socketPath } = socket;
-    const refusal = stationHostSafeError(
-      "HOST_UPGRADE_BLOCKED",
-      "Host build older-build owns 2 live terminals; requested build is test-build.",
-    );
+    const refusal = stationHostSafeError("HOST_UPGRADE_BLOCKED", "one live terminal");
     const stopIfIdle = vi.fn(async () => {
       throw refusal;
     });
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
+    const beginHandoff = vi.fn();
+    const spawnHost = vi.fn();
     try {
       const handle = await ensureStationHostRunning(
         {
-          socketPath,
+          socketPath: socket.socketPath,
           stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          hostCommand: ["station-host"],
           expectedBuildVersion,
         },
         {
@@ -308,41 +368,33 @@ describe("ensureStationHostRunning", () => {
                 buildVersion: "older-build",
               }),
               stopIfIdle,
+              beginHandoff,
             }),
           spawnHost,
         },
       );
-
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: { code: "HOST_UPGRADE_BLOCKED" },
-      });
-      if (handle.status === "unavailable") {
-        expect(handle.error).toBe(refusal);
-      }
+      expect(handle).toMatchObject({ status: "unavailable", error: refusal });
+      expect(beginHandoff).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
-      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
+      await expect(probeUnixSocket(socket.socketPath)).resolves.toMatchObject({
+        status: "listening",
+      });
     } finally {
       await socket.close();
     }
   });
 
-  it("never handoffs on protocol refuse even when handoff is opted in", async () => {
+  it("refuses a protocol mismatch without lifecycle mutation", async () => {
     const socket = await liveSocket();
-    const { socketPath } = socket;
-    const beginHandoff = vi.fn();
     const stopIfIdle = vi.fn();
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
+    const spawnHost = vi.fn();
     try {
       const handle = await ensureStationHostRunning(
         {
-          socketPath,
+          socketPath: socket.socketPath,
           stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          hostCommand: ["station-host"],
           expectedBuildVersion,
-          handoff: { fidelity: "processes" },
         },
         {
           clientFactory: () =>
@@ -353,611 +405,28 @@ describe("ensureStationHostRunning", () => {
                 buildVersion: "older-build",
               }),
               stopIfIdle,
-              beginHandoff,
             }),
           spawnHost,
         },
       );
-
       expect(handle).toMatchObject({
         status: "unavailable",
         error: { code: "HOST_VERSION_INCOMPATIBLE" },
       });
       expect(stopIfIdle).not.toHaveBeenCalled();
-      expect(beginHandoff).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
     } finally {
       await socket.close();
     }
   });
 
-  it("does not abort after complete when socket release fails", async () => {
+  it("does not stop an incompatible Host without a replacement command", async () => {
     const socket = await liveSocket();
-    const { socketPath } = socket;
-    const abortHandoff = vi.fn(async () => ({ adopted: ["pty-1"], failed: [] }));
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
+    const stopIfIdle = vi.fn();
     try {
       const handle = await ensureStationHostRunning(
         {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-          timeoutMs: 120,
-          handoff: { fidelity: "processes" },
-        },
-        {
-          clientFactory: () =>
-            fakeClient({
-              health: async () => ({
-                ok: true,
-                protocolVersion: HOST_PROTOCOL_VERSION,
-                buildVersion: "older-build",
-              }),
-              stopIfIdle: async () => {
-                throw stationHostSafeError(
-                  "HOST_UPGRADE_BLOCKED",
-                  "Host build older-build owns 1 live terminal.",
-                );
-              },
-              beginHandoff: async () => ({
-                manifest: {
-                  "pty-1": {
-                    bridgeProtocolVersion: 2 as const,
-                    bridgePid: 4242,
-                    controlSocket: "/tmp/pty-1.sock",
-                    command: "/bin/sh",
-                    cols: 80,
-                    rows: 24,
-                    ptyInstanceId: "instance-pty-1",
-                    identity: {
-                      kind: "agent" as const,
-                      terminalTargetId: "native:wt-1",
-                      worktreeId: "wt-1",
-                      projectId: "proj-1",
-                      sessionId: "ses-1",
-                      worktreePath: "/repo/wt-1",
-                      harnessProvider: "claude",
-                    },
-                  },
-                },
-                fidelity: "processes" as const,
-                released: ["pty-1"],
-                skipped: [],
-              }),
-              completeHandoff: async () => ({ stopping: true as const }),
-              abortHandoff,
-            }),
-          spawnHost,
-        },
-      );
-
-      // complete committed but the incumbent socket never released.
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: {
-          code: "HOST_UNREACHABLE",
-          hint: expect.stringContaining(
-            "Parked bridges remain under the state dir for successor recovery.",
-          ),
-        },
-      });
-      expect(abortHandoff).not.toHaveBeenCalled();
-      expect(spawnHost).not.toHaveBeenCalled();
-    } finally {
-      await socket.close();
-    }
-  });
-
-  it("aborts after begin when completeHandoff fails and does not spawn", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    const abortHandoff = vi.fn(async () => ({ adopted: ["pty-1"], failed: [] }));
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-          handoff: { fidelity: "screen" },
-        },
-        {
-          clientFactory: () =>
-            fakeClient({
-              health: async () => ({
-                ok: true,
-                protocolVersion: HOST_PROTOCOL_VERSION,
-                buildVersion: "older-build",
-              }),
-              stopIfIdle: async () => {
-                throw stationHostSafeError(
-                  "HOST_UPGRADE_BLOCKED",
-                  "Host build older-build owns 1 live terminal.",
-                );
-              },
-              beginHandoff: async () => ({
-                manifest: {
-                  "pty-1": {
-                    bridgeProtocolVersion: 2 as const,
-                    bridgePid: 4242,
-                    controlSocket: "/tmp/pty-1.sock",
-                    command: "/bin/sh",
-                    cols: 80,
-                    rows: 24,
-                    ptyInstanceId: "instance-pty-1",
-                    identity: {
-                      kind: "agent" as const,
-                      terminalTargetId: "native:wt-1",
-                      worktreeId: "wt-1",
-                      projectId: "proj-1",
-                      sessionId: "ses-1",
-                      worktreePath: "/repo/wt-1",
-                      harnessProvider: "claude",
-                    },
-                  },
-                },
-                fidelity: "screen" as const,
-                released: ["pty-1"],
-                skipped: [],
-              }),
-              completeHandoff: async () => {
-                throw stationHostSafeError("HOST_UNREACHABLE", "socket closed mid-complete");
-              },
-              abortHandoff,
-            }),
-          spawnHost,
-        },
-      );
-
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: {
-          code: "HOST_UPGRADE_BLOCKED",
-          message: "Host build older-build owns 1 live terminal.",
-          hint: expect.stringContaining("socket closed mid-complete (HOST_UNREACHABLE)"),
-        },
-      });
-      expect(abortHandoff).toHaveBeenCalledOnce();
-      expect(spawnHost).not.toHaveBeenCalled();
-      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
-    } finally {
-      await socket.close();
-    }
-  });
-
-  it("reports parked recovery when abort cannot prove incumbent restoration", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-          handoff: { fidelity: "processes" },
-        },
-        {
-          clientFactory: () =>
-            fakeClient({
-              health: async () => ({
-                ok: true,
-                protocolVersion: HOST_PROTOCOL_VERSION,
-                buildVersion: "older-build",
-              }),
-              stopIfIdle: async () => {
-                throw stationHostSafeError(
-                  "HOST_UPGRADE_BLOCKED",
-                  "Host build older-build owns 1 live terminal.",
-                );
-              },
-              beginHandoff: async () => ({
-                manifest: {
-                  "pty-1": {
-                    bridgeProtocolVersion: 2 as const,
-                    bridgePid: 4242,
-                    controlSocket: "/tmp/pty-1.sock",
-                    command: "/bin/sh",
-                    cols: 80,
-                    rows: 24,
-                    ptyInstanceId: "instance-pty-1",
-                    identity: {
-                      kind: "agent" as const,
-                      terminalTargetId: "native:wt-1",
-                      worktreeId: "wt-1",
-                      projectId: "proj-1",
-                      sessionId: "ses-1",
-                      worktreePath: "/repo/wt-1",
-                      harnessProvider: "claude",
-                    },
-                  },
-                },
-                fidelity: "processes" as const,
-                released: ["pty-1"],
-                skipped: [],
-              }),
-              completeHandoff: async () => {
-                throw stationHostSafeError("HOST_UNREACHABLE", "complete acknowledgement lost");
-              },
-              abortHandoff: async () => ({
-                adopted: [],
-                failed: [{ ptyId: "pty-1", reason: "bridge unavailable" }],
-              }),
-            }),
-          spawnHost,
-        },
-      );
-
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: {
-          code: "HOST_UNREACHABLE",
-          message: "complete acknowledgement lost",
-          hint: expect.stringContaining(
-            "Parked bridges remain under the state dir for successor recovery.",
-          ),
-        },
-      });
-      if (handle.status === "unavailable") {
-        expect(handle.error.hint).not.toContain("existing host and terminals were preserved");
-      }
-      expect(spawnHost).not.toHaveBeenCalled();
-    } finally {
-      await socket.close();
-    }
-  });
-
-  it("surfaces adopt failure after successor spawn without claiming running", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    const manifest = {
-      "pty-1": {
-        bridgeProtocolVersion: 2 as const,
-        bridgePid: 4242,
-        controlSocket: "/tmp/pty-1.sock",
-        command: "/bin/sh",
-        cols: 80,
-        rows: 24,
-        ptyInstanceId: "instance-pty-1",
-        identity: {
-          kind: "agent" as const,
-          terminalTargetId: "native:wt-1",
-          worktreeId: "wt-1",
-          projectId: "proj-1",
-          sessionId: "ses-1",
-          worktreePath: "/repo/wt-1",
-          harnessProvider: "claude",
-        },
-      },
-    };
-    let healthCalls = 0;
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-          handoff: { fidelity: "processes" },
-        },
-        {
-          clientFactory: () =>
-            fakeClient({
-              health: async () => {
-                healthCalls += 1;
-                return {
-                  ok: true,
-                  protocolVersion: HOST_PROTOCOL_VERSION,
-                  buildVersion: healthCalls === 1 ? "older-build" : expectedBuildVersion,
-                };
-              },
-              stopIfIdle: async () => {
-                throw stationHostSafeError(
-                  "HOST_UPGRADE_BLOCKED",
-                  "Host build older-build owns 1 live terminal.",
-                );
-              },
-              beginHandoff: async () => ({
-                manifest,
-                fidelity: "processes" as const,
-                released: ["pty-1"],
-                skipped: [],
-              }),
-              completeHandoff: async () => {
-                await socket.close();
-                return { stopping: true as const };
-              },
-              adoptRegistry: async () => {
-                throw stationHostSafeError(
-                  "HOST_HANDOFF_MANIFEST_INVALID",
-                  "control socket missing",
-                );
-              },
-            }),
-          spawnHost,
-        },
-      );
-
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: { code: "HOST_HANDOFF_MANIFEST_INVALID" },
-      });
-      expect(spawnHost).toHaveBeenCalledOnce();
-    } finally {
-      await socket.close();
-    }
-  });
-
-  it("opt-in handoff preserves the original refusal when beginHandoff fails", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    const abortHandoff = vi.fn(async () => ({ adopted: [], failed: [] }));
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-          handoff: { fidelity: "processes" },
-        },
-        {
-          clientFactory: () =>
-            fakeClient({
-              health: async () => ({
-                ok: true,
-                protocolVersion: HOST_PROTOCOL_VERSION,
-                buildVersion: "older-build",
-              }),
-              stopIfIdle: async () => {
-                throw stationHostSafeError(
-                  "HOST_UPGRADE_BLOCKED",
-                  "Host build older-build owns 1 live terminal.",
-                );
-              },
-              beginHandoff: async () => {
-                throw stationHostSafeError(
-                  "HOST_HANDOFF_INVALID_STATE",
-                  "The host is already draining or handing off.",
-                );
-              },
-              abortHandoff,
-            }),
-          spawnHost,
-        },
-      );
-
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: {
-          code: "HOST_UPGRADE_BLOCKED",
-          message: "Host build older-build owns 1 live terminal.",
-          hint: expect.stringContaining(
-            "The host is already draining or handing off. (HOST_HANDOFF_INVALID_STATE)",
-          ),
-        },
-      });
-      expect(abortHandoff).not.toHaveBeenCalled();
-      expect(spawnHost).not.toHaveBeenCalled();
-      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
-    } finally {
-      await socket.close();
-    }
-  });
-
-  it("opt-in handoff begins, completes, spawns successor, and adopts the manifest", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    const manifest = {
-      "pty-1": {
-        bridgeProtocolVersion: 2 as const,
-        bridgePid: 4242,
-        controlSocket: "/tmp/pty-1.sock",
-        command: "/bin/sh",
-        cols: 80,
-        rows: 24,
-        ptyInstanceId: "instance-pty-1",
-        identity: {
-          kind: "agent" as const,
-          terminalTargetId: "native:wt-1",
-          worktreeId: "wt-1",
-          projectId: "proj-1",
-          sessionId: "ses-1",
-          worktreePath: "/repo/wt-1",
-          harnessProvider: "claude",
-        },
-      },
-    };
-    const beginHandoff = vi.fn(async () => ({
-      manifest,
-      fidelity: "processes" as const,
-      released: ["pty-1"],
-      skipped: [],
-    }));
-    const completeHandoff = vi.fn(async () => {
-      await socket.close();
-      return { stopping: true as const };
-    });
-    const adoptRegistry = vi.fn(async () => ({ adopted: ["pty-1"], failed: [] }));
-    let healthCalls = 0;
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-          handoff: { fidelity: "processes" },
-        },
-        {
-          clientFactory: () =>
-            fakeClient({
-              health: async () => {
-                healthCalls += 1;
-                return {
-                  ok: true,
-                  protocolVersion: HOST_PROTOCOL_VERSION,
-                  buildVersion: healthCalls === 1 ? "older-build" : expectedBuildVersion,
-                };
-              },
-              stopIfIdle: async () => {
-                throw stationHostSafeError(
-                  "HOST_UPGRADE_BLOCKED",
-                  "Host build older-build owns 1 live terminal.",
-                );
-              },
-              beginHandoff,
-              completeHandoff,
-              adoptRegistry,
-            }),
-          spawnHost,
-        },
-      );
-
-      expect(handle).toMatchObject({
-        status: "running",
-        socketPath,
-        ensuredBy: "handoff",
-        handoffAdopt: { adopted: ["pty-1"], failed: [] },
-      });
-      expect(beginHandoff).toHaveBeenCalledWith(expectedBuildVersion, "processes");
-      expect(completeHandoff).toHaveBeenCalledOnce();
-      expect(spawnHost).toHaveBeenCalledOnce();
-      expect(adoptRegistry).toHaveBeenCalledWith(manifest);
-    } finally {
-      await socket.close();
-    }
-  });
-
-  it("opt-in handoff refuses when adopt reports any failed entry", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    const manifest = {
-      "pty-1": {
-        bridgeProtocolVersion: 2 as const,
-        bridgePid: 4242,
-        controlSocket: "/tmp/pty-1.sock",
-        command: "/bin/sh",
-        cols: 80,
-        rows: 24,
-        ptyInstanceId: "instance-pty-1",
-        identity: {
-          kind: "agent" as const,
-          terminalTargetId: "native:wt-1",
-          worktreeId: "wt-1",
-          projectId: "proj-1",
-          sessionId: "ses-1",
-          worktreePath: "/repo/wt-1",
-          harnessProvider: "claude",
-        },
-      },
-      "pty-2": {
-        bridgeProtocolVersion: 2 as const,
-        bridgePid: 4243,
-        controlSocket: "/tmp/pty-2.sock",
-        command: "/bin/sh",
-        cols: 80,
-        rows: 24,
-        ptyInstanceId: "instance-pty-2",
-        identity: {
-          kind: "agent" as const,
-          terminalTargetId: "native:wt-2",
-          worktreeId: "wt-2",
-          projectId: "proj-1",
-          sessionId: "ses-2",
-          worktreePath: "/repo/wt-2",
-          harnessProvider: "claude",
-        },
-      },
-    };
-    let healthCalls = 0;
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-          handoff: { fidelity: "processes" },
-        },
-        {
-          clientFactory: () =>
-            fakeClient({
-              health: async () => {
-                healthCalls += 1;
-                return {
-                  ok: true,
-                  protocolVersion: HOST_PROTOCOL_VERSION,
-                  buildVersion: healthCalls === 1 ? "older-build" : expectedBuildVersion,
-                };
-              },
-              stopIfIdle: async () => {
-                throw stationHostSafeError(
-                  "HOST_UPGRADE_BLOCKED",
-                  "Host build older-build owns 2 live terminals.",
-                );
-              },
-              beginHandoff: async () => ({
-                manifest,
-                fidelity: "processes" as const,
-                released: ["pty-1", "pty-2"],
-                skipped: [],
-              }),
-              completeHandoff: async () => {
-                await socket.close();
-                return { stopping: true as const };
-              },
-              adoptRegistry: async () => ({
-                adopted: ["pty-1"],
-                failed: [{ ptyId: "pty-2", reason: "adopt-failed" }],
-              }),
-            }),
-          spawnHost,
-        },
-      );
-
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: { code: "HOST_HANDOFF_MANIFEST_INVALID" },
-      });
-      expect(spawnHost).toHaveBeenCalledOnce();
-    } finally {
-      await socket.close();
-    }
-  });
-
-  it("does not stop a different-build host when no replacement command is configured", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    const stopIfIdle = vi.fn(async () => ({ stopping: true as const }));
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
+          socketPath: socket.socketPath,
           stateDir: tmpdir(),
           hostCommand: [""],
           expectedBuildVersion,
@@ -972,101 +441,44 @@ describe("ensureStationHostRunning", () => {
               }),
               stopIfIdle,
             }),
-          spawnHost,
         },
       );
-
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: { code: "HOST_VERSION_INCOMPATIBLE" },
-      });
+      expect(handle).toMatchObject({ status: "unavailable" });
       expect(stopIfIdle).not.toHaveBeenCalled();
-      expect(spawnHost).not.toHaveBeenCalled();
-      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     } finally {
       await socket.close();
     }
   });
 
-  it("does not spawn or unlink when an idle host never releases its socket", async () => {
+  it("preserves inaccessible ownership without health, spawn, or unlink", async () => {
     const socket = await liveSocket();
-    const { socketPath } = socket;
-    const stopIfIdle = vi.fn(async () => ({ stopping: true as const }));
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
+    const before = await lstat(socket.socketPath, { bigint: true });
+    const clientFactory = vi.fn();
+    const spawnHost = vi.fn();
     try {
+      await chmod(socket.socketPath, 0o000);
       const handle = await ensureStationHostRunning(
         {
-          socketPath,
+          socketPath: socket.socketPath,
           stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-          timeoutMs: 120,
-        },
-        {
-          clientFactory: () =>
-            fakeClient({
-              health: async () => ({
-                ok: true,
-                protocolVersion: HOST_PROTOCOL_VERSION,
-                buildVersion: "older-build",
-              }),
-              stopIfIdle,
-            }),
-          spawnHost,
-        },
-      );
-
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: { code: "HOST_VERSION_INCOMPATIBLE" },
-      });
-      expect(stopIfIdle).toHaveBeenCalledTimes(1);
-      expect(spawnHost).not.toHaveBeenCalled();
-      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
-    } finally {
-      await socket.close();
-    }
-  });
-
-  it("refuses a protocol mismatch without sending the new lifecycle method", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    const stopIfIdle = vi.fn(async () => ({ stopping: true as const }));
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          hostCommand: ["station-host"],
           expectedBuildVersion,
         },
-        {
-          clientFactory: () =>
-            fakeClient({
-              health: async () => ({
-                ok: true,
-                protocolVersion: HOST_PROTOCOL_VERSION - 1,
-                buildVersion: "older-build",
-              }),
-              stopIfIdle,
-            }),
-          spawnHost,
-        },
+        { clientFactory, spawnHost },
       );
-
       expect(handle).toMatchObject({
         status: "unavailable",
-        error: { code: "HOST_VERSION_INCOMPATIBLE" },
+        error: { code: "HOST_UNREACHABLE", hint: expect.stringContaining("do not unlink") },
       });
-      expect(stopIfIdle).not.toHaveBeenCalled();
+      const after = await lstat(socket.socketPath, { bigint: true });
+      expect({ ino: after.ino, birthtimeNs: after.birthtimeNs }).toEqual({
+        ino: before.ino,
+        birthtimeNs: before.birthtimeNs,
+      });
+      expect(clientFactory).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
-      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     } finally {
+      await chmod(socket.socketPath, 0o600);
       await socket.close();
     }
   });

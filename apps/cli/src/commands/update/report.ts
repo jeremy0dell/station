@@ -2,6 +2,8 @@ import {
   type ObserverLifecycleFailure,
   parseUpdateCommandReport,
   projectPublicUpdateReport,
+  type SafeError,
+  type StationHostConvergenceFailureSummary,
   type UpdateCommandArgv,
   type UpdateCommandReport,
   type UpdateCommandStep,
@@ -39,11 +41,11 @@ function hostHandoffDetail(hostHandoff: HostHandoffScenario): string {
 }
 
 function updatedHostHandoffStep(hostHandoff: HostHandoffScenario): UpdateCommandStep {
-  if (hostHandoff.kind === "handoff") {
+  if (hostHandoff.kind === "converge") {
     return updateStep(
       "host-handoff",
       "completed",
-      `The Host completed ${hostHandoff.fidelity} handoff.`,
+      `The Host completed exact ownership convergence with ${hostHandoff.fidelity} fidelity.`,
     );
   }
   return updateStep("host-handoff", "skipped", hostHandoffDetail(hostHandoff));
@@ -119,6 +121,8 @@ export function failedUpdateResult(
   recoveryCommands: readonly UpdateCommandArgv[],
   output: UpdateRequest["output"],
   lifecycleFailure?: ObserverLifecycleFailure,
+  hostConvergenceFailure?: StationHostConvergenceFailureSummary,
+  hostCrossoverError?: SafeError,
 ): CliRunResult {
   const safeError = publicSafeErrorFromUnknown(error, updateFailureFallback);
   report.error = safeError;
@@ -128,6 +132,10 @@ export function failedUpdateResult(
       report.startupEvidence = lifecycleFailure.startupEvidence;
     }
   }
+  if (hostConvergenceFailure !== undefined) {
+    report.hostConvergenceFailure = hostConvergenceFailure;
+  }
+  if (hostCrossoverError !== undefined) report.cause = hostCrossoverError;
   report.recoveryCommands.push(...recoveryCommands);
   report.steps.push(updateStep(phase, "failed", safeError.message, recoveryCommands[0]));
   if (phase === "apply") {

@@ -93,6 +93,22 @@ const setTimeoutAllowlist = new Map([
     "apps/cli/src/observerProcess/startup.ts",
     "UI-only progress timers report a runtime-bounded observer launch; they do not implement startup timeout or retry control.",
   ],
+  [
+    "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
+    "Same-endpoint shutdown polling consumes the convergence command's absolute deadline before any successor spawn.",
+  ],
+  [
+    "integrations/terminal/station/src/host/hostProcess.ts",
+    "Direct-child settlement waits enforce bounded TERM and KILL grace while retaining only the spawned child.",
+  ],
+  [
+    "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+    "Fresh disposable readiness attempts use a short cutoff-bounded delay while waiting for the spawned socket.",
+  ],
+  [
+    "integrations/terminal/station/src/host/preflightParkedOrphanRecovery.ts",
+    "One socket timer enforces the updater's absolute preflight deadline while reading a bounded bridge status reply.",
+  ],
 ]);
 
 const setIntervalAllowlist = new Map([

@@ -1,148 +1,149 @@
 import { stationHostSocketPath } from "@station/config";
-import { HOST_PROTOCOL_VERSION, stationHostSafeError } from "@station/host";
-import { listenUnixSocket } from "@station/protocol";
+import {
+  HOST_PROTOCOL_VERSION,
+  type StationHostInspectionResult,
+  StationHostUpdateCrossoverResultSchema,
+} from "@station/contracts";
+import { stationHostSafeError } from "@station/host";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState } from "../../../../tests/support/temp-projects";
 import { runHostCommand } from "../../src/commands/host/index.js";
+import { hostCliCommand } from "../../src/commands/registry/host.js";
 
 const requestingBuild = "0.0.0-cli-request";
+const targetIdentity = "b".repeat(64);
+const incumbentIdentity = "a".repeat(64);
+type ExactEvidence = Extract<StationHostInspectionResult, { status: "exact" }>["evidence"];
+
+const terminal = {
+  kind: "agent" as const,
+  terminalTargetId: "target-1",
+  ptyId: "pty-1",
+  ptyInstanceId: "instance-1",
+  worktreeId: "worktree-1",
+  projectId: "project-1",
+  sessionId: "session-1",
+  worktreePath: "/repo/one",
+  harnessProvider: "codex",
+  pid: 42,
+  alive: true,
+  cols: 80,
+  rows: 24,
+  handoffSupport: { kind: "bridge-releasable" as const },
+};
+
+function exactEvidence(
+  socketPath: string,
+  buildVersion = "older-build",
+  buildIdentity = incumbentIdentity,
+  terminals: readonly (typeof terminal)[] = [terminal],
+): ExactEvidence {
+  return {
+    endpoint: { socketPath, ino: 11n, birthtimeNs: 22n },
+    health: { ok: true, protocolVersion: HOST_PROTOCOL_VERSION, buildVersion },
+    buildIdentity,
+    terminals: [...terminals],
+  };
+}
 
 describe("runHostCommand", () => {
-  it("reports status health, compatibility, and handoff eligibility", async () => {
+  it("reports exact status, compatibility, identity, and handoff eligibility", async () => {
     const fixture = await createTempState();
     const socketPath = stationHostSocketPath(fixture.config);
-    const server = await listenUnixSocket({
-      socketPath,
-      onConnection: () => undefined,
+    const inspection = exactEvidence(socketPath);
+    const inspectHost = vi.fn(async () => ({
+      status: "exact" as const,
+      evidence: inspection,
+    }));
+
+    const result = await runHostCommand(
+      ["status"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost,
+      },
+    );
+
+    expect(result).toMatchObject({
+      action: "status",
+      probe: "listening",
+      livePtyCount: 1,
+      handoffEligible: true,
+      compatibility: { action: "replace", runningBuildVersion: "older-build" },
+      buildIdentity: incumbentIdentity,
+      ptys: [{ handoffSupport: { kind: "bridge-releasable" } }],
     });
-    const dispose = vi.fn();
-    const requestedBuilds: string[] = [];
-    try {
-      const result = await runHostCommand(
-        ["status"],
-        { config: fixture.config },
-        {
-          expectedBuildVersion: requestingBuild,
-          clientFactory: (_socketPath, expectedBuildVersion) => {
-            requestedBuilds.push(expectedBuildVersion);
-            return {
-              health: async () => ({
-                ok: true,
-                protocolVersion: HOST_PROTOCOL_VERSION,
-                buildVersion: "older-build",
-              }),
-              list: async () => {
-                if (expectedBuildVersion !== "older-build") {
-                  throw new Error("wrong inventory identity");
-                }
-                return [{ ptyId: "pty-1", pid: 42, alive: true }];
-              },
-              recoveryInventory: async () => ({
-                buildIdentity: "a".repeat(64),
-                ptys: [
-                  {
-                    kind: "agent",
-                    terminalTargetId: "target-1",
-                    ptyId: "pty-1",
-                    ptyInstanceId: "instance-1",
-                    worktreeId: "worktree-1",
-                    projectId: "project-1",
-                    sessionId: "session-1",
-                    worktreePath: "/repo/one",
-                    harnessProvider: "codex",
-                    pid: 42,
-                    alive: true,
-                    cols: 80,
-                    rows: 24,
-                    handoffSupport: { kind: "bridge-releasable" },
-                  },
-                ],
-              }),
-              dispose,
-            } as never;
-          },
-        },
-      );
-
-      expect(result).toMatchObject({
-        action: "status",
-        probe: "listening",
-        livePtyCount: 1,
-        handoffEligible: true,
-        compatibility: { action: "replace" },
-        buildIdentity: "a".repeat(64),
-        ptys: [{ handoffSupport: { kind: "bridge-releasable" } }],
-      });
-      expect(requestedBuilds).toEqual([requestingBuild, "older-build"]);
-      expect(dispose).toHaveBeenCalledTimes(2);
-    } finally {
-      await server.close();
-    }
+    expect(inspectHost).toHaveBeenCalledWith({
+      socketPath,
+      expectedBuildVersion: requestingBuild,
+    });
   });
 
-  it("fails closed without a host.list fallback when recovery inventory is unavailable", async () => {
+  it("marks same-display/different-identity live ownership eligible while retaining compatibility reuse", async () => {
     const fixture = await createTempState();
     const socketPath = stationHostSocketPath(fixture.config);
-    const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
-    const list = vi.fn(async () => [{ ptyId: "pty-legacy", pid: 42, alive: true }]);
-    try {
-      const result = await runHostCommand(
-        ["status"],
-        { config: fixture.config },
-        {
-          expectedBuildVersion: requestingBuild,
-          clientFactory: () =>
-            ({
-              health: async () => ({
-                ok: true,
-                protocolVersion: HOST_PROTOCOL_VERSION,
-                buildVersion: requestingBuild,
-              }),
-              recoveryInventory: async () => {
-                throw stationHostSafeError("HOST_BAD_REQUEST", "unknown method");
-              },
-              list,
-              dispose: () => undefined,
-            }) as never,
-        },
-      );
-
-      expect(result).toMatchObject({
-        action: "status",
-        probe: "listening",
-        error: "unknown method",
-      });
-      expect(result).not.toHaveProperty("buildIdentity");
-      expect(result).not.toHaveProperty("ptys");
-      expect(list).not.toHaveBeenCalled();
-    } finally {
-      await server.close();
-    }
+    const result = await runHostCommand(
+      ["status"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath, requestingBuild, incumbentIdentity),
+        }),
+      },
+    );
+    expect(result).toMatchObject({
+      action: "status",
+      compatibility: { action: "reuse" },
+      handoffEligible: true,
+    });
   });
 
-  it("dry-run plans handoff without calling ensure/begin", async () => {
+  it("fails closed on incomplete exact inspection without a host.list fallback", async () => {
     const fixture = await createTempState();
-    const ensureHost = vi.fn();
-    const beginHandoff = vi.fn();
-    const completeHandoff = vi.fn();
+    const result = await runHostCommand(
+      ["status"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "unknown",
+          reason: "inventory-failed",
+          error: stationHostSafeError("HOST_BAD_REQUEST", "unknown method"),
+        }),
+      },
+    );
+    expect(result).toMatchObject({
+      action: "status",
+      probe: "listening",
+      error: "unknown method",
+    });
+    expect(result).not.toHaveProperty("buildIdentity");
+    expect(result).not.toHaveProperty("ptys");
+  });
+
+  it("dry-run plans an eligible handoff using inspection only", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const convergeHost = vi.fn();
+    const resolveHostCommand = vi.fn();
     const result = await runHostCommand(
       ["handoff", "--dry-run", "--fidelity", "screen"],
       { config: fixture.config },
       {
         expectedBuildVersion: requestingBuild,
-        ensureHost,
-        clientFactory: () =>
-          ({
-            health: async () => ({
-              ok: true,
-              protocolVersion: HOST_PROTOCOL_VERSION,
-              buildVersion: "older-build",
-            }),
-            list: async () => [{ ptyId: "pty-1", pid: 42, alive: true }],
-            beginHandoff,
-            completeHandoff,
-            dispose: () => undefined,
-          }) as never,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath),
+        }),
+        convergeHost,
+        resolveHostCommand,
       },
     );
 
@@ -152,113 +153,110 @@ describe("runHostCommand", () => {
       fidelity: "screen",
       status: "planned",
       livePtyCount: 1,
+      message:
+        "Would beginHandoff(fidelity=screen) → completeHandoff → spawn successor → adoptRegistry.",
     });
-    expect(ensureHost).not.toHaveBeenCalled();
-    expect(beginHandoff).not.toHaveBeenCalled();
-    expect(completeHandoff).not.toHaveBeenCalled();
+    expect(convergeHost).not.toHaveBeenCalled();
+    expect(resolveHostCommand).not.toHaveBeenCalled();
   });
 
-  it("dry-run refuses when the host already matches this build", async () => {
+  it("dry-run refuses only an exact incumbent/target pair as unnecessary", async () => {
     const fixture = await createTempState();
-    const ensureHost = vi.fn();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const convergeHost = vi.fn();
     const result = await runHostCommand(
       ["handoff", "--dry-run"],
       { config: fixture.config },
       {
         expectedBuildVersion: requestingBuild,
-        ensureHost,
-        clientFactory: () =>
-          ({
-            health: async () => ({
-              ok: true,
-              protocolVersion: HOST_PROTOCOL_VERSION,
-              buildVersion: requestingBuild,
-            }),
-            list: async () => [{ ptyId: "pty-1", pid: 42, alive: true }],
-            dispose: () => undefined,
-          }) as never,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath, requestingBuild, targetIdentity),
+        }),
+        convergeHost,
       },
     );
-
     expect(result).toMatchObject({
       action: "handoff",
       status: "refused",
+      message: "Host already matches this build; handoff is unnecessary.",
     });
-    expect(String((result as { message: string }).message)).toMatch(/unnecessary/i);
-    expect(ensureHost).not.toHaveBeenCalled();
+    expect(convergeHost).not.toHaveBeenCalled();
   });
 
-  it("dry-run refuses handoff on protocol major mismatch", async () => {
+  it("preserves protocol-mismatch dry-run refusal text", async () => {
     const fixture = await createTempState();
-    const ensureHost = vi.fn();
-    const result = await runHostCommand(
-      ["handoff", "--dry-run", "--fidelity", "processes"],
-      { config: fixture.config },
-      {
-        expectedBuildVersion: requestingBuild,
-        ensureHost,
-        clientFactory: () =>
-          ({
-            health: async () => ({
-              ok: true,
-              protocolVersion: HOST_PROTOCOL_VERSION + 100,
-              buildVersion: "other-build",
-            }),
-            list: async () => [{ ptyId: "pty-1", pid: 42, alive: true }],
-            dispose: () => undefined,
-          }) as never,
-      },
-    );
-
-    expect(result).toMatchObject({
-      action: "handoff",
-      status: "refused",
-    });
-    expect(String((result as { message: string }).message)).toMatch(/incompatible/i);
-    expect(ensureHost).not.toHaveBeenCalled();
-  });
-
-  it("dry-run refuses handoff when the host is idle", async () => {
-    const fixture = await createTempState();
-    const ensureHost = vi.fn();
     const result = await runHostCommand(
       ["handoff", "--dry-run"],
       { config: fixture.config },
       {
         expectedBuildVersion: requestingBuild,
-        ensureHost,
-        clientFactory: () =>
-          ({
-            health: async () => ({
-              ok: true,
-              protocolVersion: HOST_PROTOCOL_VERSION,
-              buildVersion: "older-build",
-            }),
-            list: async () => [],
-            dispose: () => undefined,
-          }) as never,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "unknown",
+          reason: "health-failed",
+          error: stationHostSafeError("HOST_VERSION_INCOMPATIBLE", "protocol mismatch"),
+        }),
       },
     );
+    expect(result).toMatchObject({
+      action: "handoff",
+      status: "refused",
+      message: "Host protocol is incompatible; live handoff is refused.",
+    });
+  });
 
+  it("dry-run refuses an exact empty incumbent without mutation", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const convergeHost = vi.fn();
+    const resolveHostCommand = vi.fn();
+    const result = await runHostCommand(
+      ["handoff", "--dry-run"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath, "older-build", incumbentIdentity, []),
+        }),
+        convergeHost,
+        resolveHostCommand,
+      },
+    );
     expect(result).toMatchObject({
       action: "handoff",
       status: "refused",
       livePtyCount: 0,
     });
-    expect(ensureHost).not.toHaveBeenCalled();
+    expect(convergeHost).not.toHaveBeenCalled();
+    expect(resolveHostCommand).not.toHaveBeenCalled();
   });
 
-  it("live handoff opts into ensure and projects the adopt report", async () => {
+  it("delegates live handoff to convergence and projects only receipt PTY IDs", async () => {
     const fixture = await createTempState();
-    const dispose = vi.fn();
-    const ensureHost = vi.fn(async () => ({
-      status: "running" as const,
-      socketPath: stationHostSocketPath(fixture.config),
-      ensuredBy: "handoff" as const,
-      handoffAdopt: { adopted: ["pty-1"], failed: [] },
-      client: {
-        list: async () => [{ ptyId: "pty-1", pid: 99, alive: true }],
-        dispose,
+    const socketPath = stationHostSocketPath(fixture.config);
+    const incumbent = exactEvidence(socketPath);
+    const successor = exactEvidence(socketPath, requestingBuild, targetIdentity);
+    const convergeHost = vi.fn(async () => ({
+      status: "completed" as const,
+      action: "handoff" as const,
+      targetBuild: {
+        buildVersion: requestingBuild,
+        buildIdentity: targetIdentity,
+      },
+      finalEvidence: successor,
+      handoffReceipt: {
+        fidelity: "screen" as const,
+        terminals: [
+          {
+            terminalTargetId: terminal.terminalTargetId,
+            ptyId: terminal.ptyId,
+            ptyInstanceId: terminal.ptyInstanceId,
+          },
+        ],
       },
     }));
     const result = await runHostCommand(
@@ -266,84 +264,479 @@ describe("runHostCommand", () => {
       { config: fixture.config },
       {
         expectedBuildVersion: requestingBuild,
-        ensureHost: ensureHost as never,
-        clientFactory: () =>
-          ({
-            health: async () => ({
-              ok: true,
-              protocolVersion: HOST_PROTOCOL_VERSION,
-              buildVersion: "older-build",
-            }),
-            list: async () => [{ ptyId: "pty-1", pid: 42, alive: true }],
-            dispose: () => undefined,
-          }) as never,
+        expectedBuildIdentity: targetIdentity,
+        now: () => 1_000,
+        inspectHost: async () => ({ status: "exact", evidence: incumbent }),
+        resolveHostCommand: () => ["station-host", "serve"],
+        convergeHost: convergeHost as never,
+      },
+    );
+
+    expect(result).toEqual({
+      action: "handoff",
+      dryRun: false,
+      fidelity: "screen",
+      socketPath,
+      status: "completed",
+      message: "Live handoff completed; successor adopted 1 terminal(s).",
+      livePtyCount: 1,
+      adopted: ["pty-1"],
+    });
+    expect(convergeHost).toHaveBeenCalledWith({
+      command: {
+        action: "handoff",
+        targetBuild: {
+          buildVersion: requestingBuild,
+          buildIdentity: targetIdentity,
+        },
+        socketPath,
+        expected: incumbent,
+        deadlineMs: 13_000,
+        fidelity: "screen",
+      },
+      targetBuild: {
+        buildVersion: requestingBuild,
+        buildIdentity: targetIdentity,
+      },
+      socketPath,
+      stateDir: expect.any(String),
+      hostCommand: ["station-host", "serve"],
+    });
+  });
+
+  it("retains the refused result after successful internal idle replacement", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const incumbent = exactEvidence(socketPath, "older-build", incumbentIdentity, []);
+    const successor = exactEvidence(socketPath, requestingBuild, targetIdentity, []);
+    const result = await runHostCommand(
+      ["handoff"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({ status: "exact", evidence: incumbent }),
+        resolveHostCommand: () => ["station-host"],
+        convergeHost: async (options) => {
+          expect(options.command).toMatchObject({
+            action: "replace-idle",
+            expected: incumbent,
+          });
+          return {
+            status: "completed",
+            action: "replace-idle",
+            targetBuild: {
+              buildVersion: requestingBuild,
+              buildIdentity: targetIdentity,
+            },
+            finalEvidence: successor,
+          };
+        },
+      },
+    );
+    expect(result).toEqual({
+      action: "handoff",
+      dryRun: false,
+      fidelity: "processes",
+      socketPath,
+      status: "refused",
+      message: "Host is idle; ordinary stop-if-idle replacement ran instead of handoff.",
+      livePtyCount: 0,
+    });
+  });
+
+  it("projects an updater idle replacement as successful exact convergence", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const incumbent = exactEvidence(socketPath, "older-build", incumbentIdentity, []);
+    const successor = exactEvidence(socketPath, requestingBuild, targetIdentity, []);
+    const result = await runHostCommand(
+      ["handoff", "--update-crossover"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({ status: "exact", evidence: incumbent }),
+        resolveHostCommand: () => ["station-host"],
+        convergeHost: async () => ({
+          status: "completed",
+          action: "replace-idle",
+          targetBuild: {
+            buildVersion: requestingBuild,
+            buildIdentity: targetIdentity,
+          },
+          finalEvidence: successor,
+        }),
       },
     );
 
     expect(result).toMatchObject({
       action: "handoff",
       status: "completed",
-      fidelity: "screen",
-      livePtyCount: 1,
-      adopted: ["pty-1"],
+      message: "Host exact ownership converged by idle replacement.",
+      livePtyCount: 0,
     });
-    expect(ensureHost).toHaveBeenCalledWith(
-      expect.objectContaining({
-        expectedBuildVersion: requestingBuild,
-        handoff: { fidelity: "screen" },
-      }),
-      expect.anything(),
-    );
-    expect(dispose).toHaveBeenCalledOnce();
   });
 
-  it("projects ensure reuse as refused without claiming handoff", async () => {
+  it("makes updater convergence idempotent for an exact or absent Host", async () => {
     const fixture = await createTempState();
-    const ensureHost = vi.fn(async () => ({
-      status: "running" as const,
-      socketPath: stationHostSocketPath(fixture.config),
-      ensuredBy: "reuse" as const,
-      client: { dispose: () => undefined },
-    }));
-    const result = await runHostCommand(
-      ["handoff"],
+    const socketPath = stationHostSocketPath(fixture.config);
+    const convergeHost = vi.fn();
+    const exact = await runHostCommand(
+      ["handoff", "--update-crossover"],
       { config: fixture.config },
       {
         expectedBuildVersion: requestingBuild,
-        ensureHost: ensureHost as never,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath, requestingBuild, targetIdentity),
+        }),
+        convergeHost,
+      },
+    );
+    const absent = await runHostCommand(
+      ["handoff", "--update-crossover"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({ status: "absent" }),
+        convergeHost,
+      },
+    );
+
+    expect(exact).toMatchObject({
+      action: "handoff",
+      status: "completed",
+      livePtyCount: 1,
+    });
+    expect(absent).toMatchObject({
+      action: "handoff",
+      status: "completed",
+      livePtyCount: 0,
+      message: "No incumbent Host or parked terminal required update crossover.",
+    });
+    expect(convergeHost).not.toHaveBeenCalled();
+  });
+
+  it("recovers parked manifests before accepting an exact updater target", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const recoverHostOrphans = vi.fn(async () => ({
+      recoveredPtyIds: ["pty-parked"],
+    }));
+    const result = await runHostCommand(
+      ["handoff", "--update-crossover"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath, requestingBuild, targetIdentity, []),
+        }),
+        recoverHostOrphans,
+        resolveHostCommand: () => ["station-host"],
       },
     );
 
     expect(result).toMatchObject({
       action: "handoff",
-      status: "refused",
+      status: "completed",
+      recovered: ["pty-parked"],
+      livePtyCount: 1,
     });
-    expect(String((result as { message: string }).message)).toMatch(/unnecessary/i);
+    expect(recoverHostOrphans).toHaveBeenCalledWith({
+      socketPath,
+      stateDir: expect.any(String),
+      targetBuild: {
+        buildVersion: requestingBuild,
+        buildIdentity: targetIdentity,
+      },
+      hostCommand: ["station-host"],
+    });
   });
 
-  it("surfaces ensure failure as unavailable without claiming completion", async () => {
+  it.each([
+    "exact",
+    "absent",
+  ] as const)("does not accept %s preflight evidence when fresh updater recovery finds a replacement", async (initialState) => {
     const fixture = await createTempState();
-    const ensureHost = vi.fn(async () => ({
-      status: "unavailable" as const,
-      socketPath: stationHostSocketPath(fixture.config),
-      error: {
-        code: "HOST_HANDOFF_INVALID_STATE",
-        message: "handoff could not complete",
-      },
-    }));
+    const socketPath = stationHostSocketPath(fixture.config);
     const result = await runHostCommand(
-      ["handoff"],
+      ["handoff", "--update-crossover"],
       { config: fixture.config },
       {
         expectedBuildVersion: requestingBuild,
-        ensureHost: ensureHost as never,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () =>
+          initialState === "absent"
+            ? { status: "absent" as const }
+            : {
+                status: "exact" as const,
+                evidence: exactEvidence(socketPath, requestingBuild, targetIdentity, []),
+              },
+        recoverHostOrphans: async () => {
+          throw {
+            tag: "TerminalProviderError",
+            code: "HOST_TARGET_CONFLICT",
+            message: "Fresh Host evidence named another build.",
+          };
+        },
       },
     );
 
     expect(result).toMatchObject({
       action: "handoff",
       status: "unavailable",
-      message: "handoff could not complete",
+      message: "Fresh Host evidence named another build.",
+      error: { code: "HOST_TARGET_CONFLICT" },
     });
+  });
+
+  it("preflights a future update replacement even when the current Host is exact", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const result = await runHostCommand(
+      ["handoff", "--dry-run", "--update-crossover"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath, requestingBuild, targetIdentity),
+        }),
+      },
+    );
+
+    expect(result).toMatchObject({
+      action: "handoff",
+      status: "planned",
+      livePtyCount: 1,
+    });
+  });
+
+  it("blocks updater planning when parked bridge recovery viability is unproved", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const convergeHost = vi.fn();
+    const result = await runHostCommand(
+      ["handoff", "--dry-run", "--update-crossover"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath, requestingBuild, targetIdentity, []),
+        }),
+        preflightHostOrphans: async () => {
+          throw stationHostSafeError(
+            "HOST_HANDOFF_MANIFEST_INVALID",
+            "A parked terminal was not reachable for update recovery.",
+          );
+        },
+        convergeHost,
+      },
+    );
+
+    expect(result).toMatchObject({
+      action: "handoff",
+      status: "unavailable",
+      error: { code: "HOST_HANDOFF_MANIFEST_INVALID" },
+    });
+    expect(convergeHost).not.toHaveBeenCalled();
+  });
+
+  it("refuses updater preflight when a future replacement cannot preserve the exact Host", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const result = await runHostCommand(
+      ["handoff", "--dry-run", "--update-crossover", "--replacement-required"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath, requestingBuild, targetIdentity, [
+            {
+              ...terminal,
+              handoffSupport: {
+                kind: "non-releasable",
+                reason: "release-unsupported",
+              },
+            },
+          ] as never),
+        }),
+      },
+    );
+
+    expect(result).toMatchObject({
+      action: "handoff",
+      status: "refused",
+      livePtyCount: 1,
+    });
+  });
+
+  it("does not require bridge eligibility when updater convergence already targets the exact Host", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const result = await runHostCommand(
+      ["handoff", "--dry-run", "--update-crossover"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath, requestingBuild, targetIdentity, [
+            {
+              ...terminal,
+              handoffSupport: {
+                kind: "non-releasable",
+                reason: "release-unsupported",
+              },
+            },
+          ] as never),
+        }),
+      },
+    );
+
+    expect(result).toMatchObject({
+      action: "handoff",
+      status: "planned",
+      livePtyCount: 1,
+    });
+  });
+
+  it("surfaces convergence failure without claiming completion", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const failure = stationHostSafeError(
+      "HOST_HANDOFF_INVALID_STATE",
+      "handoff could not complete",
+    );
+    const result = await runHostCommand(
+      ["handoff"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath),
+        }),
+        resolveHostCommand: () => ["station-host"],
+        convergeHost: async () => ({
+          status: "failed",
+          action: "handoff",
+          targetBuild: {
+            buildVersion: requestingBuild,
+            buildIdentity: targetIdentity,
+          },
+          phase: "incumbent-release",
+          incumbentDisposition: "preserved",
+          terminalDisposition: "incumbent",
+          recoveryAuthority: "none",
+          terminalRecovery: [
+            {
+              terminalTargetId: terminal.terminalTargetId,
+              ptyId: terminal.ptyId,
+              ptyInstanceId: terminal.ptyInstanceId,
+              lastProvenDisposition: "incumbent",
+            },
+          ],
+          error: failure,
+        }),
+      },
+    );
+    expect(result).toMatchObject({
+      action: "handoff",
+      status: "unavailable",
+      message: "handoff could not complete",
+      convergenceFailure: {
+        phase: "incumbent-release",
+        terminalCount: 1,
+        terminalRecoveryCounts: { incumbent: 1 },
+        handoffReceipt: { retained: false, terminalCount: 0 },
+      },
+    });
+  });
+
+  it("refuses ineligible terminals before resolving or mutating", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const convergeHost = vi.fn();
+    const resolveHostCommand = vi.fn();
+    const result = await runHostCommand(
+      ["handoff"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost: async () => ({
+          status: "exact",
+          evidence: exactEvidence(socketPath, "older-build", incumbentIdentity, [
+            {
+              ...terminal,
+              handoffSupport: {
+                kind: "non-releasable",
+                reason: "release-unsupported",
+              },
+            },
+          ] as never),
+        }),
+        convergeHost,
+        resolveHostCommand,
+      },
+    );
+    expect(result).toMatchObject({
+      action: "handoff",
+      status: "refused",
+      livePtyCount: 1,
+    });
+    expect(convergeHost).not.toHaveBeenCalled();
+    expect(resolveHostCommand).not.toHaveBeenCalled();
+  });
+});
+
+describe("host update crossover process boundary", () => {
+  it.each([
+    "inspection",
+    "arguments",
+  ] as const)("emits strict failed JSON when %s throws before a Host result", async (failurePoint) => {
+    const fixture = await createTempState();
+    const run = hostCliCommand.run;
+    if (run === undefined) throw new Error("Host command was not runnable.");
+    const args =
+      failurePoint === "arguments"
+        ? ["handoff", "--update-crossover", "--unknown"]
+        : ["handoff", "--update-crossover"];
+    const result = await run({
+      path: ["host"],
+      args,
+      allArgs: ["host", ...args],
+      cliEntryPath: "/repo/apps/cli/dist/main.js",
+      renderHelpTopic: () => "",
+      config: fixture.config,
+      options: {
+        hostDeps:
+          failurePoint === "inspection"
+            ? {
+                inspectHost: async () => {
+                  throw stationHostSafeError("HOST_UNREACHABLE", "Host inspection failed.");
+                },
+              }
+            : {},
+      },
+    });
+
+    expect(result.code).toBe(1);
+    expect(
+      StationHostUpdateCrossoverResultSchema.parse(JSON.parse(String(result.output))),
+    ).toMatchObject({ schemaVersion: 1, status: "failed" });
   });
 });

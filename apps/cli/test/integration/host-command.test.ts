@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const targetBuild = "1.0.0+target";
+const targetIdentity = "b".repeat(64);
 const runningBuild = "0.9.0+incumbent";
 
 describe("registered stn host command", () => {
@@ -11,7 +12,7 @@ describe("registered stn host command", () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const socketPath = stationHostSocketPath(fixture.config);
-    const ensureHost = vi.fn();
+    const convergeHost = vi.fn();
     const resolveHostCommand = vi.fn();
     const inspectHost = vi.fn(async () => ({
       status: "exact" as const,
@@ -41,7 +42,13 @@ describe("registered stn host command", () => {
     }));
 
     const result = await runCli(["--config", configPath, "host", "status"], {
-      hostDeps: { expectedBuildVersion: targetBuild, inspectHost, ensureHost, resolveHostCommand },
+      hostDeps: {
+        expectedBuildVersion: targetBuild,
+        expectedBuildIdentity: targetIdentity,
+        inspectHost,
+        convergeHost,
+        resolveHostCommand,
+      },
     });
 
     expect(result).toEqual({
@@ -57,11 +64,8 @@ describe("registered stn host command", () => {
         "",
       ].join("\n"),
     });
-    expect(inspectHost).toHaveBeenCalledWith(
-      { socketPath, expectedBuildVersion: targetBuild },
-      expect.objectContaining({ clientFactory: expect.any(Function) }),
-    );
-    expect(ensureHost).not.toHaveBeenCalled();
+    expect(inspectHost).toHaveBeenCalledWith({ socketPath, expectedBuildVersion: targetBuild });
+    expect(convergeHost).not.toHaveBeenCalled();
     expect(resolveHostCommand).not.toHaveBeenCalled();
     expect(String(result.output)).not.toContain("legacy");
   });
@@ -72,6 +76,7 @@ describe("registered stn host command", () => {
     const unknown = await runCli(["--config", configPath, "host", "status"], {
       hostDeps: {
         expectedBuildVersion: targetBuild,
+        expectedBuildIdentity: targetIdentity,
         inspectHost: async () => ({
           status: "unknown",
           reason: "health-failed",
@@ -87,6 +92,7 @@ describe("registered stn host command", () => {
     const unexpected = await runCli(["--config", configPath, "host", "status"], {
       hostDeps: {
         expectedBuildVersion: targetBuild,
+        expectedBuildIdentity: targetIdentity,
         inspectHost: async () => Promise.reject("raw failure"),
       },
     });

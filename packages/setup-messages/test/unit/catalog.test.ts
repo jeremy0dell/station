@@ -83,4 +83,13 @@ describe("setup message catalog", () => {
       expect(resolveSetupMessage(ref, "graphical").trim().length).toBeGreaterThan(0);
     }
   });
+
+  it("describes lsof as required for causal Station Host admission", () => {
+    expect(
+      resolveSetupMessage({
+        id: "check.socket-evidence-missing",
+        args: { command: "/usr/bin/lsof" },
+      }),
+    ).toContain("Station Host admission requires");
+  });
 });

@@ -66,11 +66,11 @@ export const setupMessageCatalog = {
   "check.available": { terminal: "{label} is available." },
   "check.state-directory-ready": { terminal: "Station’s state directory is writable." },
   "check.socket-evidence-ready": {
-    terminal: "lsof is available for safe Observer socket recovery and build handoff.",
+    terminal: "lsof is available for causal Station Host admission and recovery.",
   },
   "check.socket-evidence-missing": {
     terminal:
-      "Fresh Observer startup can continue, but stale-socket recovery and build handoff require an executable lsof at {command}. Install lsof, then rerun stn setup check (Debian/Ubuntu: sudo apt-get install lsof; Fedora/RHEL: sudo dnf install lsof).",
+      "Station Host admission requires an executable lsof at {command}. Install lsof, then rerun stn setup check (Debian/Ubuntu: sudo apt-get install lsof; Fedora/RHEL: sudo dnf install lsof).",
   },
   "check.tmux-popup-skipped": { terminal: "Available after tmux is installed." },
   "check.tmux-popup-launcher-missing": {

@@ -64,11 +64,14 @@ export type StationHostInstance = {
 type CloseReason = "requested" | "upgrade" | "handoff";
 
 /**
- * The host owns PTYs independently of any client and answers
+ * COMPOSITION ROOT
+ *
+ * Wires one Host lifetime that owns PTYs independently of every client and answers
  * spawn/list + health. Attachment-scoped mutation is resolved by the server's
  * connection registry and enforced by the PTY table before reaching a child.
- * Typed PTY lifecycle is emitted directly at the table boundary, while shutdown
- * disposes owned PTYs and flushes evidence.
+ * The protected socket admits same-UID callers. Physical-connection ownership
+ * then gates handoff continuity; client/build metadata remains compatibility and
+ * correlation evidence. Shutdown disposes owned PTYs and flushes typed lifecycle evidence.
  */
 export async function startStationHost(
   options: StartStationHostOptions,
@@ -114,6 +117,7 @@ export async function startStationHost(
       ptyImplementation,
       protocolVersion: HOST_PROTOCOL_VERSION,
       buildVersion,
+      buildIdentity,
       orphanTtlMs,
     },
   });
@@ -229,7 +233,7 @@ function buildHostHandlers(input: {
   const handoff = createHostHandoffSession({ ptyTable, buildVersion });
 
   return {
-    hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion },
+    hostCompatibility: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion },
     unary: {
       "host.health": () => ({
         ok: true as const,
@@ -237,16 +241,24 @@ function buildHostHandlers(input: {
         buildVersion,
       }),
       "host.stopIfIdle": (params) => {
-        const { requestingBuildVersion } = HostStopIfIdleParamsSchema.parse(params);
-        handoff.beginIdleDrain(requestingBuildVersion);
+        const { requestingBuildVersion: requestedSuccessorBuildVersion } =
+          HostStopIfIdleParamsSchema.parse(params);
+        handoff.beginIdleDrain(requestedSuccessorBuildVersion);
         return { stopping: true as const };
       },
-      "host.beginHandoff": async (params) => {
-        const { requestingBuildVersion, fidelity } = HostBeginHandoffParamsSchema.parse(params);
-        return handoff.beginHandoff(requestingBuildVersion, fidelity);
+      "host.beginHandoff": async (params, _client, connectionOwner) => {
+        const { requestingBuildVersion: requestedSuccessorBuildVersion, fidelity } =
+          HostBeginHandoffParamsSchema.parse(params);
+        return handoff.beginHandoff(
+          requestedSuccessorBuildVersion,
+          fidelity,
+          connectionOwner,
+        );
       },
-      "host.completeHandoff": () => handoff.completeHandoff(),
-      "host.abortHandoff": () => handoff.abortHandoff(),
+      "host.completeHandoff": (_params, _client, connectionOwner) =>
+        handoff.completeHandoff(connectionOwner),
+      "host.abortHandoff": (_params, _client, connectionOwner) =>
+        handoff.abortHandoff(connectionOwner),
       "host.adoptRegistry": (params) => {
         const { manifest } = HostAdoptRegistryParamsSchema.parse(params);
         return handoff.adoptRegistry(manifest);
@@ -297,5 +309,6 @@ function buildHostHandlers(input: {
         void closeHost("handoff");
       }
     },
+    onConnectionClosed: (connectionOwner) => handoff.ownerDisconnected(connectionOwner),
   };
 }
