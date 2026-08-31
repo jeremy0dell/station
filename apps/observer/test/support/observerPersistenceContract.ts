@@ -2040,6 +2040,37 @@ export function observerPersistenceContract(
         });
       });
 
+      it("reads one exact durable session without widening the persistence query", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          for (const sessionId of ["ses_exact_a", "ses_exact_b"]) {
+            await persistence.seedSession({
+              sessionId,
+              projectId: "web",
+              worktreeId: `wt_${sessionId}`,
+              initialTitle: sessionId,
+              harness: "codex",
+              terminalProvider: "station",
+              createdAt: earlier,
+              lastSeenAt: now,
+            });
+          }
+          await persistence.renameSession({
+            sessionId: "ses_exact_b",
+            title: "Current durable title",
+            renamedAt: later,
+          });
+
+          await expect(persistence.getSession("ses_exact_b")).resolves.toEqual(
+            expect.objectContaining({
+              id: "ses_exact_b",
+              title: "Current durable title",
+              lifecycle: "open",
+            }),
+          );
+          await expect(persistence.getSession("ses_missing")).resolves.toBeUndefined();
+        });
+      });
+
       it("reads sorted retained sessions and recovery handles through one coherent snapshot", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           await expect(persistence.readRecoveryInventory()).resolves.toEqual({

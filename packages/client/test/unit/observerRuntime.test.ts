@@ -48,6 +48,27 @@ describe("observer client runtime", () => {
     expect(service.loadCount).toBe(1);
   });
 
+  it("refreshes instead of duplicating a delayed worktree addition after snapshot load", async () => {
+    const canonical = createCommandSnapshot("none");
+    const existing = canonical.rows[0];
+    if (existing === undefined) throw new Error("Expected a worktree fixture row.");
+    const service = new FakeObserverService(canonical);
+    const runtime = track(
+      createStationClientRuntime({
+        service,
+        initialSnapshot: canonical,
+        reconnect: RECONNECT_OPTIONS,
+      }),
+    );
+    runtime.start();
+    await waitFor(() => service.subscribeCount === 1);
+
+    service.emit({ type: "worktree.added", row: existing });
+
+    await waitFor(() => service.loadCount === 1 && !runtime.getState().inFlightRefresh);
+    expect(runtime.getState().snapshot?.rows.map((row) => row.id)).toEqual([existing.id]);
+  });
+
   it("returns reference-stable state between changes and a new object per change", async () => {
     const service = new FakeObserverService(createCommandSnapshot("idle"));
     const runtime = track(createStationClientRuntime({ service, reconnect: RECONNECT_OPTIONS }));

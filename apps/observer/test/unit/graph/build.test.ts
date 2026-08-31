@@ -1,239 +1,30 @@
 import type {
-  ClientFeatureFlags,
-  HarnessCapabilities,
   HarnessRunObservation,
   ProviderHealth,
-  ProviderProjectConfig,
   SessionGroupView,
-  SessionRecoveryHandle,
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
 import { StationSnapshotSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
+import type { ObserverSessionMetadata } from "../../../src/reconcile/graph/evidence";
+import { projectProviderHealthOntoSnapshot } from "../../../src/reconcile/graph/providerHealth";
+import { projectSessionGroups } from "../../../src/reconcile/sessionGroups";
 import {
-  buildStationSnapshot,
-  type ObserverSessionMetadata,
-  type ObserverTurnReadiness,
-  type ObserverWorktreeDisplayTitle,
-  projectProviderHealthOntoSnapshot,
-} from "../../src/reconcile/graph";
-import { projectSessionGroups } from "../../src/reconcile/sessionGroups";
-
-const generatedAt = "2026-05-20T12:00:00.000Z";
-const observerStartedAt = "2026-05-20T11:55:00.000Z";
-
-const observer = {
-  pid: 4242,
-  startedAt: observerStartedAt,
-  version: "0.0.0",
-};
-
-const worktreeProviderHealth: ProviderHealth = {
-  provider: "fake-worktree",
-  providerType: "worktree",
-  status: "healthy",
-  lastCheckedAt: generatedAt,
-  capabilities: {
-    canList: true,
-    canCreate: true,
-    canRemove: true,
-  },
-};
-
-const projects: ProviderProjectConfig[] = [
-  {
-    id: "web",
-    label: "web",
-    root: "/tmp/station/web",
-    defaults: {
-      harness: "fake-harness",
-      terminal: "fake-terminal",
-      layout: "agent-shell",
-    },
-    worktrunk: {
-      enabled: true,
-    },
-  },
-  {
-    id: "api",
-    label: "api",
-    root: "/tmp/station/api",
-    defaults: {
-      harness: "fake-harness",
-      terminal: "fake-terminal",
-      layout: "agent-shell",
-    },
-    worktrunk: {
-      enabled: true,
-    },
-  },
-];
-
-function worktree(
-  id: string,
-  projectId: string,
-  branch: string,
-  providerData?: unknown,
-): WorktreeObservation {
-  return {
-    id,
-    provider: "fake-worktree",
-    projectId,
-    branch,
-    path: `/tmp/station/${projectId}/${branch.replaceAll("/", "-")}`,
-    state: "exists",
-    source: "worktrunk",
-    dirty: false,
-    confidence: "high",
-    reason: "Fixture worktree.",
-    observedAt: generatedAt,
-    ...(providerData === undefined ? {} : { providerData }),
-  };
-}
-
-function terminal(
-  id: string,
-  worktreeId: string,
-  harnessRunId: string,
-  state: TerminalTargetObservation["state"] = "open",
-): TerminalTargetObservation {
-  return {
-    id,
-    provider: "fake-terminal",
-    projectId: worktreeId.startsWith("wt_api") ? "api" : "web",
-    worktreeId,
-    sessionId: `ses_${worktreeId}`,
-    harnessRunId,
-    state,
-    confidence: state === "unknown" ? "low" : "high",
-    reason: state === "unknown" ? "Terminal identity was uncertain." : "Fixture terminal.",
-    observedAt: generatedAt,
-    providerData: {
-      paneId: `%${id}`,
-    },
-  };
-}
-
-function harness(
-  id: string,
-  worktreeId: string,
-  state: HarnessRunObservation["status"]["value"],
-  reason = `Harness is ${state}.`,
-): HarnessRunObservation {
-  return harnessRun(id, worktreeId, state, reason);
-}
-
-function harnessRun(
-  id: string,
-  worktreeId: string,
-  state: HarnessRunObservation["status"]["value"],
-  reason = `Harness is ${state}.`,
-): HarnessRunObservation {
-  return {
-    id,
-    provider: "fake-harness",
-    projectId: worktreeId.startsWith("wt_api") ? "api" : "web",
-    worktreeId,
-    sessionId: `ses_${worktreeId}`,
-    pid: state === "exited" ? undefined : 5000,
-    status: {
-      value: state,
-      confidence: state === "unknown" ? "low" : "high",
-      reason,
-      source: "harness_process",
-      updatedAt: generatedAt,
-    },
-    observedAt: generatedAt,
-    providerData: {
-      rawStatus: state,
-    },
-  };
-}
-
-function build(overrides: {
-  projects?: ProviderProjectConfig[];
-  worktrees?: WorktreeObservation[];
-  terminals?: TerminalTargetObservation[];
-  harnessRuns?: HarnessRunObservation[];
-  sessionMetadata?: ObserverSessionMetadata[];
-  worktreeDisplayTitles?: ObserverWorktreeDisplayTitle[];
-  turnReadiness?: ObserverTurnReadiness[];
-  providerHealth?: Record<string, ProviderHealth>;
-  recoveryHandles?: SessionRecoveryHandle[];
-  harnessCapabilities?: Record<string, HarnessCapabilities>;
-  featureFlags?: ClientFeatureFlags;
-}) {
-  return buildStationSnapshot({
-    generatedAt,
-    observer,
-    projects: overrides.projects ?? projects,
-    worktreeProviderId: "fake-worktree",
-    providerHealth: overrides.providerHealth ?? {
-      "fake-worktree": worktreeProviderHealth,
-    },
-    worktrees: overrides.worktrees ?? [],
-    terminalTargets: overrides.terminals ?? [],
-    harnessRuns: overrides.harnessRuns ?? [],
-    sessionMetadata: overrides.sessionMetadata ?? [],
-    worktreeDisplayTitles: overrides.worktreeDisplayTitles ?? [],
-    turnReadiness: overrides.turnReadiness ?? [],
-    recoveryHandles: overrides.recoveryHandles ?? [],
-    harnessCapabilities: overrides.harnessCapabilities ?? {},
-    ...(overrides.featureFlags === undefined ? {} : { featureFlags: overrides.featureFlags }),
-  });
-}
-
-const resumableHarnessCapabilities: HarnessCapabilities = {
-  canLaunch: true,
-  canDiscoverRuns: true,
-  canEmitEvents: true,
-  canReceivePrompt: false,
-  canResume: true,
-  canStop: true,
-  canRunNonInteractive: true,
-  canExposeApprovalState: false,
-  supportsModifiedEnterSoftNewline: false,
-};
-
-const recoveryFeatureFlags: ClientFeatureFlags = {
-  revision: "recovery-enabled",
-  flags: { sessionResumeAgent: true },
-};
-
-function recoveryHandle(
-  worktree: WorktreeObservation,
-  overrides: Partial<SessionRecoveryHandle> = {},
-): SessionRecoveryHandle {
-  return {
-    id: "rec_graph",
-    provider: "fake-harness",
-    projectId: worktree.projectId,
-    worktreeId: worktree.id,
-    sessionId: `ses_${worktree.id}`,
-    target: { kind: "native-session", id: "native_graph" },
-    cwd: worktree.path,
-    observedAt: generatedAt,
-    lastSeenAt: generatedAt,
-    ...overrides,
-  };
-}
-
-function recoverySession(
-  worktree: WorktreeObservation,
-  overrides: Partial<ObserverSessionMetadata> = {},
-): ObserverSessionMetadata {
-  return {
-    id: `ses_${worktree.id}`,
-    projectId: worktree.projectId,
-    worktreeId: worktree.id,
-    lifecycle: "open",
-    harness: "fake-harness",
-    createdAt: generatedAt,
-    lastSeenAt: generatedAt,
-    ...overrides,
-  };
-}
+  build,
+  generatedAt,
+  harness,
+  harnessRun,
+  observerStartedAt,
+  projects,
+  recoveryFeatureFlags,
+  recoveryHandle,
+  recoverySession,
+  resumableHarnessCapabilities,
+  terminal,
+  worktree,
+  worktreeProviderHealth,
+} from "./fixtures";
 
 describe("observer graph derivation", () => {
   it("projects the newest exact eligible open-session recovery handle", () => {

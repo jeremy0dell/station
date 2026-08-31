@@ -2857,7 +2857,7 @@
           "name": "createWorktreeCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch, then returns the exact project and worktree identities created by the provider."
+          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch. Exact provider-returned launch evidence commits through the serialized snapshot writer before publication; ambiguous evidence and worktree-only creation retain synchronous reconciliation."
         },
         {
           "name": "CreateWorktreeCreateHandlerOptions",
@@ -2926,6 +2926,12 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["CreateWorktreeRequest", "ProviderProjectConfig"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["safeErrorFromUnknown"]
         },
         {
           "specifier": "@station/runtime",
@@ -4227,6 +4233,12 @@
           "purpose": "Excludes cross-runtime startup, stale-evidence repair, and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
         },
         {
+          "name": "alertsFromProviderHealth",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "AppliedObserverSqliteMigration",
           "kind": "type",
           "role": null,
@@ -4359,6 +4371,12 @@
           "purpose": null
         },
         {
+          "name": "CreatedWorktreeProjectionRejectionReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "createErrorEnvelope",
           "kind": "function",
           "role": null,
@@ -4446,7 +4464,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -5349,16 +5367,40 @@
           "purpose": null
         },
         {
+          "name": "PreparedExternalLaunchProjection",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "PreparedExternalLaunchProjectionRejectionReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "probeObserverSocket",
           "kind": "function",
           "role": "ADAPTER",
           "purpose": "Translates four-state Unix-socket evidence into Observer ownership states and an actionable inaccessible-socket diagnostic."
         },
         {
+          "name": "projectCreatedWorktreeOntoSnapshot",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "projectHarnessEventReportOntoSnapshot",
           "kind": "function",
           "role": "POLICY",
           "purpose": "Projects native-authorized harness status onto one current row and session."
+        },
+        {
+          "name": "projectPreparedExternalLaunchOntoSnapshot",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "projectProviderHealthOntoSnapshot",
@@ -5808,10 +5850,22 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "SessionTurnReadinessMutation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SnapshotProjectionCommitResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SnapshotProjectionResult",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5866,6 +5920,12 @@
         },
         {
           "name": "toSafeError",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "unknownProviderHealth",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -6089,8 +6149,26 @@
           "bindings": ["*"]
         },
         {
-          "specifier": "./reconcile/graph.js",
-          "resolvedPath": "apps/observer/src/reconcile/graph.ts",
+          "specifier": "./reconcile/graph/authoritativeLaunch.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/authoritativeLaunch.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./reconcile/graph/build.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/build.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./reconcile/graph/evidence.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/evidence.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./reconcile/graph/providerHealth.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/providerHealth.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -7450,6 +7528,12 @@
           "purpose": null
         },
         {
+          "name": "getSession",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "listSessions",
           "kind": "function",
           "role": null,
@@ -7965,7 +8049,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -8256,7 +8340,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -8316,6 +8400,7 @@
             "SafeError",
             "SessionGroupId",
             "SessionGroupView",
+            "SessionId",
             "SessionRecoveryHandle",
             "StationCommand",
             "StationCommandResult",
@@ -9619,6 +9704,12 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "SnapshotProjectionCommitResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         }
       ],
       "imports": [
@@ -9666,8 +9757,26 @@
           "bindings": ["ProviderRegistry"]
         },
         {
-          "specifier": "./graph.js",
-          "resolvedPath": "apps/observer/src/reconcile/graph.ts",
+          "specifier": "./graph/authoritativeLaunch.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/authoritativeLaunch.ts",
+          "edgeKind": "runtime",
+          "bindings": [
+            "projectCreatedWorktreeOntoSnapshot",
+            "projectPreparedExternalLaunchOntoSnapshot"
+          ]
+        },
+        {
+          "specifier": "./graph/authoritativeLaunch.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/authoritativeLaunch.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "CreatedWorktreeProjectionRejectionReason",
+            "PreparedExternalLaunchProjectionRejectionReason"
+          ]
+        },
+        {
+          "specifier": "./graph/providerHealth.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/providerHealth.ts",
           "edgeKind": "runtime",
           "bindings": ["projectProviderHealthOntoSnapshot"]
         },
@@ -9749,6 +9858,8 @@
             "StationEvent",
             "StationSnapshot",
             "StationSnapshotDebug",
+            "TerminalTargetObservation",
+            "WorktreeObservation",
             "WorktreeRow"
           ]
         },
@@ -9767,14 +9878,188 @@
       ]
     },
     {
-      "path": "apps/observer/src/reconcile/graph.ts",
+      "path": "apps/observer/src/reconcile/graph/authoritativeLaunch.ts",
+      "exports": [
+        {
+          "name": "CreatedWorktreeProjectionRejectionReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "PreparedExternalLaunchProjection",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "PreparedExternalLaunchProjectionRejectionReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "projectCreatedWorktreeOntoSnapshot",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "projectPreparedExternalLaunchOntoSnapshot",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SnapshotProjectionResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./evidence.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/evidence.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSessionMetadata"]
+        },
+        {
+          "specifier": "./sessions.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/sessions.ts",
+          "edgeKind": "runtime",
+          "bindings": ["buildStationSession"]
+        },
+        {
+          "specifier": "./worktreeRows.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/worktreeRows.ts",
+          "edgeKind": "runtime",
+          "bindings": ["buildWorktreeRow", "compareRows"]
+        },
+        {
+          "specifier": "../sessionGroups.js",
+          "resolvedPath": "apps/observer/src/reconcile/sessionGroups.ts",
+          "edgeKind": "runtime",
+          "bindings": ["projectSessionGroups"]
+        },
+        {
+          "specifier": "../snapshotCounts.js",
+          "resolvedPath": "apps/observer/src/reconcile/snapshotCounts.ts",
+          "edgeKind": "runtime",
+          "bindings": ["countsForSnapshot"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sameObservedPath", "terminalBoundHarnessRunObservation"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "HarnessCapabilities",
+            "ProviderId",
+            "ProviderProjectConfig",
+            "SessionGroupView",
+            "SessionView",
+            "StationSnapshot",
+            "TerminalAttachment",
+            "TerminalTargetObservation",
+            "WorktreeObservation",
+            "WorktreeRow"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/graph/build.ts",
       "exports": [
         {
           "name": "buildStationSnapshot",
           "kind": "function",
           "role": "POLICY",
           "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./evidence.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/evidence.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverGraphInput"]
         },
+        {
+          "specifier": "./observations.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/observations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["chooseHarnessRun", "chooseTerminal"]
+        },
+        {
+          "specifier": "./orphans.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/orphans.ts",
+          "edgeKind": "runtime",
+          "bindings": ["projectOrphanedRuntimeState"]
+        },
+        {
+          "specifier": "./providerHealth.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/providerHealth.ts",
+          "edgeKind": "runtime",
+          "bindings": ["alertsFromProviderHealth", "unknownProviderHealth"]
+        },
+        {
+          "specifier": "./sessions.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/sessions.ts",
+          "edgeKind": "runtime",
+          "bindings": ["buildSessions", "newestRetainedSessionByWorktree", "sessionWorktreeKey"]
+        },
+        {
+          "specifier": "./sessions.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/sessions.ts",
+          "edgeKind": "type-only",
+          "bindings": ["BuildSessionInput"]
+        },
+        {
+          "specifier": "./worktreeRows.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/worktreeRows.ts",
+          "edgeKind": "runtime",
+          "bindings": [
+            "attachTurnReadiness",
+            "buildWorktreeRow",
+            "compareRows",
+            "recoveryActionForRow"
+          ]
+        },
+        {
+          "specifier": "./worktreeRows.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/worktreeRows.ts",
+          "edgeKind": "type-only",
+          "bindings": ["BuildWorktreeRowInput"]
+        },
+        {
+          "specifier": "../snapshotCounts.js",
+          "resolvedPath": "apps/observer/src/reconcile/snapshotCounts.ts",
+          "edgeKind": "runtime",
+          "bindings": ["countsForSnapshot"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["STATION_SCHEMA_VERSION"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionView", "StationSnapshot", "WorktreeRow"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/graph/evidence.ts",
+      "exports": [
         {
           "name": "ObserverGraphInput",
           "kind": "type",
@@ -9798,6 +10083,116 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ClientFeatureFlags",
+            "HarnessCapabilities",
+            "HarnessRunObservation",
+            "ProviderHealth",
+            "ProviderId",
+            "ProviderProjectConfig",
+            "SessionRecoveryHandle",
+            "SnapshotHarness",
+            "StationAlert",
+            "TerminalTargetObservation",
+            "WorktreeObservation"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/graph/observations.ts",
+      "exports": [
+        {
+          "name": "chooseHarnessRun",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "chooseTerminal",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "terminalTargetMatchesWorktree",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["AGENT_STATUS"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessRunObservation", "TerminalTargetObservation", "WorktreeObservation"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["pathIsSameOrInside"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/graph/orphans.ts",
+      "exports": [
+        {
+          "name": "projectOrphanedRuntimeState",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./evidence.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/evidence.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverGraphInput"]
+        },
+        {
+          "specifier": "./observations.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/observations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["terminalTargetMatchesWorktree"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "HarnessRunObservation",
+            "OrphanedRuntimeState",
+            "ProviderProjectConfig",
+            "WorktreeObservation"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/graph/providerHealth.ts",
+      "exports": [
+        {
+          "name": "alertsFromProviderHealth",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "projectProviderHealthOntoSnapshot",
@@ -9810,35 +10205,164 @@
           "kind": "function",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "unknownProviderHealth",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         }
       ],
       "imports": [
         {
-          "specifier": "./sessionActivation.js",
+          "specifier": "./evidence.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/evidence.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverGraphInput"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ProviderHealth",
+            "ProviderId",
+            "SafeError",
+            "StationAlert",
+            "StationSnapshot"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/graph/sessions.ts",
+      "exports": [
+        {
+          "name": "BuildSessionInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "buildSessions",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "buildStationSession",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "newestRetainedSessionByWorktree",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "sessionWorktreeKey",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./evidence.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/evidence.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSessionMetadata"]
+        },
+        {
+          "specifier": "./worktreeRows.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/worktreeRows.ts",
+          "edgeKind": "runtime",
+          "bindings": ["terminalAttachment"]
+        },
+        {
+          "specifier": "../sessionActivation.js",
           "resolvedPath": "apps/observer/src/reconcile/sessionActivation.ts",
           "edgeKind": "runtime",
           "bindings": ["harnessRunCanActivateSession", "terminalCanActivateSession"]
         },
         {
-          "specifier": "./snapshotCounts.js",
-          "resolvedPath": "apps/observer/src/reconcile/snapshotCounts.ts",
-          "edgeKind": "runtime",
-          "bindings": ["countsForSnapshot"]
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "HarnessCapabilities",
+            "HarnessRunObservation",
+            "ProviderProjectConfig",
+            "SessionView",
+            "TerminalTargetObservation",
+            "WorktreeObservation"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/graph/worktreeRows.ts",
+      "exports": [
+        {
+          "name": "attachTurnReadiness",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         },
         {
-          "specifier": "./terminalControlEvidence.js",
+          "name": "buildWorktreeRow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "BuildWorktreeRowInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "compareRows",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "recoveryActionForRow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "terminalAttachment",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./evidence.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/evidence.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSessionMetadata", "ObserverTurnReadiness"]
+        },
+        {
+          "specifier": "../terminalControlEvidence.js",
           "resolvedPath": "apps/observer/src/reconcile/terminalControlEvidence.ts",
           "edgeKind": "runtime",
           "bindings": ["terminalControlEvidence"]
         },
         {
-          "specifier": "../sessionRecovery/eligibility.js",
+          "specifier": "../../sessionRecovery/eligibility.js",
           "resolvedPath": "apps/observer/src/sessionRecovery/eligibility.ts",
           "edgeKind": "runtime",
           "bindings": ["sessionRecoveryEligibility"]
         },
         {
-          "specifier": "../sessionRecovery/selection.js",
+          "specifier": "../../sessionRecovery/selection.js",
           "resolvedPath": "apps/observer/src/sessionRecovery/selection.ts",
           "edgeKind": "runtime",
           "bindings": ["selectNewestSessionRecoveryCandidate"]
@@ -9847,12 +10371,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": [
-            "AGENT_STATUS",
-            "STATION_SCHEMA_VERSION",
-            "worktreeDisplayForAgentState",
-            "worktreeHasLiveAgent"
-          ]
+          "bindings": ["worktreeDisplayForAgentState", "worktreeHasLiveAgent"]
         },
         {
           "specifier": "@station/contracts",
@@ -9862,28 +10381,14 @@
             "ClientFeatureFlags",
             "HarnessCapabilities",
             "HarnessRunObservation",
-            "OrphanedRuntimeState",
-            "ProviderHealth",
-            "ProviderId",
             "ProviderProjectConfig",
-            "SafeError",
             "SessionRecoveryHandle",
-            "SessionView",
-            "SnapshotHarness",
-            "StationAlert",
-            "StationSnapshot",
             "TerminalAttachment",
             "TerminalTargetObservation",
             "WorktreeObservation",
             "WorktreeRecoveryAction",
             "WorktreeRow"
           ]
-        },
-        {
-          "specifier": "@station/runtime",
-          "resolvedPath": "packages/runtime/src/index.ts",
-          "edgeKind": "runtime",
-          "bindings": ["pathIsSameOrInside"]
         }
       ]
     },
@@ -10141,8 +10646,8 @@
           "bindings": ["ProviderRegistry"]
         },
         {
-          "specifier": "./graph.js",
-          "resolvedPath": "apps/observer/src/reconcile/graph.ts",
+          "specifier": "./graph/providerHealth.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/providerHealth.ts",
           "edgeKind": "runtime",
           "bindings": ["safeErrorToProviderHealth"]
         },
@@ -10244,8 +10749,8 @@
           "bindings": ["ProviderRegistry"]
         },
         {
-          "specifier": "./graph.js",
-          "resolvedPath": "apps/observer/src/reconcile/graph.ts",
+          "specifier": "./graph/build.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/build.ts",
           "edgeKind": "runtime",
           "bindings": ["buildStationSnapshot"]
         },
@@ -10626,8 +11131,8 @@
           "bindings": ["ProviderRegistry"]
         },
         {
-          "specifier": "./graph.js",
-          "resolvedPath": "apps/observer/src/reconcile/graph.ts",
+          "specifier": "./graph/build.js",
+          "resolvedPath": "apps/observer/src/reconcile/graph/build.ts",
           "edgeKind": "runtime",
           "bindings": ["buildStationSnapshot"]
         },
@@ -10827,7 +11332,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -11205,7 +11710,7 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group."
+          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group. After the binding-token-qualified process launch succeeds, the serialized projection reloads exact durable session authority and preserves correlated state committed since preflight before return; reconciliation verifies it and remains the fallback for any rejection."
         },
         {
           "name": "reportExternalExit",
@@ -11314,8 +11819,15 @@
             "ManagedOpenWorkspaceResult",
             "ManagedTerminalLifecycle",
             "SafeError",
-            "SessionView"
+            "SessionView",
+            "StationEvent"
           ]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["safeErrorFromUnknown"]
         },
         {
           "specifier": "@station/runtime",
@@ -15839,7 +16351,7 @@
       "declaration": "createWorktreeCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch, then returns the exact project and worktree identities created by the provider.",
+      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch. Exact provider-returned launch evidence commits through the serialized snapshot writer before publication; ambiguous evidence and worktree-only creation retain synchronous reconciliation.",
       "dependencies": []
     },
     {
@@ -16140,7 +16652,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh.",
+      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh.",
       "dependencies": []
     },
     {
@@ -16176,7 +16688,7 @@
       ]
     },
     {
-      "path": "apps/observer/src/reconcile/graph.ts",
+      "path": "apps/observer/src/reconcile/graph/build.ts",
       "declaration": "buildStationSnapshot",
       "kind": "function",
       "role": "POLICY",
@@ -16186,34 +16698,6 @@
           "path": "apps/observer/src/reconcile/snapshotCounts.ts",
           "declaration": "countsForSnapshot",
           "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/reconcile/terminalControlEvidence.ts",
-          "declaration": "terminalControlEvidence",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/sessionRecovery/eligibility.ts",
-          "declaration": "sessionRecoveryEligibility",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/sessionRecovery/selection.ts",
-          "declaration": "selectNewestSessionRecoveryCandidate",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/contracts/src/agentStatus.ts",
-          "declaration": "AGENT_STATUS",
-          "kind": "const",
           "role": "POLICY",
           "edgeKind": "runtime"
         }
@@ -16269,7 +16753,7 @@
           "edgeKind": "type-only"
         },
         {
-          "path": "apps/observer/src/reconcile/graph.ts",
+          "path": "apps/observer/src/reconcile/graph/build.ts",
           "declaration": "buildStationSnapshot",
           "kind": "function",
           "role": "POLICY",
@@ -16375,7 +16859,7 @@
       "declaration": "createObserverApi",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API.",
+      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, read-only singleton diagnostics, and adapter shutdown behind the application API.",
       "dependencies": [
         {
           "path": "apps/observer/src/diagnostics/collector.ts",
@@ -16503,7 +16987,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group.",
+      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group. After the binding-token-qualified process launch succeeds, the serialized projection reloads exact durable session authority and preserves correlated state committed since preflight before return; reconciliation verifies it and remains the fallback for any rejection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
