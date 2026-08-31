@@ -5,6 +5,7 @@ export type ReconcileScheduler = {
   requestInteractive(reason: string): void;
   requestWhenReady(reason: string, readiness: ReconcileReadiness): void;
   requestInteractiveWhenReady(reason: string, readiness: ReconcileReadiness): void;
+  shutdown(): Promise<void>;
 };
 
 export type ReconcileReadiness = {
@@ -49,6 +50,8 @@ export function createReconcileScheduler(
   const interactiveDebounceMs = options.interactiveDebounceMs ?? defaultInteractiveDebounceMs;
   let running = false;
   let timerScheduled = false;
+  let stopped = false;
+  let inFlight: Promise<void> | undefined;
   let scheduledFor: number | undefined;
   let timerGeneration = 0;
   let waitingForReadiness = false;
@@ -62,9 +65,17 @@ export function createReconcileScheduler(
       request({ reason, queuedAt: Date.now(), interactive: false, readiness }),
     requestInteractiveWhenReady: (reason, readiness) =>
       request({ reason, queuedAt: Date.now(), interactive: true, readiness }),
+    shutdown: async () => {
+      stopped = true;
+      queuedRequests.length = 0;
+      waitingForReadiness = false;
+      readinessGeneration += 1;
+      await inFlight;
+    },
   };
 
   function request(queued: QueuedReconcileRequest): void {
+    if (stopped) return;
     queuedRequests.push(queued);
     if (running) return;
     if (queued.readiness !== undefined && !queued.readiness.isReady()) {
@@ -83,6 +94,7 @@ export function createReconcileScheduler(
   }
 
   function scheduleFlush(delayMs: number): void {
+    if (stopped) return;
     const generation = ++timerGeneration;
     timerScheduled = true;
     scheduledFor = Date.now() + delayMs;
@@ -91,7 +103,11 @@ export function createReconcileScheduler(
         if (generation !== timerGeneration) return;
         timerScheduled = false;
         scheduledFor = undefined;
-        void flush().catch((error: unknown) => reportError(error));
+        const flight = flush().catch((error: unknown) => reportError(error));
+        inFlight = flight;
+        void flight.finally(() => {
+          if (inFlight === flight) inFlight = undefined;
+        });
       },
       () => {
         if (generation === timerGeneration) {
@@ -103,7 +119,7 @@ export function createReconcileScheduler(
   }
 
   async function flush(): Promise<void> {
-    if (running) {
+    if (running || stopped) {
       return;
     }
     const ready: QueuedReconcileRequest[] = [];
@@ -138,7 +154,7 @@ export function createReconcileScheduler(
         durationMs: Math.max(0, Date.now() - startedAt),
         queuedAfter,
       });
-      if (queuedRequests.length > 0 && !timerScheduled) {
+      if (!stopped && queuedRequests.length > 0 && !timerScheduled) {
         if (hasReadyRequest()) {
           scheduleFlush(hasReadyInteractiveRequest() ? interactiveDebounceMs : backlogDebounceMs);
         } else {
@@ -162,7 +178,7 @@ export function createReconcileScheduler(
   }
 
   function armReadinessWait(): void {
-    if (waitingForReadiness || queuedRequests.length === 0 || hasReadyRequest()) return;
+    if (stopped || waitingForReadiness || queuedRequests.length === 0 || hasReadyRequest()) return;
     const readiness = [
       ...new Set(
         queuedRequests.flatMap((queued) =>
@@ -182,7 +198,7 @@ export function createReconcileScheduler(
   }
 
   function readinessSettled(generation: number, error?: unknown): void {
-    if (generation !== readinessGeneration || !waitingForReadiness) return;
+    if (stopped || generation !== readinessGeneration || !waitingForReadiness) return;
     waitingForReadiness = false;
     if (error !== undefined) reportError(error);
     if (!running && !timerScheduled && queuedRequests.length > 0) {

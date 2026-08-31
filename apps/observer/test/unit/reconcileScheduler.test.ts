@@ -149,6 +149,79 @@ describe("reconcile scheduler", () => {
     ]);
   });
 
+  it("shutdown resolves only after the in-flight reconcile completes", async () => {
+    const reasons: string[] = [];
+    const firstReconcile = deferred<void>();
+    const firstStarted = deferred<void>();
+    const scheduler = createReconcileScheduler({
+      debounceMs: 0,
+      reconcile: async (reason) => {
+        reasons.push(reason);
+        firstStarted.resolve();
+        await firstReconcile.promise;
+      },
+    });
+
+    scheduler.request("hook:codex:PreToolUse");
+    await firstStarted.promise;
+    let shutdownResolved = false;
+    const shutdown = scheduler.shutdown().then(() => {
+      shutdownResolved = true;
+    });
+    await drainMicrotasks();
+    expect(shutdownResolved).toBe(false);
+
+    firstReconcile.resolve();
+    await shutdown;
+    expect(shutdownResolved).toBe(true);
+    expect(reasons).toEqual(["hook:codex:PreToolUse"]);
+  });
+
+  it("ignores requests after shutdown", async () => {
+    const reasons: string[] = [];
+    const scheduler = createReconcileScheduler({
+      debounceMs: 0,
+      reconcile: async (reason) => {
+        reasons.push(reason);
+      },
+    });
+
+    await scheduler.shutdown();
+    scheduler.request("hook:codex:Stop");
+    await drainMicrotasks();
+
+    expect(reasons).toEqual([]);
+  });
+
+  it("discards the queued backlog at shutdown", async () => {
+    const reasons: string[] = [];
+    const firstReconcile = deferred<void>();
+    const firstStarted = deferred<void>();
+    const scheduler = createReconcileScheduler({
+      debounceMs: 0,
+      backlogDebounceMs: 0,
+      reconcile: async (reason) => {
+        reasons.push(reason);
+        if (reasons.length === 1) {
+          firstStarted.resolve();
+          await firstReconcile.promise;
+        }
+      },
+    });
+
+    scheduler.request("hook:codex:PreToolUse");
+    await firstStarted.promise;
+    scheduler.request("hook:codex:PostToolUse");
+    const shutdown = scheduler.shutdown();
+    firstReconcile.resolve();
+    await shutdown;
+    await drainMicrotasks();
+    await sleep(10);
+    await drainMicrotasks();
+
+    expect(reasons).toEqual(["hook:codex:PreToolUse"]);
+  });
+
   it("advances an ordinary pending flush for ready interactive work", async () => {
     vi.useFakeTimers();
     const reasons: string[] = [];
