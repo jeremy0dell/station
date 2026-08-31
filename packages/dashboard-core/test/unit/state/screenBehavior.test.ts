@@ -8,8 +8,11 @@ import {
   successStateForProject,
 } from "../../../src/flows/addProject/state.js";
 import type { AddProjectFlowState } from "../../../src/flows/addProject/types.js";
-import type { NewSessionFlowState } from "../../../src/flows/newSession.js";
-import { createNewSessionFlow, transitionNewSessionFlow } from "../../../src/flows/newSession.js";
+import {
+  createNewSessionFlow,
+  transitionNewSessionFlow,
+} from "../../../src/flows/newSession/flow.js";
+import type { NewSessionFlowState } from "../../../src/flows/newSession/model.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
 import { tuiScreenBehavior } from "../../../src/state/screenBehavior.js";
 import type { DashboardState, TuiScreen } from "../../../src/state/types.js";

@@ -8,7 +8,7 @@ import {
   selectDashboardSessionRow,
   sessionRowDisplayTitle,
 } from "../../selectors/dashboardSessionRows.js";
-import { selectMoveToGroupSessionContext } from "../../selectors/selectors.js";
+import { selectMoveToGroupSessionContext } from "../../selectors/sessionGroupChoices.js";
 import { buildCreateSessionGroupCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";

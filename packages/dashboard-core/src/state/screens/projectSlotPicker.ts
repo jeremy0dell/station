@@ -1,4 +1,4 @@
-import { selectProjectChooserChoices } from "../../selectors/selectors.js";
+import { selectProjectChooserChoices } from "../../selectors/projectChoices.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState } from "../types.js";
 

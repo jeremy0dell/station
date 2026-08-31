@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AddProjectActionId } from "../../../src/flows/addProject/actions.js";
 import { addProjectActions } from "../../../src/flows/addProject/actions.js";
+import { newSessionIntentForAction } from "../../../src/flows/newSession/actions.js";
 import {
   createNewSessionFlow,
-  newSessionIntentForAction,
   transitionNewSessionFlow,
-} from "../../../src/flows/newSession.js";
+} from "../../../src/flows/newSession/flow.js";
 import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import { handleTuiAction } from "../../../src/state/actions.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";

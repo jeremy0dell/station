@@ -1,4 +1,4 @@
-import { SELECTION_KEYS, type SelectionKey } from "../selectors/selectors.js";
+import { SELECTION_KEYS, type SelectionKey } from "../selectors/keyedChoices.js";
 import type { TuiKey } from "./keys.js";
 import type { DashboardStateView } from "./types.js";
 

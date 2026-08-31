@@ -1,5 +1,5 @@
 import type { ProjectView, ProviderId, StationSnapshot } from "@station/contracts";
-import { selectNewSessionHarnessChoices } from "../../../selectors/selectors.js";
+import { selectNewSessionHarnessChoices } from "../../../selectors/harnessChoices.js";
 import type { TuiTransition } from "../../transition.js";
 import type { DashboardState } from "../../types.js";
 import { flatPickerSpec } from "../flatPicker.js";
