@@ -32,6 +32,19 @@ describe("planSetup", () => {
     });
   });
 
+  it("keeps launcher readiness while requiring canonical socket-holder evidence", () => {
+    const plan = planSetup(facts({ socketEvidenceAvailable: false }), intent());
+
+    expect(plan.issues).toContainEqual({
+      code: "socket-evidence-unavailable",
+      tier: "required",
+    });
+    expect(plan.result).toMatchObject({
+      readiness: { launchReady: true, workflowReady: false, requiredMissing: 1 },
+      requiredIssueCount: 1,
+    });
+  });
+
   it("assesses preparation, intent editing, and apply from one semantic policy", () => {
     const blockedPreparation = planSetup(facts({ stateDirectoryWritable: false }), intent());
     const pendingConsent = planSetup(

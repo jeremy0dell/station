@@ -13,10 +13,7 @@ import {
 import type { RuntimeClock } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import { StationTerminalProviderError } from "../../src/errors";
-import {
-  createStationHostController,
-  type StationHostController,
-} from "../../src/host/hostController";
+import type { StationHostController } from "../../src/host/hostController";
 import { StationTerminalProvider, stationTargetId } from "../../src/provider";
 
 const now = "2026-05-21T12:00:00.000Z";
@@ -295,15 +292,13 @@ function liveEntry(overrides: Partial<HostListEntry> = {}): HostListEntry {
 }
 
 function hostBackedProvider(client: StationHostClient) {
-  const controller = createStationHostController(
-    {
-      socketPath: `/tmp/station-host-${process.pid}-${Math.random().toString(36).slice(2)}.sock`,
-      stateDir: "/tmp",
-      hostCommand: ["bun", "/tmp/hostMain.ts"],
-      expectedBuildVersion,
-    },
-    { clientFactory: () => client, spawnHost: () => ({ pid: 1, unref: () => undefined }) },
-  );
+  const socketPath = `/tmp/station-host-${process.pid}-${Math.random().toString(36).slice(2)}.sock`;
+  const controller: StationHostController = {
+    socketPath,
+    client: () => client,
+    ensure: async () => ({ status: "running", socketPath, client, ensuredBy: "reuse" }),
+    recoverOrphanedTargets: async () => false,
+  };
   return new StationTerminalProvider({ clock, host: controller });
 }
 

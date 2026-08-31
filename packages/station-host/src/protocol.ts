@@ -259,9 +259,9 @@ export type HostCompatibility =
 /**
  * POLICY
  *
- * Decide host reuse, idle replace eligibility, or refuse from opaque health
- * without inferring SemVer compatibility. Live handoff is only considered when
- * this returns `replace`; protocol mismatch stays a visible refuse.
+ * Decides generic Host reuse, idle replacement eligibility, or refusal from
+ * opaque health without inferring SemVer compatibility. Immutable identity and
+ * exact convergence are intentionally outside this compatibility policy.
  */
 export function classifyHostCompatibility(
   health: HostHealthResult,

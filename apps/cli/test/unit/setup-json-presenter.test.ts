@@ -313,7 +313,7 @@ describe("setup plan projection", () => {
     );
   });
 
-  it("warns without socket evidence without blocking fresh setup", () => {
+  it("requires socket evidence for causal Host admission without changing launch readiness", () => {
     const plan = buildSetupPlan(
       facts({
         socketEvidence: { status: "missing", command: "/usr/bin/lsof" },
@@ -321,11 +321,16 @@ describe("setup plan projection", () => {
     );
 
     expect(plan.checks.find((check) => check.id === "observer-socket-evidence")).toMatchObject({
-      tier: "recommended",
-      status: "warn",
-      message: expect.stringContaining("Fresh Observer startup can continue"),
+      tier: "required",
+      status: "missing",
+      message: expect.stringContaining("Station Host admission requires"),
     });
-    expect(plan.summary).toMatchObject({ workflowReady: true, requiredOk: true });
+    expect(plan.summary).toMatchObject({
+      launchReady: true,
+      workflowReady: false,
+      requiredOk: false,
+      requiredMissing: 1,
+    });
   });
 
   it("plans Homebrew installs for missing required tools", () => {

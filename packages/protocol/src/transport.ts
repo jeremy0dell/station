@@ -4,14 +4,23 @@ import { createConnection, createServer, type Server, type Socket } from "node:n
 import { dirname } from "node:path";
 import { PassThrough } from "node:stream";
 import type { SafeError } from "@station/contracts";
-import { isSafeError, runRuntimeBoundary, runRuntimeBoundaryWithTimeout } from "@station/runtime";
+import {
+  isSafeError,
+  runExternalCommand,
+  runRuntimeBoundary,
+  runRuntimeBoundaryWithTimeout,
+} from "@station/runtime";
 import { z } from "zod";
 import { protocolSafeError } from "./messages.js";
 import { unwrapBoundaryResult } from "./runtime.js";
 
 const DEFAULT_SOCKET_PROBE_TIMEOUT_MS = 1000;
 const MIN_SOCKET_PROBE_TIMEOUT_MS = 1;
-const PositivePidSchema = z.coerce.number().int().positive();
+const CanonicalPositivePidSchema = z
+  .string()
+  .regex(/^[1-9][0-9]*$/u)
+  .transform(Number)
+  .pipe(z.number().int().positive().max(Number.MAX_SAFE_INTEGER));
 const ErrorCodeSchema = z.object({ code: z.string() });
 
 export type NdjsonConnection = {
@@ -75,7 +84,12 @@ type UnixSocketHolderReaderOptions = {
   ) => Pick<SpawnSyncReturns<string>, "error" | "signal" | "status" | "stderr" | "stdout">;
 };
 
-/** ADAPTER: Returns the canonical executable used for Unix-socket holder evidence. */
+type AsyncUnixSocketHolderReaderOptions = {
+  deadlineMs: number;
+  signal?: AbortSignal;
+};
+
+/** Returns the canonical executable used for Unix-socket holder evidence. */
 export function unixSocketHolderEvidencePath(platform: NodeJS.Platform = process.platform): string {
   return platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof";
 }
@@ -196,33 +210,53 @@ export function readUnixSocketHolderPids(
     ["-t", socketPath],
     timeoutMs,
   );
-  const stdout = result.stdout;
-  const stderr = result.stderr;
-  if (
-    result.error !== undefined ||
-    result.signal !== null ||
-    stderr.length > 0 ||
-    (result.status !== 0 && result.status !== 1)
-  ) {
-    throw socketEvidenceUnavailable(socketPath);
-  }
-  // lsof uses status 1 with no output for its canonical no-match result.
-  if (result.status === 1) {
-    if (stdout.length === 0) return [];
-    throw socketEvidenceUnavailable(socketPath);
-  }
+  return parseUnixSocketHolderPids(socketPath, result);
+}
 
-  const lines = stdout.trimEnd().split("\n");
-  if (lines.length === 0 || lines.every((line) => line.length === 0)) {
+/**
+ * ADAPTER
+ *
+ * Reads canonical lsof evidence without blocking the deadline or caller-abort clock turn.
+ */
+export async function readUnixSocketHolderPidsAsync(
+  socketPath: string,
+  options: AsyncUnixSocketHolderReaderOptions,
+): Promise<number[]> {
+  const deadlineMs = options.deadlineMs;
+  if (!Number.isSafeInteger(deadlineMs) || options.signal?.aborted || deadlineMs <= Date.now())
     throw socketEvidenceUnavailable(socketPath);
-  }
-  const pids: number[] = [];
-  for (const line of lines) {
-    const pid = PositivePidSchema.safeParse(line);
-    if (!pid.success) throw socketEvidenceUnavailable(socketPath);
-    pids.push(pid.data);
-  }
-  return [...new Set(pids)];
+  const result = await runExternalCommand({
+    command: unixSocketHolderEvidencePath(),
+    args: ["-t", socketPath],
+    timeoutMs: Math.max(1, deadlineMs - Date.now()),
+    allowedExitCodes: [1],
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  }).catch(() => {
+    throw socketEvidenceUnavailable(socketPath);
+  });
+  if (options.signal?.aborted === true || Date.now() >= deadlineMs)
+    throw socketEvidenceUnavailable(socketPath);
+  return parseUnixSocketHolderPids(socketPath, {
+    status: result.exitCode,
+    signal: null,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  });
+}
+
+function parseUnixSocketHolderPids(
+  socketPath: string,
+  result: Pick<SpawnSyncReturns<string>, "error" | "signal" | "status" | "stderr" | "stdout">,
+): number[] {
+  if (result.error !== undefined || result.signal !== null || result.stderr !== "")
+    throw socketEvidenceUnavailable(socketPath);
+  if (result.status === 1 && result.stdout === "") return [];
+  if (result.status !== 0 || result.stdout === "" || result.stdout.includes("\r"))
+    throw socketEvidenceUnavailable(socketPath);
+  const body = result.stdout.endsWith("\n") ? result.stdout.slice(0, -1) : result.stdout;
+  const pids = z.array(CanonicalPositivePidSchema).safeParse(body.split("\n"));
+  if (!pids.success) throw socketEvidenceUnavailable(socketPath);
+  return [...new Set(pids.data)];
 }
 
 /**

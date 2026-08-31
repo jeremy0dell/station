@@ -6,11 +6,14 @@ import {
   listenUnixSocket,
   probeUnixSocket,
   readUnixSocketHolderPids,
+  readUnixSocketHolderPidsAsync,
 } from "@station/protocol";
-import { describe, expect, it, vi } from "vitest";
+import * as runtime from "@station/runtime";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRealStaleSocket, createTempSocketPath } from "../../../../tests/support/sockets";
 
 describe("Unix socket NDJSON transport", () => {
+  afterEach(() => vi.restoreAllMocks());
   it("exchanges newline-delimited JSON frames over a Unix socket", async () => {
     const { socketPath } = await createTempSocketPath();
     const server = await listenUnixSocket({
@@ -220,6 +223,15 @@ describe("Unix socket NDJSON transport", () => {
     for (const commandResult of [
       result(0, ""),
       result(0, "10\ninvalid\n"),
+      result(0, " 10\n"),
+      result(0, "10 \n"),
+      result(0, "+10\n"),
+      result(0, "01\n"),
+      result(0, "1e2\n"),
+      result(0, "0x10\n"),
+      result(0, "10\r\n"),
+      result(0, "10\n\n"),
+      result(0, `${Number.MAX_SAFE_INTEGER + 1}\n`),
       result(0, "10\n", "warning"),
       result(1, "10\n"),
       result(2, ""),
@@ -230,6 +242,111 @@ describe("Unix socket NDJSON transport", () => {
         readUnixSocketHolderPids("/tmp/socket", { runLsof: () => commandResult }),
       ).toThrow(expect.objectContaining({ code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" }));
     }
+  });
+
+  it("uses the runtime boundary for asynchronous canonical holder evidence", async () => {
+    const run = vi.spyOn(runtime, "runExternalCommand");
+    run
+      .mockResolvedValueOnce({
+        command: "/usr/bin/lsof",
+        args: ["-t", "/tmp/socket"],
+        stdout: "10\n20\n10\n",
+        stderr: "",
+        exitCode: 0,
+      })
+      .mockResolvedValueOnce({
+        command: "/usr/bin/lsof",
+        args: ["-t", "/tmp/socket"],
+        stdout: "",
+        stderr: "",
+        exitCode: 1,
+      });
+
+    await expect(
+      readUnixSocketHolderPidsAsync("/tmp/socket", { deadlineMs: Date.now() + 1_000 }),
+    ).resolves.toEqual([10, 20]);
+    await expect(
+      readUnixSocketHolderPidsAsync("/tmp/socket", { deadlineMs: Date.now() + 1_000 }),
+    ).resolves.toEqual([]);
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        command: process.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof",
+        args: ["-t", "/tmp/socket"],
+        allowedExitCodes: [1],
+      }),
+    );
+  });
+
+  it.each([
+    [0, "", ""],
+    [0, " 10\n", ""],
+    [0, "+10\n", ""],
+    [0, "1e2\n", ""],
+    [0, "0x10\n", ""],
+    [0, "10\r\n", ""],
+    [0, "10\n\n", ""],
+    [0, "10\n", "warning"],
+    [1, "10\n", ""],
+    [2, "", ""],
+  ])("fails closed for asynchronous status/output %#", async (exitCode, stdout, stderr) => {
+    vi.spyOn(runtime, "runExternalCommand").mockResolvedValue({
+      command: "/usr/bin/lsof",
+      args: ["-t", "/tmp/socket"],
+      stdout,
+      stderr,
+      exitCode,
+    });
+    await expect(
+      readUnixSocketHolderPidsAsync("/tmp/socket", { deadlineMs: Date.now() + 1_000 }),
+    ).rejects.toMatchObject({ code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" });
+  });
+
+  it("rejects pre-abort, execution uncertainty, late completion, and cancellation", async () => {
+    const run = vi.spyOn(runtime, "runExternalCommand");
+    const alreadyAborted = new AbortController();
+    alreadyAborted.abort();
+    await expect(
+      readUnixSocketHolderPidsAsync("/tmp/socket", {
+        deadlineMs: Date.now() + 1_000,
+        signal: alreadyAborted.signal,
+      }),
+    ).rejects.toMatchObject({ code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" });
+    expect(run).not.toHaveBeenCalled();
+
+    run.mockRejectedValueOnce(Object.assign(new Error("uncertain"), { signal: "SIGKILL" }));
+    await expect(
+      readUnixSocketHolderPidsAsync("/tmp/socket", { deadlineMs: Date.now() + 1_000 }),
+    ).rejects.toMatchObject({ code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" });
+
+    const result = {
+      command: "/usr/bin/lsof",
+      args: ["-t", "/tmp/socket"],
+      stdout: "10\n",
+      stderr: "",
+      exitCode: 0,
+    };
+    run.mockResolvedValueOnce(result);
+    vi.spyOn(Date, "now")
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(1_000)
+      .mockReturnValue(2_000);
+    await expect(
+      readUnixSocketHolderPidsAsync("/tmp/socket", { deadlineMs: 1_500 }),
+    ).rejects.toMatchObject({ code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" });
+    vi.mocked(Date.now).mockRestore();
+
+    const controller = new AbortController();
+    run.mockImplementationOnce(async () => {
+      controller.abort();
+      return result;
+    });
+    await expect(
+      readUnixSocketHolderPidsAsync("/tmp/socket", {
+        deadlineMs: Date.now() + 1_000,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" });
   });
 
   it("bounds holder evidence with the caller's socket-probe timeout", () => {

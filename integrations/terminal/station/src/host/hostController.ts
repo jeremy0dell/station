@@ -1,13 +1,12 @@
 import { createStationHostClient, type StationHostClient } from "@station/host";
 import { stationBuildInfo } from "@station/runtime";
 import {
-  adoptHandoffManifest,
   type EnsureStationHostDeps,
   type EnsureStationHostOptions,
   ensureStationHostRunning,
   type StationHostHandle,
 } from "./ensureHostRunning.js";
-import { loadParkedOrphanManifest } from "./orphanRecovery.js";
+import { adoptParkedOrphanManifest, loadParkedOrphanManifest } from "./orphanRecovery.js";
 
 /**
  * Holds the single long-lived host client the provider reuses for both the
@@ -35,10 +34,7 @@ export function createStationHostController(
   const ensure = () =>
     ensureStationHostRunning(
       { ...options, expectedBuildVersion },
-      {
-        ...(deps.spawnHost === undefined ? {} : { spawnHost: deps.spawnHost }),
-        clientFactory: () => client,
-      },
+      { ...deps, clientFactory: () => client },
     );
   return {
     socketPath: options.socketPath,
@@ -65,10 +61,7 @@ export function createStationHostController(
       if (Object.keys(unowned).length === 0) {
         return true;
       }
-      const adopted = await adoptHandoffManifest(handle.client, unowned);
-      if (!adopted.ok) {
-        throw adopted.error;
-      }
+      await adoptParkedOrphanManifest(handle.client, unowned);
       return true;
     },
   };

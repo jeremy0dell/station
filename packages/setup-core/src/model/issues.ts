@@ -13,7 +13,7 @@ export type SetupStateDirectoryUnwritableIssue = SetupIssueBase<
 
 export type SetupSocketEvidenceUnavailableIssue = SetupIssueBase<
   "socket-evidence-unavailable",
-  "recommended"
+  "required"
 >;
 
 export type SetupXcodeToolsMissingIssue = SetupIssueBase<"xcode-tools-missing", "required">;

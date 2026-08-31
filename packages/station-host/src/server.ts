@@ -43,25 +43,35 @@ export type HostAttachmentSource = {
 };
 
 /**
- * Method handlers the Bun host supplies. Unary handlers return a JSON result;
- * `attach` validates one exact PTY lifetime and returns its ack plus live frames. All are
- * optional so the host can grow its surface increment by increment — a missing
- * method answers with a classified `HOST_BAD_REQUEST` rather than crashing.
+ * Method handlers the Bun Host supplies. Every unary call receives the opaque
+ * owner of its physical connection; response and teardown callbacks receive
+ * that same object so lifecycle authority cannot migrate between connections.
+ * `attach` validates one exact PTY lifetime and returns its ack plus live frames.
+ * Missing methods answer with classified `HOST_BAD_REQUEST` errors.
  */
 export type HostHandlers = {
   /** Exact build identity required on every operational request. */
   hostIdentity: HostCompatibilityIdentity;
   unary?: Record<
     string,
-    (params: unknown, client: HostClientIdentity | undefined) => Promise<unknown> | unknown
+    (
+      params: unknown,
+      client: HostClientIdentity | undefined,
+      owner: HostConnectionOwner,
+    ) => Promise<unknown> | unknown
   >;
   attach?: (
     params: HostAttachParams,
     attachmentId: string,
   ) => HostAttachmentSource | Promise<HostAttachmentSource>;
   /** Called only after a successful unary response has been written to the connection. */
-  afterUnaryResponseSent?: (method: string) => void;
+  afterUnaryResponseSent?: (method: string, owner: HostConnectionOwner) => void;
+  /** Restores only lifecycle authority still held by this physical connection. */
+  onConnectionClosed?: (owner: HostConnectionOwner) => Promise<void> | void;
 };
+
+/** Opaque physical-connection identity; lifecycle code relies only on object identity. */
+export type HostConnectionOwner = object;
 
 type HostLifecycleEventInput = UiLifecycleEventInputFor<"station-host">;
 
@@ -93,16 +103,20 @@ type ConnectionState = {
 };
 
 /**
- * Dispatch host requests concurrently so long-lived `host.attach` streams do
+ * ADAPTER
+ *
+ * Dispatches Host requests concurrently so long-lived `host.attach` streams do
  * not block write/resize/detach on the same multiplexed socket. The first
- * operational request binds one diagnostic client identity to the connection;
- * teardown then classifies every attachment before the client witness closes.
+ * operational request binds one diagnostic client identity and one opaque
+ * lifecycle owner to the physical connection; teardown restores only that
+ * owner's pre-complete handoff authority after attachment tasks settle.
  */
 export async function serveHostConnection(
   connection: NdjsonConnection,
   handlers: HostHandlers,
   logger: HostServerLogger = {},
 ): Promise<void> {
+  const owner: HostConnectionOwner = {};
   const state: ConnectionState = {
     clientDetachReason: "socket_closed",
     attachments: new Map(),
@@ -116,7 +130,7 @@ export async function serveHostConnection(
         handleClientShutdownNotification(handlers, logger, state, message);
         continue;
       }
-      const task = handleMessage(connection, handlers, logger, state, message);
+      const task = handleMessage(connection, handlers, logger, state, owner, message);
       state.inFlight.add(task);
       void task.finally(() => state.inFlight.delete(task));
     }
@@ -133,6 +147,7 @@ export async function serveHostConnection(
       void releaseAttachmentRegistration(state, attachment);
     }
     await Promise.allSettled([...state.inFlight]);
+    await handlers.onConnectionClosed?.(owner);
     if (state.client !== undefined) {
       logger.onLifecycle?.({
         kind: "host.client.detached",
@@ -151,6 +166,7 @@ async function handleMessage(
   handlers: HostHandlers,
   logger: HostServerLogger,
   state: ConnectionState,
+  owner: HostConnectionOwner,
   message: unknown,
 ): Promise<void> {
   const parsed = HostRequestSchema.safeParse(message);
@@ -267,7 +283,7 @@ async function handleMessage(
 
   let result: unknown;
   try {
-    result = await handler(request.params, request.client);
+    result = await handler(request.params, request.client, owner);
   } catch (error) {
     const safeError = stationHostErrorFromUnknown(error, {
       code: "HOST_REQUEST_FAILED",
@@ -278,7 +294,7 @@ async function handleMessage(
     return;
   }
   connection.send(hostSuccess(request.id, result));
-  handlers.afterUnaryResponseSent?.(request.method);
+  handlers.afterUnaryResponseSent?.(request.method, owner);
 }
 
 /** Release one registered attachment while retaining its last authoritative control evidence. */

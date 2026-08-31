@@ -492,7 +492,8 @@ const OPENTUI_LAYOUT_GEOMETRY_OWNERS = new Set([
   "station/view/layout/useAnchoredMenuPlacement.ts",
 ]);
 const TERMINAL_INTEGRATION_IMPORT_INVENTORY = [
-  "main.tsx: import ensureStationHostRunning from @station/terminal",
+  "main.tsx: import convergeStationHost from @station/terminal",
+  "sources/listLiveHostPtys.ts: import inspectStationHost from @station/terminal",
 ] as const;
 
 describe("station production boundaries", () => {

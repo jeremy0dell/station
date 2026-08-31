@@ -1,15 +1,14 @@
-import { randomUUID } from "node:crypto";
 import type { HostHandoffFidelity, PtyHandoffManifest, UiRunContext } from "@station/contracts";
 import { connectUnixSocket, type NdjsonConnection } from "@station/protocol";
 import { stationBuildInfo } from "@station/runtime";
 import type { z } from "zod";
+import { createHostClientIdentity } from "./clientIdentity.js";
 import {
   assertHostReusable,
   StationHostProviderError,
   stationHostErrorFromUnknown,
 } from "./errors.js";
 import {
-  HOST_PROTOCOL_VERSION,
   type HostAbortHandoffResult,
   HostAbortHandoffResultSchema,
   type HostAttachAck,
@@ -18,7 +17,6 @@ import {
   type HostBeginHandoffResult,
   HostBeginHandoffResultSchema,
   type HostClientIdentity,
-  HostClientIdentitySchema,
   HostCloseResultSchema,
   type HostCompleteHandoffResult,
   HostCompleteHandoffResultSchema,
@@ -265,7 +263,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
   ): Promise<TResult> {
     const active = await ensureConnection();
     if (includeClientIdentity)
-      clientIdentity ??= createClientIdentity(options, expectedBuildVersion);
+      clientIdentity ??= createHostClientIdentity(expectedBuildVersion, options);
     const id = `h${nextId++}`;
     const response = await new Promise<HostResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -573,21 +571,4 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       current?.close();
     },
   };
-}
-
-function createClientIdentity(
-  options: StationHostClientOptions,
-  buildVersion: string,
-): HostClientIdentity {
-  const uiContext = options.uiContext ?? {
-    uiRunId: `ui_${randomUUID()}`,
-    rendererPid: process.pid,
-    clientKind: "host_tool" as const,
-  };
-  return HostClientIdentitySchema.parse({
-    protocolVersion: HOST_PROTOCOL_VERSION,
-    buildVersion,
-    ...uiContext,
-    connectionId: options.connectionId ?? `conn_${randomUUID()}`,
-  });
 }

@@ -175,6 +175,35 @@ describe("runtime external command boundary", () => {
     });
   });
 
+  it("does not admit a signaled process through allowed exit codes", async () => {
+    const error = await runExternalCommand(
+      { command: "fake", args: ["signal"], allowedExitCodes: [8] },
+      createFakeExternalCommandRunner(async () => {
+        throw Object.assign(new Error("terminated"), {
+          code: 8,
+          signal: "SIGTERM",
+          stdout: "OPENAI_API_KEY=sk-secret000000000000",
+          stderr: "Bearer abcdefghijklmnop",
+        });
+      }),
+    )
+      .then(() => undefined)
+      .catch((failure: unknown) => failure);
+
+    expect(error).toMatchObject({
+      tag: "ExternalCommandError",
+      code: "EXTERNAL_COMMAND_FAILED",
+      exitCode: 8,
+      signal: "SIGTERM",
+    });
+    expect(JSON.stringify(error)).not.toContain("sk-secret");
+    expect(JSON.stringify(error)).not.toContain("abcdefghijklmnop");
+    expect(externalCommandDiagnosticFromSafeError(error)).toMatchObject({
+      exitCode: 8,
+      signal: "SIGTERM",
+    });
+  });
+
   it("supports inherited stdio for visible long-running commands", async () => {
     await expect(
       runExternalCommand({

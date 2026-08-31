@@ -553,7 +553,7 @@ Advanced development/demo overrides:
 | `STATION_PTY_ORPHAN_TTL_MS` | Host PTY orphan-bridge park lifetime | Positive integer of milliseconds an unadopted parked bridge keeps its PTY alive before self-reaping. Defaults to 24 hours; an unparsable or non-positive value falls back to the default. |
 | `STATION_BUN` | Source/development Station host launches | Bun executable path/name for source/development host launches; fallback is `bun`. |
 | `STATION_HOST_ENTRY` | Source/development Station host launches | Non-standard source/development override for the host entry file. Usually leave unset. |
-| `STATION_HOST_HANDOFF` | Native Station TUI build-upgrade launch | Only exact `1` opts a busy same-protocol older Host into negotiated handoff with fixed `processes` fidelity, followed by warm pane reattach. There is no prompt, launcher flag, or config key; absent, empty, `true`, and every other value preserve the existing visible refusal. |
+| `STATION_HOST_HANDOFF` | Native Station TUI exact Host convergence | Only exact `1` switches launch from display-compatible reuse to exact `{ buildVersion, buildIdentity }` ownership. An exact pair is reused; a nonexact empty Host is replaced; an eligible live bridge-backed registry is handed off with fixed `processes` fidelity and warm reattach. Noncanonical or incomplete evidence refuses without fallback. There is no prompt, launcher flag, or config key; absent, empty, `true`, and every other value preserve compatibility behavior. |
 | `STATION_CLI_TRACE` | `stn` process diagnostics | Only exact `1` enables one best-effort start/outcome trace pair for each `runCliMain` process. Unset, empty, `true`, and every other value leave tracing disabled. |
 | `STATION_INGRESS_BIN` | Generated Pi/OpenCode hook transport | Station sets this to the canonical absolute `stn-ingress` launcher for Pi launches and generated hook/plugin artifacts; manual extension/plugin runs fall back to the PATH name `stn-ingress`. |
 | `STATION_DASHBOARD_COMMAND` | CLI TUI launcher | Explicit command override for the observer-backed, command-capable, pane-free dashboard renderer. Development/testing only. |
@@ -611,8 +611,9 @@ child; a direct source renderer mints and preserves its own ID across Bun HMR.
 A directly launched source renderer falls back to its own verified built selector. The
 renderer fixes that selector when it creates its Observer client; each later
 operation checks the socket owner on the same connection without running Git or
-hashing source from the UI. Station Host separately compares Host protocol and
-Station display build version rather than the Observer's immutable selector. The
+hashing source from the UI. Generic Station Host startup separately compares Host protocol and
+Station display build version rather than the Observer's immutable selector. Exact gated or CLI
+convergence additionally requires the immutable Host build identity read from recovery evidence. The
 CLI sets `STATION_TUI_PERSISTENT=1` when the
 renderer requires its lifecycle-control IPC channel; it is not a standalone
 launch mode. Native Station child PTYs also receive standard terminal values
