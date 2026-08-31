@@ -30,7 +30,9 @@ describe("Unix socket NDJSON transport", () => {
       },
     });
 
-    const client = await connectUnixSocket(socketPath);
+    const client = await connectUnixSocket(socketPath, {
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
+    });
     client.send({ hello: "world" });
 
     const iterator = client.messages()[Symbol.asyncIterator]();
@@ -52,7 +54,9 @@ describe("Unix socket NDJSON transport", () => {
     });
     server.listen(socketPath);
     await once(server, "listening");
-    const client = await connectUnixSocket(socketPath);
+    const client = await connectUnixSocket(socketPath, {
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
+    });
     await waitFor(() => accepted !== undefined);
 
     try {
@@ -85,6 +89,7 @@ describe("Unix socket NDJSON transport", () => {
     const { socketPath } = await createTempSocketPath();
     const server = await listenUnixSocket({
       socketPath,
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
       onConnection: (connection) => {
         connection.send({ queued: true });
       },
@@ -113,6 +118,7 @@ describe("Unix socket NDJSON transport", () => {
     let diagnostics: NdjsonTransportDiagnostics | undefined;
     const server = await listenUnixSocket({
       socketPath,
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
       onConnection: (connection) => {
         const frame = { payload: "x".repeat(64 * 1024) };
         for (
@@ -147,7 +153,7 @@ describe("Unix socket NDJSON transport", () => {
   });
 
   it("accepts a complete frame above 4 MiB when it remains within the frame limit", async () => {
-    const pair = inMemoryNdjsonConnectionPair();
+    const pair = inMemoryNdjsonConnectionPair(NDJSON_TRANSPORT_LIMITS);
     const payload = "x".repeat(5 * 1024 * 1024);
 
     try {
@@ -167,7 +173,7 @@ describe("Unix socket NDJSON transport", () => {
   });
 
   it("rejects oversized outbound and partial frames without retaining their contents", async () => {
-    const outboundPair = inMemoryNdjsonConnectionPair();
+    const outboundPair = inMemoryNdjsonConnectionPair(NDJSON_TRANSPORT_LIMITS);
     expect(
       outboundPair.client.send({ payload: "x".repeat(NDJSON_TRANSPORT_LIMITS.maxFrameBytes) }),
     ).toBe(false);
@@ -185,7 +191,9 @@ describe("Unix socket NDJSON transport", () => {
     });
     server.listen(socketPath);
     await once(server, "listening");
-    const client = await connectUnixSocket(socketPath);
+    const client = await connectUnixSocket(socketPath, {
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
+    });
     await waitFor(() => accepted !== undefined);
 
     try {
@@ -209,6 +217,24 @@ describe("Unix socket NDJSON transport", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   }, 10_000);
+
+  it("preserves unbounded framing for Station Host transports unless limits are explicit", () => {
+    const pair = inMemoryNdjsonConnectionPair();
+
+    try {
+      for (let index = 0; index <= NDJSON_TRANSPORT_LIMITS.maxQueuedFrames; index += 1) {
+        expect(pair.server.send({ index })).toBe(true);
+      }
+      expect(pair.client.diagnostics()).toMatchObject({
+        inboundQueueDepth: NDJSON_TRANSPORT_LIMITS.maxQueuedFrames + 1,
+        overflowCount: 0,
+        closeCount: 0,
+      });
+    } finally {
+      pair.server.close();
+      pair.client.close();
+    }
+  });
 
   it("creates a user-only socket directory and classifies socket states", async () => {
     const { socketPath } = await createTempSocketPath();

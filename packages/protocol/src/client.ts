@@ -26,7 +26,12 @@ import {
   protocolSocketClosedError,
 } from "./messages.js";
 import { unwrapBoundaryResult } from "./runtime.js";
-import { connectUnixSocket, type NdjsonConnection } from "./transport.js";
+import {
+  connectUnixSocket,
+  NDJSON_TRANSPORT_LIMITS,
+  type NdjsonConnection,
+  type NdjsonTransportDiagnostics,
+} from "./transport.js";
 
 type ProtocolResult<TMethod extends ProtocolMethod> = z.infer<
   (typeof ProtocolResultSchemas)[TMethod]
@@ -67,6 +72,8 @@ export type CreateObserverClientOptions = {
   expectedObserverIdentity?: ExpectedObserverIdentity;
   /** Negotiates the immediately previous schema for health and stop during an upgrade crossover. */
   acceptPreviousLifecycleSchema?: boolean;
+  /** Receives content-free metrics after each physical connection settles. */
+  onConnectionDiagnostics?: (diagnostics: NdjsonTransportDiagnostics) => void;
 };
 
 /** Health, recovery, and cooperative-stop operations bound to one physical connection. */
@@ -329,10 +336,11 @@ async function openRequestConnection<T>(
   signal: AbortSignal,
   task: (connection: NdjsonConnection) => Promise<T>,
 ): Promise<T> {
-  const connection = await connectUnixSocket(
-    options.socketPath,
-    options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs },
-  );
+  const connection = await connectUnixSocket(options.socketPath, {
+    transportLimits: NDJSON_TRANSPORT_LIMITS,
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+  });
+  observeConnectionDiagnostics(connection, options.onConnectionDiagnostics);
 
   try {
     return await withConnectionAbort(connection, signal, () => task(connection));
@@ -502,8 +510,11 @@ function subscriptionIterator(
             // Event streams are long-lived after the bounded subscription acknowledgement.
             const event = await readSubscriptionEvent(opened);
             if (event === undefined) {
-              await close();
-              return { done: true, value: undefined };
+              throw protocolSafeError({
+                code: "PROTOCOL_SUBSCRIPTION_CLOSED",
+                message: "Observer event subscription closed unexpectedly.",
+                hint: "Reconnect and load a fresh snapshot before continuing.",
+              });
             }
             return { done: false, value: event };
           } catch (error) {
@@ -531,10 +542,11 @@ async function openSubscription(
   signal?: AbortSignal,
 ): Promise<OpenSubscription> {
   const expectedObserver = resolveExpectedObserver(options);
-  const connection = await connectUnixSocket(
-    options.socketPath,
-    options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs },
-  );
+  const connection = await connectUnixSocket(options.socketPath, {
+    transportLimits: NDJSON_TRANSPORT_LIMITS,
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+  });
+  observeConnectionDiagnostics(connection, options.onConnectionDiagnostics);
   const iterator = connection.messages()[Symbol.asyncIterator]();
   try {
     if (expectedObserver !== undefined) {
@@ -555,6 +567,16 @@ async function openSubscription(
     connection.close();
     throw error;
   }
+}
+
+function observeConnectionDiagnostics(
+  connection: NdjsonConnection,
+  onConnectionDiagnostics: CreateObserverClientOptions["onConnectionDiagnostics"],
+): void {
+  if (onConnectionDiagnostics === undefined) return;
+  void connection.closed
+    .then(() => onConnectionDiagnostics(connection.diagnostics()))
+    .catch(() => undefined);
 }
 
 function resolveExpectedObserver(

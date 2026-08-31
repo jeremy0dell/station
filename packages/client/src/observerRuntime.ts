@@ -12,6 +12,7 @@ import { applyStationEvent } from "./snapshotReducer.js";
 import type {
   ObserverService,
   StationClientRuntime,
+  StationClientRuntimeDiagnostics,
   StationClientRuntimeHooks,
   StationClientRuntimeOptions,
   StationClientRuntimeState,
@@ -20,7 +21,7 @@ import type {
 const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 100;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 5_000;
 
-type CycleEnding = "clean" | "failure" | "halted";
+type CycleEnding = "failure" | "halted";
 
 type RefreshSource = "managed" | "caller";
 
@@ -61,6 +62,7 @@ export function createStationClientRuntime(
   // connected again. A caller-provided initial snapshot is trusted.
   let resynced = options.initialSnapshot !== undefined;
   let subscriptionEpoch = 0;
+  let resubscriptionCount = 0;
   let activeEpoch: number | undefined;
   let cycleFault = false;
   let haltedFlag = false;
@@ -272,6 +274,7 @@ export function createStationClientRuntime(
         isConnectError: true,
         alreadyReported: false,
         willRetry: !permanent,
+        resubscriptionCount,
       });
     } else {
       const alreadyReported = reportedSubscriptionError;
@@ -280,6 +283,7 @@ export function createStationClientRuntime(
         isConnectError: false,
         alreadyReported,
         willRetry: !permanent,
+        resubscriptionCount,
       });
     }
     return permanent ? "halted" : "failure";
@@ -303,6 +307,9 @@ export function createStationClientRuntime(
   // lost; events applied while the resync flight is airborne are converged by
   // the chain's staleness follow-up.
   async function runCycle(): Promise<CycleEnding> {
+    if (subscriptionEpoch > 0) {
+      resubscriptionCount += 1;
+    }
     subscriptionEpoch += 1;
     const epoch = subscriptionEpoch;
     activeEpoch = epoch;
@@ -316,7 +323,15 @@ export function createStationClientRuntime(
       if (haltedFlag) {
         return "halted";
       }
-      return cycleFault ? "failure" : "clean";
+      if (cycleFault) {
+        return "failure";
+      }
+      return handleSubscriptionFailure({
+        tag: "ProtocolError",
+        code: "PROTOCOL_SUBSCRIPTION_CLOSED",
+        message: "Observer event subscription closed unexpectedly.",
+        hint: "Reconnect and load a fresh snapshot before continuing.",
+      });
     } catch (error) {
       if (!active) {
         return "failure";
@@ -340,8 +355,8 @@ export function createStationClientRuntime(
   }
 
   // The driver feeds the jittered exponential schedule into the loop: a cycle
-  // that ended cleanly or achieved resync during its lifetime resets the
-  // sequence, while consecutive unhealthy cycles escalate the next sleep.
+  // a cycle that achieved resync during its lifetime resets the sequence,
+  // while consecutive unhealthy cycles escalate the next sleep.
   const subscriptionLoop: Effect.Effect<void> = Effect.gen(function* () {
     const driver = yield* Schedule.driver(reconnectSchedule(initialDelayMs, maxDelayMs));
     while (active && !haltedFlag) {
@@ -349,7 +364,7 @@ export function createStationClientRuntime(
       if (!active || haltedFlag || ending === "halted") {
         return;
       }
-      if (ending === "clean" || resynced) {
+      if (resynced) {
         yield* driver.reset;
       }
       // Every gap demands a fresh resync before connected can be reported.
@@ -445,6 +460,10 @@ export function createStationClientRuntime(
       return stopPromise;
     },
     getState: () => state,
+    diagnostics: () => ({
+      resubscriptionCount,
+      transport: upstreamService.diagnostics?.() ?? emptyTransportDiagnostics(),
+    }),
     subscribe: (listener: () => void): (() => void) => {
       listeners.add(listener);
       return () => {
@@ -491,6 +510,18 @@ function resolveService(options: StationClientRuntimeOptions): ObserverService {
       : { commandWaitTimeoutMs: options.commandWaitTimeoutMs }),
     ...(options.clientLabel === undefined ? {} : { clientLabel: options.clientLabel }),
   });
+}
+
+function emptyTransportDiagnostics(): StationClientRuntimeDiagnostics["transport"] {
+  return {
+    inboundQueueDepth: 0,
+    inboundQueueBytes: 0,
+    inboundHighWaterDepth: 0,
+    inboundHighWaterBytes: 0,
+    outboundBackpressureCount: 0,
+    overflowCount: 0,
+    closeCount: 0,
+  };
 }
 
 function initialRuntimeState(

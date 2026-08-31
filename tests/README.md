@@ -117,8 +117,10 @@ from `test:all`:
 - `bun run profile:transport-memory --check --bun-1-4-0 /opt/homebrew/bin/bun`
   validates the macOS-only transport memory probe. Run `--matrix` with an absolute
   private `--output` directory to compare a draining consumer with a stalled one.
-  The probe is intentionally excluded from CI and stops its owned peer on memory
-  pressure or an 8 GiB physical-footprint ceiling.
+  The bounded verdict requires clean control diagnostics plus zero residual queue
+  depth and bytes, exactly one stalled overflow and close, and bounded high-water
+  marks. The probe is intentionally excluded from CI and stops its owned peer on
+  memory pressure or an 8 GiB physical-footprint ceiling.
 
 Use [Local development](../docs/local-development.md) for checkout-isolated
 runtime setup and [TUI development](../docs/tui.md) for native renderer and PTY

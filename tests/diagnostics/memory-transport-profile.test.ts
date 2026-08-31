@@ -39,14 +39,51 @@ describe("transport memory profile analysis", () => {
       transportLimits: { maxQueuedFrames: 1_024, maxQueuedBytes: 4 * 1024 * 1024 },
       transportDiagnostics: {
         inboundQueueDepth: 0,
+        inboundQueueBytes: 0,
         inboundHighWaterDepth: 1_024,
         inboundHighWaterBytes: 4 * 1024 * 1024,
+        outboundBackpressureCount: 0,
         overflowCount: 1,
+        closeCount: 1,
+      },
+    };
+    const control = {
+      status: "complete",
+      transportDiagnostics: {
+        inboundQueueDepth: 0,
+        inboundQueueBytes: 0,
+        outboundBackpressureCount: 0,
+        overflowCount: 0,
+        closeCount: 1,
       },
     };
 
-    expect(transportStayedBounded([{}], [cell], 1)).toBe(true);
-    expect(transportStayedBounded([{}], [{ ...cell, status: "complete" }], 1)).toBe(false);
-    expect(transportStayedBounded([{}], [cell], 2)).toBe(false);
+    expect(transportStayedBounded([control], [cell], 1)).toBe(true);
+    expect(
+      transportStayedBounded(
+        [control],
+        [
+          {
+            ...cell,
+            transportDiagnostics: { ...cell.transportDiagnostics, inboundQueueBytes: 1 },
+          },
+        ],
+        1,
+      ),
+    ).toBe(false);
+    expect(
+      transportStayedBounded(
+        [
+          {
+            ...control,
+            transportDiagnostics: { ...control.transportDiagnostics, overflowCount: 1 },
+          },
+        ],
+        [cell],
+        1,
+      ),
+    ).toBe(false);
+    expect(transportStayedBounded([control], [{ ...cell, status: "complete" }], 1)).toBe(false);
+    expect(transportStayedBounded([control], [cell], 2)).toBe(false);
   });
 });

@@ -66,6 +66,21 @@ again. Inspect `result.json`, each cell's process samples, and the captured
 `footprint`, `vmmap`, `heap`, and `sample` output together rather than treating RSS
 alone as ownership evidence.
 
+Production Observer overload evidence is content-free and retained in
+`logs/observer.jsonl`; inspect it with:
+
+```bash
+stn debug logs "Observer protocol transport" --component observer
+```
+
+Each matching record includes queue depth and byte high-water marks,
+backpressure, overflow, close, and overflow-reason counts for the discarded
+connection. The client runtime separately aggregates the same content-free
+connection metrics across discarded sockets and exposes its cumulative
+`resubscriptionCount`. Station Host PTY connections do not opt into the Observer
+transport capacity policy and therefore must be diagnosed through Host attachment
+and replay evidence instead.
+
 ### Terminal Reconcile Evidence
 
 Use `stn snapshot --json --include-debug` when the current question is what terminal

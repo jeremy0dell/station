@@ -53,11 +53,23 @@ export function transportStayedBounded(controls, stalled, repeats) {
   return (
     controls.length === repeats &&
     stalled.length === repeats &&
+    controls.every(
+      (cell) =>
+        cell.status === "complete" &&
+        cell.transportDiagnostics?.inboundQueueDepth === 0 &&
+        cell.transportDiagnostics.inboundQueueBytes === 0 &&
+        cell.transportDiagnostics.outboundBackpressureCount === 0 &&
+        cell.transportDiagnostics.overflowCount === 0 &&
+        cell.transportDiagnostics.closeCount === 1,
+    ) &&
     stalled.every(
       (cell) =>
         cell.status === "overflow-closed" &&
         cell.transportDiagnostics?.overflowCount === 1 &&
+        cell.transportDiagnostics.closeCount === 1 &&
         cell.transportDiagnostics.inboundQueueDepth === 0 &&
+        cell.transportDiagnostics.inboundQueueBytes === 0 &&
+        cell.transportDiagnostics.outboundBackpressureCount === 0 &&
         cell.transportDiagnostics.inboundHighWaterDepth <= cell.transportLimits?.maxQueuedFrames &&
         cell.transportDiagnostics.inboundHighWaterBytes <= cell.transportLimits?.maxQueuedBytes,
     )
@@ -270,7 +282,9 @@ async function runPeer(options) {
   const { connectUnixSocket, NDJSON_TRANSPORT_LIMITS } = await import(
     "../../packages/protocol/dist/index.js"
   );
-  const connection = await connectUnixSocket(options.socket);
+  const connection = await connectUnixSocket(options.socket, {
+    transportLimits: NDJSON_TRANSPORT_LIMITS,
+  });
   const startedAt = performance.now();
   let sequence = 0;
   let disposed = false;

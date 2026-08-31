@@ -21,6 +21,7 @@ export const NDJSON_TRANSPORT_LIMITS = Object.freeze({
   maxQueuedBytes: 16 * 1024 * 1024,
   maxFrameBytes: 16 * 1024 * 1024,
 });
+export type NdjsonTransportLimits = typeof NDJSON_TRANSPORT_LIMITS;
 const CanonicalPositivePidSchema = z
   .string()
   .regex(/^[1-9][0-9]*$/u)
@@ -59,6 +60,8 @@ export type NdjsonConnection = {
 export type ListenUnixSocketOptions = {
   socketPath: string;
   onConnection(connection: NdjsonConnection): void | Promise<void>;
+  /** Absent preserves the transport's legacy unbounded behavior for Station Host PTY traffic. */
+  transportLimits?: NdjsonTransportLimits;
 };
 
 export type UnixSocketServer = {
@@ -69,6 +72,8 @@ export type UnixSocketServer = {
 
 export type ConnectUnixSocketOptions = {
   timeoutMs?: number;
+  /** Absent preserves the transport's legacy unbounded behavior for Station Host PTY traffic. */
+  transportLimits?: NdjsonTransportLimits;
 };
 
 export type SocketIdentity = { ino: bigint; birthtimeNs: bigint };
@@ -303,7 +308,7 @@ export async function listenUnixSocket(
     socket.once("close", () => {
       sockets.delete(socket);
     });
-    const connection = ndjsonConnection(socket);
+    const connection = ndjsonConnection(socket, options.transportLimits);
     void options.onConnection(connection);
   });
 
@@ -365,7 +370,8 @@ export function connectUnixSocket(
   socketPath: string,
   options: ConnectUnixSocketOptions = {},
 ): Promise<NdjsonConnection> {
-  const task = ({ signal }: { signal: AbortSignal }) => connectUnixSocketOnce(socketPath, signal);
+  const task = ({ signal }: { signal: AbortSignal }) =>
+    connectUnixSocketOnce(socketPath, signal, options.transportLimits);
   const baseOptions = {
     operation: "protocol.socket.connect",
     error: protocolSafeError({
@@ -391,7 +397,11 @@ export function connectUnixSocket(
   ).then(unwrapBoundaryResult);
 }
 
-function connectUnixSocketOnce(socketPath: string, signal: AbortSignal): Promise<NdjsonConnection> {
+function connectUnixSocketOnce(
+  socketPath: string,
+  signal: AbortSignal,
+  transportLimits: NdjsonTransportLimits | undefined,
+): Promise<NdjsonConnection> {
   return new Promise((resolve, reject) => {
     const socket = createConnection(socketPath);
     let settled = false;
@@ -421,7 +431,7 @@ function connectUnixSocketOnce(socketPath: string, signal: AbortSignal): Promise
       );
     };
     const onConnect = () => {
-      settle(() => resolve(ndjsonConnection(socket)));
+      settle(() => resolve(ndjsonConnection(socket, transportLimits)));
     };
     const onError = (error: Error) => {
       settle(() => reject(error));
@@ -437,20 +447,26 @@ function connectUnixSocketOnce(socketPath: string, signal: AbortSignal): Promise
   });
 }
 
-function ndjsonConnection(socket: Socket): NdjsonConnection {
+function ndjsonConnection(
+  socket: Socket,
+  transportLimits: NdjsonTransportLimits | undefined,
+): NdjsonConnection {
   socket.setEncoding("utf8");
   let closedResolve: () => void = () => undefined;
   const closed = new Promise<void>((resolve) => {
     closedResolve = resolve;
   });
-  const state = createNdjsonState({
-    close: () => {
-      socket.end();
-      socket.destroySoon();
+  const state = createNdjsonState(
+    {
+      close: () => {
+        socket.end();
+        socket.destroySoon();
+      },
+      destroy: () => socket.destroy(),
+      onFinish: closedResolve,
     },
-    destroy: () => socket.destroy(),
-    onFinish: closedResolve,
-  });
+    transportLimits,
+  );
   let writeBlocked = false;
   const onDrain = () => {
     writeBlocked = false;
@@ -464,11 +480,14 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
     send: (value) => {
       const frame = `${JSON.stringify(value)}\n`;
       if (!state.canSend()) return false;
-      if (Buffer.byteLength(frame, "utf8") > NDJSON_TRANSPORT_LIMITS.maxFrameBytes) {
+      if (
+        transportLimits !== undefined &&
+        Buffer.byteLength(frame, "utf8") > transportLimits.maxFrameBytes
+      ) {
         state.overflow("outbound-frame-bytes");
         return false;
       }
-      if (writeBlocked) {
+      if (writeBlocked && transportLimits !== undefined) {
         state.overflow("outbound-backpressure");
         return false;
       }
@@ -490,36 +509,43 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
  * Cross-wired in-memory NDJSON pair for socket-free tests; closing either end
  * completes the peer's messages and closed promise like a socket disconnect.
  */
-export function inMemoryNdjsonConnectionPair(): {
+export function inMemoryNdjsonConnectionPair(transportLimits?: NdjsonTransportLimits): {
   client: NdjsonConnection;
   server: NdjsonConnection;
 } {
   const toServer = new PassThrough();
   const toClient = new PassThrough();
   return {
-    client: inMemoryEndpoint(toClient, toServer),
-    server: inMemoryEndpoint(toServer, toClient),
+    client: inMemoryEndpoint(toClient, toServer, transportLimits),
+    server: inMemoryEndpoint(toServer, toClient, transportLimits),
   };
 }
 
-function inMemoryEndpoint(incoming: PassThrough, outgoing: PassThrough): NdjsonConnection {
+function inMemoryEndpoint(
+  incoming: PassThrough,
+  outgoing: PassThrough,
+  transportLimits: NdjsonTransportLimits | undefined,
+): NdjsonConnection {
   incoming.setEncoding("utf8");
   let closedResolve: () => void = () => undefined;
   const closed = new Promise<void>((resolve) => {
     closedResolve = resolve;
   });
   let state: ReturnType<typeof createNdjsonState>;
-  state = createNdjsonState({
-    close: () => {
-      outgoing.end();
-      state.finish();
+  state = createNdjsonState(
+    {
+      close: () => {
+        outgoing.end();
+        state.finish();
+      },
+      destroy: () => {
+        outgoing.destroy();
+        incoming.destroy();
+      },
+      onFinish: closedResolve,
     },
-    destroy: () => {
-      outgoing.destroy();
-      incoming.destroy();
-    },
-    onFinish: closedResolve,
-  });
+    transportLimits,
+  );
   let writeBlocked = false;
   outgoing.on("drain", () => {
     writeBlocked = false;
@@ -532,11 +558,14 @@ function inMemoryEndpoint(incoming: PassThrough, outgoing: PassThrough): NdjsonC
     send: (value) => {
       const frame = `${JSON.stringify(value)}\n`;
       if (!state.canSend()) return false;
-      if (Buffer.byteLength(frame, "utf8") > NDJSON_TRANSPORT_LIMITS.maxFrameBytes) {
+      if (
+        transportLimits !== undefined &&
+        Buffer.byteLength(frame, "utf8") > transportLimits.maxFrameBytes
+      ) {
         state.overflow("outbound-frame-bytes");
         return false;
       }
-      if (writeBlocked) {
+      if (writeBlocked && transportLimits !== undefined) {
         state.overflow("outbound-backpressure");
         return false;
       }
@@ -561,7 +590,10 @@ type NdjsonStateOptions = {
   onFinish(): void;
 };
 
-function createNdjsonState(options: NdjsonStateOptions) {
+function createNdjsonState(
+  options: NdjsonStateOptions,
+  transportLimits: NdjsonTransportLimits | undefined,
+) {
   let buffer = "";
   let queue: QueuedNdjsonMessage[] = [];
   let queuedBytes = 0;
@@ -617,7 +649,10 @@ function createNdjsonState(options: NdjsonStateOptions) {
     for (;;) {
       const newline = buffer.indexOf("\n");
       if (newline < 0) {
-        if (Buffer.byteLength(buffer, "utf8") > NDJSON_TRANSPORT_LIMITS.maxFrameBytes) {
+        if (
+          transportLimits !== undefined &&
+          Buffer.byteLength(buffer, "utf8") > transportLimits.maxFrameBytes
+        ) {
           overflow("partial-frame-bytes");
         }
         return;
@@ -625,16 +660,19 @@ function createNdjsonState(options: NdjsonStateOptions) {
       const line = buffer.slice(0, newline);
       buffer = buffer.slice(newline + 1);
       const frameBytes = Buffer.byteLength(line, "utf8") + 1;
-      if (frameBytes > NDJSON_TRANSPORT_LIMITS.maxFrameBytes) {
+      if (transportLimits !== undefined && frameBytes > transportLimits.maxFrameBytes) {
         overflow("frame-bytes");
         return;
       }
       if (line.trim().length === 0) continue;
-      if (queue.length >= NDJSON_TRANSPORT_LIMITS.maxQueuedFrames) {
+      if (transportLimits !== undefined && queue.length >= transportLimits.maxQueuedFrames) {
         overflow("queued-frames");
         return;
       }
-      if (queuedBytes + frameBytes > NDJSON_TRANSPORT_LIMITS.maxQueuedBytes) {
+      if (
+        transportLimits !== undefined &&
+        queuedBytes + frameBytes > transportLimits.maxQueuedBytes
+      ) {
         overflow("queued-bytes");
         return;
       }

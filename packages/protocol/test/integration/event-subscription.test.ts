@@ -4,6 +4,7 @@ import {
   connectUnixSocket,
   createObserverClient,
   listenUnixSocket,
+  type NdjsonTransportDiagnostics,
   startProtocolServer,
 } from "@station/protocol";
 import { describe, expect, it } from "vitest";
@@ -251,6 +252,7 @@ describe("protocol event subscriptions", () => {
     };
     let subscriptionCalls = 0;
     let returned = 0;
+    let overloadedDiagnostics: NdjsonTransportDiagnostics | undefined;
     const stalledEvents: AsyncIterable<StationEvent> = {
       [Symbol.asyncIterator]: () => ({
         next: async () => ({ done: false, value: event }),
@@ -262,6 +264,9 @@ describe("protocol event subscriptions", () => {
     };
     const server = await startProtocolServer({
       socketPath,
+      onConnectionDiagnostics: (diagnostics) => {
+        if (diagnostics.overflowCount > 0) overloadedDiagnostics = diagnostics;
+      },
       api: createFakeObserverApi({
         subscribe: () => {
           subscriptionCalls += 1;
@@ -275,6 +280,19 @@ describe("protocol event subscriptions", () => {
     try {
       await expect(stalledIterator.next()).resolves.toEqual({ done: false, value: event });
       await waitFor(() => returned === 1, 2_000);
+      await waitFor(() => overloadedDiagnostics !== undefined, 2_000);
+      expect(overloadedDiagnostics).toMatchObject({
+        outboundBackpressureCount: 1,
+        overflowCount: 1,
+        closeCount: 1,
+        lastOverflowReason: "outbound-backpressure",
+      });
+      const consumeBufferedFrames = async () => {
+        for (;;) await stalledIterator.next();
+      };
+      await expect(consumeBufferedFrames()).rejects.toMatchObject({
+        code: "PROTOCOL_SUBSCRIPTION_CLOSED",
+      });
 
       await expect(client.getSnapshot()).resolves.toMatchObject({
         schemaVersion: STATION_SCHEMA_VERSION,

@@ -48,6 +48,43 @@ describe("observer client runtime", () => {
     expect(service.loadCount).toBe(1);
   });
 
+  it("keeps an unexpected subscription EOF display-only until replacement resync", async () => {
+    const initialSnapshot = createCommandSnapshot("idle");
+    const recoveredSnapshot = createCommandSnapshot("idle", { dirty: true });
+    const service = new DeferredLoadService(recoveredSnapshot);
+    const runtime = track(
+      createStationClientRuntime({
+        service,
+        initialSnapshot,
+        reconnect: RECONNECT_OPTIONS,
+      }),
+    );
+    runtime.start();
+    await waitFor(() => service.waiterCount === 1);
+
+    service.endSubscriptions();
+
+    await waitFor(
+      () =>
+        runtime.getState().connection.state === "displayOnly" &&
+        service.subscribeCount >= 2 &&
+        service.loadCount === 1,
+    );
+    expect(runtime.getState().connection).toMatchObject({
+      state: "displayOnly",
+      lastError: { code: "PROTOCOL_SUBSCRIPTION_CLOSED" },
+    });
+    expect(runtime.getState().snapshot?.rows[0]?.worktree.dirty).toBe(false);
+    expect(runtime.diagnostics()).toMatchObject({
+      resubscriptionCount: 1,
+      transport: { overflowCount: 0, closeCount: 0 },
+    });
+
+    service.releaseLoads();
+    await waitFor(() => runtime.getState().connection.state === "connected");
+    expect(runtime.getState().snapshot?.rows[0]?.worktree.dirty).toBe(true);
+  });
+
   it("refreshes instead of duplicating a delayed worktree addition after snapshot load", async () => {
     const canonical = createCommandSnapshot("none");
     const existing = canonical.rows[0];
@@ -189,7 +226,7 @@ describe("observer client runtime", () => {
     expect(runtime.getState().connection.state).toBe("connected");
   });
 
-  it("refreshes and resubscribes after a clean subscription end without leaving connected", async () => {
+  it("resubscribes after unexpected subscription completion and reconnects from a fresh snapshot", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeObserverService(snapshot);
     const runtime = track(

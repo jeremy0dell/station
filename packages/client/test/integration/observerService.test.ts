@@ -25,6 +25,7 @@ import type {
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   listenUnixSocket,
+  NDJSON_TRANSPORT_LIMITS,
   type ObserverClient,
   ProtocolRequestSchema,
   protocolSuccessResponse,
@@ -228,6 +229,18 @@ describe("observer client service", () => {
         state: "displayOnly",
         lastError: { code: "PROTOCOL_TRANSPORT_OVERFLOW" },
       });
+      await waitFor(() => runtime.diagnostics().transport.overflowCount === 1, 3_000);
+      expect(runtime.diagnostics()).toMatchObject({
+        resubscriptionCount: 1,
+        transport: {
+          inboundQueueDepth: 0,
+          inboundQueueBytes: 0,
+          inboundHighWaterDepth: NDJSON_TRANSPORT_LIMITS.maxQueuedFrames,
+          overflowCount: 1,
+          closeCount: 1,
+          lastOverflowReason: "queued-frames",
+        },
+      });
       expect(runtime.getState().snapshot?.rows[0]?.worktree.dirty).toBe(false);
 
       releaseSnapshot();
@@ -239,6 +252,38 @@ describe("observer client service", () => {
       await runtime.stop();
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("aggregates discarded connection diagnostics across protocol resubscriptions", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const server = await startProtocolServer({ socketPath, api: fakeApi() });
+    const runtime = createStationClientRuntime({
+      socketPath,
+      expectedBuildVersion: "0.0.0",
+      initialSnapshot: createCommandSnapshot("idle"),
+      reconnect: { initialDelayMs: 5, maxDelayMs: 20 },
+    });
+
+    try {
+      runtime.start();
+      await waitFor(
+        () =>
+          runtime.diagnostics().resubscriptionCount >= 1 &&
+          runtime.diagnostics().transport.closeCount >= 1,
+        3_000,
+      );
+      expect(runtime.diagnostics()).toMatchObject({
+        transport: {
+          inboundQueueDepth: 0,
+          inboundQueueBytes: 0,
+          overflowCount: 0,
+        },
+      });
+      expect(runtime.diagnostics().transport.inboundHighWaterDepth).toBeGreaterThanOrEqual(1);
+    } finally {
+      await runtime.stop();
+      await server.close();
     }
   });
 
