@@ -54,13 +54,41 @@ describeRealCursor("real Cursor session.create launch lane", () => {
     const root = await mkdtemp(join(tmpdir(), "station-real-cursor-"));
     const stateDir = join(root, "state");
     const diagnosticsDir = join(stateDir, "diagnostics");
+    const hookSpoolDir = join(stateDir, "spool", "hooks");
     const worktreePath = join(root, "worktree");
+    const configPath = join(root, "station.config.toml");
+    const cursorHooksPath = join(root, "cursor", "hooks.json");
+    const hookScriptPath = join(stateDir, "hooks", "station-cursor-hook.sh");
+    const observerSocketPath = join(root, "observer.sock");
+    const ingressBin = join(process.cwd(), "bin", "stn-ingress");
     const sessionName = `station-cursor-${process.pid}-${Date.now()}`;
     const shimLog = join(root, "cursor-shim.log");
     const shimPath = join(root, "cursor-shim");
     await mkdir(stateDir, { recursive: true });
+    await mkdir(hookSpoolDir, { recursive: true });
     await mkdir(worktreePath, { recursive: true });
     await execFileAsync("git", ["init"], { cwd: worktreePath, timeout: 10_000 });
+    await writeStationConfigToml({
+      configPath,
+      root,
+      stateDir,
+      socketPath: observerSocketPath,
+    });
+    const previousCursorHooksPath = process.env.STATION_CURSOR_HOOKS_PATH;
+    process.env.STATION_CURSOR_HOOKS_PATH = cursorHooksPath;
+    cleanupTasks.push(async () => {
+      if (previousCursorHooksPath === undefined) delete process.env.STATION_CURSOR_HOOKS_PATH;
+      else process.env.STATION_CURSOR_HOOKS_PATH = previousCursorHooksPath;
+    });
+    await installCursorHooks({
+      cursorHooksPath,
+      hookScriptPath,
+      stationConfigPath: configPath,
+      observerSocketPath,
+      stateDir,
+      hookSpoolDir,
+      hookBin: ingressBin,
+    });
     await writeCursorShim({ shimPath, shimLog, realCursorBin: cursorBin });
 
     cleanupTasks.push(async () => {
@@ -106,6 +134,12 @@ describeRealCursor("real Cursor session.create launch lane", () => {
       harnesses: [
         createCursorHarnessProvider({
           command: shimPath,
+          installHooks: true,
+          hookBin: ingressBin,
+          configPath,
+          observerSocketPath,
+          stateDir,
+          hookSpoolDir,
           now: () => new Date(now),
         }),
       ],
@@ -150,6 +184,9 @@ describeRealCursor("real Cursor session.create launch lane", () => {
         },
       });
       await queue.drain();
+      expect(await persistence.getCommand(receipt.commandId)).toMatchObject({
+        status: "succeeded",
+      });
       const launchLog = await waitForCursorLaunchLog(shimLog);
       const snapshot = await pollForCursorRow(core);
       const pane = await inspectTmuxPane({
@@ -157,9 +194,6 @@ describeRealCursor("real Cursor session.create launch lane", () => {
         targetId: await cursorTargetId(terminal),
       });
 
-      expect(await persistence.getCommand(receipt.commandId)).toMatchObject({
-        status: "succeeded",
-      });
       expect(launchLog).toContain("arg=--workspace");
       expect(launchLog).toContain(`arg=${worktreePath}`);
       expect(launchLog).toContain("env.STATION_HARNESS_PROVIDER=cursor");
@@ -513,7 +547,7 @@ async function cursorTargetId(terminal: TmuxProvider): Promise<string> {
 }
 
 function tmuxPaneId(targetId: string): string {
-  const [provider, _sessionId, _windowId, paneId, ...extra] = targetId.split(":");
+  const [provider, _generation, _sessionId, _windowId, paneId, ...extra] = targetId.split(":");
   if (provider !== "tmux" || paneId === undefined || extra.length > 0) {
     throw new Error(`Invalid tmux target id: ${targetId}`);
   }
