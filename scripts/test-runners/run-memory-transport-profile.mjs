@@ -291,11 +291,7 @@ async function sendUntil(socket, start, target, payload, pid, timeoutMs) {
     if (socket.destroyed) return { sent, reason: "peer-closed" };
     const frame = `${JSON.stringify({ sequence: sent, payload })}\n`;
     if (!socket.write(frame)) {
-      const outcome = await Promise.race([
-        once(socket, "drain").then(() => "drain"),
-        once(socket, "close").then(() => "closed"),
-        delay(Math.max(1, deadline - Date.now())).then(() => "timeout"),
-      ]);
+      const outcome = await waitForSocketDrain(socket, Math.max(1, deadline - Date.now()));
       if (outcome === "closed") return { sent, reason: "peer-closed" };
       if (outcome === "timeout") return { sent, reason: "backpressured" };
     }
@@ -308,6 +304,24 @@ async function sendUntil(socket, start, target, payload, pid, timeoutMs) {
     }
   }
   return { sent };
+}
+
+function waitForSocketDrain(socket, timeoutMs) {
+  return new Promise((resolve) => {
+    const finish = (outcome) => {
+      clearTimeout(timer);
+      socket.off("drain", onDrain);
+      socket.off("close", onClose);
+      socket.off("error", onClose);
+      resolve(outcome);
+    };
+    const onDrain = () => finish("drain");
+    const onClose = () => finish("closed");
+    const timer = setTimeout(() => finish("timeout"), timeoutMs);
+    socket.once("drain", onDrain);
+    socket.once("close", onClose);
+    socket.once("error", onClose);
+  });
 }
 
 async function collectProcessSample(pid, operations, includeFootprint = true) {
