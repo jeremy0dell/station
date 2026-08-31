@@ -23,7 +23,7 @@ import type {
 } from "../persistence/index.js";
 import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
-import { buildStationSnapshot } from "./graph.js";
+import { buildStationSnapshot } from "./graph/build.js";
 import { repairPersistedHarnessEventCompatibility } from "./harnessEventRepair.js";
 import type { ProviderReadOptions } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";

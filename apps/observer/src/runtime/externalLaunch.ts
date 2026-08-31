@@ -32,7 +32,7 @@ import type {
 } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
-import type { ObserverSessionMetadata } from "../reconcile/graph.js";
+import type { ObserverSessionMetadata } from "../reconcile/graph/evidence.js";
 import { resolveSessionRecovery } from "../sessionRecovery/resolve.js";
 import type { StationLogger } from "../stationLogger.js";
 import { nowIso } from "../utils/time.js";

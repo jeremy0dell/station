@@ -35,12 +35,12 @@ import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
 import {
   type CreatedWorktreeProjectionRejectionReason,
-  type ObserverSessionMetadata,
   type PreparedExternalLaunchProjectionRejectionReason,
   projectCreatedWorktreeOntoSnapshot,
   projectPreparedExternalLaunchOntoSnapshot,
-  projectProviderHealthOntoSnapshot,
-} from "./graph.js";
+} from "./graph/authoritativeLaunch.js";
+import type { ObserverSessionMetadata } from "./graph/evidence.js";
+import { projectProviderHealthOntoSnapshot } from "./graph/providerHealth.js";
 import type { ProviderReadOptions } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import { runReconcileOnce } from "./run.js";

@@ -6,7 +6,7 @@ import type {
   StationSnapshot,
 } from "@station/contracts";
 import type { ProviderRegistry } from "../providers/registry.js";
-import { buildStationSnapshot } from "./graph.js";
+import { buildStationSnapshot } from "./graph/build.js";
 
 /**
  * Creates the empty graph used before the first reconcile has produced provider observations.
