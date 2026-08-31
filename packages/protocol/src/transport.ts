@@ -16,6 +16,11 @@ import { unwrapBoundaryResult } from "./runtime.js";
 
 const DEFAULT_SOCKET_PROBE_TIMEOUT_MS = 1000;
 const MIN_SOCKET_PROBE_TIMEOUT_MS = 1;
+export const NDJSON_TRANSPORT_LIMITS = Object.freeze({
+  maxQueuedFrames: 1_024,
+  maxQueuedBytes: 4 * 1024 * 1024,
+  maxFrameBytes: 16 * 1024 * 1024,
+});
 const CanonicalPositivePidSchema = z
   .string()
   .regex(/^[1-9][0-9]*$/u)
@@ -23,10 +28,31 @@ const CanonicalPositivePidSchema = z
   .pipe(z.number().int().positive().max(Number.MAX_SAFE_INTEGER));
 const ErrorCodeSchema = z.object({ code: z.string() });
 
+export type NdjsonTransportOverflowReason =
+  | "queued-frames"
+  | "queued-bytes"
+  | "frame-bytes"
+  | "partial-frame-bytes"
+  | "outbound-backpressure"
+  | "outbound-frame-bytes";
+
+export type NdjsonTransportDiagnostics = {
+  inboundQueueDepth: number;
+  inboundQueueBytes: number;
+  inboundHighWaterDepth: number;
+  inboundHighWaterBytes: number;
+  outboundBackpressureCount: number;
+  overflowCount: number;
+  closeCount: number;
+  lastOverflowReason?: NdjsonTransportOverflowReason;
+};
+
+/** One bounded NDJSON connection with content-free queue and overload diagnostics. */
 export type NdjsonConnection = {
-  send(value: unknown): void;
+  send(value: unknown): boolean;
   messages(): AsyncIterable<unknown>;
   close(): void;
+  diagnostics(): NdjsonTransportDiagnostics;
   readonly closed: Promise<void>;
 };
 
@@ -413,84 +439,49 @@ function connectUnixSocketOnce(socketPath: string, signal: AbortSignal): Promise
 
 function ndjsonConnection(socket: Socket): NdjsonConnection {
   socket.setEncoding("utf8");
-  let buffer = "";
   let closedResolve: () => void = () => undefined;
   const closed = new Promise<void>((resolve) => {
     closedResolve = resolve;
   });
-  const messages: unknown[] = [];
-  const waiters: Array<() => void> = [];
-  let done = false;
-  let streamError: Error | undefined;
-
-  // Socket data is push-based, while callers consume a pull-based AsyncIterable.
-  // Parsed frames queue in messages; waiters wake consumers blocked on next().
-  const wake = () => {
-    while (waiters.length > 0) {
-      waiters.shift()?.();
-    }
-  };
-
-  socket.on("data", (chunk) => {
-    buffer += chunk;
-    for (;;) {
-      const newline = buffer.indexOf("\n");
-      if (newline < 0) {
-        break;
-      }
-      const line = buffer.slice(0, newline);
-      buffer = buffer.slice(newline + 1);
-      if (line.trim().length === 0) {
-        continue;
-      }
-      try {
-        messages.push(JSON.parse(line));
-      } catch (error) {
-        // A malformed frame poisons the stream so the generator surfaces the parse error.
-        streamError = error instanceof Error ? error : new Error("Invalid NDJSON frame.");
-        socket.destroy(streamError);
-      }
-    }
-    wake();
-  });
-
-  socket.on("error", (error) => {
-    streamError = error;
-    done = true;
-    wake();
-    closedResolve();
-  });
-  socket.on("close", () => {
-    done = true;
-    wake();
-    closedResolve();
-  });
-
-  return {
-    send: (value) => {
-      socket.write(`${JSON.stringify(value)}\n`);
-    },
-    messages: async function* () {
-      for (;;) {
-        if (messages.length > 0) {
-          yield messages.shift();
-          continue;
-        }
-        if (streamError !== undefined) {
-          throw streamError;
-        }
-        if (done) {
-          return;
-        }
-        await new Promise<void>((resolve) => {
-          waiters.push(resolve);
-        });
-      }
-    },
+  const state = createNdjsonState({
     close: () => {
       socket.end();
       socket.destroySoon();
     },
+    destroy: () => socket.destroy(),
+    onFinish: closedResolve,
+  });
+  let writeBlocked = false;
+  const onDrain = () => {
+    writeBlocked = false;
+  };
+
+  socket.on("data", state.ingest);
+  socket.on("error", state.finish);
+  socket.on("close", () => state.finish());
+
+  return {
+    send: (value) => {
+      const frame = `${JSON.stringify(value)}\n`;
+      if (!state.canSend()) return false;
+      if (Buffer.byteLength(frame, "utf8") > NDJSON_TRANSPORT_LIMITS.maxFrameBytes) {
+        state.overflow("outbound-frame-bytes");
+        return false;
+      }
+      if (writeBlocked) {
+        state.overflow("outbound-backpressure");
+        return false;
+      }
+      if (!socket.write(frame)) {
+        writeBlocked = true;
+        state.recordOutboundBackpressure();
+        socket.once("drain", onDrain);
+      }
+      return true;
+    },
+    messages: state.messages,
+    close: state.close,
+    diagnostics: state.diagnostics,
     closed,
   };
 }
@@ -513,82 +504,197 @@ export function inMemoryNdjsonConnectionPair(): {
 
 function inMemoryEndpoint(incoming: PassThrough, outgoing: PassThrough): NdjsonConnection {
   incoming.setEncoding("utf8");
-  let buffer = "";
-  let done = false;
-  let streamError: Error | undefined;
-  const queue: unknown[] = [];
-  const waiters: Array<() => void> = [];
   let closedResolve: () => void = () => undefined;
   const closed = new Promise<void>((resolve) => {
     closedResolve = resolve;
   });
+  let state: ReturnType<typeof createNdjsonState>;
+  state = createNdjsonState({
+    close: () => {
+      outgoing.end();
+      state.finish();
+    },
+    destroy: () => {
+      outgoing.destroy();
+      incoming.destroy();
+    },
+    onFinish: closedResolve,
+  });
+  let writeBlocked = false;
+  outgoing.on("drain", () => {
+    writeBlocked = false;
+  });
+  incoming.on("data", state.ingest);
+  incoming.on("end", () => state.finish());
+  incoming.on("close", () => state.finish());
+  incoming.on("error", state.finish);
+  return {
+    send: (value) => {
+      const frame = `${JSON.stringify(value)}\n`;
+      if (!state.canSend()) return false;
+      if (Buffer.byteLength(frame, "utf8") > NDJSON_TRANSPORT_LIMITS.maxFrameBytes) {
+        state.overflow("outbound-frame-bytes");
+        return false;
+      }
+      if (writeBlocked) {
+        state.overflow("outbound-backpressure");
+        return false;
+      }
+      if (!outgoing.write(frame)) {
+        writeBlocked = true;
+        state.recordOutboundBackpressure();
+      }
+      return true;
+    },
+    messages: state.messages,
+    close: state.close,
+    diagnostics: state.diagnostics,
+    closed,
+  };
+}
+
+type QueuedNdjsonMessage = { value: unknown; bytes: number };
+
+type NdjsonStateOptions = {
+  close(): void;
+  destroy(): void;
+  onFinish(): void;
+};
+
+function createNdjsonState(options: NdjsonStateOptions) {
+  let buffer = "";
+  let queue: QueuedNdjsonMessage[] = [];
+  let queuedBytes = 0;
+  let done = false;
+  let closeRequested = false;
+  let streamError: Error | undefined;
+  const waiters: Array<() => void> = [];
+  const metrics: NdjsonTransportDiagnostics = {
+    inboundQueueDepth: 0,
+    inboundQueueBytes: 0,
+    inboundHighWaterDepth: 0,
+    inboundHighWaterBytes: 0,
+    outboundBackpressureCount: 0,
+    overflowCount: 0,
+    closeCount: 0,
+  };
+
   const wake = () => {
-    while (waiters.length > 0) {
-      waiters.shift()?.();
-    }
+    while (waiters.length > 0) waiters.shift()?.();
   };
-  const finish = () => {
+  const updateDepth = () => {
+    metrics.inboundQueueDepth = queue.length;
+    metrics.inboundQueueBytes = queuedBytes;
+    metrics.inboundHighWaterDepth = Math.max(metrics.inboundHighWaterDepth, queue.length);
+    metrics.inboundHighWaterBytes = Math.max(metrics.inboundHighWaterBytes, queuedBytes);
+  };
+  const finish = (error?: Error) => {
+    if (done) return;
     done = true;
+    streamError = error ?? streamError;
+    metrics.closeCount += 1;
     wake();
-    closedResolve();
+    options.onFinish();
   };
-  incoming.on("data", (chunk: string) => {
+  const overflow = (reason: NdjsonTransportOverflowReason) => {
+    if (done) return;
+    metrics.overflowCount += 1;
+    metrics.lastOverflowReason = reason;
+    buffer = "";
+    queue = [];
+    queuedBytes = 0;
+    updateDepth();
+    streamError = transportOverflowError(reason);
+    finish(streamError);
+    options.destroy();
+  };
+  const ingest = (chunk: string) => {
+    if (done) return;
     buffer += chunk;
     for (;;) {
       const newline = buffer.indexOf("\n");
       if (newline < 0) {
-        break;
+        if (Buffer.byteLength(buffer, "utf8") > NDJSON_TRANSPORT_LIMITS.maxFrameBytes) {
+          overflow("partial-frame-bytes");
+        }
+        return;
       }
       const line = buffer.slice(0, newline);
       buffer = buffer.slice(newline + 1);
-      if (line.trim().length === 0) {
-        continue;
+      const frameBytes = Buffer.byteLength(line, "utf8") + 1;
+      if (frameBytes > NDJSON_TRANSPORT_LIMITS.maxFrameBytes) {
+        overflow("frame-bytes");
+        return;
+      }
+      if (line.trim().length === 0) continue;
+      if (queue.length >= NDJSON_TRANSPORT_LIMITS.maxQueuedFrames) {
+        overflow("queued-frames");
+        return;
+      }
+      if (queuedBytes + frameBytes > NDJSON_TRANSPORT_LIMITS.maxQueuedBytes) {
+        overflow("queued-bytes");
+        return;
       }
       try {
-        queue.push(JSON.parse(line));
+        queue.push({ value: JSON.parse(line), bytes: frameBytes });
+        queuedBytes += frameBytes;
+        updateDepth();
       } catch (error) {
         streamError = error instanceof Error ? error : new Error("Invalid NDJSON frame.");
-        incoming.destroy(streamError);
+        finish(streamError);
+        options.destroy();
+        return;
       }
     }
-    wake();
-  });
-  incoming.on("end", finish);
-  incoming.on("close", finish);
-  incoming.on("error", (error) => {
-    streamError = error;
-    finish();
-  });
-  return {
-    send: (value) => {
-      outgoing.write(`${JSON.stringify(value)}\n`);
-    },
-    messages: async function* () {
-      for (;;) {
-        if (queue.length > 0) {
-          yield queue.shift();
-          continue;
-        }
-        if (streamError !== undefined) {
-          throw streamError;
-        }
-        if (done) {
-          return;
-        }
-        await new Promise<void>((resolve) => {
-          waiters.push(resolve);
-        });
-      }
-    },
-    close: () => {
-      // End the peer's stream AND complete our own (a real socket close() ends
-      // both directions locally), so the closing endpoint's `closed`/`messages()`
-      // resolve too — matching `ndjsonConnection`.
-      outgoing.end();
-      finish();
-    },
-    closed,
   };
+  const close = () => {
+    if (closeRequested) return;
+    closeRequested = true;
+    options.close();
+  };
+  const messages = (): AsyncIterable<unknown> => ({
+    [Symbol.asyncIterator]: () => ({
+      next: async (): Promise<IteratorResult<unknown>> => {
+        for (;;) {
+          const message = queue.shift();
+          if (message !== undefined) {
+            queuedBytes -= message.bytes;
+            updateDepth();
+            return { done: false, value: message.value };
+          }
+          if (streamError !== undefined) throw streamError;
+          if (done) return { done: true, value: undefined };
+          await new Promise<void>((resolve) => waiters.push(resolve));
+        }
+      },
+      return: async () => {
+        close();
+        return { done: true, value: undefined };
+      },
+    }),
+  });
+  const diagnostics = (): NdjsonTransportDiagnostics => ({ ...metrics });
+
+  return {
+    canSend: () => !done && !closeRequested,
+    close,
+    diagnostics,
+    finish,
+    ingest,
+    messages,
+    overflow,
+    recordOutboundBackpressure: () => {
+      metrics.outboundBackpressureCount += 1;
+    },
+  };
+}
+
+function transportOverflowError(reason: NdjsonTransportOverflowReason): Error {
+  return Object.assign(new Error("NDJSON transport capacity was exceeded."), {
+    name: "ProtocolError",
+    code: "PROTOCOL_TRANSPORT_OVERFLOW",
+    reason,
+  });
 }
 
 async function closeServer(

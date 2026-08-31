@@ -114,7 +114,8 @@ const PreviousLifecycleErrorResponseSchema = z
 /**
  * ADAPTER
  *
- * Presents Observer operations to clients through validated NDJSON requests.
+ * Presents Observer operations through validated NDJSON requests and surfaces
+ * bounded transport overload as a retryable connection failure.
  */
 export function createObserverClient(options: CreateObserverClientOptions): ObserverClient {
   const requestId = options.requestId ?? defaultRequestId;
@@ -350,7 +351,8 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
   usePreviousLifecycleSchema = false,
 ): Promise<ProtocolResult<TMethod>> {
   const request = protocolRequest(id, method, params);
-  connection.send(
+  sendProtocolMessage(
+    connection,
     usePreviousLifecycleSchema
       ? { ...request, schemaVersion: PREVIOUS_LIFECYCLE_SCHEMA_VERSION }
       : request,
@@ -545,7 +547,7 @@ async function openSubscription(
         signal,
       );
     }
-    connection.send(protocolRequest(id, "events.subscribe", filter));
+    sendProtocolMessage(connection, protocolRequest(id, "events.subscribe", filter));
     // The acknowledgement is bounded; the event stream itself remains long-lived.
     await readSubscriptionAck(connection, iterator, id, requestTimeoutMs(options), signal);
     return { connection, iterator };
@@ -575,7 +577,7 @@ async function assertExpectedObserverForSubscription(
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<void> {
-  connection.send(protocolRequest(id, "observer.health"));
+  sendProtocolMessage(connection, protocolRequest(id, "observer.health"));
   const message = await readNextProtocolMessage(
     connection,
     iterator,
@@ -595,6 +597,15 @@ async function assertExpectedObserverForSubscription(
   }
   const health = parseProtocolResponseResult(response, "observer.health");
   assertObserverIdentity(expectedObserver, health);
+}
+
+function sendProtocolMessage(connection: NdjsonConnection, message: unknown): void {
+  if (connection.send(message)) return;
+  throw protocolSafeError({
+    code: "PROTOCOL_TRANSPORT_OVERFLOW",
+    message: "Observer transport could not accept another frame.",
+    hint: "Reconnect and load a fresh snapshot before continuing.",
+  });
 }
 
 async function readSubscriptionAck(

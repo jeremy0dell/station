@@ -6,6 +6,7 @@ import {
   connectUnixSocket,
   inMemoryNdjsonConnectionPair,
   listenUnixSocket,
+  NDJSON_TRANSPORT_LIMITS,
   probeUnixSocket,
   readUnixSocketHolderPids,
   readUnixSocketHolderPidsAsync,
@@ -62,6 +63,16 @@ describe("Unix socket NDJSON transport", () => {
       }
 
       await expect(settlesWithin(client.closed, 500)).resolves.toBe(true);
+      expect(client.diagnostics()).toMatchObject({
+        inboundQueueDepth: 0,
+        inboundHighWaterDepth: NDJSON_TRANSPORT_LIMITS.maxQueuedFrames,
+        overflowCount: 1,
+        closeCount: 1,
+        lastOverflowReason: "queued-frames",
+      });
+      expect(client.diagnostics().inboundHighWaterBytes).toBeLessThanOrEqual(
+        NDJSON_TRANSPORT_LIMITS.maxQueuedBytes,
+      );
     } finally {
       client.close();
       accepted?.destroy();
@@ -78,7 +89,45 @@ describe("Unix socket NDJSON transport", () => {
     await iterator.return?.();
 
     await expect(settlesWithin(client.closed, 500)).resolves.toBe(true);
+    expect(client.diagnostics().closeCount).toBe(1);
     await server.close();
+  });
+
+  it("rejects oversized outbound and partial frames without retaining their contents", async () => {
+    const outboundPair = inMemoryNdjsonConnectionPair();
+    expect(
+      outboundPair.client.send({ payload: "x".repeat(NDJSON_TRANSPORT_LIMITS.maxFrameBytes) }),
+    ).toBe(false);
+    expect(outboundPair.client.diagnostics()).toMatchObject({
+      inboundQueueDepth: 0,
+      overflowCount: 1,
+      lastOverflowReason: "outbound-frame-bytes",
+    });
+
+    const { socketPath } = await createTempSocketPath();
+    let accepted: Socket | undefined;
+    const server = createServer((socket) => {
+      accepted = socket;
+      socket.on("error", () => undefined);
+    });
+    server.listen(socketPath);
+    await once(server, "listening");
+    const client = await connectUnixSocket(socketPath);
+    await waitFor(() => accepted !== undefined);
+
+    try {
+      accepted?.write("x".repeat(NDJSON_TRANSPORT_LIMITS.maxFrameBytes + 1));
+      await expect(settlesWithin(client.closed, 1_000)).resolves.toBe(true);
+      expect(client.diagnostics()).toMatchObject({
+        inboundQueueDepth: 0,
+        overflowCount: 1,
+        lastOverflowReason: "partial-frame-bytes",
+      });
+    } finally {
+      client.close();
+      accepted?.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   it("creates a user-only socket directory and classifies socket states", async () => {

@@ -44,7 +44,8 @@ export type ProtocolServerOptions = {
 /**
  * ADAPTER
  *
- * Exposes Observer operations through validated NDJSON requests on a Unix socket.
+ * Exposes Observer operations through validated NDJSON requests and disconnects
+ * subscriptions that exceed the transport's bounded delivery capacity.
  */
 export async function startProtocolServer(
   options: ProtocolServerOptions,
@@ -71,7 +72,9 @@ async function handleConnection(
     for await (const message of connection.messages()) {
       const request = ProtocolRequestSchema.safeParse(message);
       if (!request.success) {
-        connection.send(errorResponse(requestId(message), "Invalid protocol request."));
+        if (!connection.send(errorResponse(requestId(message), "Invalid protocol request."))) {
+          return;
+        }
         continue;
       }
       await routeRequest(connection, api, request.data, requestTimeoutMs, requestGuard);
@@ -227,7 +230,7 @@ async function routeSubscriptionRequest(
 ): Promise<void> {
   try {
     const params = EventsSubscribeParamsSchema.parse(request.params);
-    sendResult(connection, request.id, "events.subscribe", { subscribed: true });
+    if (!sendResult(connection, request.id, "events.subscribe", { subscribed: true })) return;
     await streamEvents(connection, api.subscribe(params));
   } catch (error) {
     connection.send(errorResponse(request.id, "Observer protocol method failed.", error));
@@ -241,8 +244,8 @@ function sendResult(
   id: string,
   method: ProtocolMethod,
   value: unknown,
-): void {
-  connection.send(protocolSuccessResponse(id, method, value));
+): boolean {
+  return connection.send(protocolSuccessResponse(id, method, value));
 }
 
 async function streamEvents(
@@ -257,12 +260,16 @@ async function streamEvents(
       if (next.done) {
         return;
       }
-      connection.send(
-        ProtocolEventEnvelopeSchema.parse({
-          schemaVersion: STATION_SCHEMA_VERSION,
-          event: next.value,
-        }),
-      );
+      if (
+        !connection.send(
+          ProtocolEventEnvelopeSchema.parse({
+            schemaVersion: STATION_SCHEMA_VERSION,
+            event: next.value,
+          }),
+        )
+      ) {
+        return;
+      }
     }
   } finally {
     await iterator.return?.();
