@@ -81,12 +81,16 @@ export function terminalPalettePolarity(
     : "light";
 }
 
+const embeddedStationFallbackTheme = createReadableTerminalPaletteTheme(
+  nativeStationTheme.terminal,
+);
+
 /** Resolves complete embedded palette evidence or the whole built-in fallback theme. */
 export function resolveEmbeddedStationTheme(
   observation: StationTerminalTheme | null | undefined,
 ): StationTheme {
   if (observation === undefined || observation === null) {
-    return nativeStationTheme;
+    return embeddedStationFallbackTheme;
   }
   return createTerminalPaletteTheme(observation);
 }
@@ -100,8 +104,14 @@ export function createTerminalPaletteTheme(
     STATION_TEXT_CONTRAST_RATIO
   ) {
     // Whole-theme fallback prevents terminal surfaces from mixing with unrelated Station roles.
-    return nativeStationTheme;
+    return embeddedStationFallbackTheme;
   }
+  return createReadableTerminalPaletteTheme(observation);
+}
+
+function createReadableTerminalPaletteTheme(
+  observation: StationTerminalTheme,
+): StationTheme {
   const foreground = observation.defaultForeground;
   const background = observation.defaultBackground;
   const defaultForeground = terminalDefaultColor("foreground", foreground);
