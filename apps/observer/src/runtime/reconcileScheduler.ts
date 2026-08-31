@@ -2,7 +2,6 @@ import { Effect } from "@station/runtime";
 
 export type ReconcileScheduler = {
   request(reason: string): void;
-  /** Closes admission (later requests are no-ops), discards the queued backlog, and resolves after any in-flight flush completes. */
   shutdown(): Promise<void>;
 };
 
