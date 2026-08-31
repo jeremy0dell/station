@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +23,7 @@ import { runOwnedDisposableRuntime } from "../runtime-owner.mjs";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
+const stationRequire = createRequire(new URL("../../station/package.json", import.meta.url));
 const cellDriverPath = fileURLToPath(
   new URL("../../tests/performance/memory/cellDriver.mjs", import.meta.url),
 );
@@ -79,6 +81,11 @@ export async function checkMemoryProfilePrerequisites(options = {}) {
     } catch {
       missing.push(`built workspace output: ${path}`);
     }
+  }
+  try {
+    stationRequire.resolve("node-pty");
+  } catch {
+    missing.push("installed station workspace dependency: node-pty");
   }
   let buildIdentity;
   try {

@@ -3,10 +3,13 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { closeSync, createWriteStream, mkdirSync, openSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
 import { createObserverClient } from "../../../packages/protocol/dist/index.js";
 import { captureProcessEvidence, startProcessMetricSampler } from "./processEvidence.mjs";
+
+const stationRequire = createRequire(new URL("../../../station/package.json", import.meta.url));
 
 const ProcessSpecSchema = z
   .object({
@@ -272,7 +275,7 @@ async function spawnProfileProcess(spec, manifest, label) {
   if (spec.tty === true) {
     let pty;
     try {
-      pty = await import("node-pty");
+      pty = stationRequire("node-pty");
     } catch (error) {
       throw new Error("TTY profile cells require the installed node-pty dependency.", {
         cause: error,
