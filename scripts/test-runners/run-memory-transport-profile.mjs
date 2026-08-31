@@ -396,10 +396,8 @@ async function waitForPeerReady(peer) {
   let buffer = "";
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    const result = await Promise.race([
-      reader.read(),
-      delay(Math.max(1, deadline - Date.now())).then(() => ({ done: true, value: undefined })),
-    ]);
+    const result = await readWithTimeout(reader, Math.max(1, deadline - Date.now()));
+    if (result === undefined) break;
     if (result.done) break;
     buffer += decoder.decode(result.value, { stream: true });
     const newline = buffer.indexOf("\n");
@@ -417,11 +415,37 @@ async function waitForPeerReady(peer) {
 async function terminateOwnedPeer(peer) {
   if (peer.exitCode !== null) return;
   peer.kill("SIGTERM");
-  const exited = await Promise.race([peer.exited.then(() => true), delay(3_000).then(() => false)]);
+  const exited = await settlesWithin(peer.exited, 3_000);
   if (!exited) {
     peer.kill("SIGKILL");
     await peer.exited;
   }
+}
+
+function readWithTimeout(reader, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(undefined), timeoutMs);
+    reader.read().then(
+      (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function settlesWithin(promise, timeoutMs) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    promise.then(() => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
 }
 
 async function runTool(command, args, timeout) {
