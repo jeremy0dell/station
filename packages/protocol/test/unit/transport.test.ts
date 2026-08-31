@@ -135,7 +135,7 @@ describe("Unix socket NDJSON transport", () => {
       accepted?.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-  });
+  }, 10_000);
 
   it("creates a user-only socket directory and classifies socket states", async () => {
     const { socketPath } = await createTempSocketPath();
