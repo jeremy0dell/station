@@ -49,6 +49,32 @@ export const tmuxPrimaryPaneIdentityFormat = [
   "#{pane_id}",
 ].join("\t");
 
+const TmuxClientIdentitySchema = z
+  .object({
+    clientName: z.string().min(1),
+    clientPid: positiveIntegerTextSchema,
+  })
+  .strict();
+
+const TmuxClientSelectionSchema = TmuxClientIdentitySchema.extend({
+  sessionId: stableSessionIdSchema,
+  windowId: stableWindowIdSchema,
+  paneId: stablePaneIdSchema,
+}).strict();
+
+export type TmuxClientIdentity = z.infer<typeof TmuxClientIdentitySchema>;
+export type TmuxClientSelection = z.infer<typeof TmuxClientSelectionSchema>;
+
+export const tmuxClientIdentityFormat = ["#{client_name}", "#{client_pid}"].join("\t");
+
+export const tmuxClientSelectionFormat = [
+  "#{client_name}",
+  "#{client_pid}",
+  "#{session_id}",
+  "#{window_id}",
+  "#{pane_id}",
+].join("\t");
+
 export function parseTmuxPaneProof(stdout: string): TmuxPaneProof {
   const proofs = parseTmuxPaneProofLines(stdout);
   if (proofs.length !== 1) throw new Error("tmux returned ambiguous pane proof.");
@@ -76,6 +102,36 @@ export function parseTmuxPaneProofLines(stdout: string): TmuxPaneProof[] {
         openToken: fields[7],
         stationSessionId: fields[8],
       });
+    });
+}
+
+export function parseTmuxClientSelections(stdout: string): TmuxClientSelection[] {
+  if (stdout.trim().length === 0) return [];
+  return stdout
+    .split(/\r?\n/u)
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const fields = line.split("\t");
+      if (fields.length !== 5) throw new Error("tmux returned malformed client selection.");
+      return TmuxClientSelectionSchema.parse({
+        clientName: fields[0],
+        clientPid: fields[1],
+        sessionId: fields[2],
+        windowId: fields[3],
+        paneId: fields[4],
+      });
+    });
+}
+
+export function parseTmuxClientIdentities(stdout: string): TmuxClientIdentity[] {
+  if (stdout.trim().length === 0) return [];
+  return stdout
+    .split(/\r?\n/u)
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const fields = line.split("\t");
+      if (fields.length !== 2) throw new Error("tmux returned malformed client identity.");
+      return TmuxClientIdentitySchema.parse({ clientName: fields[0], clientPid: fields[1] });
     });
 }
 

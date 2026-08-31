@@ -102,7 +102,8 @@ Real lanes use installed tools, credentials, or terminal state and are excluded
 from `test:all`:
 
 - `bun run test:e2e:worktrunk:real` uses a real Worktrunk installation.
-- `STATION_REAL_TMUX=1 bun run test:tmux-popup:real` uses an isolated tmux server.
+- `STATION_REAL_TMUX=1 bun run test:tmux-popup:real` uses an isolated tmux server for
+  placement and popup behavior.
 - `bun run test:e2e:claude:real`, `test:e2e:codex:real`, and
   `test:e2e:cursor:real` use authenticated agent CLIs.
 - `bun run test:e2e:pi:real` and `test:e2e:opencode:real` exercise those real

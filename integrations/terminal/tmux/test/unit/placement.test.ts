@@ -1,7 +1,7 @@
 import type { OpenPlacedWorkspaceRequest, TerminalPlacementRequest } from "@station/contracts";
 import type { ExternalCommandInput } from "@station/runtime";
 import { describe, expect, it } from "vitest";
-import { tmuxPaneProofFormat } from "../../src/parse.js";
+import { tmuxClientSelectionFormat, tmuxPaneProofFormat } from "../../src/parse.js";
 import { TmuxPlacementService } from "../../src/placement/index.js";
 import { tmuxCommandResult } from "../support/commands.js";
 
@@ -26,6 +26,22 @@ const worktree = {
   state: "exists" as const,
   source: "worktrunk" as const,
   observedAt: now,
+};
+
+type FixtureClientSelection = {
+  clientName: string;
+  clientPid: number;
+  sessionId: string;
+  windowId: string;
+  paneId: string;
+};
+
+const sourceClient: FixtureClientSelection = {
+  clientName: "/dev/ttys001",
+  clientPid: 300,
+  sessionId: "$1",
+  windowId: "@1",
+  paneId: "%1",
 };
 
 describe("TmuxPlacementService", () => {
@@ -111,6 +127,132 @@ describe("TmuxPlacementService", () => {
     await expect(fixture.service.releasePlacedTarget(releaseRequest(opened))).resolves.toEqual({
       status: "already-absent",
     });
+    expect(fixture.calls.some((call) => tmuxArgs(call)[0] === "list-clients")).toBe(false);
+  });
+
+  it("restores exact attached clients after creating a missing workbench session", async () => {
+    const fixture = placementFixture({
+      workbenchAbsent: true,
+      clients: [sourceClient],
+      clientsAfterSessionCreate: [
+        { ...sourceClient, sessionId: "$2", windowId: "@2", paneId: "%2" },
+      ],
+    });
+
+    await expect(
+      openWorkspace(fixture, "ses_bootstrap", { intent: "detached" }),
+    ).resolves.toMatchObject({
+      placement: { intent: "detached", presentation: "detached" },
+    });
+
+    expect(
+      fixture.calls
+        .map((call) => tmuxArgs(call)[0])
+        .filter((command) => command === "list-clients"),
+    ).toHaveLength(4);
+    expect(
+      fixture.calls.filter((call) => tmuxArgs(call)[0] === "switch-client").map(tmuxArgs),
+    ).toEqual([
+      ["switch-client", "-E", "-Z", "-c", sourceClient.clientName, "-t", sourceClient.paneId],
+    ]);
+    expect(fixture.clients).toEqual([sourceClient]);
+  });
+
+  it("never restores exited, replaced, or newly attached client identities", async () => {
+    const replaced = { ...sourceClient, clientName: "/dev/ttys002", clientPid: 301 };
+    const exited = { ...sourceClient, clientName: "/dev/ttys003", clientPid: 302 };
+    const moved = { ...sourceClient, sessionId: "$2", windowId: "@2", paneId: "%2" };
+    const replacement = {
+      ...replaced,
+      clientPid: 999,
+      sessionId: "$2",
+      windowId: "@2",
+      paneId: "%2",
+    };
+    const newlyAttached = {
+      ...sourceClient,
+      clientName: "/dev/ttys004",
+      clientPid: 303,
+      sessionId: "$2",
+      windowId: "@2",
+      paneId: "%2",
+    };
+    const fixture = placementFixture({
+      workbenchAbsent: true,
+      clients: [sourceClient, replaced, exited],
+      clientsAfterSessionCreate: [moved, replacement, newlyAttached],
+    });
+
+    await openWorkspace(fixture, "ses_identity", { intent: "detached" });
+
+    expect(
+      fixture.calls.filter((call) => tmuxArgs(call)[0] === "switch-client").map(tmuxArgs),
+    ).toEqual([
+      ["switch-client", "-E", "-Z", "-c", sourceClient.clientName, "-t", sourceClient.paneId],
+    ]);
+    expect(fixture.clients).toEqual([sourceClient, replacement, newlyAttached]);
+  });
+
+  it("ignores an exact client that exits immediately before restoration", async () => {
+    const fixture = placementFixture({
+      workbenchAbsent: true,
+      clients: [sourceClient],
+      clientsAfterSessionCreate: [
+        { ...sourceClient, sessionId: "$2", windowId: "@2", paneId: "%2" },
+      ],
+      exitClientsBeforeRestore: true,
+    });
+
+    await expect(
+      openWorkspace(fixture, "ses_client_exit", { intent: "detached" }),
+    ).resolves.toMatchObject({ placement: { intent: "detached" } });
+    expect(fixture.calls.some((call) => tmuxArgs(call)[0] === "switch-client")).toBe(false);
+    expect(fixture.clients).toEqual([]);
+  });
+
+  it("treats exact server absence as an empty client baseline", async () => {
+    const fixture = placementFixture({ serverAbsent: true });
+
+    await expect(
+      openWorkspace(fixture, "ses_new_server", { intent: "detached" }),
+    ).resolves.toMatchObject({
+      placement: { intent: "detached", presentation: "detached" },
+    });
+    expect(fixture.calls.some((call) => tmuxArgs(call)[0] === "new-session")).toBe(true);
+    expect(fixture.calls.some((call) => tmuxArgs(call)[0] === "switch-client")).toBe(false);
+  });
+
+  it("fails before mutation when attached client selection cannot be inspected", async () => {
+    const fixture = placementFixture({ workbenchAbsent: true, failClientList: true });
+
+    await expectCode(
+      openWorkspace(fixture, "ses_client_list_failure", { intent: "detached" }),
+      "TERMINAL_OPEN_FAILED",
+    );
+    expect(fixture.calls.some((call) => tmuxArgs(call)[0] === "new-session")).toBe(false);
+  });
+
+  it("reports uncertain cleanup when client restoration cannot converge", async () => {
+    const fixture = placementFixture({
+      workbenchAbsent: true,
+      clients: [sourceClient],
+      clientsAfterSessionCreate: [
+        { ...sourceClient, sessionId: "$2", windowId: "@2", paneId: "%2" },
+      ],
+      restoreClients: false,
+      restoreClientsAfterRollback: false,
+    });
+
+    await expectCode(
+      openWorkspace(fixture, "ses_restore_failure", { intent: "detached" }),
+      "TERMINAL_CLEANUP_UNCERTAIN",
+    );
+    expect(
+      fixture.calls.some(
+        (call) =>
+          tmuxArgs(call)[0] === "if-shell" && tmuxArgs(call).join(" ").includes("kill-window"),
+      ),
+    ).toBe(true);
   });
 
   it("rejects endpoint mismatch, public-field tampering, and unqualified cleanup authority", async () => {
@@ -224,6 +366,14 @@ function placementFixture(
     failOpenAfterMutation?: boolean;
     omitStationSessionId?: boolean;
     mutateReleaseBinding?: boolean;
+    workbenchAbsent?: boolean;
+    serverAbsent?: boolean;
+    failClientList?: boolean;
+    clients?: FixtureClientSelection[];
+    clientsAfterSessionCreate?: FixtureClientSelection[];
+    exitClientsBeforeRestore?: boolean;
+    restoreClients?: boolean;
+    restoreClientsAfterRollback?: boolean;
   } = {},
 ) {
   const calls: ExternalCommandInput[] = [];
@@ -238,6 +388,15 @@ function placementFixture(
   let binding = 0;
   let placed: string | undefined;
   let mutateReleaseBinding = options.mutateReleaseBinding === true;
+  let serverExists = options.serverAbsent !== true;
+  let workbenchExists = serverExists && options.workbenchAbsent !== true;
+  let createdWorkbenchSession = false;
+  let clientListCount = 0;
+  const initialClients = options.clients?.map((client) => ({ ...client })) ?? [];
+  const clients = initialClients.map((client) => ({ ...client }));
+  const replaceClients = (next: readonly FixtureClientSelection[]) => {
+    clients.splice(0, clients.length, ...next.map((client) => ({ ...client })));
+  };
   const service = new TmuxPlacementService({
     config: { workbenchSession: "station", workbenchSocketPath: socketPath },
     clock: { now: () => currentNow },
@@ -257,8 +416,60 @@ function placementFixture(
       if (args[0] === "display-message" && args.at(-1) === tmuxPaneProofFormat) {
         return tmuxCommandResult(input, sourceProof);
       }
-      if (args[0] === "has-session") return tmuxCommandResult(input, "");
       if (
+        args[0] === "display-message" &&
+        args.includes("-c") &&
+        args.at(-1) === tmuxClientSelectionFormat
+      ) {
+        const clientName = args[args.indexOf("-c") + 1];
+        const selection = clients.find((client) => client.clientName === clientName);
+        if (selection === undefined) {
+          throw Object.assign(new Error("tmux failed"), {
+            code: 1,
+            stderr: `can't find client: ${clientName}`,
+          });
+        }
+        return tmuxCommandResult(input, serializeClientSelection(selection));
+      }
+      if (args[0] === "has-session") {
+        if (!serverExists) {
+          throw Object.assign(new Error("tmux failed"), {
+            code: 1,
+            stderr: `no server running on ${socketPath}`,
+          });
+        }
+        if (!workbenchExists) {
+          throw Object.assign(new Error("tmux failed"), {
+            code: 1,
+            stderr: "can't find session: station",
+          });
+        }
+        return tmuxCommandResult(input, "");
+      }
+      if (args[0] === "list-clients") {
+        clientListCount += 1;
+        if (!serverExists) {
+          throw Object.assign(new Error("tmux failed"), {
+            code: 1,
+            stderr: `no server running on ${socketPath}`,
+          });
+        }
+        if (options.failClientList === true) {
+          throw Object.assign(new Error("tmux failed"), {
+            code: 1,
+            stderr: "client inspection failed",
+          });
+        }
+        if (options.exitClientsBeforeRestore === true && clientListCount === 3) {
+          replaceClients([]);
+        }
+        return tmuxCommandResult(
+          input,
+          clients.map((client) => `${client.clientName}\t${client.clientPid}`).join("\n"),
+        );
+      }
+      if (
+        args[0] === "new-session" ||
         args[0] === "new-window" ||
         (args[0] === "if-shell" && args.join(" ").includes("new-window"))
       ) {
@@ -269,17 +480,25 @@ function placementFixture(
         const serialized = args.join(" ");
         const sibling = serialized.includes("$1:");
         const token =
-          args[0] === "new-window"
+          args[0] !== "if-shell"
             ? (args[args.indexOf("@station.open_token") + 1] ?? "")
             : (/@station\.open_token" "([^"]+)"/u.exec(serialized)?.[1] ?? "");
         const stationSessionId =
-          args[0] === "new-window"
+          args[0] !== "if-shell"
             ? (args[args.indexOf("@station.session_id") + 1] ?? "")
             : (/@station\.session_id" "([^"]+)"/u.exec(serialized)?.[1] ?? "");
         const sessionId = sibling ? "$1" : "$2";
         const sessionName = sibling ? "caller" : "station";
         const sessionBinding = options.omitStationSessionId === true ? "" : stationSessionId;
         placed = `${socketPath}\t10\t${sessionId}\t${sessionName}\t@2\t%2\t200\t${token}\t${sessionBinding}`;
+        if (args[0] === "new-session") {
+          serverExists = true;
+          workbenchExists = true;
+          createdWorkbenchSession = true;
+          if (options.clientsAfterSessionCreate !== undefined) {
+            replaceClients(options.clientsAfterSessionCreate);
+          }
+        }
         if (options.failOpenAfterMutation === true) {
           throw {
             tag: "TimeoutError",
@@ -288,6 +507,24 @@ function placementFixture(
           };
         }
         return tmuxCommandResult(input, placed);
+      }
+      if (args[0] === "switch-client") {
+        if (
+          options.restoreClients !== false ||
+          (placed === undefined && options.restoreClientsAfterRollback !== false)
+        ) {
+          const clientName = args[args.indexOf("-c") + 1];
+          const paneId = args[args.indexOf("-t") + 1];
+          const expected = initialClients.find(
+            (client) => client.clientName === clientName && client.paneId === paneId,
+          );
+          const index = clients.findIndex(
+            (client) =>
+              client.clientName === clientName && client.clientPid === expected?.clientPid,
+          );
+          if (expected !== undefined && index >= 0) clients[index] = { ...expected };
+        }
+        return tmuxCommandResult(input, "");
       }
       if (args[0] === "list-panes") {
         return tmuxCommandResult(
@@ -305,6 +542,8 @@ function placementFixture(
             return tmuxCommandResult(input, "__station_release_guard_rejected__");
           }
           placed = undefined;
+          if (createdWorkbenchSession) workbenchExists = false;
+          if (options.restoreClientsAfterRollback !== false) replaceClients(initialClients);
           return tmuxCommandResult(input, "");
         }
         placed = undefined;
@@ -317,6 +556,7 @@ function placementFixture(
   return {
     service,
     calls,
+    clients,
     processStartTokens,
     advance: (milliseconds: number) => {
       currentNow = new Date(currentNow.getTime() + milliseconds);
@@ -325,6 +565,16 @@ function placementFixture(
       rejectOpenGuard = true;
     },
   };
+}
+
+function serializeClientSelection(selection: FixtureClientSelection): string {
+  return [
+    selection.clientName,
+    String(selection.clientPid),
+    selection.sessionId,
+    selection.windowId,
+    selection.paneId,
+  ].join("\t");
 }
 
 async function placementSource(fixture: ReturnType<typeof placementFixture>) {
