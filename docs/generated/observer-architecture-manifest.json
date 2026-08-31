@@ -18758,7 +18758,7 @@
       "declaration": "createObserverClient",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Presents Observer operations to clients through validated NDJSON requests.",
+      "purpose": "Presents Observer operations through validated NDJSON requests and surfaces bounded transport overload as a retryable connection failure.",
       "dependencies": []
     },
     {
@@ -18774,7 +18774,7 @@
       "declaration": "startProtocolServer",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Exposes Observer operations through validated NDJSON requests on a Unix socket.",
+      "purpose": "Exposes Observer operations through validated NDJSON requests and disconnects subscriptions that exceed the transport's bounded delivery capacity.",
       "dependencies": [
         {
           "path": "packages/contracts/src/observer.ts",
