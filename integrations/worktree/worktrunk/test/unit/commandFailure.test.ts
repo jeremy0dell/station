@@ -4,7 +4,11 @@ import {
   safeErrorFromUnknown,
 } from "@station/runtime";
 import { describe, expect, it } from "vitest";
-import { worktrunkCommandFailure } from "../../src/commandFailure.js";
+import {
+  isWorktrunkConcurrentCreateRegistryFailure,
+  worktrunkCommandFailure,
+} from "../../src/commandFailure.js";
+import { WorktrunkProviderError } from "../../src/errors.js";
 
 const fallback = {
   code: "WORKTRUNK_COMMAND_FAILED" as const,
@@ -145,4 +149,71 @@ describe("Worktrunk command failure mapping", () => {
       message: "Worktrunk command was cancelled.",
     });
   });
+
+  it("recognizes only the nested Git sibling-registration create race", () => {
+    for (const missingFile of ["No such file or directory", "Undefined error: 0"]) {
+      const race = registryCreateFailure([
+        "Failed to create worktree for feature from base main",
+        `fatal: failed to read .git/worktrees/sibling/commondir: ${missingFile}`,
+        "Failed command, exit code 128:",
+        "git worktree add -b feature -- /tmp/project/feature main",
+      ]);
+      expect(isWorktrunkConcurrentCreateRegistryFailure(race, "feature")).toBe(true);
+    }
+
+    for (const ordinaryFailure of [
+      "Permission denied",
+      "Input/output error",
+      "Operation not permitted",
+    ]) {
+      const failure = registryCreateFailure([
+        "Failed to create worktree for feature from base main",
+        `fatal: failed to read .git/worktrees/sibling/commondir: ${ordinaryFailure}`,
+        "Failed command, exit code 128:",
+        "git worktree add -b feature -- /tmp/project/feature main",
+      ]);
+      expect(isWorktrunkConcurrentCreateRegistryFailure(failure, "feature")).toBe(false);
+    }
+
+    const ownRegistration = registryCreateFailure([
+      "Failed to create worktree for feature from base main",
+      "fatal: failed to read .git/worktrees/feature/commondir: No such file or directory",
+      "Failed command, exit code 128:",
+      "git worktree add -b feature -- /tmp/project/feature main",
+    ]);
+    expect(isWorktrunkConcurrentCreateRegistryFailure(ownRegistration, "feature")).toBe(false);
+
+    const mismatchedCreate = registryCreateFailure([
+      "Failed to create worktree for other from base main",
+      "fatal: failed to read .git/worktrees/sibling/commondir: No such file or directory",
+      "Failed command, exit code 128:",
+      "git worktree add -b other -- /tmp/project/other main",
+    ]);
+    expect(isWorktrunkConcurrentCreateRegistryFailure(mismatchedCreate, "feature")).toBe(false);
+  });
 });
+
+function registryCreateFailure(stderr: string[]): WorktrunkProviderError {
+  const failure = mapFailure(
+    safeErrorFromUnknown(
+      externalCommandErrorFromUnknown(
+        Object.assign(new Error("wt failed"), { code: 128, stderr: stderr.join("\n") }),
+        {
+          command: "wt",
+          args: ["switch", "--create", "feature"],
+          cwd: "/tmp/project",
+        },
+      ),
+      {
+        tag: "WorktreeProviderError",
+        code: fallback.code,
+        message: fallback.message,
+        provider: "worktrunk",
+      },
+    ),
+  );
+  if (!(failure instanceof WorktrunkProviderError)) {
+    throw new Error("Expected a Worktrunk provider failure.");
+  }
+  return failure;
+}

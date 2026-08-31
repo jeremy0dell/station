@@ -1189,6 +1189,61 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("keeps a cross-command branch blocked until failed-session rollback settles", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const createWorktree = vi.spyOn(worktree, "createWorktree");
+    const removeWorktree = worktree.removeWorktree.bind(worktree);
+    const rollbackStarted = deferred<void>();
+    const releaseRollback = deferred<void>();
+    vi.spyOn(worktree, "removeWorktree").mockImplementation(async (request) => {
+      rollbackStarted.resolve();
+      await releaseRollback.promise;
+      return removeWorktree(request);
+    });
+    const terminal = new FakeTerminalProvider({
+      now,
+      failures: {
+        launchProcess: {
+          tag: "TerminalProviderError",
+          code: "FAKE_TERMINAL_LAUNCH_FAILED",
+          message: "The fake terminal provider could not launch the process.",
+          provider: "fake-terminal",
+        },
+      },
+    });
+    const fixture = createFixture({ worktree, terminal, sessionIds: ["ses_rollback_branch"] });
+
+    const failed = await fixture.queue.dispatch({
+      type: "session.create",
+      payload: {
+        projectId: "web",
+        branch: "rollback-branch",
+        harness: { provider: "fake-harness" },
+        terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
+      },
+    });
+    await rollbackStarted.promise;
+    const following = await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: { projectId: "web", branch: "rollback-branch" },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createWorktree).toHaveBeenCalledTimes(1);
+    releaseRollback.resolve();
+    await fixture.queue.drain();
+    expect(createWorktree).toHaveBeenCalledTimes(2);
+    await expect(fixture.persistence.getCommand(failed.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "FAKE_TERMINAL_LAUNCH_FAILED" },
+    });
+    await expect(fixture.persistence.getCommand(following.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    fixture.sqlite.close();
+  });
+
   it("does not focus session.create after launch", async () => {
     const terminal = new FakeTerminalProvider({ now });
     const harness = new FakeHarnessProvider({
@@ -3567,6 +3622,22 @@ function persistentManagedTerminal(): ManagedTerminalLifecycle {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value?: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
+
+async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (await predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("Timed out waiting for predicate.");
+}
+
 const config: StationConfig = {
   schemaVersion: 1,
   workspace: DEFAULT_WORKSPACE_CONFIG,
@@ -3644,6 +3715,54 @@ function healthyHarnessHealth(harness: HarnessProvider): ProviderHealth {
 }
 
 describe("worktree.create command", () => {
+  it("admits four distinct branches to the provider and queues project overflow", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const originalCreate = worktree.createWorktree.bind(worktree);
+    const releases = Array.from({ length: 6 }, () => deferred<void>());
+    const starts: number[] = [];
+    let active = 0;
+    let maximumActive = 0;
+    vi.spyOn(worktree, "createWorktree").mockImplementation(async (request) => {
+      const index = Number(request.branch.replace("bounded-", ""));
+      starts.push(index);
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      try {
+        await releases[index]?.promise;
+        return await originalCreate(request);
+      } finally {
+        active -= 1;
+      }
+    });
+    const fixture = createFixture({ worktree });
+
+    await Promise.all(
+      releases.map((_release, index) =>
+        fixture.queue.dispatch({
+          type: "worktree.create",
+          payload: {
+            projectId: "web",
+            branch: `bounded-${index}`,
+            launchHarness: "fake-harness",
+          },
+        }),
+      ),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(starts).toEqual([0, 1, 2, 3]);
+    expect(maximumActive).toBe(4);
+
+    releases[0]?.resolve();
+    await waitFor(() => starts.length === 5);
+    expect(starts).toEqual([0, 1, 2, 3, 4]);
+
+    for (const release of releases) release.resolve();
+    await fixture.queue.drain();
+    expect(starts).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(maximumActive).toBe(4);
+    fixture.sqlite.close();
+  });
+
   it("publishes a committed launch-bound create without scanning providers", async () => {
     const worktree = new FakeWorktreeProvider({ now });
     const listWorktrees = vi.spyOn(worktree, "listWorktrees");

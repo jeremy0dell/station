@@ -158,6 +158,38 @@ describe("TmuxPlacementService", () => {
     expect(fixture.clients).toEqual([sourceClient]);
   });
 
+  it("serializes concurrent detached opens through missing workbench creation", async () => {
+    const firstMutation = Promise.withResolvers<void>();
+    const releaseFirstMutation = Promise.withResolvers<void>();
+    let mutationCount = 0;
+    const fixture = placementFixture({
+      workbenchAbsent: true,
+      beforeOpenMutation: async () => {
+        mutationCount += 1;
+        if (mutationCount !== 1) return;
+        firstMutation.resolve();
+        await releaseFirstMutation.promise;
+      },
+    });
+
+    const first = openWorkspace(fixture, "ses_cold_first", { intent: "detached" });
+    await firstMutation.promise;
+    const second = openWorkspace(fixture, "ses_cold_second", { intent: "detached" });
+    await new Promise((resolve) => setImmediate(resolve));
+    const coldSessionChecks = fixture.calls.filter(
+      (call) => tmuxArgs(call)[0] === "has-session",
+    ).length;
+    releaseFirstMutation.resolve();
+
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(coldSessionChecks).toBe(1);
+    expect(
+      fixture.calls
+        .map((call) => tmuxArgs(call)[0])
+        .filter((command) => command === "new-session" || command === "new-window"),
+    ).toEqual(["new-session", "new-window"]);
+  });
+
   it("never restores exited, replaced, or newly attached client identities", async () => {
     const replaced = { ...sourceClient, clientName: "/dev/ttys002", clientPid: 301 };
     const exited = { ...sourceClient, clientName: "/dev/ttys003", clientPid: 302 };
@@ -374,6 +406,7 @@ function placementFixture(
     exitClientsBeforeRestore?: boolean;
     restoreClients?: boolean;
     restoreClientsAfterRollback?: boolean;
+    beforeOpenMutation?: () => Promise<void>;
   } = {},
 ) {
   const calls: ExternalCommandInput[] = [];
@@ -473,6 +506,7 @@ function placementFixture(
         args[0] === "new-window" ||
         (args[0] === "if-shell" && args.join(" ").includes("new-window"))
       ) {
+        await options.beforeOpenMutation?.();
         if (rejectOpenGuard && args[0] === "if-shell") {
           rejectOpenGuard = false;
           return tmuxCommandResult(input, "__station_open_guard_rejected__");

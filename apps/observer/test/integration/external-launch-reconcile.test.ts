@@ -32,6 +32,10 @@ import {
   providerIngressSpoolDir,
 } from "../../src/internal";
 import type { StationLogger } from "../../src/stationLogger";
+import {
+  createWorktreeCreateCoordinator,
+  type WorktreeCreateCoordinator,
+} from "../../src/worktreeCreateCoordinator";
 import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -62,6 +66,93 @@ const config: StationConfig = {
 // spooled during an agent launch was never flushed. Prove the launch-triggered
 // reconcile drains the spool, the same as api.reconcile does.
 describe("observer external-launch reconcile", () => {
+  it("invalidates an idle edge when a create starts before verification flush", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-idle-edge-"));
+    const worktreeCreates = createWorktreeCreateCoordinator();
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      worktreeCreates,
+      hookReconcileDebounceMs: 20,
+      interactiveReconcileDebounceMs: 20,
+    });
+    await fixture.api.reconcile("seed-idle-edge");
+    const scansBeforeLaunch = fixture.worktree.listCalls;
+
+    await fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+    });
+    const releaseCreate = deferred<void>();
+    const create = worktreeCreates.run(
+      "web",
+      "later-create",
+      new AbortController().signal,
+      async (runProviderCreate) => {
+        await runProviderCreate(async () => undefined);
+        await releaseCreate.promise;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(fixture.worktree.listCalls).toBe(scansBeforeLaunch);
+
+    releaseCreate.resolve();
+    await create;
+    await waitFor(() => fixture.worktree.listCalls > scansBeforeLaunch);
+    expect(fixture.worktree.listCalls - scansBeforeLaunch).toBe(1);
+    fixture.sqlite.close();
+  });
+
+  it.each([
+    1, 3, 5, 20,
+  ])("coalesces a %i-launch burst into one create-quiescent verification wave", async (burstSize) => {
+    const stateDir = await mkdtemp(join(tmpdir(), `station-observer-ext-burst-${burstSize}-`));
+    const worktreeCreates = createWorktreeCreateCoordinator();
+    const worktrees = Array.from({ length: burstSize }, (_, index) =>
+      createFakeWorktree({
+        id: `wt_web_burst_${index}`,
+        projectId: "web",
+        branch: `burst-${index}`,
+        path: `/tmp/station/web/burst-${index}`,
+        now,
+      }),
+    );
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      worktreeCreates,
+      hookReconcileDebounceMs: 0,
+      interactiveReconcileDebounceMs: 0,
+      worktrees,
+    });
+    await fixture.api.reconcile("seed-burst");
+    const scansBeforeLaunch = fixture.worktree.listCalls;
+    const releaseCreate = deferred<void>();
+    const create = worktreeCreates.run(
+      "web",
+      "burst-held-open",
+      new AbortController().signal,
+      async (runProviderCreate) => {
+        await runProviderCreate(async () => undefined);
+        await releaseCreate.promise;
+      },
+    );
+
+    const launches = await Promise.all(
+      worktrees.map((worktree) =>
+        fixture.api.prepareExternalLaunch({
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+        }),
+      ),
+    );
+    expect(launches.every((launch) => launch.kind === "prepared")).toBe(true);
+    expect(fixture.worktree.listCalls).toBe(scansBeforeLaunch);
+
+    releaseCreate.resolve();
+    await create;
+    await waitFor(() => fixture.worktree.listCalls > scansBeforeLaunch);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(fixture.worktree.listCalls - scansBeforeLaunch).toBe(1);
+    fixture.sqlite.close();
+  });
+
   it("publishes the prepared launch before verification and recovers the same state on restart", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
     const fixture = createFixture(providerIngressSpoolDir(stateDir));
@@ -636,6 +727,8 @@ function createFixture(
     logger?: StationLogger;
     config?: StationConfig;
     hookReconcileDebounceMs?: number;
+    interactiveReconcileDebounceMs?: number;
+    worktreeCreates?: WorktreeCreateCoordinator;
     worktrees?: WorktreeObservation[];
   } = {},
 ) {
@@ -674,6 +767,7 @@ function createFixture(
     persistence,
     persistenceHealth: persistence,
     commandQueue: queue,
+    ...(options.worktreeCreates === undefined ? {} : { worktreeCreates: options.worktreeCreates }),
     eventBus,
     diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
     hookSpoolDir: spoolDir,
@@ -682,6 +776,9 @@ function createFixture(
     ...(options.hookReconcileDebounceMs === undefined
       ? {}
       : { hookReconcileDebounceMs: options.hookReconcileDebounceMs }),
+    ...(options.interactiveReconcileDebounceMs === undefined
+      ? {}
+      : { interactiveReconcileDebounceMs: options.interactiveReconcileDebounceMs }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
   return { api, harness, persistence, sqlite, worktree, providers, core, clock, fixtureConfig };
@@ -742,4 +839,12 @@ async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<voi
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("Timed out waiting for predicate.");
+}
+
+function deferred<T>() {
+  let resolve!: (value?: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
 }

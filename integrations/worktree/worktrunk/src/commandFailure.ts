@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import type {
   DiagnosticDetail,
@@ -77,6 +78,46 @@ export function worktrunkCommandFailure(
     diagnosticDetails,
     ...(hint === undefined ? {} : { hint }),
   });
+}
+
+export function isWorktrunkConcurrentCreateRegistryFailure(
+  error: WorktrunkProviderError,
+  requestedBranch: string,
+): boolean {
+  for (const detail of error.diagnosticDetails ?? []) {
+    if (detail.type !== "external_command" || detail.operation !== "provider.worktrunk.switch") {
+      continue;
+    }
+    const diagnostic = stripVTControlCharacters(
+      [detail.stdoutSnippet, detail.stderrSnippet].filter((part) => part !== undefined).join("\n"),
+    );
+    const escapedBranch = escapeRegExp(requestedBranch);
+    const createWrapper = new RegExp(
+      `^Failed to create worktree for ${escapedBranch}(?: from base \\S+)?$`,
+      "im",
+    );
+    const nestedCreate = new RegExp(
+      `^git worktree add\\b[^\\r\\n]*\\s-b\\s+${escapedBranch}\\s+--\\s+(\\S+)`,
+      "im",
+    ).exec(diagnostic);
+    const missingCommonDir =
+      /^fatal: failed to read .*\.git[\\/]worktrees[\\/]([^\\/\r\n]+)[\\/]commondir: (?:No such file or directory|Undefined error: 0)$/im.exec(
+        diagnostic,
+      );
+    if (
+      createWrapper.test(diagnostic) &&
+      nestedCreate !== null &&
+      missingCommonDir !== null &&
+      missingCommonDir[1] !== basename(nestedCreate[1] ?? "")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function enrichedCommandDiagnostic(

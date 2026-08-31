@@ -4,6 +4,10 @@ import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
+import {
+  createWorktreeCreateCoordinator,
+  type WorktreeCreateCoordinator,
+} from "../../worktreeCreateCoordinator.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandResultHandler } from "../queue.js";
@@ -25,6 +29,7 @@ export type WorktreeForkHandlerOptions = {
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   logger?: StationLogger | undefined;
+  worktreeCreates?: WorktreeCreateCoordinator | undefined;
 };
 
 /**
@@ -34,11 +39,13 @@ export type WorktreeForkHandlerOptions = {
  * working tree (when copyDirty), validating any source-Group inheritance intent while minting no
  * session and launching no terminal so Station can host the inherited harness itself. A selected
  * launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a
- * read-only snapshot. Success returns the exact project and forked-worktree identities.
+ * read-only snapshot. Shared branch ownership spans the completion reconcile while provider-call
+ * capacity spans only creation. Success returns the exact project and forked-worktree identities.
  */
 export function createWorktreeForkHandler(
   options: WorktreeForkHandlerOptions,
 ): CommandResultHandler<"worktree.fork"> {
+  const worktreeCreates = options.worktreeCreates ?? createWorktreeCreateCoordinator();
   return async (context) => {
     assertCommandType(context, "worktree.fork");
     throwIfAborted(context.signal);
@@ -82,34 +89,38 @@ export function createWorktreeForkHandler(
       request.seedFrom = { path: sourceRow.path, worktreeId: sourceRow.id };
     }
 
-    const worktree = await runProviderMutation(
-      {
-        clock: options.clock,
-        signal: context.signal,
-        trace: context.trace,
-        operation: `provider.${options.providers.worktree.id}.createWorktree`,
-        fallback: {
-          tag: "WorktreeProviderError",
-          code: "WORKTREE_CREATE_FAILED",
-          message: "The worktree provider failed to create the forked worktree.",
-          provider: options.providers.worktree.id,
-        },
-      },
-      () => options.providers.worktree.createWorktree(request),
-    );
-    throwIfAborted(context.signal);
+    return worktreeCreates.run(project.id, payload.branch, context.signal, async (create) => {
+      const worktree = await create(() =>
+        runProviderMutation(
+          {
+            clock: options.clock,
+            signal: context.signal,
+            trace: context.trace,
+            operation: `provider.${options.providers.worktree.id}.createWorktree`,
+            fallback: {
+              tag: "WorktreeProviderError",
+              code: "WORKTREE_CREATE_FAILED",
+              message: "The worktree provider failed to create the forked worktree.",
+              provider: options.providers.worktree.id,
+            },
+          },
+          () => options.providers.worktree.createWorktree(request),
+        ),
+      );
+      throwIfAborted(context.signal);
 
-    await reconcileAndPublish({
-      core: options.core,
-      eventBus: options.eventBus,
-      clock: options.clock,
-      reason: "command:worktree.fork",
-      trace: context.trace,
+      await reconcileAndPublish({
+        core: options.core,
+        eventBus: options.eventBus,
+        clock: options.clock,
+        reason: "command:worktree.fork",
+        trace: context.trace,
+      });
+      return {
+        type: "worktree.fork",
+        projectId: project.id,
+        worktreeId: worktree.id,
+      };
     });
-    return {
-      type: "worktree.fork",
-      projectId: project.id,
-      worktreeId: worktree.id,
-    };
   };
 }
