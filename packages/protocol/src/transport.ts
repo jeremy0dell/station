@@ -588,6 +588,12 @@ function createNdjsonState(options: NdjsonStateOptions) {
     metrics.inboundHighWaterDepth = Math.max(metrics.inboundHighWaterDepth, queue.length);
     metrics.inboundHighWaterBytes = Math.max(metrics.inboundHighWaterBytes, queuedBytes);
   };
+  const clearQueued = () => {
+    buffer = "";
+    queue = [];
+    queuedBytes = 0;
+    updateDepth();
+  };
   const finish = (error?: Error) => {
     if (done) return;
     done = true;
@@ -600,16 +606,13 @@ function createNdjsonState(options: NdjsonStateOptions) {
     if (done) return;
     metrics.overflowCount += 1;
     metrics.lastOverflowReason = reason;
-    buffer = "";
-    queue = [];
-    queuedBytes = 0;
-    updateDepth();
+    clearQueued();
     streamError = transportOverflowError(reason);
     finish(streamError);
     options.destroy();
   };
   const ingest = (chunk: string) => {
-    if (done) return;
+    if (done || closeRequested) return;
     buffer += chunk;
     for (;;) {
       const newline = buffer.indexOf("\n");
@@ -642,6 +645,7 @@ function createNdjsonState(options: NdjsonStateOptions) {
         wake();
       } catch (error) {
         streamError = error instanceof Error ? error : new Error("Invalid NDJSON frame.");
+        clearQueued();
         finish(streamError);
         options.destroy();
         return;
@@ -651,6 +655,7 @@ function createNdjsonState(options: NdjsonStateOptions) {
   const close = () => {
     if (closeRequested) return;
     closeRequested = true;
+    clearQueued();
     options.close();
   };
   const messages = (): AsyncIterable<unknown> => ({

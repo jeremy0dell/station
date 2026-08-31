@@ -83,14 +83,24 @@ describe("Unix socket NDJSON transport", () => {
 
   it("closes the connection when its message iterator is returned", async () => {
     const { socketPath } = await createTempSocketPath();
-    const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: (connection) => {
+        connection.send({ queued: true });
+      },
+    });
     const client = await connectUnixSocket(socketPath);
     const iterator = client.messages()[Symbol.asyncIterator]();
+    await waitFor(() => client.diagnostics().inboundQueueDepth === 1);
 
     await iterator.return?.();
 
     await expect(settlesWithin(client.closed, 500)).resolves.toBe(true);
-    expect(client.diagnostics().closeCount).toBe(1);
+    expect(client.diagnostics()).toMatchObject({
+      inboundQueueDepth: 0,
+      inboundQueueBytes: 0,
+      closeCount: 1,
+    });
     await server.close();
   });
 
