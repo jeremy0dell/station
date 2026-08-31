@@ -7,6 +7,7 @@ import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { toSafeError } from "@station/client";
 import { createDashboardRuntime } from "@station/dashboard-core/runtime";
+import { Profiler } from "react";
 import {
   loadStationTuiConfig,
   startWidgetConfigWrites,
@@ -22,6 +23,13 @@ import { CsiCommand } from "../terminal/protocol/identifiers.js";
 import { VtPrefix } from "../terminal/protocol/syntax.js";
 import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../client/createStationClient.js";
+import { devRenderProfilePath } from "../host/devPaths.js";
+import {
+  createRenderProfilerSession,
+  readRenderProfileEnabled,
+  resolveRenderProfilePath,
+  type RenderProfilerSession,
+} from "../profiling/renderProfiler.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { stationHelpEntryOrder } from "../station/helpEntries.js";
 import { createDashboardScrollController } from "../station/view/layout/scroll/dashboardScrollController.js";
@@ -49,7 +57,7 @@ import {
   type DashboardRendererRuntimeLifecycle,
 } from "./runtimeLifecycle.js";
 
-type DashboardRenderer = Pick<CliRenderer, "destroy" | "getSelection">;
+type DashboardRenderer = Pick<CliRenderer, "destroy" | "getSelection" | "getStats">;
 type DashboardHotRoot = { unmount(): void };
 type DashboardRendererHotSlots = StationHotDisposalSlots & {
   __stationDashboardHotRenderer?: DashboardRenderer;
@@ -60,7 +68,8 @@ type DashboardRendererHotSlots = StationHotDisposalSlots & {
  * Callable entry for the interactive observer-backed dashboard without native Station panes.
  * Configured widgets seed the live store and share the config-write subscription;
  * disposal releases renderer ownership synchronously, then drains dashboard work and
- * widget durability before normal process exit.
+ * widget durability before normal process exit. Optional render profiling is owned
+ * by the same renderer lifecycle.
  */
 export async function runDashboardMain(): Promise<void> {
   const env = process.env;
@@ -154,10 +163,12 @@ export async function runDashboardMain(): Promise<void> {
 
   let renderer: DashboardRenderer | undefined;
   let root: DashboardHotRoot | undefined;
+  let renderProfiler: RenderProfilerSession | undefined;
   let themeController: StationThemeController | undefined;
   const onProcessExit = (): void => runtimeLifecycle?.disposeForProcessExit();
   runtimeLifecycle = createDashboardRendererRuntimeLifecycle({
     releaseRendererResources: [
+      () => renderProfiler?.dispose(),
       () => root?.unmount(),
       () => themeController?.dispose(),
       () => destroyDashboardRenderer(renderer),
@@ -187,6 +198,7 @@ export async function runDashboardMain(): Promise<void> {
   // tmux/tmux@ad6832e, which removes the popup menu.
   const popupRenderer = env.STATION_TUI_POPUP === "1";
   const enableMouseMovement = !popupRenderer;
+  const renderProfileEnabled = readRenderProfileEnabled(env.STATION_PROFILE);
 
   try {
     const copySelectedText = createOpenTuiSelectionCopyHandler(() => renderer, clipboardEffects);
@@ -199,8 +211,15 @@ export async function runDashboardMain(): Promise<void> {
         createDashboardSequenceHandler(dashboardRuntime),
       ],
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
+      ...(renderProfileEnabled ? { gatherStats: true } : {}),
     });
     renderer = nextRenderer;
+    renderProfiler = renderProfileEnabled
+      ? createRenderProfilerSession(
+          resolveRenderProfilePath(env.STATION_RENDER_PROFILE_PATH, devRenderProfilePath()),
+          nextRenderer,
+        )
+      : undefined;
     const nextThemeController = createStationThemeController(nextRenderer);
     themeController = nextThemeController;
     // The controller begins on the complete fallback; palette I/O must not block the first frame.
@@ -223,14 +242,23 @@ export async function runDashboardMain(): Promise<void> {
     });
     const nextRoot = createRoot(nextRenderer);
     root = nextRoot;
-    nextRoot.render(
+    const dashboardApp = (
       <StandaloneDashboardApp
         runtime={dashboardInput}
         openUrl={openExternalUrl}
         onCopyNotice={copyNoticeText}
         hoverEnabled={!popupRenderer}
         themeSource={nextThemeController}
-      />,
+      />
+    );
+    nextRoot.render(
+      renderProfiler === undefined ? (
+        dashboardApp
+      ) : (
+        <Profiler id="dashboard" onRender={renderProfiler.onRender}>
+          {dashboardApp}
+        </Profiler>
+      ),
     );
     process.on("exit", onProcessExit);
 

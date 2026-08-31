@@ -26,9 +26,9 @@ Station renderer changes also require the renderer/PTY lane before the repositor
 gate:
 
 ```sh
-pnpm --dir station typecheck
-pnpm --dir station test
-pnpm test:ci:station
+bun run --cwd station typecheck
+bun run --cwd station test
+bun run test:ci:station
 ```
 
 `test:all` is the deterministic repository gate. It builds, typechecks, lints,
@@ -44,6 +44,33 @@ bun run test:e2e:codex-hook-reconciliation
 
 The pre-push hook is intentionally lint-only. It does not replace `test:all` or
 the focused gate required by the change.
+
+## Memory profiling (explicit opt-in)
+
+Issue #749's deterministic owner-profile matrix is intentionally excluded from
+the normal gates because it runs four long-lived Station roles under exact Bun
+1.4.0 on macOS. Check prerequisites without launching Station:
+
+```sh
+bun run profile:memory --check --bun-1-4-0 /absolute/path/to/bun-1.4.0
+```
+
+After building workspace packages from one clean revision, run the matrix into
+an explicit evidence directory. It owns every fixture, socket, process group,
+and state path beneath that directory; do not use a live Station state path:
+
+```sh
+bun run profile:memory --matrix \
+  --output /absolute/path/to/station-memory-profile \
+  --bun-1-4-0 /absolute/path/to/bun-1.4.0
+```
+
+The matrix records exact Git/Bun/build identities, 242 reports in 93 batches
+over 446 seconds, Observer reconciles, render/commit/User Timing samples, and
+macOS `footprint`, `vmmap`, `heap`, and `sample` evidence. `--stalled-subscriber`
+adds the explicit slow-client probe used to compare #750/#751 candidates;
+`--clear-user-timing` is an opt-in diagnostic comparison that clears marks and
+measures after each sample and is not a production behavior.
 
 ## Test layout
 

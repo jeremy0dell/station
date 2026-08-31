@@ -27,7 +27,12 @@ import {
   type NativeProcessLifecycle,
 } from "./lifecycle/nativeProcessLifecycle.js";
 import { installLiveHostTtyDimensions } from "./liveHostTtyDimensions.js";
-import { createRenderProfiler, readRenderProfileEnabled } from "./profiling/renderProfiler.js";
+import {
+  createRenderProfilerSession,
+  readRenderProfileEnabled,
+  resolveRenderProfilePath,
+  type RenderProfilerSession,
+} from "./profiling/renderProfiler.js";
 import {
   acquireStationTtyOwnership,
   currentStdinMatchesStationTty,
@@ -104,7 +109,8 @@ function stationHostSuccessorCommand(
  * Callable native OpenTUI process entry and semantic lifecycle witness boundary.
  * It acquires TTY ownership before other startup work, binds one validated run
  * context into Host terminal factories, owns native signal/lifecycle evidence,
- * and releases final TTY ownership only after renderer shutdown.
+ * owns optional render profiling when explicitly enabled, and releases final TTY
+ * ownership only after renderer shutdown.
  */
 export async function runStationMain(options: RunStationMainOptions = {}): Promise<void> {
   const ownershipResult = await acquireStationTtyOwnership();
@@ -346,6 +352,7 @@ async function startStationMain(
 
   let rendererForInput: CliRenderer | undefined;
   let rootForShutdown: { unmount(): void } | undefined;
+  let renderProfiler: RenderProfilerSession | undefined;
   let stopSurfaceObservation: (() => void) | undefined;
   let processLifecycle: NativeProcessLifecycle | undefined;
   const station = createStation({
@@ -384,6 +391,7 @@ async function startStationMain(
   processLifecycle = createNativeProcessLifecycle({
     stopSurfaceObservation: () => stopSurfaceObservation?.(),
     cleanupSteps: [
+      () => renderProfiler?.dispose(),
       () => station.disposeForShutdown(),
       () => rootForShutdown?.unmount(),
       () => rendererForInput?.destroy(),
@@ -399,6 +407,7 @@ async function startStationMain(
     clipboardEffects,
   );
   installLiveHostTtyDimensions();
+  const renderProfileEnabled = readRenderProfileEnabled(env.STATION_PROFILE);
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
     exitSignals: [
@@ -412,6 +421,7 @@ async function startStationMain(
     ],
     prependInputHandlers: [copySelectedText, station.stationInput.handleSequence],
     useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
+    ...(renderProfileEnabled ? { gatherStats: true } : {}),
   });
   rendererForInput = renderer;
   stationGlobalSlots.__stationHotRenderer = renderer;
@@ -425,8 +435,11 @@ async function startStationMain(
 
   // Opt-in dev profiling (STATION_PROFILE=1). Off by default: the tree renders
   // bare, byte-for-byte the production path.
-  const onRenderProfile = readRenderProfileEnabled(env.STATION_PROFILE)
-    ? createRenderProfiler(devRenderProfilePath())
+  renderProfiler = renderProfileEnabled
+    ? createRenderProfilerSession(
+        resolveRenderProfilePath(env.STATION_RENDER_PROFILE_PATH, devRenderProfilePath()),
+        renderer,
+      )
     : undefined;
   station.start();
   const stationApp = (
@@ -435,8 +448,8 @@ async function startStationMain(
     </StationThemeProvider>
   );
   root.render(
-    onRenderProfile ? (
-      <Profiler id="station" onRender={onRenderProfile}>
+    renderProfiler !== undefined ? (
+      <Profiler id="station" onRender={renderProfiler.onRender}>
         {stationApp}
       </Profiler>
     ) : (

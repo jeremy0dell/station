@@ -97,6 +97,36 @@ async function checkedBuild(options, label) {
   fail(`${label} failed.`);
 }
 
+/**
+ * Builds the compiled Station entrypoint with the production flags shared by
+ * ordinary and diagnostic artifacts.
+ */
+export function createStationBinaryBuildOptions({
+  outputPath,
+  version,
+  buildIdentity,
+  openCodePluginBody,
+  entrypoint = join(stationRoot, "src", "bin", "stnMain.ts"),
+  target = nativeTarget(),
+}) {
+  return {
+    entrypoints: [entrypoint],
+    compile: {
+      target,
+      outfile: outputPath,
+      // A compiled artifact must not execute ambient project startup configuration.
+      autoloadDotenv: false,
+      autoloadBunfig: false,
+    },
+    define: {
+      STATION_BUILD_VERSION: JSON.stringify(version),
+      STATION_BUILD_COMPILED: "true",
+      STATION_BUILD_IDENTITY: JSON.stringify(buildIdentity),
+      STATION_BUILD_OPENCODE_PLUGIN_BODY: JSON.stringify(openCodePluginBody),
+    },
+  };
+}
+
 async function replaceSymlink(path, target) {
   await rm(path, { force: true });
   await symlink(target, path);
@@ -155,22 +185,12 @@ async function main() {
 
   await mkdir(outputDir, { recursive: true });
   await checkedBuild(
-    {
-      entrypoints: [join(stationRoot, "src", "bin", "stnMain.ts")],
-      compile: {
-        target: nativeTarget(),
-        outfile: outputPath,
-        // A compiled artifact must not execute ambient project startup configuration.
-        autoloadDotenv: false,
-        autoloadBunfig: false,
-      },
-      define: {
-        STATION_BUILD_VERSION: JSON.stringify(version),
-        STATION_BUILD_COMPILED: "true",
-        STATION_BUILD_IDENTITY: JSON.stringify(buildIdentity),
-        STATION_BUILD_OPENCODE_PLUGIN_BODY: JSON.stringify(openCodePluginBody),
-      },
-    },
+    createStationBinaryBuildOptions({
+      outputPath,
+      version,
+      buildIdentity,
+      openCodePluginBody,
+    }),
     "Station binary compile",
   );
   if (!(await verifyBuildIdentity(buildIdentity, repoRoot))) {

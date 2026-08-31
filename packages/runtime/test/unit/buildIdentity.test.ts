@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  createStationBinaryBuildOptions,
   removeBinaryOutputAfterSourceAdmission,
   runWithBunExecutable,
 } from "../../../../scripts/build-binary.mjs";
@@ -42,6 +43,32 @@ describe("build identity", () => {
 
   afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  });
+
+  it("keeps diagnostic binaries on the production compile contract", () => {
+    const production = createStationBinaryBuildOptions({
+      outputPath: "/tmp/station-production",
+      version: "0.0.0-test",
+      buildIdentity: "a".repeat(64),
+      openCodePluginBody: "plugin",
+      target: "bun-darwin-arm64",
+    });
+    const diagnostic = createStationBinaryBuildOptions({
+      outputPath: "/tmp/station-diagnostic",
+      entrypoint: "/tmp/profiled-stn-main.ts",
+      version: "0.0.0-test",
+      buildIdentity: "a".repeat(64),
+      openCodePluginBody: "plugin",
+      target: "bun-darwin-arm64",
+    });
+
+    expect(diagnostic.compile).toMatchObject({
+      target: production.compile.target,
+      autoloadDotenv: false,
+      autoloadBunfig: false,
+    });
+    expect(diagnostic.define).toEqual(production.define);
+    expect(diagnostic.entrypoints).not.toEqual(production.entrypoints);
   });
 
   it("is deterministic and changes with HEAD, inputs, modes, and production outputs", async () => {

@@ -55,6 +55,7 @@
     "station:devbox": "bun scripts/run-dev-toolchain.mjs scripts/station-devbox.mjs",
     "station:devbox:smoke": "node scripts/test-runners/run-station-devbox-smoke.mjs",
     "station:devbox:tmux:smoke": "node scripts/test-runners/run-station-tmux-devbox-smoke.mjs",
+    "profile:memory": "node scripts/test-runners/run-memory-owner-profile.mjs",
     "station:sessions:save": "node scripts/maintenance/session-rescue.mjs save",
     "station:sessions:verify": "node scripts/maintenance/session-rescue.mjs verify",
     "station:sessions:migrate": "node scripts/maintenance/session-migrate.mjs",

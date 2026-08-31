@@ -559,7 +559,8 @@ Advanced development/demo overrides:
 | `STATION_DASHBOARD_COMMAND` | CLI TUI launcher | Explicit command override for the observer-backed, command-capable, pane-free dashboard renderer. Development/testing only. |
 | `STATION_TUI_COMMAND` / `STATION_TUI_SESSION_NAME` | tmux popup registry | Development popup routing overrides. |
 | `STATION_SHELL_AUTOCLOSE` | Native Station TUI | `1`/`true` or `0`/`false`; auto-close overlay when a `+sh` shell opens. |
-| `STATION_PROFILE` | Native Station TUI | `1`/`true` or `0`/`false`; enables dev render profiling. |
+| `STATION_PROFILE` | Native Station TUI and standalone dashboard | `1`/`true` or `0`/`false`; enables opt-in render/commit and bounded OpenTUI statistics profiling. |
+| `STATION_RENDER_PROFILE_PATH` | Native Station TUI and standalone dashboard | Absolute JSONL destination for render profiling; when unset, uses the worktree `.dev-state/station-renders.jsonl` fallback. |
 
 Source installs using `STATION_PTY_IMPL=bun` must first run
 `cd station && bun run build:ctty-helper`. A missing, non-executable, or

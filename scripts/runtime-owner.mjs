@@ -40,6 +40,7 @@ const RuntimeRoleSchema = z.enum([
   "setup-guided-e2e",
   "binary-smoke",
   "cli-ux-pilot",
+  "memory-profile",
 ]);
 const UiRunIdSchema = z.string().regex(/^ui_[0-9a-f-]{36}$/i);
 const CorrelationSchema = z

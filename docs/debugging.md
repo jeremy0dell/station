@@ -372,6 +372,33 @@ PTYs remain live; rerun the same `bun run station:devbox start` or `dev` command
 Do not use reset as routine build recovery. Exact activation never signals,
 reaps, invokes devbox Host teardown, or hands off a later non-exact owner.
 
+## Memory Profiling
+
+The opt-in owner-profiling harness is a disposable, macOS-only measurement lane;
+it does not start Station during `--check`, and its matrix cells use private
+state, config, sockets, and evidence paths. From a clean checkout with the
+required Bun 1.4.0 runtime and built artifacts, inspect prerequisites first:
+
+```bash
+bun run profile:memory --check --bun-1-4-0 /path/to/bun-1.4.0
+```
+
+Run the 8-cell matrix only when the laptop can remain free of builds,
+heavy applications, sleep, and network transitions for its duration:
+
+```bash
+bun run profile:memory --matrix --bun-1-4-0 /path/to/bun-1.4.0
+```
+
+The runner records bounded process samples, macOS `footprint`/`vmmap`/`heap`/
+`sample` evidence, renderer JSONL, User Timing marks, event/reconcile counts,
+and owner classifications. Classifications are hypotheses until the relevant
+`--stalled-subscriber` or control cell shows a reproducible retention slope;
+do not infer a retained owner from RSS alone. Add `--clear-user-timing` only for
+an explicit diagnostic comparison; it clears marks/measures after each sample
+and is not a production mitigation. Keep the generated output root for
+comparison and attach only its redacted summaries to an investigation.
+
 ## Preserve Sessions Before Runtime Surgery
 
 When an Observer or Host handoff is blocked and live agent work must survive,

@@ -255,7 +255,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 - **Shell auto-close overlay** — `STATION_SHELL_AUTOCLOSE=1` dismisses the overlay when a `[+sh]` shell opens.
 - **Hot reload (HMR)** — `--hot`; edits preserve panes/PTYs and reattach.
 - **React DevTools** — `bun run station:devtools`.
-- **Render profiling** — `STATION_PROFILE=1` (or `station:profile`) logs commit timeline to `.dev-state/render-profile.jsonl`.
+- **Render profiling** — `STATION_PROFILE=1` (or `station:profile`) logs commit timing, bounded renderer samples, and User Timing counts to `.dev-state/station-renders.jsonl`; set `STATION_RENDER_PROFILE_PATH` to an absolute JSONL destination for a disposable run.
 - **Smoke / e2e tests** — `bun run test:pty`, `test:agents`, `e2e:persist`, VT stress (`STATION_VT_STRESS=1`).
 
 ---

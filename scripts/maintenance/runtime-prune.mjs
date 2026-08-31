@@ -19,7 +19,7 @@ const ErrorCodeSchema = z.object({ code: z.string() }).loose();
 const RuntimeProjectionSchema = z
   .object({
     runtimeId: DisposableRuntimeIdSchema,
-    role: z.enum(["native-hmr", "setup-guided-e2e", "binary-smoke"]),
+    role: z.enum(["native-hmr", "setup-guided-e2e", "binary-smoke", "memory-profile"]),
     runtimeKey: DigestSchema,
     checkoutKey: DigestSchema,
     ownerState: z.string().min(1),

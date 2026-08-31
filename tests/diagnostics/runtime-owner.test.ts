@@ -37,9 +37,13 @@ async function temporaryRoot(): Promise<string> {
   return root;
 }
 
-function runtimeInput(root: string, steps = [{ command: process.execPath, args: ["-e", ""] }]) {
+function runtimeInput(
+  root: string,
+  steps = [{ command: process.execPath, args: ["-e", ""] }],
+  role: "native-hmr" | "memory-profile" = "native-hmr",
+) {
   return {
-    role: "native-hmr" as const,
+    role,
     checkoutRoot: process.cwd(),
     stateDir: root,
     socketRoots: [join(root, "run")],
@@ -381,6 +385,16 @@ describe("disposable runtime ownership", () => {
         },
       }).success,
     ).toBe(true);
+  });
+
+  it("accepts the memory-profile owner role with the same exact cleanup contract", async () => {
+    const root = await temporaryRoot();
+    const result = await runOwnedDisposableRuntime(runtimeInput(root, undefined, "memory-profile"));
+
+    expect(result.exitCode).toBe(0);
+    expect(await readdir(runtimeOwnerRecordDirectory(root))).toEqual([]);
+    const events = await lifecycleEvents(root);
+    expect(events.every((event) => event.attributes.role === "memory-profile")).toBe(true);
   });
 });
 
