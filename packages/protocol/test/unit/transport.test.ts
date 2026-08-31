@@ -1,12 +1,13 @@
 import { once } from "node:events";
 import { access, mkdir, stat, unlink, writeFile } from "node:fs/promises";
-import { createServer, type Socket } from "node:net";
+import { createConnection, createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 import {
   connectUnixSocket,
   inMemoryNdjsonConnectionPair,
   listenUnixSocket,
   NDJSON_TRANSPORT_LIMITS,
+  type NdjsonTransportDiagnostics,
   probeUnixSocket,
   readUnixSocketHolderPids,
   readUnixSocketHolderPidsAsync,
@@ -91,6 +92,43 @@ describe("Unix socket NDJSON transport", () => {
     await expect(settlesWithin(client.closed, 500)).resolves.toBe(true);
     expect(client.diagnostics().closeCount).toBe(1);
     await server.close();
+  });
+
+  it("disconnects a producer that continues writing through socket backpressure", async () => {
+    const { socketPath } = await createTempSocketPath();
+    let releaseChecked: () => void = () => undefined;
+    const checked = new Promise<void>((resolve) => {
+      releaseChecked = resolve;
+    });
+    let diagnostics: NdjsonTransportDiagnostics | undefined;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: (connection) => {
+        const frame = { payload: "x".repeat(64 * 1024) };
+        while (connection.diagnostics().outboundBackpressureCount === 0) {
+          expect(connection.send(frame)).toBe(true);
+        }
+        expect(connection.send(frame)).toBe(false);
+        diagnostics = connection.diagnostics();
+        releaseChecked();
+      },
+    });
+    const stalled = createConnection(socketPath);
+    stalled.on("error", () => undefined);
+    stalled.pause();
+
+    try {
+      await checked;
+      expect(diagnostics).toMatchObject({
+        outboundBackpressureCount: 1,
+        overflowCount: 1,
+        closeCount: 1,
+        lastOverflowReason: "outbound-backpressure",
+      });
+    } finally {
+      stalled.destroy();
+      await server.close();
+    }
   });
 
   it("rejects oversized outbound and partial frames without retaining their contents", async () => {
