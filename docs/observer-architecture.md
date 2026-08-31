@@ -206,7 +206,7 @@ ownership even where current ownership is still a deviation.
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
 | Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Fresh list evidence and mutations only; Observer snapshots own current session selection, callers supply project context for mutation, and adapters retain no second worktree inventory. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | Ordinary topology and lifecycle are provider-owned; implementing this port does not advertise placement support. Optional reconcile-aware discovery refuses retained adapter hints as indeterminate, while ordinary callers may still inspect them; Observer admits targets into the current graph and debug evidence only from a complete result. |
-| Terminal placement | Driven | `TerminalPlacementPort` | tmux and test adapters | Explicit companion role registered only beside the same ordinary terminal id. Caller fields are untrusted claims; tmux proves one configured endpoint, socket/server/pane/process identity, and bounded ancestry, mints a ten-minute one-shot authority, and revalidates immediately before mutation. Sibling and detached never fall back to a current, recent, focused, or alternate-server target. Station registers no placement role. |
+| Terminal placement | Driven | `TerminalPlacementPort` | tmux and test adapters | Explicit companion role registered only beside the same ordinary terminal id. Caller fields are untrusted claims; tmux proves one configured endpoint, socket/server/pane/process identity, and bounded ancestry, mints a ten-minute one-shot authority, and revalidates immediately before mutation. The tmux adapter serializes detached opens through its workbench existence decision and mutation so cold creation is single-flight. Sibling and detached never fall back to a current, recent, focused, or alternate-server target. Station registers no placement role. |
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. Complete target observations may contribute debug-only `hasManagedAttachment` as true, false, or absent for currently issuable, definitively absent, or unknown/inapplicable attachment evidence; activation still resolves the opaque attachment afresh. |
 | Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports: discovery returns provider-normalized current run status; `hookHealth()` returns strict read-only hook evidence; `reconcileHooks()` delegates mutation and post-write verification to the integration; separate hook adapters own event parsing; and harness providers retain compatibility admission and exact recovery-artifact location. Unsupported capabilities remain explicit provider-neutral outcomes. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
@@ -504,6 +504,9 @@ does not occupy provider-call capacity. Cancellation before either admission
 removes that waiter, while an admitted call releases capacity only after the
 provider boundary settles. The coordinator becomes globally idle only after
 queued and active transactions, including rollback, have all completed.
+Distinct session branches may therefore reach terminal placement concurrently;
+the tmux adapter independently serializes detached opens through the workbench
+existence decision and mutation without widening provider-create ownership.
 
 Successful `worktree.create`, `worktree.fork`, `session.create`, `session.fork`,
 and `sessionGroup.create` handlers return strict application identities. Session
@@ -564,9 +567,11 @@ before mutation so an external checkout replacement cannot reuse the selected
 path and branch as removal identity. The Worktrunk adapter keeps common-case
 distinct-branch creates concurrent, but its project-local Git-registry coordinator
 drains those creates before list or removal work. If Worktrunk reports the exact
-nested `git worktree add` sibling-`commondir` initialization race, the same gate
-closes new create admission, drains older attempts, and resumes the requested
-half-created branch without `--create`; ordinary failures are never retried, and
+nested `git worktree add` sibling-`commondir` initialization race, including one
+of the observed missing-file messages for a registry identity distinct from the
+requested target, the same gate closes new create admission, drains older attempts,
+and resumes the requested half-created branch without `--create`; permission,
+I/O, and other ordinary failures are never retried, and
 the normal branch, path, managed-root, and opaque registration checks still decide
 whether recovery is usable. Adapter race refusals retain provider-neutral,
 trace-correlated diagnostic evidence.

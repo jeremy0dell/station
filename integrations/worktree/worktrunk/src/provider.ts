@@ -355,7 +355,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         ),
       (error) =>
         error instanceof WorktrunkProviderError &&
-        isWorktrunkConcurrentCreateRegistryFailure(error),
+        isWorktrunkConcurrentCreateRegistryFailure(error, request.branch),
       () =>
         this.#run(
           this.#args([

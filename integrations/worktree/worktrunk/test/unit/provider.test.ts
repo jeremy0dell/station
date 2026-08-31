@@ -704,6 +704,41 @@ describe("WorktrunkProvider", () => {
     expect(calls.indexOf("settled:older")).toBeLessThan(calls.indexOf("recovery:raced"));
   });
 
+  it.each([
+    "Permission denied",
+    "Input/output error",
+  ])("retains an ordinary commondir failure without recovery: %s", async (failureText) => {
+    const calls: string[][] = [];
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.command === "git") return result(input, "false\n");
+        calls.push(input.args ?? []);
+        throw Object.assign(new Error("wt failed"), {
+          code: 128,
+          stderr: [
+            "Failed to create worktree for feature from base main",
+            `fatal: failed to read .git/worktrees/sibling/commondir: ${failureText}`,
+            "Failed command, exit code 128:",
+            "git worktree add -b feature -- /tmp/station/web/feature main",
+          ].join("\n"),
+        });
+      },
+    });
+
+    await expect(provider.createWorktree({ project, branch: "feature" })).rejects.toMatchObject({
+      code: "WORKTRUNK_COMMAND_FAILED",
+      diagnosticDetails: [
+        expect.objectContaining({ stderrSnippet: expect.stringContaining(failureText) }),
+      ],
+    });
+    expect(calls).toEqual([
+      ["switch", "--no-hooks", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
+    ]);
+  });
+
   it("drains active creates before removal revalidation touches the Git registry", async () => {
     const targetPath = "/tmp/station/web/.worktrees/target";
     const createPath = "/tmp/station/web/.worktrees/new";

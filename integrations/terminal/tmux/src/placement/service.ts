@@ -65,6 +65,7 @@ export type TmuxPlacementServiceOptions = {
  * Proves caller-owned tmux topology on one configured endpoint and applies
  * one-shot sibling or source-free detached placement with exact rollback authority,
  * preserving attached client selection while creating a missing workbench session.
+ * Detached opens serialize through the workbench existence decision and mutation.
  */
 export class TmuxPlacementService implements TerminalPlacementPort {
   readonly id: ProviderId = "tmux";
@@ -77,6 +78,7 @@ export class TmuxPlacementService implements TerminalPlacementPort {
   readonly #cleanup: TmuxPlacementCleanup;
   readonly #authorities: TmuxPlacementAuthorityStore;
   readonly #newBindingToken: () => string;
+  #detachedOpenTail: Promise<void> = Promise.resolve();
 
   constructor(options: TmuxPlacementServiceOptions = {}) {
     this.#config = resolveTmuxWorkbenchConfig(options.config);
@@ -138,6 +140,23 @@ export class TmuxPlacementService implements TerminalPlacementPort {
     if (sessionId === undefined) {
       throw placementRejected("Placed workspaces require an explicit Station session identity.");
     }
+    if (request.placement.intent === "detached") {
+      const opened = this.#detachedOpenTail.then(() =>
+        this.#openPlacedWorkspace(request, sessionId),
+      );
+      this.#detachedOpenTail = opened.then(
+        () => undefined,
+        () => undefined,
+      );
+      return opened;
+    }
+    return this.#openPlacedWorkspace(request, sessionId);
+  }
+
+  async #openPlacedWorkspace(
+    request: OpenPlacedWorkspaceRequest,
+    sessionId: string,
+  ): Promise<OpenPlacedWorkspaceResult> {
     const bindingToken = this.#newBindingToken();
     let expectedGeneration: string | undefined;
     let siblingProof: TmuxPrivateProof | undefined;
