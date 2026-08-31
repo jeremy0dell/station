@@ -26,7 +26,7 @@ import {
 import type { startStationHostWithOwnershipProof } from "./startStationHostWithOwnershipProof.js";
 import {
   stationHostHandoffPtyIdsMatch,
-  stationHostTerminalIdentitiesMatch,
+  stationHostTerminalLifetimesMatch,
   validateStationHostHandoffBegin,
 } from "./stationHostHandoffEvidence.js";
 
@@ -66,7 +66,9 @@ type Progress = Pick<Failure, "phase" | "incumbentDisposition" | "terminalDispos
  * USE CASE
  *
  * Sequences one-deadline incumbent release, direct-child ownership transfer, exact adoption, and
- * independent successor proof. A transferred or concurrent proven successor is never signaled.
+ * independent proof of the successor's complete terminal lifetimes. Mutation delivery makes the
+ * prior incumbent disposition unknown until fresh evidence proves otherwise. A transferred or
+ * concurrent proven successor is never signaled.
  */
 export async function executeStationHostConvergence(
   input: ExecuteStationHostConvergenceInput,
@@ -101,6 +103,8 @@ export async function executeStationHostConvergence(
 
     progress.phase = "incumbent-release";
     requireCleanupReserve(startupCutoffMs, ports.now);
+    progress.incumbentDisposition = "unknown";
+    if (command.action === "handoff") progress.terminalDisposition = "unknown";
     if (command.action === "replace-idle") {
       await incumbent.stopIfIdle(command.targetBuild.buildVersion);
     } else {
@@ -202,7 +206,7 @@ async function admitConcurrentSuccessor(
     progress.lastExactEvidence = { source: "target-session", evidence };
     if (
       command.action === "handoff" &&
-      !stationHostTerminalIdentitiesMatch(evidence.terminals, command.expected.terminals)
+      !stationHostTerminalLifetimesMatch(evidence.terminals, command.expected.terminals)
     ) {
       assertExactSuccessor(evidence, command, endpoint.endpoint, []);
       if (manifest === undefined) throw missingHandoffEvidence();
@@ -356,7 +360,7 @@ function assertExactSuccessor(
     !stationHostEndpointsMatch(evidence.endpoint, endpoint) ||
     evidence.health.buildVersion !== command.targetBuild.buildVersion ||
     evidence.buildIdentity !== command.targetBuild.buildIdentity ||
-    !stationHostTerminalIdentitiesMatch(evidence.terminals, terminals)
+    !stationHostTerminalLifetimesMatch(evidence.terminals, terminals)
   )
     throw hostFailure("Exact target Host evidence was not proved.", "HOST_TARGET_CONFLICT");
 }

@@ -53,6 +53,8 @@ export type AdoptLocalPtyBridgeOptions = {
   id: string;
   /** Exact PTY lifetime the bridge must prove before changing ownership. */
   ptyInstanceId: z.infer<typeof PtyInstanceIdSchema>;
+  /** Exact bridge process attested by the handoff manifest or durable park record. */
+  bridgePid: number;
   command: string;
   controlSocketPath: string;
   size: StationTerminalSize;
@@ -134,6 +136,12 @@ export function adoptLocalPtyBridge(
       if (message.ptyInstanceId !== options.ptyInstanceId) {
         finishWithError(
           new Error("The parked bridge acknowledged a different PTY instance."),
+        );
+        return;
+      }
+      if (message.bridgePid !== options.bridgePid) {
+        finishWithError(
+          new Error("The parked bridge acknowledged a different bridge process."),
         );
         return;
       }

@@ -7,6 +7,8 @@ describe("parseHostArgs", () => {
       action: "status",
       dryRun: false,
       fidelity: "processes",
+      updateCrossover: false,
+      replacementRequired: false,
     });
   });
 
@@ -15,12 +17,32 @@ describe("parseHostArgs", () => {
       action: "handoff",
       dryRun: true,
       fidelity: "screen",
+      updateCrossover: false,
+      replacementRequired: false,
     });
     expect(parseHostArgs(["handoff", "--fidelity=processes"])).toEqual({
       action: "handoff",
       dryRun: false,
       fidelity: "processes",
+      updateCrossover: false,
+      replacementRequired: false,
     });
+  });
+
+  it("parses the updater-only idempotent crossover projection", () => {
+    expect(parseHostArgs(["handoff", "--update-crossover", "--dry-run"])).toEqual({
+      action: "handoff",
+      dryRun: true,
+      fidelity: "processes",
+      updateCrossover: true,
+      replacementRequired: false,
+    });
+    expect(() => parseHostArgs(["handoff", "--update-crossover", "--update-crossover"])).toThrow(
+      /only once/,
+    );
+    expect(() => parseHostArgs(["handoff", "--replacement-required"])).toThrow(
+      /update crossover dry-run/,
+    );
   });
 
   it("rejects unknown actions, status flags, and bad fidelity", () => {

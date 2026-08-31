@@ -105,6 +105,10 @@ const setTimeoutAllowlist = new Map([
     "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
     "Fresh disposable readiness attempts use a short cutoff-bounded delay while waiting for the spawned socket.",
   ],
+  [
+    "integrations/terminal/station/src/host/preflightParkedOrphanRecovery.ts",
+    "One socket timer enforces the updater's absolute preflight deadline while reading a bounded bridge status reply.",
+  ],
 ]);
 
 const setIntervalAllowlist = new Map([

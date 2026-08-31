@@ -18087,7 +18087,7 @@
       "declaration": "executeStationHostConvergence",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Sequences one-deadline incumbent release, direct-child ownership transfer, exact adoption, and independent successor proof. A transferred or concurrent proven successor is never signaled.",
+      "purpose": "Sequences one-deadline incumbent release, direct-child ownership transfer, exact adoption, and independent proof of the successor's complete terminal lifetimes. Mutation delivery makes the prior incumbent disposition unknown until fresh evidence proves otherwise. A transferred or concurrent proven successor is never signaled.",
       "dependencies": [
         {
           "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
@@ -18146,6 +18146,30 @@
       "dependencies": []
     },
     {
+      "path": "integrations/terminal/station/src/host/preflightParkedOrphanRecovery.ts",
+      "declaration": "executeParkedOrphanRecoveryPreflight",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Proves every durable live park is currently reachable and still identifies the same bridge and PTY without starting a Host or requesting ownership transfer. Unowned parks must also be disjoint from every independently unique lifetime identity in the current Host inventory.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/terminal/station/src/host/preflightParkedOrphanRecovery.ts",
+      "declaration": "preflightParkedOrphanRecovery",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Binds durable filesystem evidence, local bridge status, and the absolute preflight clock.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/preflightParkedOrphanRecovery.ts",
+          "declaration": "executeParkedOrphanRecoveryPreflight",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
       "declaration": "readStationHostEndpoint",
       "kind": "function",
@@ -18178,6 +18202,65 @@
         {
           "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
           "declaration": "readStationHostEndpoint",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/recoverExactStationHostOrphans.ts",
+      "declaration": "executeExactStationHostOrphanRecovery",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Starts the exact target when durable parks require it, then adopts every validated unowned park whose independent lifetime identities are disjoint from the pinned Host inventory, on one identity-proven physical session, and independently verifies the resulting inventory.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/terminal/station/src/host/recoverExactStationHostOrphans.ts",
+      "declaration": "recoverExactStationHostOrphans",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Parses target identity and binds local process, socket, evidence, and adoption adapters.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/inspectStationHost.ts",
+          "declaration": "inspectStationHost",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/orphanRecovery.ts",
+          "declaration": "adoptParkedOrphanManifest",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+          "declaration": "readStationHostEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/recoverExactStationHostOrphans.ts",
+          "declaration": "executeExactStationHostOrphanRecovery",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+          "declaration": "startStationHostWithOwnershipProof",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/lifecycleSession.ts",
+          "declaration": "openStationHostLifecycleSession",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -18830,7 +18913,7 @@
       "declaration": "serveHostConnection",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Dispatches Host requests concurrently so long-lived `host.attach` streams do not block write/resize/detach on the same multiplexed socket. The first operational request binds one diagnostic client identity and one opaque lifecycle owner to the physical connection; teardown restores only that owner's pre-complete handoff authority after attachment tasks settle.",
+      "purpose": "Dispatches Host requests concurrently so long-lived `host.attach` streams do not block write/resize/detach on the same multiplexed socket. Socket access is the admission boundary; accepted connections receive an opaque continuity token, while operational requests bind only caller-asserted compatibility and correlation metadata. Teardown restores only that connection's pre-complete handoff authority after attachment tasks settle.",
       "dependencies": []
     }
   ]

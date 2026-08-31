@@ -61,6 +61,7 @@ describe("pty handoff manifest schema", () => {
       "pty-1": entry(),
       "pty-2": entry({
         bridgePid: 4243,
+        controlSocket: "/state/run/pty-bridges/pty-2.sock",
         ptyInstanceId: "ptyi-2",
         identity: identity({ terminalTargetId: "native:wt-2" }),
         scrollbackRef: "/state/run/pty-bridges/pty-2.scrollback.json",
@@ -99,6 +100,36 @@ describe("pty handoff manifest schema", () => {
       PtyHandoffManifestSchema.parse({ "pty-1": entry({ identity: undefined }) }),
     ).toThrow();
     expect(() => PtyHandoffManifestSchema.parse({ "pty-1": entry(), "pty-2": entry() })).toThrow();
+  });
+
+  it("rejects every independently duplicated PTY or bridge identity", () => {
+    const distinctSecond = entry({
+      bridgePid: 4243,
+      controlSocket: "/state/run/pty-bridges/pty-2.sock",
+      ptyInstanceId: "ptyi-2",
+      identity: identity({ terminalTargetId: "native:wt-2" }),
+    });
+    expect(() =>
+      PtyHandoffManifestSchema.parse({
+        "pty-1": entry(),
+        "pty-2": { ...distinctSecond, ptyInstanceId: "ptyi-1" },
+      }),
+    ).toThrow(/duplicate PTY instance ids/);
+    expect(() =>
+      PtyHandoffManifestSchema.parse({
+        "pty-1": entry(),
+        "pty-2": {
+          ...distinctSecond,
+          controlSocket: "/state/run/pty-bridges/pty-1.sock",
+        },
+      }),
+    ).toThrow(/duplicate bridge control sockets/);
+    expect(() =>
+      PtyHandoffManifestSchema.parse({
+        "pty-1": entry(),
+        "pty-2": { ...distinctSecond, bridgePid: 4242 },
+      }),
+    ).toThrow(/duplicate bridge process ids/);
   });
 });
 

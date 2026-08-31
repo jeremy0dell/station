@@ -13,6 +13,7 @@ import { createStationHostController } from "../../src/host/hostController.js";
 import {
   adoptParkedOrphanManifest,
   loadParkedOrphanManifest,
+  loadParkedOrphanRecoveryEvidence,
 } from "../../src/host/orphanRecovery.js";
 
 class FakeChild extends EventEmitter {
@@ -49,6 +50,9 @@ describe("loadParkedOrphanManifest", () => {
         identity: expect.objectContaining({ sessionId: "ses_feature" }),
       }),
     });
+    await expect(loadParkedOrphanRecoveryEvidence(stateDir)).resolves.toMatchObject({
+      payloadPids: { "pty-live": park.pid },
+    });
   });
 
   it("fails closed on malformed parked recovery evidence", async () => {
@@ -70,6 +74,36 @@ describe("loadParkedOrphanManifest", () => {
       path.join(directory, "pty-wrong.park.json"),
       JSON.stringify(parkRecord(path.join(directory, "pty-other.sock"))),
     );
+
+    await expect(loadParkedOrphanManifest(stateDir)).rejects.toMatchObject({
+      code: "HOST_HANDOFF_MANIFEST_INVALID",
+    });
+  });
+
+  it.each([
+    "ptyInstanceId",
+    "controlSocket",
+    "bridgePid",
+  ] as const)("fails closed when strict park records duplicate %s", async (field) => {
+    const stateDir = await mkdtemp(path.join(tmpdir(), "station-orphan-recovery-duplicate-"));
+    const directory = path.join(stateDir, "run", "pty-bridges");
+    await mkdir(directory, { recursive: true });
+    const first = parkRecord(path.join(directory, "pty-first.sock"));
+    const second = {
+      ...parkRecord(path.join(directory, "pty-second.sock")),
+      ptyInstanceId: "instance-pty-2",
+      bridgePid: 13,
+      identity: {
+        ...first.identity,
+        terminalTargetId: "native:wt_second",
+        sessionId: "ses_second",
+      },
+    };
+    if (field === "ptyInstanceId") second.ptyInstanceId = first.ptyInstanceId;
+    if (field === "controlSocket") second.controlSocket = first.controlSocket;
+    if (field === "bridgePid") second.bridgePid = first.bridgePid;
+    await writeFile(path.join(directory, "pty-first.park.json"), JSON.stringify(first));
+    await writeFile(path.join(directory, "pty-second.park.json"), JSON.stringify(second));
 
     await expect(loadParkedOrphanManifest(stateDir)).rejects.toMatchObject({
       code: "HOST_HANDOFF_MANIFEST_INVALID",
@@ -176,7 +210,10 @@ function fakeHostClient(overrides: Partial<StationHostClient> = {}): StationHost
       pid: 1,
     }),
     list: async () => [],
-    recoveryInventory: async () => ({ buildIdentity: "a".repeat(64), ptys: [] }),
+    recoveryInventory: async () => ({
+      buildIdentity: "a".repeat(64),
+      ptys: [],
+    }),
     focus: async () => undefined,
     close: async () => ({ closed: true }),
     attach: async () => {
@@ -194,7 +231,10 @@ function fakeLifecycleSession(): StationHostLifecycleSession {
       protocolVersion: HOST_PROTOCOL_VERSION,
       buildVersion: "test-build",
     }),
-    recoveryInventory: async () => ({ buildIdentity: "a".repeat(64), ptys: [] }),
+    recoveryInventory: async () => ({
+      buildIdentity: "a".repeat(64),
+      ptys: [],
+    }),
     stopIfIdle: async () => ({ stopping: true }),
     beginHandoff: async () => ({
       status: "refused",

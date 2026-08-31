@@ -116,7 +116,7 @@ describe("inspectStationHost", () => {
           factoryBuilds.push(expectedBuildVersion);
           const pair = inMemoryNdjsonConnectionPair();
           void serveHostConnection(pair.server, {
-            hostIdentity: {
+            hostCompatibility: {
               protocolVersion: HOST_PROTOCOL_VERSION,
               buildVersion: runningBuildVersion,
             },

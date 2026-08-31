@@ -9,7 +9,12 @@ import {
 } from "@station/contracts";
 import type { classifyHostCompatibility } from "@station/host";
 import { stationBuildInfo } from "@station/runtime";
-import { convergeStationHost, inspectStationHost } from "@station/terminal";
+import {
+  convergeStationHost,
+  inspectStationHost,
+  preflightParkedOrphanRecovery,
+  recoverExactStationHostOrphans,
+} from "@station/terminal";
 import { resolveObserverPaths } from "../../paths.js";
 import { selfExecArgv } from "../../selfExec.js";
 import { parseHostArgs } from "./args.js";
@@ -20,6 +25,8 @@ export type { HostHandoffResult } from "./hostHandoff.js";
 export type HostCommandDeps = {
   convergeHost?: typeof convergeStationHost;
   inspectHost?: typeof inspectStationHost;
+  preflightHostOrphans?: typeof preflightParkedOrphanRecovery;
+  recoverHostOrphans?: typeof recoverExactStationHostOrphans;
   resolveHostCommand?: () => readonly [string, ...string[]];
   /** Test/composition override for the requesting Station display build. */
   expectedBuildVersion?: string;
@@ -70,10 +77,14 @@ export async function runHostCommand(
       targetBuild,
       dryRun: parsed.dryRun,
       fidelity: parsed.fidelity,
+      updateCrossover: parsed.updateCrossover,
+      replacementRequired: parsed.replacementRequired,
       inspection,
     },
     {
       convergeHost: deps.convergeHost ?? convergeStationHost,
+      preflightHostOrphans: deps.preflightHostOrphans ?? preflightParkedOrphanRecovery,
+      recoverHostOrphans: deps.recoverHostOrphans ?? recoverExactStationHostOrphans,
       resolveHostCommand: deps.resolveHostCommand ?? resolveStationHostCommand,
       now: deps.now ?? Date.now,
     },
@@ -101,7 +112,11 @@ function projectStatus(
 ): HostStatusResult {
   const base = { action: "status" as const, socketPath };
   if (inspection.status === "absent" || inspection.status === "stale")
-    return { ...base, probe: inspection.status, error: "Host socket is not listening." };
+    return {
+      ...base,
+      probe: inspection.status,
+      error: "Host socket is not listening.",
+    };
   if (inspection.status === "inaccessible" || inspection.status === "unknown")
     return {
       ...base,
@@ -112,7 +127,10 @@ function projectStatus(
   const compatibility =
     health.buildVersion === targetBuild.buildVersion
       ? ({ action: "reuse" } as const)
-      : ({ action: "replace", runningBuildVersion: health.buildVersion } as const);
+      : ({
+          action: "replace",
+          runningBuildVersion: health.buildVersion,
+        } as const);
   const targetExact = stationHostEvidenceMatchesTargetBuild(inspection.evidence, targetBuild);
   return {
     ...base,

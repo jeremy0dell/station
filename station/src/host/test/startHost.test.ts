@@ -130,6 +130,7 @@ describe("startStationHost", () => {
         ptyImplementation: "bun-nocctty",
         protocolVersion: HOST_PROTOCOL_VERSION,
         buildVersion: TEST_HOST_BUILD,
+        buildIdentity: TEST_HOST_IDENTITY,
       },
     });
   });

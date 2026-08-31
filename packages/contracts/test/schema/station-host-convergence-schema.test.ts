@@ -3,8 +3,10 @@ import {
   parseStationHostConvergenceCommand,
   StationHostConvergenceCommandSchema,
   StationHostConvergenceResultSchema,
+  StationHostUpdateCrossoverResultSchema,
   stationHostEvidenceMatchesTargetBuild,
   stationHostTerminalsAreHandoffEligible,
+  summarizeStationHostConvergenceFailure,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -30,7 +32,11 @@ const lifetime = {
 };
 const expected = {
   endpoint: { socketPath, ino: 11n, birthtimeNs: 22n },
-  health: { ok: true as const, protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "1.0.0" },
+  health: {
+    ok: true as const,
+    protocolVersion: HOST_PROTOCOL_VERSION,
+    buildVersion: "1.0.0",
+  },
   buildIdentity: incumbentIdentity,
   terminals: [lifetime],
 };
@@ -50,7 +56,10 @@ describe("Station Host convergence contracts", () => {
       stationHostEvidenceMatchesTargetBuild(
         {
           ...expected,
-          health: { ...expected.health, buildVersion: targetBuild.buildVersion },
+          health: {
+            ...expected.health,
+            buildVersion: targetBuild.buildVersion,
+          },
           buildIdentity: targetBuild.buildIdentity,
         },
         targetBuild,
@@ -63,7 +72,10 @@ describe("Station Host convergence contracts", () => {
       stationHostTerminalsAreHandoffEligible([
         {
           ...lifetime,
-          handoffSupport: { kind: "non-releasable", reason: "release-unsupported" },
+          handoffSupport: {
+            kind: "non-releasable",
+            reason: "release-unsupported",
+          },
         },
       ]),
     ).toBe(false);
@@ -107,7 +119,11 @@ describe("Station Host convergence contracts", () => {
 
   it("rejects expired authority and an already-exact incumbent", () => {
     expect(() =>
-      parseStationHostConvergenceCommand(handoff, { targetBuild, socketPath, nowMs: 2_000 }),
+      parseStationHostConvergenceCommand(handoff, {
+        targetBuild,
+        socketPath,
+        nowMs: 2_000,
+      }),
     ).toThrow(/expired/);
     expect(() =>
       parseStationHostConvergenceCommand(
@@ -115,7 +131,10 @@ describe("Station Host convergence contracts", () => {
           ...handoff,
           expected: {
             ...expected,
-            health: { ...expected.health, buildVersion: targetBuild.buildVersion },
+            health: {
+              ...expected.health,
+              buildVersion: targetBuild.buildVersion,
+            },
             buildIdentity: targetBuild.buildIdentity,
           },
         },
@@ -154,7 +173,11 @@ describe("Station Host convergence contracts", () => {
           ...expected,
           terminals: [
             lifetime,
-            { ...lifetime, terminalTargetId: "target-b", ptyInstanceId: "instance-b" },
+            {
+              ...lifetime,
+              terminalTargetId: "target-b",
+              ptyInstanceId: "instance-b",
+            },
           ],
         },
       }).success,
@@ -208,15 +231,73 @@ describe("Station Host convergence contracts", () => {
           lastProvenDisposition: "parked" as const,
         },
       ],
-      lastExactEvidence: { source: "target-session" as const, evidence: expected },
-      error: { tag: "station-host", code: "HOST_REQUEST_FAILED", message: "failed" },
+      lastExactEvidence: {
+        source: "target-session" as const,
+        evidence: expected,
+      },
+      error: {
+        tag: "station-host",
+        code: "HOST_REQUEST_FAILED",
+        message: "failed",
+      },
     };
     expect(StationHostConvergenceResultSchema.parse(failure)).toEqual(failure);
     expect(
       StationHostConvergenceResultSchema.safeParse({
         ...failure,
-        lastExactEvidence: { source: "command-expectation", evidence: expected },
+        lastExactEvidence: {
+          source: "command-expectation",
+          evidence: expected,
+        },
       }).success,
     ).toBe(false);
+  });
+
+  it("bounds updater failure truth without losing phase or disposition counts", () => {
+    const terminalRecovery = Array.from({ length: 10_000 }, (_, index) => ({
+      terminalTargetId: `target-${index}-${"x".repeat(256)}`,
+      ptyId: `pty-${index}-${"x".repeat(256)}`,
+      ptyInstanceId: `instance-${index}-${"x".repeat(256)}`,
+      lastProvenDisposition: index % 2 === 0 ? ("parked" as const) : ("unknown" as const),
+    }));
+    const parsed = StationHostConvergenceResultSchema.parse({
+      status: "failed",
+      action: "handoff",
+      targetBuild,
+      phase: "adoption",
+      incumbentDisposition: "released",
+      terminalDisposition: "mixed",
+      recoveryAuthority: "none",
+      terminalRecovery,
+      error: {
+        tag: "station-host",
+        code: "HOST_HANDOFF_MANIFEST_INVALID",
+        message: "m".repeat(100_000),
+      },
+    });
+    if (parsed.status !== "failed") throw new Error("Expected failed convergence.");
+    const convergenceFailure = summarizeStationHostConvergenceFailure(parsed);
+    const crossover = StationHostUpdateCrossoverResultSchema.parse({
+      schemaVersion: 1,
+      status: "failed",
+      error: convergenceFailure.error,
+      convergenceFailure,
+    });
+    const serialized = JSON.stringify(crossover);
+
+    expect(serialized.length).toBeLessThan(16 * 1024);
+    expect(convergenceFailure).toMatchObject({
+      phase: "adoption",
+      incumbentDisposition: "released",
+      terminalDisposition: "mixed",
+      terminalCount: 10_000,
+      terminalRecoveryCounts: {
+        incumbent: 0,
+        parked: 5_000,
+        successor: 0,
+        unknown: 5_000,
+      },
+    });
+    expect(serialized).not.toContain("target-9999");
   });
 });

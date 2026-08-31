@@ -17,7 +17,7 @@ const socketPath = "/state/station-host.sock";
 const targetBuild = { buildVersion: "2.0.0", buildIdentity: "b".repeat(64) };
 const incumbentEndpoint = { socketPath, ino: 11n, birthtimeNs: 12n };
 const targetEndpoint = { socketPath, ino: 21n, birthtimeNs: 22n };
-const terminal = {
+const terminal: StationHostExactEvidence["terminals"][number] = {
   kind: "agent" as const,
   terminalTargetId: "target-1",
   ptyId: "pty-1",
@@ -38,7 +38,7 @@ function evidence(
   buildVersion: string,
   buildIdentity: string,
   endpoint = incumbentEndpoint,
-  terminals: readonly (typeof terminal)[] = [terminal],
+  terminals: StationHostExactEvidence["terminals"] = [terminal],
 ): StationHostExactEvidence {
   return {
     endpoint,
@@ -57,6 +57,29 @@ const successorIdle = evidence(
   targetEndpoint,
   [],
 );
+
+type TerminalLifetime = StationHostExactEvidence["terminals"][number];
+const terminalFactDrifts: ReadonlyArray<
+  [name: string, mutate: (value: TerminalLifetime) => TerminalLifetime]
+> = [
+  ["kind", (value) => ({ ...value, kind: "aux" })],
+  ["worktreeId", (value) => ({ ...value, worktreeId: "worktree-wrong" })],
+  ["projectId", (value) => ({ ...value, projectId: "project-wrong" })],
+  ["sessionId", (value) => ({ ...value, sessionId: "session-wrong" })],
+  ["worktreePath", (value) => ({ ...value, worktreePath: "/repo/wrong" })],
+  ["harnessProvider", (value) => ({ ...value, harnessProvider: "claude" })],
+  ["pid", (value) => ({ ...value, pid: value.pid + 1 })],
+  ["alive", (value) => ({ ...value, alive: false })],
+  ["cols", (value) => ({ ...value, cols: value.cols + 1 })],
+  ["rows", (value) => ({ ...value, rows: value.rows + 1 })],
+  [
+    "handoffSupport",
+    (value) => ({
+      ...value,
+      handoffSupport: { kind: "non-releasable", reason: "release-unsupported" },
+    }),
+  ],
+];
 
 function command(action: "replace-idle" | "handoff") {
   return StationHostConvergenceCommandSchema.parse(
@@ -305,6 +328,100 @@ describe("exact Station Host convergence", () => {
     expect(setup.ports.readEvidence).toHaveBeenCalledWith(target, targetEndpoint, 10_000);
   });
 
+  it.each(
+    terminalFactDrifts,
+  )("refuses target-session successor evidence with drifted %s despite matching lifetime ids", async (_field, mutate) => {
+    const incumbent = lifecycle();
+    const target = lifecycle();
+    const drifted = evidence(targetBuild.buildVersion, targetBuild.buildIdentity, targetEndpoint, [
+      mutate(terminal),
+    ]);
+    const setup = portsFor({ incumbent, target, targetEvidence: drifted });
+
+    await expect(
+      executeStationHostConvergence(executeInput("handoff"), setup.ports),
+    ).resolves.toMatchObject({
+      status: "failed",
+      phase: "adoption",
+      incumbentDisposition: "released",
+      terminalDisposition: "parked",
+      error: { code: "HOST_TARGET_CONFLICT" },
+    });
+    expect(target.dispose).toHaveBeenCalledOnce();
+    expect(setup.ports.inspectTarget).not.toHaveBeenCalled();
+  });
+
+  it("refuses independently inspected successor facts that drift after pinned validation", async () => {
+    const incumbent = lifecycle();
+    const finalEvidence = evidence(
+      targetBuild.buildVersion,
+      targetBuild.buildIdentity,
+      targetEndpoint,
+      [{ ...terminal, pid: terminal.pid + 1 }],
+    );
+    const setup = portsFor({ incumbent, finalEvidence });
+
+    await expect(
+      executeStationHostConvergence(executeInput("handoff"), setup.ports),
+    ).resolves.toMatchObject({
+      status: "failed",
+      phase: "final-verification",
+      incumbentDisposition: "released",
+      terminalDisposition: "successor",
+      lastExactEvidence: { source: "independent-inspection", evidence: finalEvidence },
+      error: { code: "HOST_TARGET_CONFLICT" },
+    });
+  });
+
+  it("reports an idle incumbent mutation as unknown when stop delivery is ambiguous", async () => {
+    const incumbent = lifecycle({
+      stopIfIdle: vi.fn(async () => {
+        throw stationHostSafeError("HOST_REQUEST_FAILED", "response lost");
+      }),
+    });
+    const setup = portsFor({ incumbent, incumbentEvidence: idleExpected });
+
+    await expect(
+      executeStationHostConvergence(executeInput("replace-idle"), setup.ports),
+    ).resolves.toMatchObject({
+      status: "failed",
+      phase: "incumbent-release",
+      incumbentDisposition: "unknown",
+      terminalDisposition: "none",
+      lastExactEvidence: { source: "incumbent-session", evidence: idleExpected },
+    });
+    expect(setup.ports.startTarget).not.toHaveBeenCalled();
+  });
+
+  it("reports terminal ownership as unknown when begin delivery is ambiguous", async () => {
+    const incumbent = lifecycle({
+      beginHandoff: vi.fn(async () => {
+        throw stationHostSafeError("HOST_REQUEST_FAILED", "response lost");
+      }),
+    });
+    const setup = portsFor({ incumbent });
+
+    await expect(
+      executeStationHostConvergence(executeInput("handoff"), setup.ports),
+    ).resolves.toMatchObject({
+      status: "failed",
+      phase: "incumbent-release",
+      incumbentDisposition: "unknown",
+      terminalDisposition: "unknown",
+      terminalRecovery: [
+        {
+          terminalTargetId: terminal.terminalTargetId,
+          ptyId: terminal.ptyId,
+          ptyInstanceId: terminal.ptyInstanceId,
+          lastProvenDisposition: "unknown",
+        },
+      ],
+      lastExactEvidence: { source: "incumbent-session", evidence: liveExpected },
+    });
+    expect(incumbent.abortHandoff).not.toHaveBeenCalled();
+    expect(setup.ports.startTarget).not.toHaveBeenCalled();
+  });
+
   it("aborts malformed successful begin only on the incumbent and reports restored evidence", async () => {
     const incumbent = lifecycle({
       beginHandoff: vi.fn(async () => ({
@@ -427,6 +544,38 @@ describe("exact Station Host convergence", () => {
     });
     expect(setup.ports.openSession).toHaveBeenCalledTimes(2);
     expect(winner.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a concurrent winner that reuses lifetime ids with drifted terminal facts", async () => {
+    const incumbent = lifecycle();
+    const winner = lifecycle();
+    const loser = stationHostSafeError("HOST_TARGET_CONFLICT", "lost");
+    const drifted = evidence(targetBuild.buildVersion, targetBuild.buildIdentity, targetEndpoint, [
+      { ...terminal, pid: terminal.pid + 1 },
+    ]);
+    const setup = portsFor({
+      incumbent,
+      startResult: { status: "failed", error: loser, childDisposition: "settled" },
+    });
+    setup.ports.openSession.mockResolvedValueOnce(incumbent).mockResolvedValueOnce(winner);
+    setup.ports.probeEndpoint
+      .mockResolvedValueOnce({ status: "absent" })
+      .mockResolvedValueOnce({ status: "listening", endpoint: targetEndpoint });
+    setup.ports.readEvidence.mockImplementation(async (session) =>
+      session === incumbent ? liveExpected : drifted,
+    );
+
+    await expect(
+      executeStationHostConvergence(executeInput("handoff"), setup.ports),
+    ).resolves.toMatchObject({
+      status: "failed",
+      phase: "target-start",
+      lastExactEvidence: { source: "target-session", evidence: drifted },
+      error: { code: "HOST_TARGET_CONFLICT" },
+    });
+    expect(winner.adoptRegistry).not.toHaveBeenCalled();
+    expect(winner.dispose).toHaveBeenCalledOnce();
+    expect(setup.ports.inspectTarget).not.toHaveBeenCalled();
   });
 
   it("never inspects or signals a possible winner after unproven loser settlement", async () => {

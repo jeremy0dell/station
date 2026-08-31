@@ -50,14 +50,14 @@ export type HostAttachmentSource = {
  * Missing methods answer with classified `HOST_BAD_REQUEST` errors.
  */
 export type HostHandlers = {
-  /** Exact build identity required on every operational request. */
-  hostIdentity: HostCompatibilityIdentity;
+  /** Protocol/build metadata required for same-build operational compatibility. */
+  hostCompatibility: HostCompatibilityIdentity;
   unary?: Record<
     string,
     (
       params: unknown,
       client: HostClientIdentity | undefined,
-      owner: HostConnectionOwner,
+      connectionOwner: HostConnectionOwner,
     ) => Promise<unknown> | unknown
   >;
   attach?: (
@@ -65,12 +65,15 @@ export type HostHandlers = {
     attachmentId: string,
   ) => HostAttachmentSource | Promise<HostAttachmentSource>;
   /** Called only after a successful unary response has been written to the connection. */
-  afterUnaryResponseSent?: (method: string, owner: HostConnectionOwner) => void;
+  afterUnaryResponseSent?: (method: string, connectionOwner: HostConnectionOwner) => void;
   /** Restores only lifecycle authority still held by this physical connection. */
-  onConnectionClosed?: (owner: HostConnectionOwner) => Promise<void> | void;
+  onConnectionClosed?: (connectionOwner: HostConnectionOwner) => Promise<void> | void;
 };
 
-/** Opaque physical-connection identity; lifecycle code relies only on object identity. */
+/**
+ * Opaque token for one admitted physical connection. Object identity proves
+ * continuity within the same-UID control plane, not caller authentication.
+ */
 export type HostConnectionOwner = object;
 
 type HostLifecycleEventInput = UiLifecycleEventInputFor<"station-host">;
@@ -102,21 +105,32 @@ type ConnectionState = {
   acceptingAttachments: boolean;
 };
 
+// Successor builds must reach this narrow compatibility path before same-build
+// metadata can bind. Socket admission, not these caller assertions, is the trust boundary.
+const CROSS_BUILD_NEGOTIATION_METHODS: ReadonlySet<string> = new Set([
+  "host.health",
+  "host.stopIfIdle",
+  "host.beginHandoff",
+  "host.completeHandoff",
+  "host.abortHandoff",
+]);
+
 /**
  * ADAPTER
  *
  * Dispatches Host requests concurrently so long-lived `host.attach` streams do
- * not block write/resize/detach on the same multiplexed socket. The first
- * operational request binds one diagnostic client identity and one opaque
- * lifecycle owner to the physical connection; teardown restores only that
- * owner's pre-complete handoff authority after attachment tasks settle.
+ * not block write/resize/detach on the same multiplexed socket. Socket access
+ * is the admission boundary; accepted connections receive an opaque continuity
+ * token, while operational requests bind only caller-asserted compatibility and
+ * correlation metadata. Teardown restores only that connection's pre-complete
+ * handoff authority after attachment tasks settle.
  */
 export async function serveHostConnection(
   connection: NdjsonConnection,
   handlers: HostHandlers,
   logger: HostServerLogger = {},
 ): Promise<void> {
-  const owner: HostConnectionOwner = {};
+  const connectionOwner: HostConnectionOwner = {};
   const state: ConnectionState = {
     clientDetachReason: "socket_closed",
     attachments: new Map(),
@@ -130,7 +144,7 @@ export async function serveHostConnection(
         handleClientShutdownNotification(handlers, logger, state, message);
         continue;
       }
-      const task = handleMessage(connection, handlers, logger, state, owner, message);
+      const task = handleMessage(connection, handlers, logger, state, connectionOwner, message);
       state.inFlight.add(task);
       void task.finally(() => state.inFlight.delete(task));
     }
@@ -147,7 +161,7 @@ export async function serveHostConnection(
       void releaseAttachmentRegistration(state, attachment);
     }
     await Promise.allSettled([...state.inFlight]);
-    await handlers.onConnectionClosed?.(owner);
+    await handlers.onConnectionClosed?.(connectionOwner);
     if (state.client !== undefined) {
       logger.onLifecycle?.({
         kind: "host.client.detached",
@@ -166,7 +180,7 @@ async function handleMessage(
   handlers: HostHandlers,
   logger: HostServerLogger,
   state: ConnectionState,
-  owner: HostConnectionOwner,
+  connectionOwner: HostConnectionOwner,
   message: unknown,
 ): Promise<void> {
   const parsed = HostRequestSchema.safeParse(message);
@@ -175,17 +189,22 @@ async function handleMessage(
     return;
   }
   const request = parsed.data;
-  // adoptRegistry is identity-bound: only cross-build negotiation methods are exempt.
-  const lifecycleRequest =
-    request.method === "host.health" ||
-    request.method === "host.stopIfIdle" ||
-    request.method === "host.beginHandoff" ||
-    request.method === "host.completeHandoff" ||
-    request.method === "host.abortHandoff";
-  if (!lifecycleRequest) {
-    const binding = bindClientIdentity(request.client, handlers.hostIdentity, state, logger);
-    if (!binding.ok) {
-      fail(connection, logger, request.id, binding.code, binding.message, binding.hint);
+  if (!CROSS_BUILD_NEGOTIATION_METHODS.has(request.method)) {
+    const metadataCheck = validateAndBindOperationalClientMetadata(
+      request.client,
+      handlers.hostCompatibility,
+      state,
+      logger,
+    );
+    if (!metadataCheck.ok) {
+      fail(
+        connection,
+        logger,
+        request.id,
+        metadataCheck.code,
+        metadataCheck.message,
+        metadataCheck.hint,
+      );
       return;
     }
   }
@@ -283,7 +302,7 @@ async function handleMessage(
 
   let result: unknown;
   try {
-    result = await handler(request.params, request.client, owner);
+    result = await handler(request.params, request.client, connectionOwner);
   } catch (error) {
     const safeError = stationHostErrorFromUnknown(error, {
       code: "HOST_REQUEST_FAILED",
@@ -294,7 +313,7 @@ async function handleMessage(
     return;
   }
   connection.send(hostSuccess(request.id, result));
-  handlers.afterUnaryResponseSent?.(request.method, owner);
+  handlers.afterUnaryResponseSent?.(request.method, connectionOwner);
 }
 
 /** Release one registered attachment while retaining its last authoritative control evidence. */
@@ -342,7 +361,7 @@ function failFromHandler(
   connection.send(hostFailure(id, safeError));
 }
 
-type ClientBinding =
+type OperationalClientMetadataCheck =
   | { ok: true; client: HostClientIdentity }
   | {
       ok: false;
@@ -351,21 +370,21 @@ type ClientBinding =
       hint?: string;
     };
 
-function bindClientIdentity(
+function validateAndBindOperationalClientMetadata(
   client: HostClientIdentity | undefined,
-  hostIdentity: HostCompatibilityIdentity,
+  hostCompatibility: HostCompatibilityIdentity,
   state: ConnectionState,
   logger: HostServerLogger,
-): ClientBinding {
+): OperationalClientMetadataCheck {
   if (
     client !== undefined &&
-    (client.protocolVersion !== hostIdentity.protocolVersion ||
-      client.buildVersion !== hostIdentity.buildVersion)
+    (client.protocolVersion !== hostCompatibility.protocolVersion ||
+      client.buildVersion !== hostCompatibility.buildVersion)
   ) {
     return {
       ok: false,
       code: "HOST_VERSION_INCOMPATIBLE",
-      message: `Station host build "${hostIdentity.buildVersion}" rejected a client with an incompatible protocol or build.`,
+      message: `Station host build "${hostCompatibility.buildVersion}" rejected a client with an incompatible protocol or build.`,
       hint: "Use the Station build that started this host, or let the current build negotiate a guarded idle replacement.",
     };
   }
@@ -573,14 +592,14 @@ function handleClientShutdownNotification(
     );
     return;
   }
-  const binding = bindClientIdentity(
+  const metadataCheck = validateAndBindOperationalClientMetadata(
     notification.data.client,
-    handlers.hostIdentity,
+    handlers.hostCompatibility,
     state,
     logger,
   );
-  if (!binding.ok) {
-    logger.onError?.(stationHostSafeError(binding.code, binding.message));
+  if (!metadataCheck.ok) {
+    logger.onError?.(stationHostSafeError(metadataCheck.code, metadataCheck.message));
     return;
   }
   state.clientDetachReason = "client_shutdown";

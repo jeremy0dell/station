@@ -33,12 +33,15 @@ export const HostCompatibilityIdentitySchema = z
   .strict();
 export type HostCompatibilityIdentity = z.infer<typeof HostCompatibilityIdentitySchema>;
 
-/** Content-free UI and connection identity used only for lifecycle correlation. */
+/** Caller-asserted UI and connection metadata used only for lifecycle correlation. */
 export const HostCorrelationIdentitySchema = UiRunContextSchema.extend({
   connectionId: idSchema,
 }).strict();
 
-/** Compatibility and diagnostic correlation carried on every operational Host request. */
+/**
+ * Caller-asserted compatibility and correlation metadata carried on operational
+ * Host requests. It is not admission or authentication evidence.
+ */
 export const HostClientIdentitySchema = HostCompatibilityIdentitySchema.merge(
   HostCorrelationIdentitySchema,
 ).strict();

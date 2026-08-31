@@ -4,6 +4,7 @@ import {
   type StationHostConvergenceCommand,
   type StationHostHandoffReceipt,
   StationHostHandoffReceiptSchema,
+  type StationHostTerminalLifetime,
 } from "@station/contracts";
 import { type HostBeginHandoffOutcome, stationHostSafeError } from "@station/host";
 
@@ -81,6 +82,45 @@ export function stationHostTerminalIdentitiesMatch(
       );
     })
   );
+}
+
+/** Requires every canonical recovery-inventory fact for each physical terminal lifetime to match. */
+export function stationHostTerminalLifetimesMatch(
+  actual: readonly StationHostTerminalLifetime[],
+  expected: readonly StationHostTerminalLifetime[],
+): boolean {
+  return (
+    actual.length === expected.length &&
+    actual.every((terminal, index) => {
+      const expectedTerminal = expected[index];
+      return (
+        expectedTerminal !== undefined &&
+        terminal.kind === expectedTerminal.kind &&
+        terminal.terminalTargetId === expectedTerminal.terminalTargetId &&
+        terminal.ptyId === expectedTerminal.ptyId &&
+        terminal.ptyInstanceId === expectedTerminal.ptyInstanceId &&
+        terminal.worktreeId === expectedTerminal.worktreeId &&
+        terminal.projectId === expectedTerminal.projectId &&
+        terminal.sessionId === expectedTerminal.sessionId &&
+        terminal.worktreePath === expectedTerminal.worktreePath &&
+        terminal.harnessProvider === expectedTerminal.harnessProvider &&
+        terminal.pid === expectedTerminal.pid &&
+        terminal.alive === expectedTerminal.alive &&
+        terminal.cols === expectedTerminal.cols &&
+        terminal.rows === expectedTerminal.rows &&
+        handoffSupportMatches(terminal.handoffSupport, expectedTerminal.handoffSupport)
+      );
+    })
+  );
+}
+
+function handoffSupportMatches(
+  actual: StationHostTerminalLifetime["handoffSupport"],
+  expected: StationHostTerminalLifetime["handoffSupport"],
+): boolean {
+  if (actual.kind !== expected.kind) return false;
+  if (actual.kind === "bridge-releasable") return true;
+  return expected.kind === "non-releasable" && actual.reason === expected.reason;
 }
 
 function invalidHandoffEvidence(message: string) {
