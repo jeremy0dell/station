@@ -341,6 +341,26 @@ describe("Codex app-server event parsing", () => {
       }),
     ).toThrowError(CodexHarnessProviderError);
   });
+
+  it("accepts the current envelope timestamp without weakening strict parsing", () => {
+    const message = {
+      method: "item/completed",
+      emittedAtMs: 1781712000000,
+      params: {
+        threadId: "thr_plan",
+        turnId: "turn_1",
+        item: { id: "item_plan_1", type: "plan" },
+      },
+    };
+
+    expect(parseCodexAppServerEvent(message)).toMatchObject({
+      kind: "item-completed",
+      itemType: "plan",
+    });
+    expect(() => parseCodexAppServerEvent({ ...message, unexpected: true })).toThrowError(
+      CodexHarnessProviderError,
+    );
+  });
 });
 
 function context() {
