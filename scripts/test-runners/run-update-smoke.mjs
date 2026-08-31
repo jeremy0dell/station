@@ -1654,7 +1654,7 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
       "completed",
       "completed",
       "completed",
-      refusal ? "failed" : input.busyHost ? "completed" : "skipped",
+      refusal ? "failed" : "completed",
     ],
     `${input.name} exact update step outcomes`,
   );
