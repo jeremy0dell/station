@@ -4,24 +4,24 @@ exports[`modal flow golden frames renders the help overlay 1`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ────────╭──────────────────────────────────────────────────────────────╮─────── 
-       S│    station help                                              │FF · PR 
- ▼ stati│      Ctrl-O       open/close project view                    │qs] [▾] 
- [1] ○ c│      Ctrl-Q       quit Station                               │6 #70 ✓ 
- [2] - d│      Ctrl-\\       split pane right                           │        
- [3] ○ p│      Ctrl-^       split pane below (Ctrl-6)                  │  #73 ✓ 
- [4] + s│      Ctrl-]       focus next pane                            │        
- [5] ⠋ s│      Ctrl-/       close split pane (Ctrl-_)                  │6 #76 … 
-        │      Enter/Sp     open project view on welcome               │        
- ▼ obser│      Esc/↑↓       context menu close/move                    │qs] [▾] 
- [6] x b│      Enter/Sp     context menu select                        │   #8 ✓ 
- [7] ⠋ p│    station project view                                      │8 #16 … 
- [8] ○ t│      ↑/↓          move cursor · wheel scroll                 │-1 #4 ✓ 
-        │      ↵            open focused session                       │        
- ▼ scrip│      tab          next session needing you                   │qs] [▾] 
- [9] ○ a│      G/M          quick group/move to group                  │6 #5 x1 
- [a] ? m│      / ↵ Esc Q   edit/apply/cancel-clear/retain-close        │ -1 #10 
-        │                  filter                                      │        
- ▼ empty│ ↓ more · ↑↓ · PgUp/PgDn · Esc                                │qs] [▾] 
+       S│    station help                                             ▲│FF · PR 
+ ▼ stati│      Ctrl-O       open/close project view                   ▐│qs] [▾] 
+ [1] ○ c│      Ctrl-Q       quit Station                              ▐│6 #70 ✓ 
+ [2] - d│      Ctrl-\\       split pane right                          ▐│        
+ [3] ○ p│      Ctrl-^       split pane below (Ctrl-6)                 ▐│  #73 ✓ 
+ [4] + s│      Ctrl-]       focus next pane                           ▐│        
+ [5] ⠋ s│      Ctrl-/       close split pane (Ctrl-_)                 ▐│6 #76 … 
+        │      Enter/Sp     open project view on welcome              ▐│        
+ ▼ obser│      Esc/↑↓       context menu close/move                   ▐│qs] [▾] 
+ [6] x b│      Enter/Sp     context menu select                       ▐│   #8 ✓ 
+ [7] ⠋ p│    station project view                                     ▐│8 #16 … 
+ [8] ○ t│      ↑/↓          move cursor · wheel scroll                ▐│-1 #4 ✓ 
+        │      ↵            open focused session                      ▕│        
+ ▼ scrip│      tab          next session needing you                  ▕│qs] [▾] 
+ [9] ○ a│      G/M          quick group/move to group                 ▕│6 #5 x1 
+ [a] ? m│      / ↵ Esc Q   edit/apply/cancel-clear/retain-close       ▕│ -1 #10 
+        │                  filter                                     ▼│        
+ ▼ empty│ ↓ 6 below · ↑↓ · PgUp/PgDn · Esc                             │qs] [▾] 
  no sess╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
@@ -32,24 +32,24 @@ exports[`modal flow golden frames renders the help overlay middle at standard si
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ────────╭──────────────────────────────────────────────────────────────╮─────── 
-       S│    station help                                              │FF · PR 
- ▼ stati│      Ctrl-O       open/close project view                    │qs] [▾] 
- [1] ○ c│      Ctrl-Q       quit Station                               │6 #70 ✓ 
- [2] - d│      Ctrl-\\       split pane right                           │        
- [3] ○ p│      Ctrl-^       split pane below (Ctrl-6)                  │  #73 ✓ 
- [4] + s│      Ctrl-]       focus next pane                            │        
- [5] ⠋ s│      Ctrl-/       close split pane (Ctrl-_)                  │6 #76 … 
-        │      Enter/Sp     open project view on welcome               │        
- ▼ obser│      Esc/↑↓       context menu close/move                    │qs] [▾] 
- [6] x b│  ▸   Enter/Sp     context menu select                        │   #8 ✓ 
- [7] ⠋ p│    station project view                                      │8 #16 … 
- [8] ○ t│      ↑/↓          move cursor · wheel scroll                 │-1 #4 ✓ 
-        │      ↵            open focused session                       │        
- ▼ scrip│      tab          next session needing you                   │qs] [▾] 
- [9] ○ a│      G/M          quick group/move to group                  │6 #5 x1 
- [a] ? m│      / ↵ Esc Q   edit/apply/cancel-clear/retain-close        │ -1 #10 
-        │                  filter                                      │        
- ▼ empty│ ↓ more · ↑↓ · PgUp/PgDn · Esc                                │qs] [▾] 
+       S│    station help                                             ▲│FF · PR 
+ ▼ stati│      Ctrl-O       open/close project view                   ▐│qs] [▾] 
+ [1] ○ c│      Ctrl-Q       quit Station                              ▐│6 #70 ✓ 
+ [2] - d│      Ctrl-\\       split pane right                          ▐│        
+ [3] ○ p│      Ctrl-^       split pane below (Ctrl-6)                 ▐│  #73 ✓ 
+ [4] + s│      Ctrl-]       focus next pane                           ▐│        
+ [5] ⠋ s│      Ctrl-/       close split pane (Ctrl-_)                 ▐│6 #76 … 
+        │      Enter/Sp     open project view on welcome              ▐│        
+ ▼ obser│      Esc/↑↓       context menu close/move                   ▐│qs] [▾] 
+ [6] x b│  ▸   Enter/Sp     context menu select                       ▐│   #8 ✓ 
+ [7] ⠋ p│    station project view                                     ▐│8 #16 … 
+ [8] ○ t│      ↑/↓          move cursor · wheel scroll                ▐│-1 #4 ✓ 
+        │      ↵            open focused session                      ▕│        
+ ▼ scrip│      tab          next session needing you                  ▕│qs] [▾] 
+ [9] ○ a│      G/M          quick group/move to group                 ▕│6 #5 x1 
+ [a] ? m│      / ↵ Esc Q   edit/apply/cancel-clear/retain-close       ▕│ -1 #10 
+        │                  filter                                     ▼│        
+ ▼ empty│ ↓ 6 below · ↑↓ · PgUp/PgDn · Esc                             │qs] [▾] 
  no sess╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
@@ -60,24 +60,24 @@ exports[`modal flow golden frames renders the help overlay final entry at standa
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ────────╭──────────────────────────────────────────────────────────────╮─────── 
-       S│      Enter/Sp     open project view on welcome               │FF · PR 
- ▼ stati│      Esc/↑↓       context menu close/move                    │qs] [▾] 
- [1] ○ c│      Enter/Sp     context menu select                        │6 #70 ✓ 
- [2] - d│    station project view                                      │        
- [3] ○ p│      ↑/↓          move cursor · wheel scroll                 │  #73 ✓ 
- [4] + s│      ↵            open focused session                       │        
- [5] ⠋ s│      tab          next session needing you                   │6 #76 … 
-        │      G/M          quick group/move to group                  │        
- ▼ obser│      / ↵ Esc Q   edit/apply/cancel-clear/retain-close        │qs] [▾] 
- [6] x b│                  filter                                      │   #8 ✓ 
- [7] ⠋ p│      Tab S/P/A   build filter conditions · F applies         │8 #16 … 
- [8] ○ t│                  builder                                     │-1 #4 ✓ 
-        │      1-9/a-z      open visible session or toggle condition   │        
- ▼ scrip│      N/A/R/C/F/P  new/add/rename/fold/fork/settings          │qs] [▾] 
- [9] ○ a│      W            widgets                                    │6 #5 x1 
- [a] ? m│      X            delete session                             │ -1 #10 
-        │  ▸   H/?          help · Z refresh                           │        
- ▼ empty│ ↑ more · ↑↓ · PgUp/PgDn · Esc                                │qs] [▾] 
+       S│      Enter/Sp     open project view on welcome              ▲│FF · PR 
+ ▼ stati│      Esc/↑↓       context menu close/move                   ▕│qs] [▾] 
+ [1] ○ c│      Enter/Sp     context menu select                       ▕│6 #70 ✓ 
+ [2] - d│    station project view                                     ▕│        
+ [3] ○ p│      ↑/↓          move cursor · wheel scroll                ▕│  #73 ✓ 
+ [4] + s│      ↵            open focused session                      ▐│        
+ [5] ⠋ s│      tab          next session needing you                  ▐│6 #76 … 
+        │      G/M          quick group/move to group                 ▐│        
+ ▼ obser│      / ↵ Esc Q   edit/apply/cancel-clear/retain-close       ▐│qs] [▾] 
+ [6] x b│                  filter                                     ▐│   #8 ✓ 
+ [7] ⠋ p│      Tab S/P/A   build filter conditions · F applies        ▐│8 #16 … 
+ [8] ○ t│                  builder                                    ▐│-1 #4 ✓ 
+        │      1-9/a-z      open visible session or toggle condition  ▐│        
+ ▼ scrip│      N/A/R/C/F/P  new/add/rename/fold/fork/settings         ▐│qs] [▾] 
+ [9] ○ a│      W            widgets                                   ▐│6 #5 x1 
+ [a] ? m│      X            delete session                            ▐│ -1 #10 
+        │  ▸   H/?          help · Z refresh                          ▼│        
+ ▼ empty│ ↑ 7 above · ↑↓ · PgUp/PgDn · Esc                             │qs] [▾] 
  no sess╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
@@ -86,48 +86,48 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 
 exports[`modal flow golden frames renders the help overlay top at minimum size 1`] = `
 "  ╭──────────────────────────────────╮  
-FL│    station help                  │  
-──│      Ctrl-O   open/close         │─ 
-  │               project view       │  
- ▼│      Ctrl-Q       quit Station   │] 
- [│      Ctrl-\\     split pane       │  
- [│                 right            │  
- [│      Ctrl-^   split pane below   │  
- [│               (Ctrl-6)           │  
-▼ │      Ctrl-]      focus next      │  
-──│ ↓ more · ↑↓ · PgUp/PgDn · Esc    │─ 
+FL│    station help                 ▲│  
+──│      Ctrl-O   open/close        ▐│─ 
+  │               project view      ▕│  
+ ▼│      Ctrl-Q       quit Station  ▕│]▲
+ [│      Ctrl-\\     split pane      ▕│ ▐
+ [│                 right           ▕│ ▕
+ [│      Ctrl-^   split pane below  ▕│ ▕
+ [│               (Ctrl-6)          ▕│ ▕
+ [│      Ctrl-]      focus next     ▼│ ▼
+──│ ↓16 · ↑↓ · PgUp/PgDn · Esc       │─ 
 ↵ ╰──────────────────────────────────╯… 
 "
 `;
 
 exports[`modal flow golden frames renders the help overlay middle at minimum size 1`] = `
 "  ╭──────────────────────────────────╮  
-FL│                  pane            │  
-──│      Ctrl-/   close split pane   │─ 
-  │               (Ctrl-_)           │  
- ▼│      Enter/  open project view   │] 
- [│      Sp      on welcome          │  
- [│      Esc/↑↓   context menu       │  
- [│               close/move         │  
- [│  ▸   Enter/Sp  context menu      │  
-▼ │                select            │  
-──│ ↕ more · ↑↓ · PgUp/PgDn · Esc    │─ 
+FL│                  pane           ▲│  
+──│      Ctrl-/   close split pane  ▕│─ 
+  │               (Ctrl-_)          ▕│  
+ ▼│      Enter/  open project view  ▐│]▲
+ [│      Sp      on welcome         ▕│ ▐
+ [│      Esc/↑↓   context menu      ▕│ ▕
+ [│               close/move        ▕│ ▕
+ [│  ▸   Enter/Sp  context menu     ▕│ ▕
+ [│                select           ▼│ ▼
+──│ ↑5/↓12 · ↑↓ · PgUp/PgDn · Esc    │─ 
 ↵ ╰──────────────────────────────────╯… 
 "
 `;
 
 exports[`modal flow golden frames renders the help overlay final entry at minimum size 1`] = `
 "  ╭──────────────────────────────────╮  
-FL│               toggle condition   │  
-──│      N/A/R/C/ new/add/rename/    │─ 
-  │      F/P      fold/fork/         │  
- ▼│               settings           │] 
- [│      W            widgets        │  
- [│      X           delete session  │  
- [│                                  │  
- [│  ▸   H/?        help · Z         │  
-▼ │                 refresh          │  
-──│ ↑ more · ↑↓ · PgUp/PgDn · Esc    │─ 
+FL│               toggle condition  ▲│  
+──│      N/A/R/C/ new/add/rename/   ▕│─ 
+  │      F/P      fold/fork/        ▕│  
+ ▼│               settings          ▕│]▲
+ [│      W            widgets       ▕│ ▐
+ [│      X           delete session ▕│ ▕
+ [│                                 ▕│ ▕
+ [│  ▸   H/?        help · Z        ▐│ ▕
+ [│                 refresh         ▼│ ▼
+──│ ↑17 · ↑↓ · PgUp/PgDn · Esc       │─ 
 ↵ ╰──────────────────────────────────╯… 
 "
 `;
@@ -166,7 +166,7 @@ FLEET │▸Quick Group         G│
 ──────│ New Group…           │
       │ Set default agent    │
  ▼ sta│ Project settings…    │
-▼ 10 b└──────────────────────┘
+ [1] ○└──────────────────────┘
 ───────────────────────────── 
 ↵ activate  N new  ⇥ next  /… 
 "
@@ -177,9 +177,9 @@ exports[`modal flow golden frames renders the Group menu 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
- ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾] 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                                         [qs]▸[▾]│ 
+ ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions                                         [qs]▸[▾]│▐
 │ [1] ⠋ group-contracts             codex     workin┌─Design refresh───────────┐
 │ [2] ○ group-keyboard              codex     idle  │▸Quick session           Q│
 ╰───────────────────────────────────────────────────│ New session…            N│
@@ -188,26 +188,25 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 │ [3] ○ input-routing               codex     idle  │──────────────────────────│
 ╰───────────────────────────────────────────────────│ Remove Group…           R│
 ╭───────────────────────────────────────────────────└──────────────────────────┘
-│ ▼ Observer hardening 3 sessions                                     [qs] [▾]│ 
-│ [4] ○ diagnostic-index            codex     idle                      +38 -7│ 
-│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
-│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-▼ 6 below · showing 6 of 12                                                     
-─────────────────────────────────────────────────────────────────────────────── 
+│ ▼ Observer hardening 3 sessions                                     [qs] [▾]│▕
+│ [4] ○ diagnostic-index            codex     idle                      +38 -7│▕
+│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│▕
+│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│▕
+╰─────────────────────────────────────────────────────────────────────────────╯▕
+╭─────────────────────────────────────────────────────────────────────────────╮▕
+│ ▼ Post-launch 0 sessions                                            [qs] [▾]│▼
+── ▼ 6 below · showing 6 of 12 ──────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;
 
 exports[`modal flow golden frames renders the Group menu above a short viewport 1`] = `
 "  ┌─Design refresh───────────┐
-FL│ New session…            N│
-──│──────────────────────────│
-  │ Group settings…         S│
-╭─│──────────────────────────│
-│ │▸Remove Group…           R│
-▼ └──────────────────────────┘
+FL│──────────────────────────│
+──│ Group settings…         S│
+▲ │──────────────────────────│
+╭─│▸Remove Group…           R│
+│ └──────────────────────────┘
 ───────────────────────────── 
 ↵ activate  N new  ⇥ next  /… 
 "
@@ -302,14 +301,14 @@ exports[`modal flow golden frames renders the move to group destination sheet 1`
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
- ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾] 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│ 
+ ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Move to Group                                                                │
 │ Session    group-contracts                                                   │
@@ -330,14 +329,14 @@ exports[`modal flow golden frames renders the move to group follows the final se
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
- ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾] 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│ 
+ ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Move to Group                                                                │
 │  U Ungrouped                                                                 │
@@ -358,14 +357,14 @@ exports[`modal flow golden frames renders the move to group create sheet 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
- ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾] 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│ 
+ ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Group                                                                 │
 │ Session    group-contracts                                                   │
@@ -442,13 +441,13 @@ exports[`modal flow golden frames renders the persistent filter condition fields
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
 ▏ FILTER /▏               10/10 matches 
-┌────────────────────────────────┐] [▾] 
-│ FILTER CONDITIONS           [×]│      
-│▸ S Status                 Any ›│t     
-│                                │      
-│  Apply filter (F)              │g     
-└────────────────────────────────┘      
-─────────────────────────────────────── 
+┌────────────────────────────────┐] [▾]▲
+│ FILTER CONDITIONS           [×]│     ▐
+│▸ S Status                 Any ›│t    ▕
+│                                │     ▕
+│  Apply filter (F)              │g    ▕
+└────────────────────────────────┘     ▼
+── ▼ 5 below · showing 5 of 10 ──────── 
  CONDITION  S/P/A edit F apply Esc text 
 "
 `;
@@ -458,13 +457,13 @@ exports[`modal flow golden frames renders the persistent filter follows the fina
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
 ▏ FILTER /▏               10/10 matches 
-┌────────────────────────────────┐] [▾] 
-│ FILTER CONDITIONS           [×]│      
-│▸ A Agent                  Any ›│t     
-│                                │      
-│  Apply filter (F)              │g     
-└────────────────────────────────┘      
-─────────────────────────────────────── 
+┌────────────────────────────────┐] [▾]▲
+│ FILTER CONDITIONS           [×]│     ▐
+│▸ A Agent                  Any ›│t    ▕
+│                                │     ▕
+│  Apply filter (F)              │g    ▕
+└────────────────────────────────┘     ▼
+── ▼ 5 below · showing 5 of 10 ──────── 
  CONDITION  S/P/A edit F apply Esc text 
 "
 `;
@@ -502,13 +501,13 @@ exports[`modal flow golden frames renders the persistent filter condition values
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
 ▏ FILTER /▏               10/10 matches 
-┌────────────────────────────────┐] [▾] 
-│[←] STATUS CONDITION         [×]│      
-│  6 [ ] Exited                  │t     
-│▸ 7 [ ] No agent                │      
-│  Done (Enter)                  │g     
-└────────────────────────────────┘      
-─────────────────────────────────────── 
+┌────────────────────────────────┐] [▾]▲
+│[←] STATUS CONDITION         [×]│     ▐
+│  6 [ ] Exited                  │t    ▕
+│▸ 7 [ ] No agent                │     ▕
+│  Done (Enter)                  │g    ▕
+└────────────────────────────────┘     ▼
+── ▼ 5 below · showing 5 of 10 ──────── 
  CONDITION  ← fields Sp toggle Esc clo… 
 "
 `;
@@ -546,14 +545,14 @@ exports[`modal flow golden frames renders the collapse project sheet scrolls a l
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
 ───────────────────────────────────────────────────────────────────────────────
        SESSION                            AGENT     STATUS            DIFF · PR
- ▼ station  5 sessions · 4 agents                                 [sh] [qs] [▾]
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       codex     no agent
- [3] ○ pty-buffer                         codex     idle                  #73 ✓
- [4] + session-resume                     codex     starting
- [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …
-
- ▼ observer  3 sessions · 3 agents                                [sh] [qs] [▾]
+ ▼ station  5 sessions · 4 agents                                 [sh] [qs] [▾]▲
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓▐
+ [2] - docs-cleanup                       codex     no agent                   ▐
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓▐
+ [4] + session-resume                     codex     starting                   ▐
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …▕
+                                                                               ▕
+ ▼ observer  3 sessions · 3 agents                                [sh] [qs] [▾]▕
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Collapse Project                                                             │
 │  i overflow-project-13 healthy                                               │
@@ -602,30 +601,30 @@ exports[`modal flow golden frames renders the new session project picker reaches
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
 ───────────────────────────────────────────────────────────────────────────────
        SESSION                                 AGENT     STATUS       DIFF · PR
- ▼ sheet-project-00  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-01  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-02  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-03  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-04  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-05  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-06  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-07  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
+ ▼ sheet-project-00  5 sessions · 4 agents                        [sh] [qs] [▾]▲
+ no sessions yet · [ + add session ]                                           ▐
+                                                                               ▐
+ ▼ sheet-project-01  5 sessions · 4 agents                        [sh] [qs] [▾]▐
+ no sessions yet · [ + add session ]                                           ▐
+                                                                               ▐
+ ▼ sheet-project-02  5 sessions · 4 agents                        [sh] [qs] [▾]▐
+ no sessions yet · [ + add session ]                                           ▐
+                                                                               ▐
+ ▼ sheet-project-03  5 sessions · 4 agents                        [sh] [qs] [▾]▐
+ no sessions yet · [ + add session ]                                           ▕
+                                                                               ▕
+ ▼ sheet-project-04  5 sessions · 4 agents                        [sh] [qs] [▾]▕
+ no sessions yet · [ + add session ]                                           ▕
+                                                                               ▕
+ ▼ sheet-project-05  5 sessions · 4 agents                        [sh] [qs] [▾]▕
+ no sessions yet · [ + add session ]                                           ▕
+                                                                               ▕
+ ▼ sheet-project-06  5 sessions · 4 agents                        [sh] [qs] [▾]▕
+ no sessions yet · [ + add session ]                                           ▕
+                                                                               ▕
+ ▼ sheet-project-07  5 sessions · 4 agents                        [sh] [qs] [▾]▕
+ no sessions yet · [ + add session ]                                           ▕
+                                                                               ▕
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Choose Project                                                               │
 │  x sheet-project-32 healthy                                                  │
@@ -646,25 +645,25 @@ exports[`modal flow golden frames renders the group settings general 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ───┌────────────────────────────────────────────────────────────────────────┐── 
    │ Group settings · Design refresh                                        │PR 
- ▼ │ Design refresh           │ General                                     │▾] 
-╭──│▸ General                 │  Name Design refresh                        │─╮ 
-│ ▼│  Sessions                │ Save renames; sessions stay attached.       │]│ 
-│ [│  Remove Group            │                                             │…│ 
-│ [│                          │ Project station (read-only)                 │✓│ 
-╰──│                          │ /Users/example/Developer/station            │─╯ 
-╭──│                          │                                             │─╮ 
-│ ▼│                          │                                             │]│ 
-│ [│                          │                                             │6│ 
-╰──│                          │                                             │─╯ 
-╭──│                          │                                             │─╮ 
-│ ▼│                          │                                             │]│ 
-│ [│                          │                                             │7│ 
-│ [│                          │                                             │1│ 
-│ [│                          │                                             │…│ 
-╰──│                          │  Save (Enter)    Cancel (Esc)               │─╯ 
-╭──│ ↑↓ or G/S/R select · →/enter edit · esc back                           │─╮ 
-▼ 6└────────────────────────────────────────────────────────────────────────┘   
-─────────────────────────────────────────────────────────────────────────────── 
+ ▼ │ Design refresh           │ General                                     │▾]▲
+╭──│▸ General                 │  Name Design refresh                        │─╮▐
+│ ▼│  Sessions                │ Save renames; sessions stay attached.       │]│▐
+│ [│  Remove Group            │                                             │…│▐
+│ [│                          │ Project station (read-only)                 │✓│▐
+╰──│                          │ /Users/example/Developer/station            │─╯▐
+╭──│                          │                                             │─╮▐
+│ ▼│                          │                                             │]│▐
+│ [│                          │                                             │6│▐
+╰──│                          │                                             │─╯▐
+╭──│                          │                                             │─╮▕
+│ ▼│                          │                                             │]│▕
+│ [│                          │                                             │7│▕
+│ [│                          │                                             │1│▕
+│ [│                          │                                             │…│▕
+╰──│                          │  Save (Enter)    Cancel (Esc)               │─╯▕
+╭──│ ↑↓ or G/S/R select · →/enter edit · esc back                           │─╮▕
+│ ▼└────────────────────────────────────────────────────────────────────────┘]│▼
+── ▼ 6 below · showing 6 of 12 ──────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;
@@ -1206,24 +1205,24 @@ exports[`modal flow golden frames renders the fork details grouped source 1`] = 
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
- ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾] 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│ 
-┌────────────────────────────────────────────┐idle                      +27 -6│ 
-│ Fork Session                               │────────────────────────────────╯ 
-│ Source   station · group-contracts         │────────────────────────────────╮ 
-│  Name   group-contracts-fork               │                        [qs] [▾]│ 
-│▸ Group  [x] create in Design refresh       │idle                      +38 -7│ 
-│  Copy   [x] uncommitted changes            │Agent needs app… +53 -11 #476 x1│ 
-│ Source keeps running — copy is read-only.  │working           +91 -22 #478 …│ 
-│                                            │────────────────────────────────╯ 
-│                                            │────────────────────────────────╮ 
-│  Fork (enter)                              │                                  
+ ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
+┌────────────────────────────────────────────┐idle                      +27 -6│▐
+│ Fork Session                               │────────────────────────────────╯▐
+│ Source   station · group-contracts         │────────────────────────────────╮▕
+│  Name   group-contracts-fork               │                        [qs] [▾]│▕
+│▸ Group  [x] create in Design refresh       │idle                      +38 -7│▕
+│  Copy   [x] uncommitted changes            │Agent needs app… +53 -11 #476 x1│▕
+│ Source keeps running — copy is read-only.  │working           +91 -22 #478 …│▕
+│                                            │────────────────────────────────╯▕
+│                                            │────────────────────────────────╮▕
+│  Fork (enter)                              │                        [qs] [▾]│▼
 │ Space/Enter toggle · ↑↓ focus · Esc back   │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
@@ -1694,14 +1693,14 @@ exports[`modal flow golden frames renders the new session pick Group 1`] = `
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
- ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾] 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│ 
+ ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Choose Group                                                                 │
 │                                                                              │
@@ -1722,14 +1721,14 @@ exports[`modal flow golden frames renders the new session follows the final Grou
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
- ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾] 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│ 
+ ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Choose Group                                                                 │
 │ ✓U Ungrouped                                                                 │
@@ -1750,14 +1749,14 @@ exports[`modal flow golden frames renders the new session edit inline Group 1`] 
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
- ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾] 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│ 
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
-╭─────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│ 
+ ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭─────────────────────────────────────────────────────────────────────────────╮▐
+│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Group                                                                 │
 │ Project      station                                                         │

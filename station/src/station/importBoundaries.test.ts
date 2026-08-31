@@ -9,7 +9,7 @@ import ts from "@typescript/typescript6";
 const STATION_VIEW_ROOT = fileURLToPath(new URL(".", import.meta.url));
 const STATION_SOURCE_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const CONTEXT_MENU_ROOT = fileURLToPath(new URL("../contextMenu/", import.meta.url));
-const STATION_SOURCES_ROOT = fileURLToPath(new URL("../sources/", import.meta.url));
+const STATION_CLIENT_ROOT = fileURLToPath(new URL("../client/", import.meta.url));
 const DASHBOARD_CORE_SOURCE_ROOT = fileURLToPath(
   new URL("../../../packages/dashboard-core/src/", import.meta.url),
 );
@@ -484,9 +484,9 @@ const DASHBOARD_TEXT_NAMES = new Set([
 ]);
 const OPENTUI_LAYOUT_GEOMETRY_OWNERS = new Set([
   "contextMenu/usePointerAnchoredMenuPlacement.ts",
-  "station/view/layout/SemanticScrollViewport.tsx",
+  "station/view/layout/scroll/SemanticScrollViewport.tsx",
   "station/view/layout/renderBoxInsets.ts",
-  "station/view/layout/scrollViewport.ts",
+  "station/view/layout/scroll/scrollViewport.ts",
   "station/view/layout/semanticPointerTarget.ts",
   "station/view/layout/useAncestorBoundedHeight.ts",
   "station/view/layout/useAnchoredMenuPlacement.ts",
@@ -495,6 +495,10 @@ const TERMINAL_INTEGRATION_IMPORT_INVENTORY = [
   "main.tsx: import convergeStationHost from @station/terminal",
   "sources/listLiveHostPtys.ts: import inspectStationHost from @station/terminal",
 ] as const;
+const NODE_FOLDER_SERVICE_IMPORT_INVENTORY = [
+  "dashboardRenderer/main.tsx: import createNodeFolderService from ../folderNavigation/nodeFolderService.js",
+  "main.tsx: import createNodeFolderService from ./folderNavigation/nodeFolderService.js",
+] as const;
 
 describe("station production boundaries", () => {
   it("finds every production layer and excludes test support", () => {
@@ -502,7 +506,8 @@ describe("station production boundaries", () => {
     const expectedProduction = [
       "main.tsx",
       "dashboardRenderer/main.tsx",
-      "sources/observerStationClient.ts",
+      "client/observerStationClient.ts",
+      "folderNavigation/nodeFolderService.ts",
       "config/tuiConfig.ts",
       "input/stationInput.ts",
       "station/view/DashboardView.tsx",
@@ -510,7 +515,7 @@ describe("station production boundaries", () => {
     const expectedExcluded = [
       "station/importBoundaries.test.ts",
       "station/test/support/makeStationTestRuntime.ts",
-      "sources/fixtures/mockObserverSnapshot.ts",
+      "client/fixtures/mockObserverSnapshot.ts",
       "terminal/testing/frameProbe.ts",
     ];
     const expectedInternalExports = ["createTuiLocalOperationRunner"];
@@ -543,8 +548,8 @@ describe("station production boundaries", () => {
     expect(imports).toEqual([...TERMINAL_INTEGRATION_IMPORT_INVENTORY].sort());
   });
 
-  it("keeps the Station client-source tree independent of dashboard-core", () => {
-    const failures = sourceModules(STATION_SOURCES_ROOT, isProductionSource).flatMap((module) =>
+  it("keeps the Station client tree independent of dashboard-core", () => {
+    const failures = sourceModules(STATION_CLIENT_ROOT, isProductionSource).flatMap((module) =>
       moduleReferencesOf(module).flatMap((reference) =>
         reference.specifier.startsWith(DASHBOARD_CORE_ROOT_IMPORT)
           ? referenceDescriptors(module, reference)
@@ -552,6 +557,17 @@ describe("station production boundaries", () => {
       ),
     );
     expect(failures.sort()).toEqual([]);
+  });
+
+  it("constructs Node folder navigation only at renderer composition roots", () => {
+    const imports = PRODUCTION_MODULES.flatMap((module) =>
+      moduleReferencesOf(module).flatMap((reference) =>
+        reference.importedNames.includes("createNodeFolderService")
+          ? referenceDescriptors(module, reference, ["createNodeFolderService"])
+          : [],
+      ),
+    ).sort();
+    expect(imports).toEqual([...NODE_FOLDER_SERVICE_IMPORT_INVENTORY].sort());
   });
 
   it("keeps Zustand React access read-only and rejects raw store imports", () => {
@@ -778,7 +794,6 @@ describe("station view import boundaries", () => {
 
   it("keeps sheet action sizing and pointer wiring in shared controls", () => {
     const frame = "view/sheets/BottomSheetFrameView.tsx";
-    const primitives = "view/sheets/parts.tsx";
     const actionSheets = new Set([
       "view/sheets/AddProjectSheetView.tsx",
       "view/sheets/ForkSessionSheetView.tsx",
@@ -791,8 +806,7 @@ describe("station view import boundaries", () => {
       if (
         !rel.startsWith("view/sheets/") ||
         !file.endsWith(".tsx") ||
-        file.includes(".test.") ||
-        rel === primitives
+        file.includes(".test.")
       ) {
         continue;
       }

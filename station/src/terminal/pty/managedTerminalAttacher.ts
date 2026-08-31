@@ -3,7 +3,7 @@ import {
   StationHostProviderError,
   type HostListEntry,
 } from "@station/host";
-import { listLiveHostPtys } from "../../sources/listLiveHostPtys.js";
+import { listLiveHostPtys } from "../../host/listLiveHostPtys.js";
 import type { StationTerminalProcess, StationTerminalSpawnOptions } from "../types.js";
 import {
   createHostAttachedTerminal,

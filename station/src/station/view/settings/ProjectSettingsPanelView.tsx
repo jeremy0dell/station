@@ -17,10 +17,10 @@ import type {
   DashboardStateView,
 } from "@station/dashboard-core/state";
 import { toOpenTuiColor, useStationTheme } from "../../../theme/index.js";
+import { fit } from "../controls/sheetText.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 import { AgentChoiceListView } from "../sheets/AgentChoiceListView.js";
-import { fit } from "../sheets/parts.js";
 import {
   stationMouseProps,
   useStationHoverState,

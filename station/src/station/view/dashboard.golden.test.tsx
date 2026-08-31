@@ -39,7 +39,7 @@ import {
   StationMouseProvider,
   type StationMouseDispatch,
 } from "./stationMouseContext.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import { FullscreenDashboard } from "../../dashboardRenderer/FullscreenDashboard.js";
 
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
@@ -367,17 +367,32 @@ describe("dashboard golden frames", () => {
     expect(filteredFrame).not.toContain("group-contracts");
     expect(stableGoldenFrame(filteredFrame)).toMatchSnapshot();
 
+    const pointerTargets: StationMouseTarget[] = [];
     const scrolled = await renderDashboard({
       width: 80,
       height: 16,
       snapshot,
+      dispatchMouse: (target) => pointerTargets.push(target),
     });
     scrolled.store.layout.scrollBy(8);
     await scrolled.flush();
     const scrolledFrame = scrolled.captureCharFrame();
     expect(scrolledFrame).toContain("▲");
     expect(scrolledFrame).toContain("│");
+    expect(scrolledFrame).toMatch(/▼ \d+ below · showing/u);
     expect(stableGoldenFrame(scrolledFrame)).toMatchSnapshot();
+
+    const belowRow = scrolledFrame.split("\n").findIndex((line) => line.includes("below"));
+    await scrolled.mockMouse.click(2, belowRow, MouseButtons.LEFT);
+    expect(pointerTargets).toEqual([{ kind: "scrollIndicator", direction: "down" }]);
+
+    const downArrowRow = scrolledFrame.split("\n").findIndex((line) => line.endsWith("▼"));
+    expect(belowRow).toBe(downArrowRow + 1);
+    scrolled.store.layout.scrollBy(1_000);
+    await scrolled.flush();
+    const bottomFrame = scrolled.captureCharFrame();
+    expect(bottomFrame).not.toContain("below");
+    expect(bottomFrame.split("\n").findIndex((line) => line.endsWith("▼"))).toBe(downArrowRow);
   });
 
   it("uses the same responsive Quick Session label for Group and Project headers", async () => {
@@ -424,8 +439,8 @@ describe("dashboard golden frames", () => {
     expect(group).toBeDefined();
     expect(project).not.toContain("�");
     expect(group).not.toContain("�");
-    expect(project?.trimEnd().endsWith("[sh] [qs] [▾]")).toBe(true);
-    expect(group?.trimEnd().endsWith("[qs] [▾]│")).toBe(true);
+    expect(project?.replace(/[▐▕▲▼]$/u, "").trimEnd().endsWith("[sh] [qs] [▾]")).toBe(true);
+    expect(group?.replace(/[▐▕▲▼]$/u, "").trimEnd().endsWith("[qs] [▾]│")).toBe(true);
     expect(cellWidth(project ?? "")).toBe(40);
     expect(cellWidth(group ?? "")).toBe(40);
   });
@@ -561,7 +576,9 @@ describe("dashboard golden frames", () => {
         expect(line?.includes("[qs]")).toBe(testCase.quickSession);
         expect(line?.includes("[▾]")).toBe(testCase.menu);
         if (!collapsed) {
-          expect(line?.trimEnd().endsWith(testCase.expandedSuffix)).toBe(true);
+          expect(line?.replace(/[▐▕]$/u, "").trimEnd().endsWith(testCase.expandedSuffix)).toBe(
+            true,
+          );
           expect(line?.lastIndexOf("│")).toBe(78);
         }
       }

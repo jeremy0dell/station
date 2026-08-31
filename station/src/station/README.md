@@ -45,8 +45,9 @@ await the prior dashboard disposer before composing a replacement; native HMR re
 the compatible workspace store and live PTYs.
 
 Every renderer injects session-activation, managed-session, shell-opening, and
-dismissal capabilities. Native Station composes those capabilities with managed panes
-and overlay authority; standalone rendering composes Observer commands and popup IPC.
+dismissal capabilities plus required folder navigation. Native Station composes those
+capabilities with managed panes, overlay authority, and `folderNavigation/nodeFolderService.ts`;
+standalone rendering composes Observer commands, popup IPC, and the same Node adapter.
 Dashboard state contains no renderer control intents, and dashboard-core owns optimistic
 rows, notices, failures, and expiry. Native pointer Create, direct `C`, and focused
 Create Enter therefore converge after semantic resolution and shared validation before
@@ -75,7 +76,7 @@ the same managed-session capability invocation.
 
 Live mode dispatches through the single shared `@station/client` service: one
 client runtime owns canonical snapshot/connection state and the `ObserverService`
-used by commands (`sources/observerStationClient.ts`). Its provider-neutral
+used by commands (`../client/observerStationClient.ts`). Its provider-neutral
 `executeObserverCommand` primitive dispatches typed commands and normalizes
 rejection, acceptance, successful completion, completion failure, and thrown
 failure exactly once while retaining receipt/trace identity. Dashboard and native

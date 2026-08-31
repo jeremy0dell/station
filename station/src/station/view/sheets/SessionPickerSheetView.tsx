@@ -1,7 +1,8 @@
 import type { ReactElement } from "react";
-import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
+import { SheetMessageLine } from "../controls/sheetMessages.js";
+import { SheetFooter } from "../controls/sheetText.js";
+import { bottomSheetContentWidth, compactSheetWidth } from "../layout/bottomSheetFrame.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
-import { compactSheetWidth, SheetFooter, SheetMessageLine } from "./parts.js";
 
 export type SessionPickerSheetViewProps = {
   title: string;

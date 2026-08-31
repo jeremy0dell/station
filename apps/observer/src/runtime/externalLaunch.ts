@@ -7,9 +7,10 @@ import type {
   ManagedTerminalLifecycle,
   SafeError,
   SessionView,
+  StationEvent,
 } from "@station/contracts";
 import { terminalTargetObservationFromBinding, worktreeHasLiveAgent } from "@station/contracts";
-import type { RuntimeClock } from "@station/runtime";
+import { type RuntimeClock, safeErrorFromUnknown } from "@station/runtime";
 import { worktreeMissingError } from "../commands/errors.js";
 import { assertHarnessLaunchPreconditionsOrThrow } from "../commands/harnessLaunchPreflight.js";
 import { resolveHarnessProviderOrThrow } from "../commands/providers.js";
@@ -50,6 +51,7 @@ export type ExternalLaunchOutcome<T> = {
   outcome: T;
   /** Whether the caller should request a shared scheduled reconcile for this lifecycle change. */
   reconcile: boolean;
+  events?: StationEvent[];
 };
 
 /**
@@ -61,7 +63,10 @@ export type ExternalLaunchOutcome<T> = {
  * options, and releases only its replacement target generation on failure. Both launch paths
  * preflight only the selected provider. A fresh Station identity is atomically seeded with explicit
  * root placement or the requested source session's current Group before target publication, and
- * confirmed failed launch cleanup removes only its membership and owned inline Group.
+ * confirmed failed launch cleanup removes only its membership and owned inline Group. After the
+ * binding-token-qualified process launch succeeds, the serialized projection reloads exact durable
+ * session authority and preserves correlated state committed since preflight before return;
+ * reconciliation verifies it and remains the fallback for any rejection.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -303,9 +308,71 @@ async function prepareExternalLaunchForWorktree(
       outcome.outputCompatibility = launched.outputCompatibility;
     }
 
+    let events: StationEvent[] = [];
+    if (
+      launched.terminalTargetId === opened.target.targetId &&
+      launched.agentEndpointId === opened.agentEndpointId
+    ) {
+      const projectedTerminalTarget = terminalTargetObservationFromBinding({
+        binding: opened.target,
+        worktree,
+        observedAt: nowIso(deps.clock),
+      });
+      try {
+        const projection = await deps.core.commitPreparedExternalLaunch({
+          worktree,
+          terminalProviderId: managedTerminal.id,
+          terminalTargetId: opened.target.targetId,
+          terminalTarget: projectedTerminalTarget,
+          harnessProviderId,
+          sessionId,
+          baseRow: row,
+        });
+        if (projection.status === "rejected") {
+          await deps.logger
+            ?.warn("External launch evidence required reconciliation fallback.", {
+              projectId: project.id,
+              worktreeId: worktree.id,
+              sessionId,
+              terminalTargetId: opened.target.targetId,
+              reason: projection.reason,
+            })
+            .catch(() => undefined);
+        } else {
+          events = projection.events;
+        }
+      } catch (cause) {
+        const error = safeErrorFromUnknown(cause, {
+          tag: "ObserverProjectionError",
+          code: "EXTERNAL_LAUNCH_PROJECTION_FAILED",
+          message: "Prepared external launch evidence could not be projected.",
+        });
+        await deps.logger
+          ?.warn("External launch evidence required reconciliation fallback.", {
+            projectId: project.id,
+            worktreeId: worktree.id,
+            sessionId,
+            terminalTargetId: opened.target.targetId,
+            error,
+          })
+          .catch(() => undefined);
+      }
+    } else {
+      await deps.logger
+        ?.warn("External launch evidence required reconciliation fallback.", {
+          projectId: project.id,
+          worktreeId: worktree.id,
+          sessionId,
+          terminalTargetId: opened.target.targetId,
+          reason: "launch_result_identity_mismatch",
+        })
+        .catch(() => undefined);
+    }
+
     return {
       outcome,
       reconcile: true,
+      ...(events.length === 0 ? {} : { events }),
     };
   } catch (error) {
     const targetReleaseConfirmed = await releaseOpenedTargetBestEffort({

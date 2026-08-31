@@ -12,7 +12,7 @@ import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.j
 import { groupedManyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 import { MoveToGroupSheetView } from "./MoveToGroupSheetView.js";
 
 type MoveScreen = Exclude<

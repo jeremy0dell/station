@@ -17,11 +17,12 @@ import type {
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import { stationHelpEntryOrder } from "../../helpEntries.js";
 import { FakeStationSource } from "./fakeStationSource.js";
+import { createFakeFolderService } from "./fakeFolderService.js";
 import { FakeTuiObserverService } from "./fakeObserverService.js";
 import {
   createDashboardScrollController,
   type DashboardScrollController,
-} from "../../view/layout/scrollViewport.js";
+} from "../../view/layout/scroll/dashboardScrollController.js";
 
 export type MakeStationTestRuntimeOptions = {
   /** Source snapshot; `null` exercises the no-snapshot states. Default: manyProjectsSnapshot(). */
@@ -41,11 +42,12 @@ export type StationTestDashboardRuntime = DashboardRuntime & {
 
 export type CreateStationTestDashboardRuntimeOptions = Omit<
   DashboardRuntimeOptions,
-  "source" | "capabilities"
+  "source" | "capabilities" | "folderService"
 > & {
   source?: StationClientStateSource;
   initialSnapshot?: StationSnapshot;
   capabilities?: DashboardCapabilities;
+  folderService?: TuiFolderService;
   persistentPopup?: boolean;
   focusOrigin?: import("@station/contracts").TerminalFocusOrigin;
   resolveFocusTarget?: () => Promise<DashboardFocusTarget | undefined>;
@@ -90,6 +92,7 @@ export function createStationTestDashboardRuntime(
     ...runtimeOptions,
     source: clientState,
     capabilities: resolvedCapabilities,
+    folderService: options.folderService ?? createFakeFolderService(),
     helpEntries: runtimeOptions.helpEntries ?? stationHelpEntryOrder,
     visibleDashboardRows: runtimeOptions.visibleDashboardRows ?? layout.visibleRows,
   });
@@ -177,7 +180,7 @@ export function makeStationTestRuntime(
     initialState: {
       ...(options.initialState ?? {}),
     },
-    ...(options.folderService === undefined ? {} : { folderService: options.folderService }),
+    folderService: options.folderService ?? createFakeFolderService(),
   });
   if (snapshot !== undefined && options.seedInitialSnapshot === false) {
     // Preserve loading-state fixtures: the source gains truth before start,

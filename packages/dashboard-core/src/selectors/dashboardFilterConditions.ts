@@ -6,7 +6,7 @@ import type {
   DashboardFilterStatusConditionValue,
   TuiViewState,
 } from "../state/types.js";
-import { SELECTION_KEYS } from "./selectors.js";
+import { SELECTION_KEYS } from "./keyedChoices.js";
 
 const DASHBOARD_FILTER_STATUS_RANK = {
   needs_attention: 0,

@@ -465,6 +465,33 @@ describe("DynamicStationButton", () => {
     }
   });
 
+  it("clears external hover when unmounted while hovered", async () => {
+    const hoverChanges: boolean[] = [];
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DynamicStationButton
+          input={input({ attention: true, needsYouCount: 1, sessionName: "hook-scope" })}
+          onHoverChange={(hovered) => hoverChanges.push(hovered)}
+        />
+      </StationThemeProvider>,
+      SURFACE,
+    );
+    let destroyed = false;
+    try {
+      await setup.flush();
+      await setup.mockMouse.moveTo(SURFACE.width - 1, 0);
+      setup.renderer.destroy();
+      destroyed = true;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(hoverChanges).toEqual([true, false]);
+    } finally {
+      if (!destroyed) {
+        setup.renderer.destroy();
+      }
+    }
+  });
+
   it("attention wins over the celebration", async () => {
     const frame = await captureFrame(
       <DynamicStationButton

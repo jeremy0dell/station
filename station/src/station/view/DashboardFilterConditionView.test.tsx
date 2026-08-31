@@ -19,7 +19,7 @@ import {
   DashboardFilterConditionView,
   FILTER_CONDITION_PANEL_ID,
 } from "./DashboardFilterConditionView.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;

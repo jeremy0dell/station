@@ -43,11 +43,13 @@ export type DashboardTableHeaderModel =
 export function dashboardTableHeaderModel({
   layout,
   overflow,
+  hasSemanticRowsAbove,
   columns,
   persistentFilter,
 }: {
   layout: RowGridLayout | undefined;
   overflow: DashboardSessionOverflow;
+  hasSemanticRowsAbove: boolean;
   columns: number;
   persistentFilter?: DashboardPersistentFilterProjection;
 }): DashboardTableHeaderModel | undefined {
@@ -61,8 +63,8 @@ export function dashboardTableHeaderModel({
       }),
     };
   }
-  // The position cue owns the shared row whenever sessions are hidden above.
-  if (overflow.above > 0) {
+  // The position cue owns the shared row whenever semantic content is hidden above.
+  if (hasSemanticRowsAbove) {
     return { kind: "aboveOverflow", overflow };
   }
   if (layout !== undefined) {

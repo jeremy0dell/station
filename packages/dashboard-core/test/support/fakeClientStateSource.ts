@@ -4,6 +4,7 @@ import type {
   StationClientStateSource,
 } from "@station/client";
 import type { StationSnapshot, TerminalFocusOrigin } from "@station/contracts";
+import type { TuiFolderService } from "../../src/services/folderService.js";
 import {
   createObserverActivationCapabilities,
   type DashboardFocusTarget,
@@ -21,11 +22,12 @@ import { createFakeDashboardCapabilities } from "./fakeDashboardCapabilities.js"
 
 export type TestDashboardRuntimeOptions = Omit<
   DashboardRuntimeOptions,
-  "source" | "capabilities"
+  "source" | "capabilities" | "folderService"
 > & {
   source?: StationClientStateSource;
   initialSnapshot?: StationSnapshot;
   capabilities?: DashboardRuntimeOptions["capabilities"];
+  folderService?: TuiFolderService;
   persistentPopup?: boolean;
   focusOrigin?: TerminalFocusOrigin;
   resolveFocusTarget?: () => Promise<DashboardFocusTarget | undefined>;
@@ -53,6 +55,7 @@ export function createTestDashboardRuntime(options: TestDashboardRuntimeOptions)
   return createDashboardRuntime({
     ...runtimeOptions,
     source,
+    folderService: options.folderService ?? createFakeFolderService(),
     capabilities:
       capabilities ??
       createLegacyTestCapabilities({
@@ -67,6 +70,17 @@ export function createTestDashboardRuntime(options: TestDashboardRuntimeOptions)
         ...(onExit === undefined ? {} : { onExit }),
       }),
   });
+}
+
+function createFakeFolderService(): TuiFolderService {
+  return {
+    cwd: () => "/workspace/station",
+    homeDir: () => "/Users/example",
+    parent: (path) => path,
+    readDirectory: async (path) => ({ path, entries: [] }),
+    searchDirectories: async (query) => ({ query, entries: [], truncated: false }),
+    reviewFolder: async (path) => ({ selectedPath: path, id: "project", label: "project" }),
+  };
 }
 
 function createLegacyTestCapabilities(options: {

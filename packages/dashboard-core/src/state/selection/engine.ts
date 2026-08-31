@@ -1,4 +1,4 @@
-import { choiceValueByKey } from "../../selectors/selectors.js";
+import { choiceValueByKey } from "../../selectors/keyedChoices.js";
 import { isSlotKey } from "../keymap.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";

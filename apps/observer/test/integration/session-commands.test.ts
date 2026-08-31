@@ -3644,11 +3644,166 @@ function healthyHarnessHealth(harness: HarnessProvider): ProviderHealth {
 }
 
 describe("worktree.create command", () => {
+  it("publishes a committed launch-bound create without scanning providers", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const listWorktrees = vi.spyOn(worktree, "listWorktrees");
+    const fixture = createFixture({ worktree });
+    const events = fixture.eventBus.subscribe({ type: "worktree.added" })[Symbol.asyncIterator]();
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: {
+        projectId: "web",
+        branch: "launch-bound-create",
+        launchHarness: "fake-harness",
+      },
+    });
+    await fixture.queue.drain();
+
+    expect(listWorktrees).not.toHaveBeenCalled();
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+      result: {
+        type: "worktree.create",
+        projectId: "web",
+        worktreeId: "wt_web_launch_bound_create",
+      },
+    });
+    const published = await events.next();
+    expect(published).toMatchObject({
+      done: false,
+      value: { type: "worktree.added", row: { branch: "launch-bound-create" } },
+    });
+    const publishedId =
+      published.done || published.value.type !== "worktree.added"
+        ? undefined
+        : published.value.row.id;
+    expect(fixture.core.getSnapshot().rows.find((row) => row.id === publishedId)).toMatchObject({
+      branch: "launch-bound-create",
+    });
+    expect(fixture.core.getSnapshot()).toMatchObject({
+      counts: { worktrees: 1 },
+      rows: [{ title: "launch-bound-create", display: { statusLabel: "no agent" } }],
+    });
+
+    await events.return?.();
+    fixture.sqlite.close();
+  });
+
+  it("uses full reconciliation for stale same-id evidence", async () => {
+    const stale = createFakeWorktree({
+      id: "wt_web_collision",
+      projectId: "web",
+      branch: "collision",
+      path: "/tmp/station/web/stale-collision",
+      source: "manual",
+      now,
+    });
+    const worktree = new FakeWorktreeProvider({ now, worktrees: [stale] });
+    const originalCreate = worktree.createWorktree.bind(worktree);
+    let created: Awaited<ReturnType<typeof worktree.createWorktree>> | undefined;
+    vi.spyOn(worktree, "createWorktree").mockImplementation(async (request) => {
+      created = await originalCreate(request);
+      return created;
+    });
+    const listWorktrees = vi
+      .spyOn(worktree, "listWorktrees")
+      .mockImplementation(async () => (created === undefined ? [stale] : [created]));
+    const fixture = createFixture({ worktree });
+    await fixture.core.reconcile("seed-stale-id");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: {
+        projectId: "web",
+        branch: "collision",
+        launchHarness: "fake-harness",
+      },
+    });
+    await fixture.queue.drain();
+
+    expect(listWorktrees).toHaveBeenCalledTimes(2);
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.core.getSnapshot().rows).toEqual([
+      expect.objectContaining({
+        id: "wt_web_collision",
+        path: "/tmp/station/web/collision",
+        worktree: expect.objectContaining({ source: "worktrunk" }),
+      }),
+    ]);
+    fixture.sqlite.close();
+  });
+
+  it("uses full reconciliation when the narrow create projection fails", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const listWorktrees = vi.spyOn(worktree, "listWorktrees");
+    const fixture = createFixture({ worktree });
+    vi.spyOn(fixture.core, "commitCreatedWorktreeObservation").mockRejectedValueOnce(
+      new Error("projection unavailable"),
+    );
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: {
+        projectId: "web",
+        branch: "projection-fallback",
+        launchHarness: "fake-harness",
+      },
+    });
+    await fixture.queue.drain();
+
+    expect(listWorktrees).toHaveBeenCalledTimes(1);
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.core.getSnapshot().rows).toEqual([
+      expect.objectContaining({ branch: "projection-fallback" }),
+    ]);
+    fixture.sqlite.close();
+  });
+
+  it("projects a completed provider mutation before recording late cancellation", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const fixture = createFixture({ worktree });
+    const commitProjection = fixture.core.commitCreatedWorktreeObservation.bind(fixture.core);
+    let shutdown: Promise<void> | undefined;
+    vi.spyOn(fixture.core, "commitCreatedWorktreeObservation").mockImplementation((created) => {
+      shutdown = fixture.queue.shutdown();
+      return commitProjection(created);
+    });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: {
+        projectId: "web",
+        branch: "late-cancellation",
+        launchHarness: "fake-harness",
+      },
+    });
+    while (shutdown === undefined) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await shutdown;
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: expect.objectContaining({ code: "COMMAND_CANCELLED" }),
+    });
+    expect(fixture.core.getSnapshot().rows).toContainEqual(
+      expect.objectContaining({ id: "wt_web_late_cancellation", branch: "late-cancellation" }),
+    );
+    fixture.sqlite.close();
+  });
+
   it("creates a worktree with no session, agent, or terminal launch", async () => {
     // Station's New Session uses worktree.create then hosts the agent itself, so
     // — unlike session.create — it must NOT mint a session or spawn a terminal.
     const terminal = new FakeTerminalProvider({ now });
-    const fixture = createFixture({ terminal });
+    const worktree = new FakeWorktreeProvider({ now });
+    const listWorktrees = vi.spyOn(worktree, "listWorktrees");
+    const fixture = createFixture({ terminal, worktree });
 
     const receipt = await fixture.queue.dispatch({
       type: "worktree.create",
@@ -3657,6 +3812,7 @@ describe("worktree.create command", () => {
     await fixture.queue.drain();
 
     expect(receipt).toMatchObject({ accepted: true, status: "accepted" });
+    expect(listWorktrees).toHaveBeenCalledTimes(1);
 
     const rows = fixture.core.getSnapshot().rows;
     expect(rows).toHaveLength(1);

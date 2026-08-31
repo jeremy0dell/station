@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   selectMoveToGroupChoices,
   selectMoveToGroupSessionContext,
-} from "../../../../src/selectors/selectors.js";
+} from "../../../../src/selectors/sessionGroupChoices.js";
 import { createInitialTuiState } from "../../../../src/state/screen.js";
 import {
   openMoveToGroupForRow,

@@ -35,7 +35,12 @@ const AbsolutePathSchema = z.string().min(1).refine(isAbsolute, "Expected an abs
 const ProcessStartIdentitySchema = z.string().min(1);
 /** Strict public identifier for one registered disposable runtime. */
 export const DisposableRuntimeIdSchema = z.string().regex(/^run_[0-9a-f-]{36}$/i);
-const RuntimeRoleSchema = z.enum(["native-hmr", "setup-guided-e2e", "binary-smoke"]);
+const RuntimeRoleSchema = z.enum([
+  "native-hmr",
+  "setup-guided-e2e",
+  "binary-smoke",
+  "cli-ux-pilot",
+]);
 const UiRunIdSchema = z.string().regex(/^ui_[0-9a-f-]{36}$/i);
 const CorrelationSchema = z
   .object({

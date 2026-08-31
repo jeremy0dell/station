@@ -123,7 +123,7 @@ export type AddProjectFlowAction =
   | { type: "backToChoose" };
 
 export type AddProjectFlowEffect =
-  | { type: "loadDirectory"; path: string }
+  | { type: "loadDirectory"; path: string; parent?: true }
   | { type: "searchDirectories"; query: string }
   | { type: "reviewFolder"; path: string }
   | { type: "submitProject"; command: Extract<StationCommand, { type: "project.add" }> };

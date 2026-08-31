@@ -6,7 +6,6 @@ import { textSegment } from "@station/dashboard-core/selectors";
 import type { DashboardTableHeaderModel, RowGridLayout } from "@station/dashboard-core/selectors";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import {
-  DashboardScrollIndicatorView,
   DashboardTableHeaderView,
 } from "./DashboardTableHeaderView.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
@@ -97,23 +96,4 @@ describe("DashboardTableHeaderView", () => {
     expect(targets).toEqual([{ kind: "scrollIndicator", direction: "up" }]);
   });
 
-  it("does not reserve a row for an absent below-overflow indicator", async () => {
-    const setup = await testRender(
-      <StationThemeProvider theme={nativeStationTheme}>
-        <box flexDirection="column">
-          <DashboardScrollIndicatorView
-            direction="below"
-            overflow={{ above: 0, below: 0, visible: 4, total: 4 }}
-          />
-          <text>NEXT</text>
-        </box>
-      </StationThemeProvider>,
-      { width: 60, height: 2 },
-    );
-    teardowns.push(() => setup.renderer.destroy());
-    await setup.renderOnce();
-
-    const lines = setup.captureCharFrame().split("\n");
-    expect(lines[0]?.trimEnd()).toBe("NEXT");
-  });
 });

@@ -4,7 +4,7 @@ import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/contracts";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
 import { WidgetSettingsPanelView } from "./WidgetSettingsPanelView.js";
 

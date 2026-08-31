@@ -41,6 +41,25 @@ describe("add project flow", () => {
     expect(opened.effects).toEqual([{ type: "loadDirectory", path: "/Users/example" }]);
   });
 
+  it("defers parent resolution unless a compatibility resolver is supplied", () => {
+    const started = createAddProjectFlow({
+      cwd: "/Users/example/Developer/station",
+      homeDir: "/Users/example",
+    });
+    const choosing = transitionAddProjectFlow(started, {
+      type: "folderLoaded",
+      result: { path: "/Users/example/Developer/station", entries: [] },
+    }).state;
+    if (choosing?.mode !== "choose") throw new Error("expected choose mode");
+
+    expect(transitionAddProjectFlow(choosing, { type: "chooseParent" }).effects).toEqual([
+      { type: "loadDirectory", path: "/Users/example/Developer/station", parent: true },
+    ]);
+    expect(
+      transitionAddProjectFlow(choosing, { type: "chooseParent" }, () => "/legacy-parent").effects,
+    ).toEqual([{ type: "loadDirectory", path: "/legacy-parent" }]);
+  });
+
   it("uses wizard history and does not leak choose fields into review state", () => {
     const started = createAddProjectFlow({
       cwd: "/Users/example/Developer/station",

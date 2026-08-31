@@ -18,7 +18,7 @@ import {
 } from "@station/runtime";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
-import { safeErrorToProviderHealth } from "./graph.js";
+import { safeErrorToProviderHealth } from "./graph/providerHealth.js";
 
 export type ProviderReadOptions = {
   clock: RuntimeClock;

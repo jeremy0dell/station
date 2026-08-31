@@ -130,7 +130,8 @@ export type CreateObserverApiOptions = {
  * Wires Observer use cases with supplied durable, local-metadata, and diagnostic-
  * evidence roles, ingress workers, provider-health publication, scheduling, exact
  * build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment
- * queries, read-only singleton diagnostics, and adapter shutdown behind the application API.
+ * queries, authoritative launch projection and event ordering, read-only singleton diagnostics,
+ * and adapter shutdown behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
@@ -412,7 +413,10 @@ async function prepareExternalLaunchSafe(
     }
     throw cause;
   }
-  const { outcome, reconcile } = result;
+  const { outcome, reconcile, events } = result;
+  for (const event of events ?? []) {
+    options.eventBus.publish(event);
+  }
   if (reconcile) {
     reconcileScheduler.request("agent.prepareExternalLaunch");
   }

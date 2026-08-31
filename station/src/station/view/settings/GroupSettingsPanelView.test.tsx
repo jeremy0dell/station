@@ -17,7 +17,7 @@ import {
   StationHoverProvider,
   StationMouseProvider,
 } from "../stationMouseContext.js";
-import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scroll/scrollViewport.js";
 import { GroupSettingsPanelView } from "./GroupSettingsPanelView.js";
 
 type GroupSettingsScreen = Extract<DashboardScreenView, { name: "groupSettings" }>;

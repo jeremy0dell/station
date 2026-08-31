@@ -1,6 +1,6 @@
 import type { SessionId } from "@station/contracts";
 import { selectDashboardSlots } from "../../selectors/dashboardSlots.js";
-import { choiceValueByKey } from "../../selectors/selectors.js";
+import { choiceValueByKey } from "../../selectors/keyedChoices.js";
 import { focusedChooserSession, moveDashboardChooserCursor } from "../dashboardFocus.js";
 import { isSlotKey } from "../keymap.js";
 import { isReturnKey, type TuiKey } from "../keys.js";

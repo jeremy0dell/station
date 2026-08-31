@@ -243,6 +243,7 @@ areas contain the following responsibilities:
 | `commands/` | command queue, routing, scopes, cancellation, launch preflight, direct terminal operations, Group mutation, and command use cases | Driving application behavior; command handlers coordinate launch preflight and provider-neutral terminal operations directly through their narrow ports, while Group mutation remains a dedicated use case. |
 | `sessionRecovery/` | session recovery resolution, inventory, assessment, eligibility, and selection | Application use cases (`resolve.ts`, `inventory.ts`, `assessment.ts`) turn durable session state into typed resume authority or provider-neutral, redacted evidence without launching, reconciling, or mutating persistence; deterministic policies (`eligibility.ts`, `selection.ts`) admit and order recovery handles. |
 | `reconcile/` | provider reads, correlation, graph construction, Group projection, and core state | Reconcile-owned Group repair, command-local Group projection, and deterministic policies; provider I/O remains at its driven edges. `reconcileResult.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
+| `reconcile/graph/` | normalized snapshot construction and narrow authoritative projection | `build.ts` owns full graph construction; responsibility-named modules own authoritative launch projection, evidence types, worktree rows, sessions, observation selection, provider health, and orphan diagnostics without introducing a second inventory boundary. |
 | `hooks/` | raw hook persistence and adapter handoff, report ingestion, dedupe, readiness, spool I/O, and ingress queue | One adapter-to-report normalization path; non-report hooks are reconcile hints, and queue orchestration stays separate from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, exact read-only ownership inspection, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. Exact inspection consumes purpose-specific status, pidfile, cooperative process, and pinned recovery ports without lifecycle mutation authority. |
 | `stationLogger.ts`, `commands/projectConfigWriter.ts` | Observer-private logging and authoritative project-configuration capabilities | Driven application ports free of JSONL records and configuration/home-path plumbing. |
@@ -278,7 +279,7 @@ No single layer owns all truth.
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, processToken, version, socketPath}` identity published by the process that successfully bound the socket. The UUID v4 `processToken` identifies one launch and `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. They corroborate process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the eight persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
-| `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership; and required `sessionGroups` carries normalized organizational state for configured projects. Reconcile replaces the base projection; unavailable sessions remain absent during degraded reads even when their durable Group assignments are preserved. Recorded Group mutations refresh only their project through the same serialized writer, and accepted harness reports can project status and readiness between reconciles. An opt-in `debug.terminal` envelope retains sanitized evidence only while its reconcile remains the latest attempt; starting a newer reconcile clears it, and a failed attempt leaves it absent. Ordinary reads omit it. The snapshot is derived and not a durable replay log; its debug envelope is non-authoritative diagnostic evidence. |
+| `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership; and required `sessionGroups` carries normalized organizational state for configured projects. Reconcile replaces the base projection; unavailable sessions remain absent during degraded reads even when their durable Group assignments are preserved. Exact successful worktree-create and managed-launch results may authoritatively project their narrow effects through the same serialized writer before verification; recorded Group mutations refresh only their project, and accepted harness reports can project status and readiness between reconciles. These projections accelerate the current process only: full reconciliation remains fallback and verification, and restart reconstructs the graph from durable and provider evidence. An opt-in `debug.terminal` envelope retains sanitized evidence only while its reconcile remains the latest attempt; starting a newer reconcile clears it, and a failed attempt leaves it absent. Ordinary reads omit it. The snapshot is derived and not a durable replay log; its debug envelope is non-authoritative diagnostic evidence. |
 | Current provider context | The exact correlated worktree and terminal arrays from the last committed reconcile generation, held only in Observer core for harness-hook normalization. It commits with the snapshot, is never reconstructed from durable observation history, and strips terminal-private provider data before crossing the provider boundary. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
@@ -479,6 +480,17 @@ unrelated scopes may run concurrently. Failure is normalized into `SafeError`,
 persisted with trace correlation, and published. A failed command does not
 poison the following command in its scope.
 
+A launch-bound `worktree.create` may commit the successful provider result
+without a foreground inventory scan. The narrow projection requires the exact
+configured project and provider, an existing returned worktree, and non-conflicting
+ID, normalized path, branch, registration, and source identity. It updates the row,
+ordering, timestamps, and project and global counts through the snapshot writer;
+`worktree.added` is published only after that commit. Rejected or failed projection
+falls back to synchronous full reconciliation, as does every worktree-only create.
+The handler checks post-provider cancellation after projection or fallback, so a
+completed external mutation is visible even when the command ultimately records
+cancellation.
+
 Successful `worktree.create`, `worktree.fork`, `session.create`, `session.fork`,
 and `sessionGroup.create` handlers return strict application identities. Session
 results additionally project only requested `sibling | detached` intent and the
@@ -615,9 +627,9 @@ sessions. Terminal attachment requires matching session or run identity. Session
 and activity totals derive from canonical sessions; only worktree totals derive
 from rows.
 
-Observer core serializes full reconciles, Group mutation commits,
-completed provider-health commits, and harness-report authorization plus base snapshot
-projection on one non-poisoning writer chain. A Group mutation projects only its command
+Observer core serializes full reconciles, authoritative worktree-create and managed-launch
+projections, Group mutation commits, completed provider-health commits, and harness-report
+authorization plus base snapshot projection on one non-poisoning writer chain. A Group mutation projects only its command
 project, performs no reconcile repair, and never invokes providers. A health commit persists one observation, coherently updates the
 current health projection, and then publishes `provider.healthChanged` without a
 full provider scan. Readiness persistence and application happen after its base
@@ -632,6 +644,9 @@ graph, current provider context, or debug projection. Starting the next reconcil
 previous debug envelope before provider IO, so an in-flight or failed attempt cannot republish an
 older generation. Harness-hook
 normalization reads the committed context directly rather than querying expiring observation history.
+Narrow authoritative projections do not replace that context, provider-observation history,
+or reconcile debug evidence. Rejection and projection failure therefore preserve the last
+committed snapshot and require full reconciliation rather than publishing speculative state.
 The scheduler debounces and coalesces reasons while ensuring only one scheduled
 run is active. Startup-compatible requests may join the startup flight; other
 direct requests retain the rule that their scan starts at or after the request.
@@ -735,11 +750,20 @@ the producing use case owns whether the event is also durable and its ordering
 relative to publication. Callers must not assume persist-before-publish unless
 that use case defines the guarantee.
 
+The launch projections define that guarantee for their in-memory commits. A projected
+worktree create publishes `worktree.added` after the row is readable. A projected managed
+launch publishes committed `worktree.updated` followed by `session.created` or
+`session.updated`, then requests verification and returns the public handshake result.
+These live notifications add no replay or event-persistence guarantee.
+
 Live events optimize freshness and incremental rendering. They are not a
 durable log, replay protocol, or substitute for resynchronization. Any future
 replay guarantee requires sequence identity, retention semantics, bounded
 subscriber behavior, and a protocol contract rather than an adapter-local
-patch.
+patch. In particular, the shared client treats unsequenced `worktree.added`
+as a canonical-snapshot refresh hint instead of appending its row locally;
+that prevents delayed or duplicate delivery from exposing stale ordering,
+counts, or row state.
 
 ### Managed Launch Preflight
 
@@ -795,6 +819,29 @@ while one or more candidates select the newest by `lastSeenAt`, `observedAt`, an
 handle ID. An explicitly selected imported handle may proceed without a local lifecycle row,
 while legacy, ended, or contradictory local identity always refuses. All failures occur before
 terminal mutation, and only typed provider-neutral resume options reach the launch adapter.
+
+After the binding-token-qualified managed process launch succeeds, preparation carries the exact
+preflight worktree row and session identity into the snapshot writer. The writer reloads that one
+durable session and current Group projection before committing, so a rename, lifecycle transition,
+or other durable session change after preflight cannot be replaced by cached runtime metadata. It
+may project only when project, worktree, open durable session, target provider and identity, harness
+binding and role, normalized worktree path, open target state, and selected harness agree exactly.
+A retained session's recorded terminal provider describes its prior launch; the exact newly opened
+target is authoritative for the current terminal provider. Older terminal evidence, conflicting
+sessions, and identity mismatches reject projection. Correlated agent and session status committed
+after preflight, as well as status newer than the synthetic launch evidence, is preserved. The
+projection derives the provider-neutral terminal-bound unknown run identity so an immediate harness
+report can correlate before verification. In one snapshot-writer turn it updates the durable title,
+terminal and agent, canonical session, durable Group membership, deterministic ordering, counts,
+and `generatedAt`, and removes any recovery action superseded by the successful launch.
+
+An applied launch projection returns committed `worktree.updated` followed by
+`session.created` or `session.updated`; API composition publishes them before requesting the
+verification scan and before returning the unchanged public result. Rejection or projection
+failure logs bounded evidence, publishes no speculative event, preserves the successful launch,
+and still schedules reconciliation. Verification can replace the accelerated projection with
+fresh provider truth, while a restarted Observer reconstructs the same canonical state from the
+durable session and Group plus provider evidence.
 
 Automatic recovery opens and launches the replacement target under the retained
 Station session ID without seeding, reopening, renaming, discarding, or copying
@@ -901,7 +948,7 @@ expires.
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Managed target release | Station target IDs are deterministic per worktree, so external release is compare-and-delete on target, expected Station session, and binding generation. Tokenless Host exits reconcile instead of releasing. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Concrete provider adapters own bounded external settlement; command use cases pass cancellation and normalize failures without starting another provider-operation timer. A handler with a non-cancellable durable section calls `beginCommit` after read-only validation and immediately before its first write; cancellation may prevent entry, but the queue drains a begun commit to one completion. Other cancellation remains cooperative, and the process shutdown backstop handles ignored signals. |
-| Snapshot writer ordering | Full reconciles, Group mutation commits, and harness-report authorization plus base projection share a non-poisoning promise chain. A Group mutation projects only its command project and never scans providers, repairs other durable state, or publishes a reconcile event. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
+| Snapshot writer ordering | Full reconciles, exact worktree-create and prepared managed-launch projections, Group mutation commits, and harness-report authorization plus base projection share a non-poisoning promise chain. Create and launch events publish only after their projection commit; a projected launch orders its worktree event before its session event and schedules verification afterward. Rejected projections retain the current snapshot and use reconciliation fallback or verification. A Group mutation projects only its command project and never scans providers, repairs other durable state, or publishes a reconcile event. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
 | Persisted harness compatibility | A harness adapter may use a provider-local strict schema to reject recognizable observations accepted by an earlier build. Unparseable legacy data remains admitted. Reconcile excludes only provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Every worktree-project, terminal-provider, and harness-provider read produces explicit completeness evidence. Failures become provider health and reconcile errors; worktree failures scope Group absence authority by project, while terminal or harness failures block it globally. |
 | Harness ingress | First-party hook transports delegate delivery and spooling to `stn-ingress`. Known build/schema/handoff incompatibility rejects without spooling. One Observer worker processes a bounded pending map; new reports can replace pending work for the same key, and a full map rejects unrelated work with a backpressure error. |

@@ -11,9 +11,10 @@ import {
 } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
 import { dashboardRowIds, selectDashboardSlots } from "@station/dashboard-core/selectors";
-import { createObserverStationClient } from "../../sources/observerStationClient.js";
-import type { StationClient } from "../../sources/types.js";
+import { createObserverStationClient } from "../../client/observerStationClient.js";
+import type { StationClient } from "../../client/stationClient.js";
 import { waitFor } from "../../terminal/testing/waitFor.js";
+import { createFakeFolderService } from "../test/support/fakeFolderService.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import { externalAgentSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { routeStationMouse } from "../input/stationMouse.js";
@@ -67,7 +68,9 @@ describe("station command dispatch through the shared client", () => {
         exitRenderer: () => dashboardExecution({ kind: "success" }),
       },
     };
-    const store = createStationDashboardRuntime(client, capabilities);
+    const store = createStationDashboardRuntime(client, capabilities, {
+      folderService: createFakeFolderService(),
+    });
     store.start();
     client.start();
     const harness: Harness = { fake, client, store, detach: () => store.dispose() };

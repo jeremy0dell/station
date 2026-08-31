@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectProjectChooserChoices } from "../../../../src/selectors/selectors.js";
+import { selectProjectChooserChoices } from "../../../../src/selectors/projectChoices.js";
 import type { TuiKey } from "../../../../src/state/keys.js";
 import { createInitialTuiState } from "../../../../src/state/screen.js";
 import { handleTuiKey } from "../../../../src/state/transition.js";

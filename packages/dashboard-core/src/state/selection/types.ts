@@ -1,4 +1,4 @@
-import type { KeyedChoice } from "../../selectors/selectors.js";
+import type { KeyedChoice } from "../../selectors/keyedChoices.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState } from "../types.js";
 

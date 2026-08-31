@@ -48,7 +48,9 @@ export function transitionAddProjectFlow(
       return {
         state,
         effects: [
-          { type: "loadDirectory", path: parentPath?.(state.currentPath) ?? state.currentPath },
+          parentPath === undefined
+            ? { type: "loadDirectory", path: state.currentPath, parent: true }
+            : { type: "loadDirectory", path: parentPath(state.currentPath) },
         ],
       };
     case "chooseSelected":

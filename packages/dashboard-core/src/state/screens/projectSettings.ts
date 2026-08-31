@@ -6,12 +6,14 @@ import {
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
 import {
+  selectNewSessionHarnessChoices,
+  selectProjectDefaultHarness,
+} from "../../selectors/harnessChoices.js";
+import {
   choiceValueByKey,
   isSelectionKey,
   keyedSelectionChoices,
-  selectNewSessionHarnessChoices,
-  selectProjectDefaultHarness,
-} from "../../selectors/selectors.js";
+} from "../../selectors/keyedChoices.js";
 import {
   buildRemoveProjectCommand,
   buildSetProjectDefaultHarnessCommand,

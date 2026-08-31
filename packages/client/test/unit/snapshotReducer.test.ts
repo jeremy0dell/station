@@ -115,20 +115,45 @@ describe("client snapshot reducer", () => {
     expect(removed.snapshot.rows[0]?.agent).not.toHaveProperty("turnReadiness");
   });
 
-  it("adds and removes worktree rows from normalized events", () => {
+  it("defers an unsequenced worktree addition to the canonical snapshot", () => {
     const snapshot = createCommandSnapshot("none");
     const added = applyStationEvent(snapshot, {
       type: "worktree.added",
       row: row({ id: "wt_web_added", projectId: "web", branch: "new-row", state: "none" }),
     });
 
-    expect(added.snapshot.rows.map((candidate) => candidate.id)).toContain("wt_web_added");
+    expect(added.needsSnapshotRefresh).toBe(true);
+    expect(added.snapshot).toBe(snapshot);
+    expect(added.snapshot.rows.map((candidate) => candidate.id)).not.toContain("wt_web_added");
+  });
 
-    const removed = applyStationEvent(added.snapshot, {
+  it("removes worktree rows from normalized events", () => {
+    const snapshot = createCommandSnapshot("none");
+    const existing = snapshot.rows[0];
+    if (existing === undefined) throw new Error("Expected a worktree fixture row.");
+
+    const removed = applyStationEvent(snapshot, {
       type: "worktree.removed",
-      worktreeId: "wt_web_added",
+      worktreeId: existing.id,
     });
-    expect(removed.snapshot.rows.map((candidate) => candidate.id)).not.toContain("wt_web_added");
+
+    expect(removed.snapshot.rows.map((candidate) => candidate.id)).not.toContain(existing.id);
+  });
+
+  it("treats a duplicate unsequenced worktree addition as a canonical refresh hint", () => {
+    const snapshot = createCommandSnapshot("none");
+    const existing = snapshot.rows[0];
+    if (existing === undefined) throw new Error("Expected a worktree fixture row.");
+
+    const duplicate = applyStationEvent(snapshot, {
+      type: "worktree.added",
+      row: { ...existing, title: "Stale delayed title" },
+    });
+
+    expect(duplicate.snapshot).toBe(snapshot);
+    expect(duplicate.snapshot.rows).toHaveLength(1);
+    expect(duplicate.snapshot.rows[0]?.title).toBe(existing.title);
+    expect(duplicate.needsSnapshotRefresh).toBe(true);
   });
 
   it("waits for canonical relationship-complete state after session creation", () => {

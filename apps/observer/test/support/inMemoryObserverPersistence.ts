@@ -157,6 +157,8 @@ export function createInMemoryObserverPersistence(
         ),
       })),
 
+    getSession: (sessionId) => readSnapshot((snapshot) => snapshot.sessions.get(sessionId)),
+
     recordCommandAccepted: (input) =>
       transaction((draft) => {
         const command = StationCommandSchema.parse(input.command);

@@ -5,8 +5,8 @@ import { isReturnKey, type TuiKey } from "../keys.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState, GroupMenuActionId } from "../types.js";
-import { openNewSession } from "./dashboard.js";
 import { focusGroupSettingsControl, openGroupSettings } from "./groupSettings.js";
+import { openNewSession } from "./newSession.js";
 import { submitQuickSessionInGroup } from "./quickSession.js";
 
 export type GroupMenuInputActionId = GroupMenuActionId | "cancel";

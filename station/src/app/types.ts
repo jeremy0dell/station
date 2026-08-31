@@ -1,5 +1,10 @@
 import type { StationClientStateSource } from "@station/client";
-import type { DashboardActions, DashboardRuntime, DashboardStateSource } from "@station/dashboard-core/runtime";
+import type {
+  DashboardActions,
+  DashboardRuntime,
+  DashboardStateSource,
+  TuiFolderService,
+} from "@station/dashboard-core/runtime";
 import type {
   TopRowWidgetRuntimeDeps,
   TuiConfig,
@@ -10,10 +15,10 @@ import type { ClipboardEffects } from "../copy/clipboard.js";
 import type { StationInputRuntime } from "../input/stationInput.js";
 import type { StationLayoutSnapshot } from "../state/layout/layoutSnapshot.js";
 import type { StationStore } from "../state/store.js";
-import type { StationClient } from "../sources/types.js";
+import type { StationClient } from "../client/stationClient.js";
 import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import type { ManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
-import type { DashboardScrollController } from "../station/view/layout/scrollViewport.js";
+import type { DashboardScrollController } from "../station/view/layout/scroll/dashboardScrollController.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import type {
   StationTerminalProcess,
@@ -42,6 +47,8 @@ export type StationAppProps = {
 export type CreateStationOptions = {
   store: StationStore;
   stationClient: StationClient;
+  /** Required composition-supplied folder navigation for the dashboard. */
+  folderService: TuiFolderService;
   /** Admit an input-requested shutdown; the process owner coordinates `disposeForShutdown()`. */
   shutdown(): void;
   /** Real copy sinks (OSC 52 + a clipboard CLI); tests pass NO_OP_CLIPBOARD_EFFECTS. */

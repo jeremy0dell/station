@@ -4,7 +4,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { act, type Dispatch, type SetStateAction, useState } from "react";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
 
 const teardowns: Array<() => void> = [];
@@ -50,8 +50,13 @@ describe("HelpOverlayView", () => {
     expect(viewport).toBeDefined();
     expect(wrapped?.height).toBeGreaterThan(1);
     expect(finalEntry).toBeDefined();
-    expect(setup.captureCharFrame()).toContain("refresh");
-    expect(setup.captureCharFrame()).toContain("↑ more");
+    const initialFrame = setup.captureCharFrame();
+    expect(initialFrame).toContain("refresh");
+    expect(initialFrame).toMatch(/↑\d+/);
+    expect(initialFrame).toContain("▲");
+    expect(initialFrame).toContain("▼");
+    expect(initialFrame).toContain("▐");
+    expect(initialFrame).toContain("▕");
 
     await act(async () => {
       for (let index = 0; index < 60; index += 1) {
@@ -74,5 +79,20 @@ describe("HelpOverlayView", () => {
     expect(wrapped?.height).toBeGreaterThan(2);
     expect(finalEntry).toBeDefined();
     expect(setup.captureCharFrame()).toContain("▸");
+
+    const scrollStepsToTop = Math.ceil(viewport?.scrollTop ?? 0) + 1;
+    await act(async () => {
+      for (let index = 0; index < scrollStepsToTop; index += 1) {
+        await setup.mockMouse.scroll(
+          viewport?.x ?? 0,
+          (viewport?.y ?? 0) + 1,
+          "up",
+        );
+      }
+    });
+    await setup.flush();
+
+    expect(viewport?.scrollTop).toBe(0);
+    expect(setup.captureCharFrame()).toMatch(/↓\d+/);
   });
 });

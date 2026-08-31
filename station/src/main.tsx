@@ -10,6 +10,7 @@ import { convergeStationHost } from "@station/terminal";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
 import { loadStationTuiConfig } from "./config/tuiConfig.js";
+import { createNodeFolderService } from "./folderNavigation/nodeFolderService.js";
 import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "./copy/runtimeClipboard.js";
 import { devRenderProfilePath } from "./host/devPaths.js";
@@ -48,12 +49,12 @@ import {
   type HostAttachedTerminalOptions,
 } from "./terminal/pty/hostAttachedTerminal.js";
 import { createStationHostManagedTerminalAttacher } from "./terminal/pty/managedTerminalAttacher.js";
-import { playStationAttentionSound } from "./sources/attentionSound.js";
-import { createStationClient } from "./sources/createStationClient.js";
+import { playStationAttentionSound } from "./attention/attentionSound.js";
+import { createStationClient } from "./client/createStationClient.js";
 import { openExternalUrl } from "./openUrl.js";
-import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
-import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js";
-import { resolveStationLayoutPath } from "./sources/stationLayoutPath.js";
+import { listLiveHostPtys } from "./host/listLiveHostPtys.js";
+import { resolveStationHostSocketPath } from "./host/stationHostSocketPath.js";
+import { resolveStationLayoutPath } from "./state/layout/stationLayoutPath.js";
 import { nativeStationTheme, StationThemeProvider } from "./theme/index.js";
 import type { PreparedPtyRuntime } from "./bin/packagedAssets.js";
 import {
@@ -332,6 +333,7 @@ async function startStationMain(
   const station = createStation({
     store,
     stationClient,
+    folderService: createNodeFolderService(),
     registry: stationRuntime.registry,
     scrollOnOutput: stationConfig.config.scroll_on_output,
     scrollbackLines: stationConfig.config.scrollback_lines,

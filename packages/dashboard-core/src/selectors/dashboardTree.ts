@@ -60,11 +60,11 @@ type DashboardPendingRemoveWorktreeRowView =
   DashboardViewState["localRows"]["pendingRemove"][number];
 type DashboardPendingStartAgentRowView = DashboardViewState["localRows"]["pendingStart"][number];
 
-export type DashboardCreateSessionLocalRow =
+type DashboardCreateSessionLocalRow =
   | ({ readonly status: "pending" } & DashboardPendingCreateSessionRowView)
   | ({ readonly status: "failed" } & DashboardFailedCreateSessionRowView);
 
-export type DashboardProjectHeaderPayload = {
+type DashboardProjectHeaderPayload = {
   readonly type: "projectHeader";
   readonly project: DashboardProjectView;
   readonly collapsed: boolean;
@@ -85,7 +85,7 @@ export type DashboardGroupHeaderPayload = {
   readonly persistentFilterMatch?: DashboardPersistentFilterGroupMatch;
 };
 
-export type DashboardSessionPayload = {
+type DashboardSessionPayload = {
   readonly type: "session";
   readonly row: DashboardSessionRow;
   readonly displayTitle: string;
@@ -95,14 +95,14 @@ export type DashboardSessionPayload = {
   readonly persistentFilterMatch?: DashboardPersistentFilterRowMatch;
 };
 
-export type DashboardCreateLocalRowPayload = {
+type DashboardCreateLocalRowPayload = {
   readonly type: "createLocalRow";
   readonly row: DashboardCreateSessionLocalRow;
   readonly presentation: DashboardPersistentFilterVisibleFields;
   readonly persistentFilterMatch?: DashboardPersistentFilterRowMatch;
 };
 
-export type DashboardEmptyProjectPayload = {
+type DashboardEmptyProjectPayload = {
   readonly type: "emptyProject";
   readonly project: DashboardProjectView;
 };

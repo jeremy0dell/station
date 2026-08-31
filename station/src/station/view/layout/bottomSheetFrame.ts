@@ -6,6 +6,11 @@ export type BottomSheetFrame = {
 
 const PREFERRED_SHEET_HEIGHT = 12;
 
+/** Width for the compact bottom-sheet confirm dialogs (capped at 46 columns). */
+export function compactSheetWidth(columns: number): number {
+  return Math.min(Math.max(1, Math.floor(columns)), 46);
+}
+
 /**
  * OpenTUI boundary for the stable bottom-sheet box.
  * Semantic sheet state never observes these terminal-cell dimensions.

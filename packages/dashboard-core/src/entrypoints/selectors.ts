@@ -99,10 +99,7 @@ export {
   selectDashboardSessionRows,
   sessionRowDisplayTitle,
 } from "../selectors/dashboardSessionRows.js";
-export type {
-  DashboardSessionOverflow,
-  DashboardSlots,
-} from "../selectors/dashboardSlots.js";
+export type { DashboardSessionOverflow, DashboardSlots } from "../selectors/dashboardSlots.js";
 export {
   selectDashboardSlots,
   selectDashboardSlotsForTree,
@@ -119,20 +116,26 @@ export type {
 export { dashboardRowIds, selectDashboardTree } from "../selectors/dashboardTree.js";
 export type { FleetSummary } from "../selectors/fleetSummary.js";
 export { selectFleetSummary } from "../selectors/fleetSummary.js";
+export type { NewSessionHarnessOption } from "../selectors/harnessChoices.js";
+export {
+  selectNewSessionHarnessChoices,
+  selectProjectDefaultHarness,
+} from "../selectors/harnessChoices.js";
 export type {
   KeyedChoice,
+  SelectionChoice,
+} from "../selectors/keyedChoices.js";
+export {
+  selectNewSessionProjectChoices,
+  selectProjectChooserChoices,
+} from "../selectors/projectChoices.js";
+export type {
   MoveToGroupSessionContext,
   NewSessionGroupOption,
-  NewSessionHarnessOption,
-  SelectionChoice,
-} from "../selectors/selectors.js";
+} from "../selectors/sessionGroupChoices.js";
 export {
   selectMoveToGroupChoices,
   selectMoveToGroupSessionContext,
   selectNewSessionGroupChoices,
-  selectNewSessionHarnessChoices,
-  selectNewSessionProjectChoices,
-  selectProjectChooserChoices,
-  selectProjectDefaultHarness,
-} from "../selectors/selectors.js";
+} from "../selectors/sessionGroupChoices.js";
 export { cellWidth, clipCells, truncateCells } from "../text/cells.js";

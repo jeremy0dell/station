@@ -58,21 +58,33 @@ function verifyDashboardRuntimeOptions(
   source: StationClientStateSource,
   capabilities: DashboardCapabilities,
 ): void {
-  const valid: DashboardRuntimeOptions = { service, source, capabilities };
+  const folderService: DashboardRuntimeOptions["folderService"] = {
+    cwd: () => "/workspace",
+    homeDir: () => "/Users/example",
+    parent: (path) => path,
+    readDirectory: async (path) => ({ path, entries: [] }),
+    searchDirectories: async (query) => ({ query, entries: [], truncated: false }),
+    reviewFolder: async (path) => ({ selectedPath: path, id: "project", label: "project" }),
+  };
+  const valid: DashboardRuntimeOptions = { service, source, capabilities, folderService };
   // @ts-expect-error Dashboard composition must supply canonical client state.
-  const missingSource: DashboardRuntimeOptions = { service, capabilities };
+  const missingSource: DashboardRuntimeOptions = { service, capabilities, folderService };
   // @ts-expect-error Dashboard composition must supply every semantic capability group.
-  const missingCapabilities: DashboardRuntimeOptions = { service, source };
+  const missingCapabilities: DashboardRuntimeOptions = { service, source, folderService };
+  // @ts-expect-error Dashboard composition must supply folder navigation.
+  const missingFolderService: DashboardRuntimeOptions = { service, source, capabilities };
   const independentSnapshot: DashboardRuntimeOptions = {
     service,
     source,
     capabilities,
+    folderService,
     // @ts-expect-error Runtime snapshots come only from the canonical source.
     initialSnapshot: source.getState().snapshot,
   };
   void valid;
   void missingSource;
   void missingCapabilities;
+  void missingFolderService;
   void independentSnapshot;
 }
 

@@ -3,7 +3,7 @@ import { selectDashboardSlots } from "@station/dashboard-core/selectors";
 import type { DashboardRowId } from "@station/dashboard-core/selectors";
 import type { TuiKey, TuiSemanticAction } from "@station/dashboard-core/state";
 import { sequenceToTuiKey } from "./sequenceToTuiKey.js";
-import type { DashboardScrollController } from "../view/layout/scrollViewport.js";
+import type { DashboardScrollController } from "../view/layout/scroll/dashboardScrollController.js";
 
 type DashboardKeyInput = {
   actions: Pick<DashboardActions, "handleKey">;

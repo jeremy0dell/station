@@ -11,7 +11,7 @@ import type {
 } from "@station/contracts";
 import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
 import type { AddProjectFlowState } from "../flows/addProject/types.js";
-import type { NewSessionFlowState } from "../flows/newSession.js";
+import type { NewSessionFlowState } from "../flows/newSession/model.js";
 import type { DashboardFocus, GroupOrderingMode } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
 import type { HelpEntryId } from "./helpEntries.js";

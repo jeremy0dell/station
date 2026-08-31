@@ -1,4 +1,3 @@
-import { dirname } from "node:path";
 import { editableTextInputIntentForInput } from "../../components/EditableTextInput/editing.js";
 import {
   type AddProjectActionFocus,
@@ -105,7 +104,7 @@ function executeAddProjectIntent(
         operations: [{ type: "reviewProjectFolder", path: intent.path }],
       };
     case "transition":
-      return applyAddProjectAction(state, intent.action, dirname);
+      return applyAddProjectAction(state, intent.action);
   }
 }
 

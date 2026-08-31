@@ -78,7 +78,9 @@ runtime owns subscriptions, timers, operation bookkeeping, and cancellation;
 disposal is idempotent and testable.
 
 New Session owns one bounded review flow shared by native and standalone
-renderers. Its Group field selects Ungrouped, a current same-project root Group
+renderers. `flows/newSession/` names its model, actions, transitions, validation,
+name generation, and snapshot reconciliation owners directly, without a barrel.
+Its Group field selects Ungrouped, a current same-project root Group
 by stable ID, or a trimmed inline-create draft. Snapshot replacement preserves
 the stable selection through rename and resets missing, cross-project, or newly
 nested Groups to Ungrouped. Submission retains and disables the sheet until the
@@ -198,16 +200,18 @@ still comes exclusively from `snapshot.sessionGroups`. A focused direct visible 
 The selectors entrypoint exposes branded dashboard row IDs, dashboard cell IDs,
 decorated tree rows, their exact `rowById` lookup, and nested `roots`. Renderers do
 not construct or parse row IDs and do not reconstruct ancestry from a flat list.
-`ProjectBranchView` owns its header and descendant branches. `GroupBranchView`
-owns one `GroupFrameView` containing the Group header and every direct child, so
-the border is part of that structure rather than painted line records or per-child
-rails. Root and framed compact session leaves resolve against their actual
-container widths. Quiet frames use the hairline role, a focused Group header uses
-the working role, and member focus dims that working frame while the member keeps
-ordinary keyboard-focus or hover treatment.
+`DashboardTreeView` owns recursive Project and Group traversal; its private
+`ProjectBranchView` owns its header and descendants, while `GroupBranchView` owns
+one `GroupFrameView` containing the Group header and every direct child.
+`DashboardLeafView` owns session, local-create, and empty-Project leaves. The Group
+border is therefore part of the tree rather than painted line records or per-child
+rails, and compact leaves resolve against their actual container widths. Quiet
+frames use the hairline role, a focused Group header uses the working role, and
+member focus dims that working frame while the member keeps ordinary keyboard-focus
+or hover treatment.
 
 Station mounts the complete semantic component tree in one OpenTUI scroll box.
-`station/view/layout/scrollViewport.ts` is the sole dashboard translation between
+`station/view/layout/scroll/scrollViewport.ts` is the sole dashboard translation between
 stable identities and measured `y`/`height` cell geometry. It follows focus by
 identity, scrolls and clips by box coordinates, treats partially intersecting and
 oversized boxes correctly, and reports only intersecting semantic IDs back to
@@ -279,7 +283,7 @@ open that downstream stage without replaying the chooser.
 
 Physical geometry is permitted only after semantic state and has these owners:
 
-- `station/view/layout/*` and the context-menu placement adapter translate
+- `station/view/layout/*`, including `layout/scroll/*`, and the context-menu placement adapter translate
   OpenTUI renderables into measured coordinates, bounded heights, pointer hits,
   and scroll deltas. The Station import-boundary test inventories these modules.
 - Group/sheet frame helpers subtract their two vertical border cells only to
@@ -314,8 +318,11 @@ barrel and no wildcard subpath access:
 | `@station/dashboard-core/text` | Narrow grapheme segmentation and terminal-cell measurement/clipping shared by compact renderer-neutral leaves |
 | `@station/dashboard-core/widgets` | Widget config shapes (owned by `@station/contracts`), widget resolution, and the widget hook runtime |
 
-Directory layout keeps ownership visible: `selectors/` for snapshot-to-view
-projection, `state/screens/*` for pure screen transitions,
+Directory layout keeps ownership visible: `selectors/keyedChoices.ts` owns the
+shortcut grammar, `projectChoices.ts` owns Project projections,
+`sessionGroupChoices.ts` owns New Session and Move-to-Group projections, and
+`harnessChoices.ts` owns harness options and optimistic defaults.
+`state/screens/*` owns pure screen transitions,
 `state/commandBuilders.ts` for typed observer command construction,
 `state/sourceBridge.ts` for mirroring canonical client state into the
 projection, `state/runtimeEffectScope.ts` for private effect admission and
@@ -327,12 +334,15 @@ narrow grapheme/cell contract. Dashboard-core owns renderer-neutral settings
 content; Station owns responsive OpenTUI settings shells and scrolling, while each settings screen
 retains its navigation policy, detail controls, drafts, and mutation lifecycle. The `[tui]` config shapes
 live in `@station/contracts`; `@station/config` retains load/persist authority.
+Folder browsing follows the same boundary: dashboard-core owns the `TuiFolderService`
+port, chooser transitions, operations, and polling lifecycle, while each Station renderer
+composition supplies the Station-local Node filesystem adapter.
 
 ## Dependency direction and enforcement
 
 - Station compositions depend on dashboard-core through the role entrypoints;
   dashboard-core never imports Station, workspace, or terminal-provider code.
-- `station/src/sources` carries no dashboard-core dependency; operation
+- `station/src/client` carries no dashboard-core dependency; operation
   convergence lives behind `@station/client`.
 - `station/src/station/importBoundaries.test.ts` freezes the coupling surface:
   it rejects private mutable dashboard model imports and direct mutation, pins
@@ -340,7 +350,8 @@ live in `@station/contracts`; `@station/config` retains load/persist authority.
   production dashboard-core import to use a role entrypoint.
 - `packages/dashboard-core/test/unit/declaredDependencies.test.ts` guards the
   emitted declarations: production sources may import only declared
-  dependencies, since type imports become declaration references.
+  dependencies, since type imports become declaration references, and rejects
+  Node filesystem, OS, and path modules from production core.
 - `packages/dashboard-core/test/unit/state/readonlyStateSource.typecheck.test.ts`
   and the runtime boundary test protect identity-preserving recursive readonly
   views.

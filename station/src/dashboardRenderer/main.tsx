@@ -16,14 +16,15 @@ import { copyToClipboard, DEFAULT_COPY_SINKS } from "../copy/clipboard.js";
 import { createOpenTuiSelectionCopyHandler } from "../copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "../copy/runtimeClipboard.js";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
+import { createNodeFolderService } from "../folderNavigation/nodeFolderService.js";
 import { DecMode } from "../terminal/protocol/decset.js";
 import { CsiCommand } from "../terminal/protocol/identifiers.js";
 import { VtPrefix } from "../terminal/protocol/syntax.js";
 import { openExternalUrl } from "../openUrl.js";
-import { createStationClient } from "../sources/createStationClient.js";
+import { createStationClient } from "../client/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { stationHelpEntryOrder } from "../station/helpEntries.js";
-import { createDashboardScrollController } from "../station/view/layout/scrollViewport.js";
+import { createDashboardScrollController } from "../station/view/layout/scroll/dashboardScrollController.js";
 import {
   createStationThemeController,
   type StationThemeController,
@@ -120,6 +121,7 @@ export async function runDashboardMain(): Promise<void> {
     source: client.state,
     service: client.service,
     capabilities,
+    folderService: createNodeFolderService(),
     clientLabel: "station",
     visibleDashboardRows: dashboardLayout.visibleRows,
     helpEntries: stationHelpEntryOrder,

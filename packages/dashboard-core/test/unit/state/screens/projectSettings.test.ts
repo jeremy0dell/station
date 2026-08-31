@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   selectNewSessionHarnessChoices,
   selectProjectDefaultHarness,
-} from "../../../../src/selectors/selectors.js";
+} from "../../../../src/selectors/harnessChoices.js";
 import type { TuiKey } from "../../../../src/state/keys.js";
 import {
   pendingProjectDefaultHarnesses,

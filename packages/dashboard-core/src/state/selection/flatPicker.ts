@@ -1,4 +1,4 @@
-import { keyedSelectionChoices, type SelectionChoice } from "../../selectors/selectors.js";
+import { keyedSelectionChoices, type SelectionChoice } from "../../selectors/keyedChoices.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState } from "../types.js";
 import { type CommitVia, defineList, type ListRow, type RegisteredListSpec } from "./types.js";

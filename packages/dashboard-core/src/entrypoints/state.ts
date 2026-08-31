@@ -19,12 +19,13 @@ export {
 export { addProjectRows } from "../flows/addProject/rows.js";
 
 export type { AddProjectFlowStateView } from "../flows/addProject/types.js";
-export type { NewSessionActionId, NewSessionFlowStateView } from "../flows/newSession.js";
+export type { NewSessionActionId } from "../flows/newSession/actions.js";
 export {
   createNewSessionFlow,
-  selectedProject,
   transitionNewSessionFlow,
-} from "../flows/newSession.js";
+} from "../flows/newSession/flow.js";
+export type { NewSessionFlowStateView } from "../flows/newSession/model.js";
+export { selectedProject } from "../flows/newSession/validation.js";
 export type {
   PersistentFilterActionId,
   TuiSemanticAction,

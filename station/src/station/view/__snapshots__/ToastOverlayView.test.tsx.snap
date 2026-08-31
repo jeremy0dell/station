@@ -13,13 +13,13 @@ exports[`ToastOverlayView actions keeps a notice in its structural region throug
 FL│ needs attention        [copy][x] │
 ──│ Worktrunk failed to remove the   │─
   │ selected checkout because the    │
- ▼│ main worktree cannot be removed  │]
- [│ while Station is running there.  │
- [│ Open a different linked          │
- [│ checkout, select the session     │
- [│ again, and retry after           │
-▼ └──────────────────────────────────┘
-───────────────────────────────────────
+ ▼│ main worktree cannot be removed  │]▲
+ [│ while Station is running there.  │ ▐
+ [│ Open a different linked          │ ▕
+ [│ checkout, select the session     │ ▕
+ [│ again, and retry after           │ ▕
+ [└──────────────────────────────────┘ ▼
+── ▼ 5 below · showing 5 of 10 ────────
 Esc:dismiss  Q:close
 "
 `;
@@ -29,8 +29,8 @@ exports[`ToastOverlayView actions keeps a notice in its structural region throug
 FL│ need…[copy][x] │
 ──│ Worktrunk      │─
   │ failed to      │…
- ▼│ remove the     │]
-▼ └────────────────┘
+ ▼│ remove the     │]▲
+ [└────────────────┘e▼
 ─────────────────────
 Esc:dismiss  Q:close
 "

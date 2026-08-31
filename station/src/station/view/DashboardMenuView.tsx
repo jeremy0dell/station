@@ -2,8 +2,8 @@ import { type MouseEvent, TextAttributes } from "@opentui/core";
 import { Fragment, useState } from "react";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
-import { SemanticScrollRegion } from "./layout/SemanticScrollViewport.js";
-import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { SemanticScrollRegion } from "./layout/scroll/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scroll/scrollViewport.js";
 import { semanticItemIdAtPointer } from "./layout/semanticPointerTarget.js";
 import { useAnchoredMenuPlacement } from "./layout/useAnchoredMenuPlacement.js";
 import {

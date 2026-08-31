@@ -11,7 +11,7 @@ import {
   createFakeWorktree,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import { buildStationSnapshot } from "../../src/reconcile/graph";
+import { buildStationSnapshot } from "../../src/reconcile/graph/build";
 import {
   projectHarnessEventReportOntoSnapshot,
   withSessionCorrelationFromSnapshot,

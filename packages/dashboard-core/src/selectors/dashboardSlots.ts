@@ -16,7 +16,7 @@ import {
   keyedSelectionChoices,
   type SelectionChoice,
   selectionChoices,
-} from "./selectors.js";
+} from "./keyedChoices.js";
 
 /** Session-item counts around the renderer-reported semantic visibility window. */
 export type DashboardSessionOverflow = {
@@ -35,6 +35,7 @@ export type DashboardSlots = {
   readonly rowChoices: readonly KeyedChoice<DashboardSessionRow>[];
   readonly displayRowChoices: readonly SelectionChoice<DashboardSessionRow>[];
   readonly sessionOverflow: DashboardSessionOverflow;
+  readonly semanticOverflow: { readonly above: boolean; readonly below: boolean };
   readonly persistentFilter?: DashboardPersistentFilterProjection;
 };
 
@@ -70,6 +71,7 @@ export function selectDashboardSlotsForTree(
     ),
     displayRowChoices,
     sessionOverflow: sessionOverflow(tree.visibleRows, rows),
+    semanticOverflow: semanticOverflow(tree.visibleRows, rows),
     ...(tree.persistentFilter === undefined ? {} : { persistentFilter: tree.persistentFilter }),
   };
 }
@@ -105,6 +107,17 @@ function sessionOverflow(
   const above = countSessionItems(allRows.slice(0, Math.max(0, first)));
   const below = countSessionItems(allRows.slice(last + 1));
   return { above, below, visible, total };
+}
+
+function semanticOverflow(
+  allRows: readonly DashboardTreeRow[],
+  visibleRows: readonly DashboardTreeRow[],
+): DashboardSlots["semanticOverflow"] {
+  if (visibleRows.length === 0) return { above: false, below: false };
+  return {
+    above: visibleRows[0]?.id !== allRows[0]?.id,
+    below: visibleRows.at(-1)?.id !== allRows.at(-1)?.id,
+  };
 }
 
 function countSessionItems(rows: readonly DashboardTreeRow[]): number {
