@@ -9,6 +9,7 @@ import { ensureStationHostRunning } from "@station/terminal";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
 import { loadStationTuiConfig } from "./config/tuiConfig.js";
+import { createNodeFolderService } from "./folderNavigation/nodeFolderService.js";
 import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "./copy/runtimeClipboard.js";
 import { devRenderProfilePath } from "./host/devPaths.js";
@@ -350,6 +351,7 @@ async function startStationMain(
   const station = createStation({
     store,
     stationClient,
+    folderService: createNodeFolderService(),
     registry: stationRuntime.registry,
     scrollOnOutput: stationConfig.config.scroll_on_output,
     scrollbackLines: stationConfig.config.scrollback_lines,

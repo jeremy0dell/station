@@ -41,7 +41,11 @@ function resetsSelection(action: AddProjectFlowAction): boolean {
 function addProjectEffectsToOperations(effects: readonly AddProjectFlowEffect[] | undefined) {
   return effects?.map((effect) => {
     if (effect.type === "loadDirectory") {
-      return { type: "loadProjectDirectory" as const, path: effect.path };
+      return {
+        type: "loadProjectDirectory" as const,
+        path: effect.path,
+        ...(effect.parent === true ? { parent: true as const } : {}),
+      };
     }
     if (effect.type === "reviewFolder") {
       return { type: "reviewProjectFolder" as const, path: effect.path };

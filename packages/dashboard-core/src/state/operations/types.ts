@@ -68,6 +68,7 @@ export type RenameSessionOperation = {
 export type LoadProjectDirectoryOperation = {
   type: "loadProjectDirectory";
   path: string;
+  parent?: true;
 };
 
 export type ReviewProjectFolderOperation = {

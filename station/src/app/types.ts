@@ -1,5 +1,10 @@
 import type { StationClientStateSource } from "@station/client";
-import type { DashboardActions, DashboardRuntime, DashboardStateSource } from "@station/dashboard-core/runtime";
+import type {
+  DashboardActions,
+  DashboardRuntime,
+  DashboardStateSource,
+  TuiFolderService,
+} from "@station/dashboard-core/runtime";
 import type {
   TopRowWidgetRuntimeDeps,
   TuiConfig,
@@ -42,6 +47,8 @@ export type StationAppProps = {
 export type CreateStationOptions = {
   store: StationStore;
   stationClient: StationClient;
+  /** Required composition-supplied folder navigation for the dashboard. */
+  folderService: TuiFolderService;
   /** Admit an input-requested shutdown; the process owner coordinates `disposeForShutdown()`. */
   shutdown(): void;
   /** Real copy sinks (OSC 52 + a clipboard CLI); tests pass NO_OP_CLIPBOARD_EFFECTS. */

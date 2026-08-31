@@ -22,7 +22,8 @@ export type StationDashboardRuntime = DashboardRuntime & {
 
 /** Options for Station's native dashboard-runtime composition. */
 export type CreateStationDashboardRuntimeOptions = {
-  folderService?: TuiFolderService;
+  /** Required composition dependency; dashboard-core has no filesystem fallback. */
+  folderService: TuiFolderService;
   /** `[tui].widgets` seed for the session's live widget set. */
   widgets?: readonly TuiWidgetConfig[];
   /** False when widget edits cannot be written back to config.toml. */
@@ -40,7 +41,7 @@ export type CreateStationDashboardRuntimeOptions = {
 export function createStationDashboardRuntime(
   client: StationClient,
   capabilities: DashboardCapabilities,
-  options: CreateStationDashboardRuntimeOptions = {},
+  options: CreateStationDashboardRuntimeOptions,
 ): StationDashboardRuntime {
   const layout = options.layout ?? createDashboardScrollController();
   const runtimeOptions: Parameters<typeof createDashboardRuntime>[0] = {
@@ -50,10 +51,8 @@ export function createStationDashboardRuntime(
     clientLabel: "Station",
     visibleDashboardRows: layout.visibleRows,
     helpEntries: stationHelpEntryOrder,
+    folderService: options.folderService,
   };
-  if (options.folderService !== undefined) {
-    runtimeOptions.folderService = options.folderService;
-  }
   const initialState: NonNullable<typeof runtimeOptions.initialState> = {};
   if (options.widgets !== undefined) {
     initialState.widgets = options.widgets;

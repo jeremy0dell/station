@@ -1,7 +1,7 @@
 import type { StationClientStateSource } from "@station/client";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
-import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
+import type { TuiFolderService } from "../services/folderService.js";
 import type { ObserverService } from "../services/types.js";
 import { type DashboardActions, handleTuiAction } from "./actions.js";
 import type { DashboardCapabilities } from "./capabilities/execution.js";
@@ -46,7 +46,8 @@ export type DashboardRuntimeOptions = {
   source: StationClientStateSource;
   capabilities: DashboardCapabilities;
   initialState?: Omit<CreateInitialTuiStateOptions, "initialSnapshot">;
-  folderService?: TuiFolderService;
+  /** Required renderer-supplied folder navigation; core owns no filesystem fallback. */
+  folderService: TuiFolderService;
   clientLabel?: string;
   /** Semantic identities intersecting the renderer viewport; physical geometry stays outside core. */
   visibleDashboardRows?: DashboardVisibleRowsSource;
@@ -77,7 +78,7 @@ export type DashboardRuntime = {
  * timers while injected capabilities receive only semantic request values.
  */
 export function createDashboardRuntime(options: DashboardRuntimeOptions): DashboardRuntime {
-  const folderService = options.folderService ?? createNodeFolderService();
+  const folderService = options.folderService;
   const source = options.source;
   const clientLabel = options.clientLabel ?? "TUI";
   const effectScope = createDashboardRuntimeEffectScope();

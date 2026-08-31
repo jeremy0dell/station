@@ -25,6 +25,7 @@ import {
 } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
+import { createFakeFolderService } from "../station/test/support/fakeFolderService.js";
 import { createStationStubObserverService } from "../station/store/stubObserverService.js";
 import { stationPopupLayout } from "../station/StationOverlay.js";
 import { STATION_ICON } from "../stationButton/layout.js";
@@ -491,6 +492,7 @@ describe("Station app composition", () => {
     service.waitForCommandCompletion = async () => completion.promise;
     let stopped = false;
     const composition = createStation({
+      folderService: createFakeFolderService(),
       store: createStationStore(),
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {
@@ -537,6 +539,7 @@ describe("Station app composition", () => {
     const firstService = new FakeTuiObserverService(manyProjectsSnapshot());
     const scripted = createScriptedTerminal();
     const first = createStation({
+      folderService: createFakeFolderService(),
       store,
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {
@@ -570,6 +573,7 @@ describe("Station app composition", () => {
     const secondService = new FakeTuiObserverService(manyProjectsSnapshot());
     const secondScripted = createScriptedTerminal();
     const second = createStation({
+      folderService: createFakeFolderService(),
       store,
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       registry: first.registry,
@@ -632,6 +636,7 @@ describe("Station app composition", () => {
     const source = new FakeStationSource(base);
     const scripted = createScriptedTerminal();
     const composition = createStation({
+      folderService: createFakeFolderService(),
       store,
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {
@@ -688,6 +693,7 @@ describe("Station app composition", () => {
     const scripted = createScriptedTerminal();
     const writes: StationLayoutSnapshot[] = [];
     const composition = createStation({
+      folderService: createFakeFolderService(),
       store,
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {
@@ -758,6 +764,7 @@ root = "${projectRoot}"
     const source = new FakeStationSource(manyProjectsSnapshot());
     const scripted = createScriptedTerminal();
     const composition = createStation({
+      folderService: createFakeFolderService(),
       store,
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {
@@ -796,6 +803,7 @@ function composeStationForExit() {
   const service = new FakeTuiObserverService(manyProjectsSnapshot());
   const scripted = createScriptedTerminal();
   const composition = createStation({
+      folderService: createFakeFolderService(),
     store,
     clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
     stationClient: {
@@ -847,6 +855,7 @@ async function renderComposedStation(
   const shutdowns: number[] = [];
   let spawnCount = 0;
   const composition = createStation({
+      folderService: createFakeFolderService(),
     store,
     clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
     stationClient: {

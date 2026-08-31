@@ -16,6 +16,7 @@ import { copyToClipboard, DEFAULT_COPY_SINKS } from "../copy/clipboard.js";
 import { createOpenTuiSelectionCopyHandler } from "../copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "../copy/runtimeClipboard.js";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
+import { createNodeFolderService } from "../folderNavigation/nodeFolderService.js";
 import { DecMode } from "../terminal/protocol/decset.js";
 import { CsiCommand } from "../terminal/protocol/identifiers.js";
 import { VtPrefix } from "../terminal/protocol/syntax.js";
@@ -120,6 +121,7 @@ export async function runDashboardMain(): Promise<void> {
     source: client.state,
     service: client.service,
     capabilities,
+    folderService: createNodeFolderService(),
     clientLabel: "station",
     visibleDashboardRows: dashboardLayout.visibleRows,
     helpEntries: stationHelpEntryOrder,

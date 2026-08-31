@@ -15,6 +15,7 @@ import { waitFor } from "../terminal/testing/waitFor.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
+import { createFakeFolderService } from "../station/test/support/fakeFolderService.js";
 import type { StationStore } from "../state/store.js";
 
 const SURFACE = { width: 100, height: 28 };
@@ -33,6 +34,7 @@ async function bootStation(layoutPath: string, store: StationStore) {
   const source = new FakeStationSource(manyProjectsSnapshot());
   const scripted = createScriptedTerminal();
   const composition = createStation({
+      folderService: createFakeFolderService(),
     store,
     clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
     stationClient: {

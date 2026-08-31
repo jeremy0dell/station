@@ -11,6 +11,7 @@ import type { TuiFolderService } from "@station/dashboard-core/runtime";
 import { waitFor } from "../../terminal/testing/waitFor.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeStationSource } from "../test/support/fakeStationSource.js";
+import { createFakeFolderService } from "../test/support/fakeFolderService.js";
 import { createStationStubObserverService } from "./stubObserverService.js";
 import {
   createStationDashboardRuntime,
@@ -129,10 +130,9 @@ describe("createStationDashboardRuntime", () => {
 function makeStore(folderService?: TuiFolderService): StationDashboardRuntime {
   const snapshot = manyProjectsSnapshot();
   const source = new FakeStationSource(snapshot);
-  const options: Parameters<typeof createStationDashboardRuntime>[2] = {};
-  if (folderService !== undefined) {
-    options.folderService = folderService;
-  }
+  const options: Parameters<typeof createStationDashboardRuntime>[2] = {
+    folderService: folderService ?? createFakeFolderService(),
+  };
   const service = createStationStubObserverService(source, { dispatchDelayMs: 1 });
   const capabilities: DashboardCapabilities = {
     activation: createObserverActivationCapabilities({ source, service, clientLabel: "Station" }),

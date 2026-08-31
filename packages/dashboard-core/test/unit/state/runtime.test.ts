@@ -944,6 +944,28 @@ describe("dashboard runtime", () => {
     expect(service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
   });
 
+  it("resolves parent navigation through the injected folder service before reading", async () => {
+    const snapshot = createNoProjectsSnapshot();
+    const folderService = fakeFolderService();
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      folderService,
+    });
+
+    store.actions.handleKey({ input: "A" });
+    store.actions.handleKey({ input: "", rightArrow: true });
+    await waitFor(() => screenMode(store.state.getState()) === "choose");
+    store.actions.handleKey({ input: "", leftArrow: true });
+    await waitFor(() => folderService.reads.length === 2);
+
+    expect(folderService.parents).toEqual(["/Users/example/Developer/station"]);
+    expect(folderService.reads).toEqual([
+      "/Users/example/Developer/station",
+      "/Users/example/Developer",
+    ]);
+  });
+
   it("refreshes only the visible project directory and preserves selection by path", async () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
@@ -1422,17 +1444,23 @@ function fakeFolderService(): TuiFolderService & {
   reads: string[];
   reviews: string[];
   searches: string[];
+  parents: string[];
 } {
   const reads: string[] = [];
   const reviews: string[] = [];
   const searches: string[] = [];
+  const parents: string[] = [];
   return {
     reads,
     reviews,
     searches,
+    parents,
     cwd: () => "/Users/example/Developer/station",
     homeDir: () => "/Users/example",
-    parent: (path) => path.split("/").slice(0, -1).join("/") || "/",
+    parent: (path) => {
+      parents.push(path);
+      return path.split("/").slice(0, -1).join("/") || "/";
+    },
     readDirectory: async (path) => {
       reads.push(path);
       return {

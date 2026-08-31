@@ -42,8 +42,8 @@ import type { CreateStationOptions, Station, StationAppProps } from "./types.js"
 /**
  * Wire Station's runtime — dashboard, registry, source reconcilers, layout
  * persistence, lifecycle, and input — and hand back the view props plus a
- * start/dispose surface. Host placement arrives as capabilities from renderer
- * composition; this module never selects a concrete Host adapter.
+ * start/dispose surface. Folder navigation and Host placement arrive as
+ * capabilities from renderer composition; this module selects neither adapter.
  *
  * Reads as a sequence of steps; each is one extracted helper below.
  */
@@ -83,6 +83,7 @@ export function createStation(options: CreateStationOptions): Station {
     stationClient,
     dashboardCapabilities,
     {
+      folderService: options.folderService,
       ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
       widgetsPersisted: options.tuiConfigPath !== undefined,
     },
