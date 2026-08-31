@@ -334,12 +334,15 @@ narrow grapheme/cell contract. Dashboard-core owns renderer-neutral settings
 content; Station owns responsive OpenTUI settings shells and scrolling, while each settings screen
 retains its navigation policy, detail controls, drafts, and mutation lifecycle. The `[tui]` config shapes
 live in `@station/contracts`; `@station/config` retains load/persist authority.
+Folder browsing follows the same boundary: dashboard-core owns the `TuiFolderService`
+port, chooser transitions, operations, and polling lifecycle, while each Station renderer
+composition supplies the Station-local Node filesystem adapter.
 
 ## Dependency direction and enforcement
 
 - Station compositions depend on dashboard-core through the role entrypoints;
   dashboard-core never imports Station, workspace, or terminal-provider code.
-- `station/src/sources` carries no dashboard-core dependency; operation
+- `station/src/client` carries no dashboard-core dependency; operation
   convergence lives behind `@station/client`.
 - `station/src/station/importBoundaries.test.ts` freezes the coupling surface:
   it rejects private mutable dashboard model imports and direct mutation, pins
@@ -347,7 +350,8 @@ live in `@station/contracts`; `@station/config` retains load/persist authority.
   production dashboard-core import to use a role entrypoint.
 - `packages/dashboard-core/test/unit/declaredDependencies.test.ts` guards the
   emitted declarations: production sources may import only declared
-  dependencies, since type imports become declaration references.
+  dependencies, since type imports become declaration references, and rejects
+  Node filesystem, OS, and path modules from production core.
 - `packages/dashboard-core/test/unit/state/readonlyStateSource.typecheck.test.ts`
   and the runtime boundary test protect identity-preserving recursive readonly
   views.
