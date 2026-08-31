@@ -16,7 +16,7 @@ import {
   hostRequest,
   serveHostConnection,
 } from "@station/host";
-import { inMemoryNdjsonConnectionPair } from "@station/protocol";
+import { inMemoryNdjsonConnectionPair, NDJSON_TRANSPORT_LIMITS } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 
 function ptyRef(ptyId: string) {
@@ -757,6 +757,57 @@ describe("serveHostConnection", () => {
         rows: 30,
       },
     ]);
+    client.dispose();
+  });
+
+  it("preserves exact Host PTY identity through a burst beyond the Observer transport limit", async () => {
+    const stream = controllableStream();
+    const expected = ptyExpectation("p1");
+    const client = wire({
+      attach: (_params, attachmentId) =>
+        attachmentSource(
+          {
+            subscribed: true,
+            attachmentId,
+            controlEpoch: 1,
+            role: "controller",
+            ...expected,
+            pid: 7,
+            cols: 100,
+            rows: 30,
+            exited: false,
+            replay: {
+              kind: "raw-complete",
+              initialCols: 100,
+              initialRows: 30,
+              events: [],
+            },
+          },
+          stream.frames,
+        ),
+    });
+    const attachment = await client.attach(expected, "controller");
+    const iterator = attachment.frames[Symbol.asyncIterator]();
+    const frameCount = NDJSON_TRANSPORT_LIMITS.maxQueuedFrames + 1;
+
+    for (let index = 0; index < frameCount; index += 1) {
+      stream.push({ type: "data", ptyId: expected.ptyId, data: String(index) });
+    }
+    let finalFrame: IteratorResult<HostFrame> | undefined;
+    for (let index = 0; index < frameCount; index += 1) {
+      finalFrame = await iterator.next();
+    }
+
+    expect(attachment.ack).toMatchObject({ ...expected, pid: 7 });
+    expect(finalFrame).toEqual({
+      done: false,
+      value: { type: "data", ptyId: expected.ptyId, data: String(frameCount - 1) },
+    });
+    stream.push({ type: "data", ptyId: expected.ptyId, data: "still-live" });
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: { type: "data", ptyId: expected.ptyId, data: "still-live" },
+    });
     client.dispose();
   });
 

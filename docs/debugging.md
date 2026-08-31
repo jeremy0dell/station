@@ -45,6 +45,42 @@ Use the narrowest tool that can answer the question:
 | Observer event hook setup | `stn event-hooks doctor` |
 | Setup and tool readiness | `stn setup check --json`, `stn setup system --check`, or `bun run setup:system:check` |
 
+### Transport Memory Profiling
+
+Use the opt-in macOS probe when evidence points specifically to an NDJSON
+subscriber that is not consuming frames. It compares the same compiled transport
+with a draining and a stalled peer, records physical footprint and JavaScript heap
+evidence, and reports whether the configured queue bounds held:
+
+```bash
+bun run profile:transport-memory --check --bun-1-4-0 /opt/homebrew/bin/bun
+bun run profile:transport-memory --matrix \
+  --output /absolute/private/evidence/path \
+  --bun-1-4-0 /opt/homebrew/bin/bun
+```
+
+The source checkout must be clean and built. Keep the output outside the live
+Station state directory. A stalled peer is expected to be disconnected at the
+transport limit; the caller must reconnect, load a fresh snapshot, and subscribe
+again. Inspect `result.json`, each cell's process samples, and the captured
+`footprint`, `vmmap`, `heap`, and `sample` output together rather than treating RSS
+alone as ownership evidence.
+
+Production Observer overload evidence is content-free and retained in
+`logs/observer.jsonl`; inspect it with:
+
+```bash
+stn debug logs "Observer protocol transport" --component observer
+```
+
+Each matching record includes queue depth and byte high-water marks,
+backpressure, overflow, close, and overflow-reason counts for the discarded
+connection. The client runtime separately aggregates the same content-free
+connection metrics across discarded sockets and exposes its cumulative
+`resubscriptionCount`. Station Host PTY connections do not opt into the Observer
+transport capacity policy and therefore must be diagnosed through Host attachment
+and replay evidence instead.
+
 ### Terminal Reconcile Evidence
 
 Use `stn snapshot --json --include-debug` when the current question is what terminal

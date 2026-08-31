@@ -15,6 +15,7 @@ import type {
   WorktreePrepareRemovalParams,
   WorktreePrepareRemovalResult,
 } from "@station/contracts";
+import type { NdjsonTransportDiagnostics } from "@station/protocol";
 
 export type {
   AgentPrepareExternalLaunchParams,
@@ -40,6 +41,7 @@ export type StationClientCommandCompletion =
  * Distinct from protocol's `ObserverClient`, which is the raw socket transport.
  */
 export type ObserverService = {
+  diagnostics?(): NdjsonTransportDiagnostics;
   loadSnapshot(): Promise<StationSnapshot>;
   subscribeEvents(): AsyncIterable<StationEvent>;
   dispatch(command: StationCommand): Promise<CommandReceipt>;
@@ -101,6 +103,7 @@ export type StationClientState = Pick<StationClientRuntimeState, "snapshot" | "c
  */
 export interface StationClientStateSource {
   getState(): StationClientState;
+  diagnostics?(): StationClientRuntimeDiagnostics;
   subscribe(listener: () => void): () => void;
 }
 
@@ -108,6 +111,11 @@ export type StationClientRefreshOutcome =
   | { status: "loaded"; snapshot: StationSnapshot }
   | { status: "connectFailure"; error: SafeError }
   | { status: "failure"; error: SafeError };
+
+export type StationClientRuntimeDiagnostics = {
+  resubscriptionCount: number;
+  transport: NdjsonTransportDiagnostics;
+};
 
 /**
  * Bridge callbacks for apps that need per-event and per-refresh side effects
@@ -120,7 +128,12 @@ export type StationClientRuntimeHooks = {
   onEvent?(event: StationEvent, application: ApplyStationEventResult | undefined): void;
   onSubscriptionError?(
     error: SafeError,
-    info: { isConnectError: boolean; alreadyReported: boolean; willRetry: boolean },
+    info: {
+      isConnectError: boolean;
+      alreadyReported: boolean;
+      willRetry: boolean;
+      resubscriptionCount: number;
+    },
   ): void;
   onRefreshSettled?(outcome: StationClientRefreshOutcome): void;
 };
@@ -164,12 +177,15 @@ export type StationClientRuntimeOptions = StationClientRuntimeSharedOptions &
 
 /**
  * One live client projection and the convergence-safe service that mutates it.
- * Snapshot loads and reconciliation commit to runtime state before resolving.
+ * Snapshot loads and reconciliation commit to runtime state before resolving;
+ * content-free diagnostics retain transport metrics and the resubscription
+ * count across discarded connections.
  */
 export type StationClientRuntime = {
   service: ObserverService;
   start(): void;
   stop(): Promise<void>;
   getState(): StationClientRuntimeState;
+  diagnostics(): StationClientRuntimeDiagnostics;
   subscribe(listener: () => void): () => void;
 };

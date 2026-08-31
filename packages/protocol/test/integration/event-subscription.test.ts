@@ -4,6 +4,7 @@ import {
   connectUnixSocket,
   createObserverClient,
   listenUnixSocket,
+  type NdjsonTransportDiagnostics,
   startProtocolServer,
 } from "@station/protocol";
 import { describe, expect, it } from "vitest";
@@ -238,6 +239,72 @@ describe("protocol event subscriptions", () => {
       await waitFor(() => returned);
     } finally {
       connection.close();
+      await server.close();
+    }
+  });
+
+  it("disconnects a stalled subscriber and allows a fresh snapshot and subscription", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const event: StationEvent = {
+      type: "command.accepted",
+      commandId: "cmd_overflow",
+      command: { type: "observer.reconcile", payload: { reason: "overflow-test" } },
+    };
+    let subscriptionCalls = 0;
+    let returned = 0;
+    let overloadedDiagnostics: NdjsonTransportDiagnostics | undefined;
+    const stalledEvents: AsyncIterable<StationEvent> = {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => ({ done: false, value: event }),
+        return: async () => {
+          returned += 1;
+          return { done: true, value: undefined };
+        },
+      }),
+    };
+    const server = await startProtocolServer({
+      socketPath,
+      onConnectionDiagnostics: (diagnostics) => {
+        if (diagnostics.overflowCount > 0) overloadedDiagnostics = diagnostics;
+      },
+      api: createFakeObserverApi({
+        subscribe: () => {
+          subscriptionCalls += 1;
+          return subscriptionCalls === 1 ? stalledEvents : stream([event]);
+        },
+      }),
+    });
+    const client = createObserverClient({ socketPath, requestId: ids("overflow") });
+    const stalledIterator = client.subscribe()[Symbol.asyncIterator]();
+
+    try {
+      await expect(stalledIterator.next()).resolves.toEqual({ done: false, value: event });
+      await waitFor(() => returned === 1, 2_000);
+      await waitFor(() => overloadedDiagnostics !== undefined, 2_000);
+      expect(overloadedDiagnostics).toMatchObject({
+        outboundBackpressureCount: 1,
+        overflowCount: 1,
+        closeCount: 1,
+        lastOverflowReason: "outbound-backpressure",
+      });
+      const consumeBufferedFrames = async () => {
+        for (;;) await stalledIterator.next();
+      };
+      await expect(consumeBufferedFrames()).rejects.toMatchObject({
+        code: "PROTOCOL_SUBSCRIPTION_CLOSED",
+      });
+
+      await expect(client.getSnapshot()).resolves.toMatchObject({
+        schemaVersion: STATION_SCHEMA_VERSION,
+      });
+      const freshIterator = client.subscribe()[Symbol.asyncIterator]();
+      await expect(freshIterator.next()).resolves.toEqual({ done: false, value: event });
+      await freshIterator.return?.();
+
+      expect(subscriptionCalls).toBe(2);
+      expect(returned).toBe(1);
+    } finally {
+      await stalledIterator.return?.();
       await server.close();
     }
   });

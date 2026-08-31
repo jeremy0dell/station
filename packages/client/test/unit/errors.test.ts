@@ -69,6 +69,17 @@ describe("client SafeError mapping", () => {
     expect(JSON.stringify(notice)).not.toContain("/tmp/station-test.sock");
   });
 
+  it("presents transport overflow as transient observer reconnection", () => {
+    const safe = protocolError("PROTOCOL_TRANSPORT_OVERFLOW");
+
+    expect(isObserverConnectError(safe)).toBe(true);
+    expect(safeErrorToNotice(safe)).toEqual({
+      kind: "error",
+      message: "Observer is reconnecting.",
+      hint: "Try the command again when the observer is ready.",
+    });
+  });
+
   it("strips runtime diagnostics and raw causes from client errors and notices", () => {
     const rich = Object.assign(new Error("The operation failed."), {
       tag: "WorktreeProviderError",
