@@ -115,6 +115,8 @@ describeRealOpenCode("real OpenCode session.create", () => {
       harnesses: [
         createOpenCodeHarnessProvider({
           command: shimPath,
+          installHooks: true,
+          env: { OPENCODE_CONFIG_DIR: opencodeConfigDir },
           configPath,
           observerSocketPath: join(root, "observer.sock"),
           stateDir,
@@ -163,12 +165,12 @@ describeRealOpenCode("real OpenCode session.create", () => {
         },
       });
       await queue.drain();
-      const launchLog = await waitForOpenCodeLaunchLog(shimLog);
-      const snapshot = await pollForOpenCodeRow(core);
-
       expect(await persistence.getCommand(receipt.commandId)).toMatchObject({
         status: "succeeded",
       });
+      const launchLog = await waitForOpenCodeLaunchLog(shimLog);
+      const snapshot = await pollForOpenCodeRow(core);
+
       expect(launchLog).toContain("env.STATION_HARNESS_PROVIDER=opencode");
       expect(launchLog).toContain("env.STATION_SESSION_ID=ses_real_opencode_session");
       expect(launchLog).toContain("env.STATION_OBSERVER_SOCKET_PATH=");

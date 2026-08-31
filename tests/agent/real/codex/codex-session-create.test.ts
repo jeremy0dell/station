@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createCodexHarnessProvider } from "@station/codex";
+import { createCodexHarnessProvider, installCodexHooks } from "@station/codex";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { writeDebugBundle } from "@station/observability";
 import {
@@ -45,14 +45,43 @@ describeRealCodex("real Codex session.create", () => {
     const root = await mkdtemp(join(tmpdir(), "station-real-codex-"));
     const stateDir = join(root, "state");
     const diagnosticsDir = join(stateDir, "diagnostics");
+    const hookSpoolDir = join(stateDir, "spool", "hooks");
     const worktreePath = join(root, "worktree");
+    const codexHome = join(root, "codex-home");
+    const hookScriptPath = join(stateDir, "hooks", "station-codex-hook.sh");
+    const observerSocketPath = join(root, "observer.sock");
+    const ingressBin = join(process.cwd(), "bin", "stn-ingress");
+    const artifactOwner = {
+      schemaVersion: 1 as const,
+      launcher: ingressBin,
+      runtimeKind: "source" as const,
+      version: "0.0.0-real-test",
+      buildIdentity: "a".repeat(64),
+    };
     const sessionName = `station-codex-${process.pid}-${Date.now()}`;
     const shimLog = join(root, "codex-shim.log");
     const shimPath = join(root, "codex-shim");
     await mkdir(stateDir, { recursive: true });
+    await mkdir(hookSpoolDir, { recursive: true });
     await mkdir(worktreePath, { recursive: true });
+    await mkdir(codexHome, { recursive: true });
     await execFileAsync("git", ["init"], { cwd: worktreePath, timeout: 10_000 });
-    await writeCodexShim({ shimPath, shimLog, realCodexBin: codexBin });
+    await linkCodexAuth(codexHome);
+    const previousCodexHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = codexHome;
+    cleanupTasks.push(async () => {
+      if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previousCodexHome;
+    });
+    await installCodexHooks({
+      hookScriptPath,
+      observerSocketPath,
+      stateDir,
+      hookSpoolDir,
+      hookBin: ingressBin,
+      artifactOwner,
+    });
+    await writeCodexShim({ shimPath, shimLog, realCodexBin: codexBin, codexHome });
 
     cleanupTasks.push(async () => {
       await execFileAsync(tmuxBin, ["kill-session", "-t", sessionName], {
@@ -97,7 +126,13 @@ describeRealCodex("real Codex session.create", () => {
       harnesses: [
         createCodexHarnessProvider({
           command: shimPath,
+          installHooks: true,
+          hookBin: ingressBin,
+          artifactOwner,
           noAltScreen: true,
+          observerSocketPath,
+          stateDir,
+          hookSpoolDir,
           now: () => new Date(now),
         }),
       ],
@@ -142,13 +177,13 @@ describeRealCodex("real Codex session.create", () => {
         },
       });
       await queue.drain();
+      expect(await persistence.getCommand(receipt.commandId)).toMatchObject({
+        status: "succeeded",
+      });
       await waitForShimLog(shimLog);
 
       const snapshot = await pollForCodexRow(core);
 
-      expect(await persistence.getCommand(receipt.commandId)).toMatchObject({
-        status: "succeeded",
-      });
       expect(await readFile(shimLog, "utf8")).toContain("--cd");
       expect(snapshot.rows[0]?.agent).toMatchObject({
         harness: "codex",
@@ -179,19 +214,28 @@ async function writeCodexShim(input: {
   shimPath: string;
   shimLog: string;
   realCodexBin: string;
+  codexHome: string;
 }): Promise<void> {
   const script = `#!/usr/bin/env bash
 set -euo pipefail
+export CODEX_HOME=${JSON.stringify(input.codexHome)}
 {
   printf 'cwd=%s\\n' "$PWD"
   for arg in "$@"; do
     printf 'arg=%s\\n' "$arg"
   done
 } >> ${JSON.stringify(input.shimLog)}
-exec ${JSON.stringify(input.realCodexBin)} "$@"
+exec ${JSON.stringify(input.realCodexBin)} --dangerously-bypass-hook-trust "$@"
 `;
   await writeFile(input.shimPath, script, "utf8");
   await chmod(input.shimPath, 0o755);
+}
+
+async function linkCodexAuth(codexHome: string): Promise<void> {
+  const sourceHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
+  const source = join(sourceHome, "auth.json");
+  await access(source);
+  await symlink(source, join(codexHome, "auth.json"));
 }
 
 async function waitForShimLog(path: string): Promise<void> {
