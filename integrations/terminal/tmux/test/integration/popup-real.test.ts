@@ -18,6 +18,7 @@ import {
 import { startProtocolServer, type UnixSocketServer } from "@station/protocol";
 import {
   environmentWithoutGitLocals,
+  parseStationObserverBuildVersion,
   resolveExecutablePath,
   stationObserverBuildVersion,
 } from "@station/runtime";
@@ -297,6 +298,16 @@ describeRealTmux("real tmux dev popup routing", () => {
         `Compiled CLI not found at ${builtBinaryPath}; run bun run build:binary first.`,
       );
     });
+    const { stdout: binaryVersionOutput } = await execFileAsync(builtBinaryPath, ["--version"], {
+      timeout: 10_000,
+    });
+    const binaryVersion = binaryVersionOutput.trim();
+    const sourceVersion = parseStationObserverBuildVersion(stationObserverBuildVersion()).version;
+    if (binaryVersion !== sourceVersion) {
+      throw new Error(
+        `Compiled CLI version ${binaryVersion} does not match source version ${sourceVersion}; rebuild with bun run build:binary -- --version ${sourceVersion}.`,
+      );
+    }
   });
 
   afterEach(async () => {
