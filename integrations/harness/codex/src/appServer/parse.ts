@@ -10,6 +10,7 @@ const CodexAppServerMessageSchema = z
     method: nonEmptyStringSchema,
     id: requestIdSchema.optional(),
     params: z.unknown().optional(),
+    emittedAtMs: z.number().int().nonnegative().optional(),
   })
   .strict();
 
