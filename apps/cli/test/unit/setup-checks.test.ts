@@ -905,9 +905,9 @@ describe("setup dependency checks", () => {
       resolvedPath: worktrunkCommand,
     });
     expect(facts.worktrunkShellIntegration.status).toBe("ok");
-    expect(calls.filter((call) => call.command.includes("wt")).map((call) => call.command)).toEqual(
-      [worktrunkCommand, worktrunkCommand],
-    );
+    expect(
+      calls.filter((call) => call.command === worktrunkCommand).map((call) => call.command),
+    ).toEqual([worktrunkCommand, worktrunkCommand]);
   });
 
   it("derives Worktrunk hook pre-approval mode from existing config", async () => {
