@@ -20,6 +20,8 @@ export type MachineProfileState = {
   brew: ToolPresence;
   worktrunk: ToolPresence;
   tmux: ToolPresence;
+  // Canonical socket-holder evidence (`/usr/bin/lsof` or `/usr/sbin/lsof`).
+  lsof: ToolPresence;
   // Bun runtime; bare `stn` renders the TUI through `bun run`, so it is required.
   bun: ToolPresence;
   diffViewer: ToolPresence;
@@ -58,6 +60,7 @@ const linuxAllTools: MachineProfileState = {
   brew: "present",
   worktrunk: "present",
   tmux: "present",
+  lsof: "present",
   bun: "present",
   diffViewer: "present",
   harnesses: ["codex"],
@@ -101,6 +104,7 @@ export const machineProfiles: readonly MachineProfile[] = [
       checks: {
         worktrunk: "ok",
         tmux: "ok",
+        "observer-socket-evidence": "ok",
         bun: "ok",
         "git-project": "ok",
         harness: "ok",
@@ -113,8 +117,8 @@ export const machineProfiles: readonly MachineProfile[] = [
   {
     name: "all-tools-present",
     description:
-      "Every required dependency present but no STATION config or socket evidence tool yet.",
-    state: { ...linuxAllTools },
+      "Every other dependency present but no STATION config or socket evidence tool yet.",
+    state: { ...linuxAllTools, lsof: "absent" },
     expect: {
       exitCode: 1,
       requiredOk: false,
@@ -126,7 +130,7 @@ export const machineProfiles: readonly MachineProfile[] = [
         harness: "ok",
         "diff-viewer": "ok",
         config: "missing",
-        "observer-socket-evidence": "warn",
+        "observer-socket-evidence": "missing",
       },
     },
   },
@@ -198,6 +202,7 @@ export const machineProfiles: readonly MachineProfile[] = [
       brew: "absent",
       worktrunk: "absent",
       tmux: "absent",
+      lsof: "absent",
       bun: "absent",
       diffViewer: "absent",
     },
@@ -223,6 +228,7 @@ export const machineProfiles: readonly MachineProfile[] = [
       brew: "absent",
       worktrunk: "absent",
       tmux: "absent",
+      lsof: "absent",
       bun: "absent",
       diffViewer: "absent",
       harnesses: [],

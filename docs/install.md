@@ -20,11 +20,10 @@ installed. Report feedback through
 [GitHub Issues](https://github.com/jeremy0dell/station/issues).
 
 Station uses the platform `lsof` executable (`/usr/sbin/lsof` on macOS,
-`/usr/bin/lsof` on Linux) to prove that an unreachable Unix socket has no live
-owner. Its absence does not block a fresh Observer, but setup reports a
-recommended warning because stale-socket recovery and build handoff must refuse
-to proceed without that evidence. Linux VM images can install it with
-`sudo apt-get install lsof` (Debian/Ubuntu) or `sudo dnf install lsof`
+`/usr/bin/lsof` on Linux) to prove causal ownership when admitting a Station
+Host and to prove that an unreachable Unix socket has no live owner. Setup
+therefore reports its absence as a required failure. Linux VM images can install
+it with `sudo apt-get install lsof` (Debian/Ubuntu) or `sudo dnf install lsof`
 (Fedora/RHEL); macOS normally includes it.
 
 ## Let Your Agent Install and Validate Station
@@ -469,9 +468,8 @@ For a complete source-development workflow, `stn setup check` exits 1 until thes
 - Hunk for the "See diff (split right)" automation
 - One agent CLI: Claude Code, Codex, Cursor, OpenCode, or Pi
 
-`lsof` is a recommended recovery dependency rather than a launch prerequisite:
-fresh startup works without it, while stale-socket recovery and Observer build
-handoff remain blocked until holder evidence is available.
+`lsof` is required for causal Station Host admission and recovery. Setup remains
+incomplete until canonical socket-holder evidence is available.
 
 `bootstrap.sh`'s `brew bundle` installs the brew-available subset (Worktrunk,
 Bun, tmux, Hunk, plus keg-only Node 24); Git / Command Line Tools

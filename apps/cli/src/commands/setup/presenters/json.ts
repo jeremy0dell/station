@@ -161,19 +161,19 @@ function socketEvidenceCheck(facts: SetupFacts): CliSetupCheck {
   if (facts.socketEvidence.status === "ok") {
     return {
       id: "observer-socket-evidence",
-      tier: "recommended",
+      tier: "required",
       status: "ok",
       label: "Observer socket evidence",
-      message: "lsof is available for safe Observer socket recovery and build handoff.",
+      message: "lsof is available for causal Station Host admission and recovery.",
       details,
     };
   }
   return {
     id: "observer-socket-evidence",
-    tier: "recommended",
-    status: "warn",
+    tier: "required",
+    status: "missing",
     label: "Observer socket evidence",
-    message: `Fresh Observer startup can continue, but stale-socket recovery and build handoff are blocked until lsof is executable at ${facts.socketEvidence.command}. Install lsof, then rerun stn setup check (Debian/Ubuntu: sudo apt-get install lsof; Fedora/RHEL: sudo dnf install lsof).`,
+    message: `Station Host admission requires an executable lsof at ${facts.socketEvidence.command}. Install lsof, then rerun stn setup check (Debian/Ubuntu: sudo apt-get install lsof; Fedora/RHEL: sudo dnf install lsof).`,
     details,
   };
 }

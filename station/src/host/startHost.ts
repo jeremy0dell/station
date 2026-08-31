@@ -64,11 +64,13 @@ export type StationHostInstance = {
 type CloseReason = "requested" | "upgrade" | "handoff";
 
 /**
- * The host owns PTYs independently of any client and answers
+ * COMPOSITION ROOT
+ *
+ * Wires one Host lifetime that owns PTYs independently of every client and answers
  * spawn/list + health. Attachment-scoped mutation is resolved by the server's
  * connection registry and enforced by the PTY table before reaching a child.
- * Typed PTY lifecycle is emitted directly at the table boundary, while shutdown
- * disposes owned PTYs and flushes evidence.
+ * Physical-connection handoff ownership gates lifecycle transitions; shutdown
+ * disposes owned PTYs and flushes typed lifecycle evidence.
  */
 export async function startStationHost(
   options: StartStationHostOptions,
@@ -241,12 +243,12 @@ function buildHostHandlers(input: {
         handoff.beginIdleDrain(requestingBuildVersion);
         return { stopping: true as const };
       },
-      "host.beginHandoff": async (params) => {
+      "host.beginHandoff": async (params, _client, owner) => {
         const { requestingBuildVersion, fidelity } = HostBeginHandoffParamsSchema.parse(params);
-        return handoff.beginHandoff(requestingBuildVersion, fidelity);
+        return handoff.beginHandoff(requestingBuildVersion, fidelity, owner);
       },
-      "host.completeHandoff": () => handoff.completeHandoff(),
-      "host.abortHandoff": () => handoff.abortHandoff(),
+      "host.completeHandoff": (_params, _client, owner) => handoff.completeHandoff(owner),
+      "host.abortHandoff": (_params, _client, owner) => handoff.abortHandoff(owner),
       "host.adoptRegistry": (params) => {
         const { manifest } = HostAdoptRegistryParamsSchema.parse(params);
         return handoff.adoptRegistry(manifest);
@@ -297,5 +299,6 @@ function buildHostHandlers(input: {
         void closeHost("handoff");
       }
     },
+    onConnectionClosed: (owner) => handoff.ownerDisconnected(owner),
   };
 }

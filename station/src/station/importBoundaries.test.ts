@@ -492,7 +492,8 @@ const OPENTUI_LAYOUT_GEOMETRY_OWNERS = new Set([
   "station/view/layout/useAnchoredMenuPlacement.ts",
 ]);
 const TERMINAL_INTEGRATION_IMPORT_INVENTORY = [
-  "main.tsx: import ensureStationHostRunning from @station/terminal",
+  "host/listLiveHostPtys.ts: import inspectStationHost from @station/terminal",
+  "main.tsx: import convergeStationHost from @station/terminal",
 ] as const;
 const NODE_FOLDER_SERVICE_IMPORT_INVENTORY = [
   "dashboardRenderer/main.tsx: import createNodeFolderService from ../folderNavigation/nodeFolderService.js",

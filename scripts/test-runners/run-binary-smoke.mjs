@@ -22,6 +22,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import { openCodeForwardedEventTypes } from "../../integrations/harness/opencode/dist/ingressRules.js";
 import { renderStationOpenCodePlugin } from "../../integrations/harness/opencode/dist/pluginScript.js";
+import { ensureStationHostRunning } from "../../integrations/terminal/station/dist/index.js";
 import {
   ObserverHealthSchema,
   ObserverProcessIdentitySchema,
@@ -784,6 +785,15 @@ async function runBinarySmoke() {
         );
       }
     }
+
+    await verifyGenericHostEnsureColdStart({
+      binaryPath,
+      expectedVersion,
+      // Keep exact lsof pathname matching below macOS's Unix-socket path limit.
+      socketPath: join(runtimeDir, "g.sock"),
+      stateDir,
+      childEnv,
+    });
 
     hostProcess = spawn(
       binaryPath,
@@ -4080,6 +4090,29 @@ async function waitForHost(client, diagnostics) {
   }
   const output = diagnostics();
   fail(`compiled station-host did not become healthy\n${output.stdout}\n${output.stderr}`);
+}
+
+async function verifyGenericHostEnsureColdStart(input) {
+  assertEqual(await pathExists(input.socketPath), false, "generic Host ensure starts absent");
+  const envArgs = Object.entries(input.childEnv).map(([key, value]) => `${key}=${value}`);
+  const ensured = await ensureStationHostRunning({
+    socketPath: input.socketPath,
+    stateDir: input.stateDir,
+    hostCommand: ["/usr/bin/env", ...envArgs, input.binaryPath, "__station-host"],
+    expectedBuildVersion: input.expectedVersion,
+    timeoutMs: 10_000,
+  });
+  if (ensured.status !== "running") throw ensured.error;
+  try {
+    assertEqual(ensured.ensuredBy, "start", "public generic Host ensure cold start");
+    const health = await ensured.client.health();
+    assertEqual(health.buildVersion, input.expectedVersion, "generic Host ensure build");
+    assertDeepEqual(await ensured.client.list(), [], "generic Host ensure empty registry");
+    await ensured.client.stopIfIdle("binary-smoke-cleanup");
+  } finally {
+    ensured.client.dispose();
+  }
+  await waitForMissing(input.socketPath);
 }
 
 async function collectTerminalResult(attachment, timeoutMs) {

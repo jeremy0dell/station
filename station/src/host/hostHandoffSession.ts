@@ -1,36 +1,45 @@
 import type { HostHandoffFidelity, PtyHandoffManifest } from "@station/contracts";
 import { StationHostProviderError } from "@station/host";
+import type { HostConnectionOwner } from "@station/host";
 import type { PtyTable } from "./ptyTable.js";
 
 type HandoffPhase =
   | { kind: "serving" }
   | { kind: "idle-draining"; forBuild: string }
-  | { kind: "handing-off"; forBuild: string; manifest: PtyHandoffManifest }
+  | {
+      kind: "handing-off";
+      forBuild: string;
+      manifest: PtyHandoffManifest;
+      owner: HostConnectionOwner;
+    }
   | { kind: "adopting" }
   | { kind: "completed" };
 
+/** Lifecycle state whose pre-complete handoff authority belongs to one physical owner. */
 export type HostHandoffSession = {
   assertNotDraining(): void;
   beginIdleDrain(requestingBuildVersion: string): void;
   beginHandoff(
     requestingBuildVersion: string,
     fidelity: HostHandoffFidelity,
+    owner: HostConnectionOwner,
   ): Promise<{
     manifest: PtyHandoffManifest;
     fidelity: HostHandoffFidelity;
     released: string[];
     skipped: Array<{ ptyId: string; reason: string }>;
   }>;
-  completeHandoff(): { stopping: true };
-  abortHandoff(): Promise<Awaited<ReturnType<PtyTable["adoptRegistry"]>>>;
+  completeHandoff(owner: HostConnectionOwner): { stopping: true };
+  abortHandoff(owner: HostConnectionOwner): Promise<Awaited<ReturnType<PtyTable["adoptRegistry"]>>>;
+  ownerDisconnected(owner: HostConnectionOwner): Promise<void>;
   /** Exclude spawn, list, and attach until the successor registry transition is complete. */
   adoptRegistry(manifest: PtyHandoffManifest): Promise<Awaited<ReturnType<PtyTable["adoptRegistry"]>>>;
 };
 
 /**
- * Drain / handoff phase ownership for one host process: idle stop-if-idle drain,
- * live handoff begin/complete/abort, and adopt gating. Park readiness lives in
- * pty release, not here.
+ * Owns drain and handoff phases for one Host process. Begin binds complete,
+ * abort, and disconnect restoration to one physical connection; completion is
+ * terminal and makes later disconnect inert. Park readiness remains in PTY release.
  */
 export function createHostHandoffSession(input: {
   ptyTable: PtyTable;
@@ -70,7 +79,7 @@ export function createHostHandoffSession(input: {
       // Set before returning so no spawn can race the successful acknowledgement.
       phase = { kind: "idle-draining", forBuild: requestingBuildVersion };
     },
-    async beginHandoff(requestingBuildVersion, fidelity) {
+    async beginHandoff(requestingBuildVersion, fidelity, owner) {
       if (phase.kind !== "serving") {
         throw handoffInvalidState("The host is already draining or handing off.");
       }
@@ -79,7 +88,7 @@ export function createHostHandoffSession(input: {
           "Live handoff requires at least one live terminal; use idle stop-if-idle replacement instead.",
         );
       }
-      phase = { kind: "handing-off", forBuild: requestingBuildVersion, manifest: {} };
+      phase = { kind: "handing-off", forBuild: requestingBuildVersion, manifest: {}, owner };
       try {
         const report = await ptyTable.releaseRegistryForHandoff(fidelity);
         if (report.released.length === 0) {
@@ -90,6 +99,7 @@ export function createHostHandoffSession(input: {
           kind: "handing-off",
           forBuild: requestingBuildVersion,
           manifest: report.manifest,
+          owner,
         };
         return report;
       } catch (error) {
@@ -100,15 +110,16 @@ export function createHostHandoffSession(input: {
         throw error;
       }
     },
-    completeHandoff() {
+    completeHandoff(owner) {
       if (phase.kind !== "handing-off" || Object.keys(phase.manifest).length === 0) {
         throw handoffInvalidState("No handoff is in progress.");
       }
+      assertOwner(phase.owner, owner);
       // Terminal phase: abort is refused; only process exit remains.
       phase = { kind: "completed" };
       return { stopping: true as const };
     },
-    async abortHandoff() {
+    async abortHandoff(owner) {
       if (phase.kind === "completed") {
         throw handoffInvalidState(
           "Handoff already completed; parked bridges must be adopted by a successor host.",
@@ -117,9 +128,16 @@ export function createHostHandoffSession(input: {
       if (phase.kind !== "handing-off" || Object.keys(phase.manifest).length === 0) {
         throw handoffInvalidState("No handoff is in progress.");
       }
+      assertOwner(phase.owner, owner);
       const report = await ptyTable.adoptRegistry(phase.manifest);
       phase = { kind: "serving" };
       return report;
+    },
+    async ownerDisconnected(owner) {
+      if (phase.kind !== "handing-off" || phase.owner !== owner) return;
+      const manifest = phase.manifest;
+      if (Object.keys(manifest).length > 0) await ptyTable.adoptRegistry(manifest);
+      phase = { kind: "serving" };
     },
     async adoptRegistry(manifest) {
       if (phase.kind !== "serving") {
@@ -135,6 +153,12 @@ export function createHostHandoffSession(input: {
       }
     },
   };
+}
+
+function assertOwner(expected: HostConnectionOwner, received: HostConnectionOwner): void {
+  if (expected !== received) {
+    throw handoffInvalidState("Handoff lifecycle authority belongs to another connection.");
+  }
 }
 
 function emptyReleaseMessage(skippedCount: number): string {

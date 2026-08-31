@@ -37,6 +37,7 @@ export {
 } from "./shared.js";
 export * from "./snapshot.js";
 export * from "./stationBuildIdentity.js";
+export * from "./stationHostConvergence.js";
 export * from "./stationHostInspection.js";
 export * from "./terminalPlacement.js";
 export * from "./terminalTargets.js";

@@ -721,6 +721,7 @@ describe("CLI setup command", () => {
     };
     const available = new Set([
       "/usr/bin/lsof",
+      "/usr/sbin/lsof",
       "/fake/bin/tmux",
       "/fake/bin/bun",
       "/fake/bin/hunk",
@@ -1431,7 +1432,7 @@ function commandResult(input: ExternalCommandInput, stdout: string): ExternalCom
 }
 
 function fakeAccess(paths: readonly string[]): (path: string) => Promise<void> {
-  const available = new Set(paths);
+  const available = new Set(["/usr/bin/lsof", "/usr/sbin/lsof", ...paths]);
   return async (path) => {
     if (!available.has(path)) {
       throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });

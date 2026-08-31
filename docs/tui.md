@@ -62,8 +62,9 @@ this admission path.
 The popup dashboard is observer-backed, command-capable, and has no native
 Station panes. It still requires admission because its commands can produce work
 that native Station later hosts. Native Station directly operates Station Host.
-Host compatibility remains a separate protocol and display-build-version check;
-Observer immutable selectors do not create a three-process build cohort.
+Default Host compatibility remains a separate protocol and display-build-version
+check. Exact Host convergence additionally compares immutable Host build
+identity, but Observer selectors still do not create a three-process build cohort.
 
 A lower or otherwise different launcher reports both complete selectors:
 
@@ -76,6 +77,30 @@ Reopen Station with the matching Observer build first so live terminals can be
 accounted for. When hosted work is empty, stop the incumbent and retry the other
 build, or use a separate Observer state directory. Non-UI commands, hooks,
 ingress, and generic protocol clients retain normal higher-incumbent reuse.
+
+## Exact Host Ownership
+
+Native Station preserves compatibility behavior unless `STATION_HOST_HANDOFF`
+is exactly `1`. With the gate off, a current-protocol Host with the same display
+version is reused even when its immutable artifact identity differs. With the
+gate on, native startup performs exact read-only inspection and reuses only the
+complete `{ buildVersion, buildIdentity }` pair. It replaces an empty nonexact
+Host or hands off a nonempty registry only when every terminal lifetime is alive,
+canonical, and bridge-releasable. Unsupported, incomplete, or drifting evidence
+fails visibly before layout restoration; Station does not fall back to
+`host.list`, cold restore, or local PTYs.
+
+Successful convergence preserves each PTY ID and `ptyInstanceId`, replays its
+retained output, and continues live input/output on the independently verified
+successor endpoint. The standalone `stn host handoff` command drives the same
+ownership path with selectable `processes` or `screen` fidelity. Its dry-run is
+strictly read-only, an already-exact Host reports handoff unnecessary, and an
+idle replacement retains the command's existing refused result and exit status.
+
+Fresh successor admission requires the platform's canonical `lsof` executable
+(`/usr/sbin/lsof` on macOS, `/usr/bin/lsof` on Linux). `stn setup check` reports
+its absence as a required failure because Station cannot prove that the direct
+child it started is the sole socket holder.
 
 ## Nested Workspaces
 
