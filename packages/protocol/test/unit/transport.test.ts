@@ -58,7 +58,7 @@ describe("Unix socket NDJSON transport", () => {
       const frame = `${JSON.stringify({ payload: "x".repeat(4_000) })}\n`;
       for (let index = 0; index < 2_048 && accepted?.destroyed === false; index += 1) {
         if (!accepted.write(frame)) {
-          await Promise.race([once(accepted, "drain"), once(accepted, "close")]);
+          if ((await waitForDrainOrClose(accepted)) === "closed") break;
         }
       }
 
@@ -116,8 +116,15 @@ describe("Unix socket NDJSON transport", () => {
     await waitFor(() => accepted !== undefined);
 
     try {
-      accepted?.write("x".repeat(NDJSON_TRANSPORT_LIMITS.maxFrameBytes + 1));
-      await expect(settlesWithin(client.closed, 1_000)).resolves.toBe(true);
+      const chunk = "x".repeat(1024 * 1024);
+      for (
+        let bytes = 0;
+        bytes <= NDJSON_TRANSPORT_LIMITS.maxFrameBytes && accepted?.destroyed === false;
+        bytes += chunk.length
+      ) {
+        if (!accepted.write(chunk) && (await waitForDrainOrClose(accepted)) === "closed") break;
+      }
+      await expect(settlesWithin(client.closed, 2_000)).resolves.toBe(true);
       expect(client.diagnostics()).toMatchObject({
         inboundQueueDepth: 0,
         overflowCount: 1,
@@ -530,5 +537,21 @@ function settlesWithin(promise: Promise<unknown>, timeoutMs: number): Promise<bo
       clearTimeout(timer);
       resolve(true);
     });
+  });
+}
+
+function waitForDrainOrClose(socket: Socket): Promise<"drain" | "closed"> {
+  return new Promise((resolve) => {
+    const finish = (result: "drain" | "closed") => {
+      socket.off("drain", onDrain);
+      socket.off("close", onClose);
+      socket.off("error", onClose);
+      resolve(result);
+    };
+    const onDrain = () => finish("drain");
+    const onClose = () => finish("closed");
+    socket.once("drain", onDrain);
+    socket.once("close", onClose);
+    socket.once("error", onClose);
   });
 }

@@ -639,6 +639,7 @@ function createNdjsonState(options: NdjsonStateOptions) {
         queue.push({ value: JSON.parse(line), bytes: frameBytes });
         queuedBytes += frameBytes;
         updateDepth();
+        wake();
       } catch (error) {
         streamError = error instanceof Error ? error : new Error("Invalid NDJSON frame.");
         finish(streamError);
