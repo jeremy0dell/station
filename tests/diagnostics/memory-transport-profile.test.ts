@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyTransportRetention,
   robustRetentionSlope,
+  transportStayedBounded,
 } from "../../scripts/test-runners/run-memory-transport-profile.mjs";
 
 describe("transport memory profile analysis", () => {
@@ -30,5 +31,22 @@ describe("transport memory profile analysis", () => {
       finalGapBytes: 410 * 1024 * 1024,
     });
     expect(classifyTransportRetention(control, control).implicated).toBe(false);
+  });
+
+  it("accepts only repeated overflow closure within the configured transport bounds", () => {
+    const cell = {
+      status: "overflow-closed",
+      transportLimits: { maxQueuedFrames: 1_024, maxQueuedBytes: 4 * 1024 * 1024 },
+      transportDiagnostics: {
+        inboundQueueDepth: 0,
+        inboundHighWaterDepth: 1_024,
+        inboundHighWaterBytes: 4 * 1024 * 1024,
+        overflowCount: 1,
+      },
+    };
+
+    expect(transportStayedBounded([{}], [cell], 1)).toBe(true);
+    expect(transportStayedBounded([{}], [{ ...cell, status: "complete" }], 1)).toBe(false);
+    expect(transportStayedBounded([{}], [cell], 2)).toBe(false);
   });
 });

@@ -2,7 +2,7 @@
 import { execFile } from "node:child_process";
 import { once } from "node:events";
 import { appendFileSync } from "node:fs";
-import { access, mkdir, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,6 +47,21 @@ export function classifyTransportRetention(control, stalled) {
     finalGapBytes,
     implicated: stalledSlope > Math.max(controlSlope * 3, 64) && finalGapBytes >= 128 * 1024 * 1024,
   };
+}
+
+export function transportStayedBounded(controls, stalled, repeats) {
+  return (
+    controls.length === repeats &&
+    stalled.length === repeats &&
+    stalled.every(
+      (cell) =>
+        cell.status === "overflow-closed" &&
+        cell.transportDiagnostics?.overflowCount === 1 &&
+        cell.transportDiagnostics.inboundQueueDepth === 0 &&
+        cell.transportDiagnostics.inboundHighWaterDepth <= cell.transportLimits?.maxQueuedFrames &&
+        cell.transportDiagnostics.inboundHighWaterBytes <= cell.transportLimits?.maxQueuedBytes,
+    )
+  );
 }
 
 export async function checkPrerequisites(options) {
@@ -130,7 +145,10 @@ export async function runMatrix(options) {
     }
   }
   const controls = cells.filter((cell) => cell.mode === "drain" && cell.status === "complete");
-  const stalled = cells.filter((cell) => cell.mode === "stalled" && cell.status === "complete");
+  const stalled = cells.filter(
+    (cell) =>
+      cell.mode === "stalled" && (cell.status === "complete" || cell.status === "overflow-closed"),
+  );
   const comparisons = [];
   for (let index = 0; index < Math.min(controls.length, stalled.length); index += 1) {
     comparisons.push(classifyTransportRetention(controls[index].samples, stalled[index].samples));
@@ -142,10 +160,11 @@ export async function runMatrix(options) {
     comparisons,
     implicated:
       comparisons.length === options.repeats && comparisons.every((item) => item.implicated),
+    bounded: transportStayedBounded(controls, stalled, options.repeats),
   };
   await writeJson(join(options.output, "result.json"), result);
   process.stdout.write(
-    `${JSON.stringify({ output: options.output, implicated: result.implicated, comparisons })}\n`,
+    `${JSON.stringify({ output: options.output, implicated: result.implicated, bounded: result.bounded, comparisons })}\n`,
   );
   return result;
 }
@@ -201,7 +220,7 @@ async function runCell(options) {
       );
       sent = outcome.sent;
       if (outcome.reason !== undefined) {
-        status = outcome.reason === "backpressured" ? "backpressured" : "stopped";
+        status = outcome.reason === "peer-closed" ? "overflow-closed" : outcome.reason;
         stopReason = outcome.reason;
       }
       await delay(options.cooldownMs);
@@ -223,6 +242,13 @@ async function runCell(options) {
     await unlink(socketPath).catch(() => undefined);
   }
 
+  const peerSamples = await readJsonLines(peerSamplesPath);
+  const finalPeerSample = peerSamples.findLast(
+    (sample) => sample.transportDiagnostics !== undefined,
+  );
+  const transportDiagnostics = finalPeerSample?.transportDiagnostics;
+  const transportLimits = finalPeerSample?.transportLimits;
+
   const cell = {
     schemaVersion: 1,
     mode: options.mode,
@@ -232,6 +258,8 @@ async function runCell(options) {
     sentFrames: sent,
     samples,
     slopeBytesPerFrame: robustRetentionSlope(samples),
+    ...(transportLimits === undefined ? {} : { transportLimits }),
+    ...(transportDiagnostics === undefined ? {} : { transportDiagnostics }),
     output,
   };
   await writeJson(join(output, "cell-result.json"), cell);
@@ -239,7 +267,9 @@ async function runCell(options) {
 }
 
 async function runPeer(options) {
-  const { connectUnixSocket } = await import("../../packages/protocol/dist/index.js");
+  const { connectUnixSocket, NDJSON_TRANSPORT_LIMITS } = await import(
+    "../../packages/protocol/dist/index.js"
+  );
   const connection = await connectUnixSocket(options.socket);
   const startedAt = performance.now();
   let sequence = 0;
@@ -258,6 +288,8 @@ async function runPeer(options) {
       pid: process.pid,
       consumed,
       memory: process.memoryUsage(),
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
+      transportDiagnostics: connection.diagnostics(),
       ...(jsc === undefined ? {} : { jsc: jsc.heapStats() }),
     });
   };
@@ -281,7 +313,8 @@ async function runPeer(options) {
   sample("initial");
   process.stdout.write(`${JSON.stringify({ ready: true, pid: process.pid })}\n`);
   await connection.closed;
-  await finish();
+  sample("connection-closed");
+  await new Promise(() => undefined);
 }
 
 async function sendUntil(socket, start, target, payload, pid, timeoutMs) {
@@ -517,6 +550,14 @@ function parseArgs(argv) {
 
 async function writeJson(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+}
+
+async function readJsonLines(path) {
+  const contents = await readFile(path, "utf8").catch(() => "");
+  return contents
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line));
 }
 
 function appendJsonLine(path, value) {

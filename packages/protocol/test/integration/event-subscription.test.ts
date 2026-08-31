@@ -242,6 +242,53 @@ describe("protocol event subscriptions", () => {
     }
   });
 
+  it("disconnects a stalled subscriber and allows a fresh snapshot and subscription", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const event: StationEvent = {
+      type: "command.accepted",
+      commandId: "cmd_overflow",
+      command: { type: "observer.reconcile", payload: { reason: "overflow-test" } },
+    };
+    let subscriptionCalls = 0;
+    let returned = 0;
+    const stalledEvents: AsyncIterable<StationEvent> = {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => ({ done: false, value: event }),
+        return: async () => {
+          returned += 1;
+          return { done: true, value: undefined };
+        },
+      }),
+    };
+    const server = await startProtocolServer({
+      socketPath,
+      api: createFakeObserverApi({
+        subscribe: () => {
+          subscriptionCalls += 1;
+          return subscriptionCalls === 1 ? stalledEvents : stream([event]);
+        },
+      }),
+    });
+    const client = createObserverClient({ socketPath, requestId: ids("overflow") });
+    const stalledIterator = client.subscribe()[Symbol.asyncIterator]();
+
+    try {
+      await expect(stalledIterator.next()).resolves.toEqual({ done: false, value: event });
+      await waitFor(() => returned === 1, 2_000);
+
+      await expect(client.getSnapshot()).resolves.toMatchObject({ schemaVersion: 1 });
+      const freshIterator = client.subscribe()[Symbol.asyncIterator]();
+      await expect(freshIterator.next()).resolves.toEqual({ done: false, value: event });
+      await freshIterator.return?.();
+
+      expect(subscriptionCalls).toBe(2);
+      expect(returned).toBe(1);
+    } finally {
+      await stalledIterator.return?.();
+      await server.close();
+    }
+  });
+
   it("times out and closes the socket when subscription ack hangs", async () => {
     const { socketPath } = await createTempSocketPath();
     let closed = false;
