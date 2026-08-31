@@ -50,9 +50,9 @@ if prefix="$(brew --prefix node@24 2>/dev/null)" && [ -x "$prefix/bin/node" ]; t
 fi
 
 required_bun_version="$(node "$repo_root/scripts/bun-version.mjs" --print)"
-# Homebrew provides the bootstrap executable; repository work always runs under
-# the exact packageManager version even after Homebrew's formula advances.
-bun_runtime=(bun x "bun@$required_bun_version")
+# Node provides the bootstrap executable; repository work always runs under the
+# exact packageManager version even after Homebrew's Bun formula advances.
+bun_runtime=(npx --yes "bun@$required_bun_version")
 active_bun_version="$("${bun_runtime[@]}" --version)"
 if [[ "$active_bun_version" != "$required_bun_version" ]]; then
   echo "Could not activate repository Bun $required_bun_version (found $active_bun_version)." >&2
