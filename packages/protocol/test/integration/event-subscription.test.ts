@@ -276,7 +276,9 @@ describe("protocol event subscriptions", () => {
       await expect(stalledIterator.next()).resolves.toEqual({ done: false, value: event });
       await waitFor(() => returned === 1, 2_000);
 
-      await expect(client.getSnapshot()).resolves.toMatchObject({ schemaVersion: 1 });
+      await expect(client.getSnapshot()).resolves.toMatchObject({
+        schemaVersion: STATION_SCHEMA_VERSION,
+      });
       const freshIterator = client.subscribe()[Symbol.asyncIterator]();
       await expect(freshIterator.next()).resolves.toEqual({ done: false, value: event });
       await freshIterator.return?.();
