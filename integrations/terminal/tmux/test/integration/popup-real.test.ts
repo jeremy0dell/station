@@ -523,10 +523,10 @@ describeRealTmux("real tmux dev popup routing", () => {
     await waitForPaneContent(
       fixture,
       firstPopup,
-      (content) => content.includes("Rename:"),
-      "outer keyboard input did not open the Rename prompt",
+      (content) => content.includes("Select session to rename"),
+      "outer keyboard input did not open the rename picker",
     );
-    await expectHiddenTextUsesDefaultBackground(fixture, "Rename:");
+    await expectHiddenTextUsesDefaultBackground(fixture, "Select session to rename");
     await fixture.ptyClient.write(Buffer.from([0x1b]));
     await waitForExactFrame(fixture, baseline);
 
@@ -659,13 +659,18 @@ describeRealTmux("real tmux dev popup routing", () => {
         "member focus did not recover to the collapsed Group identity for Enter expansion",
       );
       await writeSgrClick(fixture.ptyClient, groupOuter);
-      await waitForPaneContent(
+      const collapsedDashboard = await waitForPaneContent(
         fixture,
         popup,
         (content) => content.includes("▶ Design refresh") && !content.includes("group-contracts"),
         "the deliberate repeated click did not collapse the Group exactly once",
       );
-      await writeSgrClick(fixture.ptyClient, groupOuter);
+      const collapsedGroupOuter = centeredPopupOuterCell(
+        outerDimensions,
+        nestedClient,
+        paneCell(collapsedDashboard, "Design refresh"),
+      );
+      await writeSgrClick(fixture.ptyClient, collapsedGroupOuter);
       const expandedDashboard = await waitForPaneContent(
         fixture,
         popup,
@@ -2217,7 +2222,7 @@ function isDashboardContent(content: string): boolean {
 function isGroupedManyProjectDashboardContent(content: string): boolean {
   return (
     content.includes("FLEET") &&
-    content.includes("╭ ▼ Design refresh") &&
+    content.includes("│ ▼ Design refresh") &&
     content.includes("group-contracts") &&
     content.includes("? help")
   );
