@@ -210,6 +210,7 @@ async function runCell(input) {
     input,
     fixture,
     label: input.role,
+    role: input.role,
   });
   const observer =
     input.role === "observer"
@@ -218,6 +219,7 @@ async function runCell(input) {
           input,
           fixture,
           label: "observer",
+          role: "observer",
         });
   const manifestPath = join(cellRoot, "cell-manifest.json");
   await writeJson(manifestPath, {
@@ -325,14 +327,14 @@ async function buildArtifact(bunPath, version, output, mode) {
 }
 
 function processSpec(input) {
-  const { input: matrix, fixture, label } = input;
+  const { input: matrix, fixture, label, role } = input;
   const compiled = matrix.mode === "compiled";
   const binary = matrix.artifact.diagnosticPath;
-  const targetName = matrix.role === "native" ? "tui" : matrix.role;
+  const targetName = role === "native" ? "tui" : role;
   const env = {};
   if (compiled) {
     const args =
-      matrix.role === "observer"
+      role === "observer"
         ? [
             "__observer",
             "--config",
@@ -342,7 +344,7 @@ function processSpec(input) {
             "--state-dir",
             fixture.stateDir,
           ]
-        : matrix.role === "host"
+        : role === "host"
           ? [
               "__station-host",
               "--socket",
@@ -350,18 +352,18 @@ function processSpec(input) {
               "--state-dir",
               fixture.stateDir,
             ]
-          : [matrix.role === "native" ? "__tui" : "__dashboard"];
+          : [role === "native" ? "__tui" : "__dashboard"];
     return {
       command: binary,
       args,
       cwd: repoRoot,
       env,
-      tty: matrix.role === "native" || matrix.role === "dashboard",
+      tty: role === "native" || role === "dashboard",
       label,
     };
   }
   const args =
-    matrix.role === "observer"
+    role === "observer"
       ? [
           "--config",
           fixture.configPath,
@@ -370,7 +372,7 @@ function processSpec(input) {
           "--state-dir",
           fixture.stateDir,
         ]
-      : matrix.role === "host"
+      : role === "host"
         ? [
             "--socket",
             join(fixture.stateDir, "run", "station-host.sock"),
@@ -382,13 +384,13 @@ function processSpec(input) {
   return {
     command: matrix.bun.executable,
     args: [
-      ...(matrix.role === "native" || matrix.role === "dashboard" ? ["--hot"] : []),
+      ...(role === "native" || role === "dashboard" ? ["--hot"] : []),
       profiledSourcePath,
       ...args,
     ],
     cwd: repoRoot,
     env,
-    tty: matrix.role === "native" || matrix.role === "dashboard",
+    tty: role === "native" || role === "dashboard",
     label,
   };
 }

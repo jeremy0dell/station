@@ -145,7 +145,7 @@ export async function runProfileCell(rawManifest) {
       await stalledIterator.return?.().catch(() => undefined);
     }
     if (manifest.observer !== undefined && observerClient !== undefined) {
-      await observerClient.stop().catch(() => undefined);
+      await Promise.race([observerClient.stop().catch(() => undefined), delay(3_000)]);
     }
     for (const process of processes.slice().reverse()) {
       await process.terminate();
