@@ -89,6 +89,16 @@ describe("reconcile harness event repair", () => {
         state: "idle",
         statusUpdatedAt: "2026-06-19T12:00:02.000Z",
       },
+      recoveryHandle: {
+        id: "report_1",
+        provider: "codex",
+        projectId: "web",
+        worktreeId: "wt_task",
+        sessionId: "session_1",
+        target: { kind: "native-session", id: "native_a" },
+        observedAt: "2026-06-19T12:00:02.000Z",
+        lastSeenAt: "2026-06-19T12:00:02.000Z",
+      },
       turnReadiness: {
         sessionId: "session_1",
         projectId: "web",
@@ -97,6 +107,69 @@ describe("reconcile harness event repair", () => {
         completedAt: "2026-06-19T12:00:02.000Z",
         createdAt: "2026-06-19T12:00:02.000Z",
         updatedAt: "2026-06-19T12:00:02.000Z",
+      },
+    });
+  });
+
+  it("replays corroborated activity over a different provisional startup", () => {
+    const observations = [
+      persistedEvent({
+        id: "obs_a_start",
+        sessionId: "session_1",
+        nativeSessionId: "native_a",
+        status: status("starting", "2026-06-19T12:00:01.000Z"),
+        observedAt: "2026-06-19T12:00:01.000Z",
+      }),
+      persistedEvent({
+        id: "obs_b_start",
+        sessionId: "session_1",
+        nativeSessionId: "native_b",
+        status: status("starting", "2026-06-19T12:00:02.000Z"),
+        observedAt: "2026-06-19T12:00:02.000Z",
+      }),
+      persistedEvent({
+        id: "obs_b_working",
+        sessionId: "session_1",
+        nativeSessionId: "native_b",
+        projectId: "web",
+        worktreeId: "wt_task",
+        reportId: "report_b_working",
+        status: status("working", "2026-06-19T12:00:03.000Z"),
+        observedAt: "2026-06-19T12:00:03.000Z",
+      }),
+      persistedEvent({
+        id: "obs_b_idle",
+        sessionId: "session_1",
+        nativeSessionId: "native_b",
+        projectId: "web",
+        worktreeId: "wt_task",
+        reportId: "report_b_idle",
+        turn: { kind: "turn_completed" },
+        status: status("idle", "2026-06-19T12:00:04.000Z"),
+        observedAt: "2026-06-19T12:00:04.000Z",
+      }),
+    ];
+
+    expect(
+      replayAcceptedSessionState({
+        observations,
+        provider: "codex",
+        sessionId: "session_1",
+      }),
+    ).toMatchObject({
+      harnessExecution: {
+        nativeSessionId: "native_b",
+        state: "idle",
+        statusUpdatedAt: "2026-06-19T12:00:04.000Z",
+      },
+      recoveryHandle: {
+        id: "report_b_idle",
+        target: { kind: "native-session", id: "native_b" },
+        lastSeenAt: "2026-06-19T12:00:04.000Z",
+      },
+      turnReadiness: {
+        token: "report_b_idle",
+        completedAt: "2026-06-19T12:00:04.000Z",
       },
     });
   });

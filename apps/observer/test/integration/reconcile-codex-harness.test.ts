@@ -393,6 +393,147 @@ describe("observer reconcile with Codex harness", () => {
     }
   });
 
+  it("projects a prompted Codex execution after an unsettled provisional startup", async () => {
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock: { now: () => new Date(now) },
+    });
+
+    try {
+      await core.reconcile("initial-provisional-codex-startup");
+      const [provisionalStart, promptedStart, promptSubmitted, toolStarted] =
+        interruptedCodexNewConversationReports();
+
+      await reportAndReconcile(api, eventBus, provisionalStart);
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "starting",
+        updatedAt: "2026-05-21T12:00:01.000Z",
+      });
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          nativeSessionId: "native_provisional",
+          state: "starting",
+        }),
+      ]);
+
+      await reportAndReconcile(api, eventBus, promptedStart);
+      await reportAndReconcile(api, eventBus, promptSubmitted);
+      await reportAndReconcile(api, eventBus, toolStarted);
+
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "working",
+        updatedAt: "2026-05-21T12:00:04.000Z",
+      });
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          nativeSessionId: "native_prompted",
+          state: "working",
+          statusUpdatedAt: "2026-05-21T12:00:04.000Z",
+        }),
+      ]);
+      await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            sessionId: "ses_web_task",
+            target: { kind: "native-session", id: "native_prompted" },
+          }),
+        ]),
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("repairs an unsettled provisional Codex startup after restart", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-provisional-startup-"));
+    const sqlitePath = join(root, "observer.sqlite");
+
+    try {
+      const seeded = createTestObserver({
+        config,
+        providers: codexProviders(),
+        clock: { now: () => new Date(now) },
+        sqlitePath,
+        idFactory: prefixedIds("provisional_seed"),
+      });
+      try {
+        await seeded.core.reconcile("seed-provisional-codex-startup");
+        const [provisionalStart] = interruptedCodexNewConversationReports();
+        for (const report of interruptedCodexNewConversationReports()) {
+          await reportAndReconcile(seeded.api, seeded.eventBus, report);
+        }
+        await seeded.persistence.resetSessionForFreshStart({
+          provider: "codex",
+          sessionId: "ses_web_task",
+        });
+        await seeded.persistence.repairSessionHarnessDerivedState({
+          provider: "codex",
+          sessionId: "ses_web_task",
+          harnessExecution: {
+            provider: "codex",
+            sessionId: "ses_web_task",
+            nativeSessionId: "native_provisional",
+            state: "starting",
+            statusUpdatedAt: "2026-05-21T12:00:01.000Z",
+          },
+        });
+        await seeded.persistence.upsertSessionRecoveryHandle({
+          id: provisionalStart.reportId,
+          provider: "codex",
+          projectId: "web",
+          worktreeId: "wt_web_task",
+          sessionId: "ses_web_task",
+          target: { kind: "native-session", id: "native_provisional" },
+          observedAt: provisionalStart.observedAt,
+          lastSeenAt: provisionalStart.observedAt,
+        });
+        await expect(seeded.persistence.listSessionRecoveryHandles()).resolves.toEqual([
+          expect.objectContaining({
+            target: { kind: "native-session", id: "native_provisional" },
+          }),
+        ]);
+      } finally {
+        seeded.sqlite.close();
+      }
+
+      const restarted = createTestObserver({
+        config,
+        providers: codexProviders(),
+        clock: { now: () => new Date(now) },
+        sqlitePath,
+        idFactory: prefixedIds("provisional_restart"),
+      });
+      try {
+        const snapshot = await restarted.core.reconcile("restart-after-provisional-codex-startup");
+
+        expect(snapshot.rows[0]?.agent).toMatchObject({
+          state: "working",
+          updatedAt: "2026-05-21T12:00:04.000Z",
+        });
+        await expect(restarted.persistence.listSessionHarnessExecutions()).resolves.toEqual([
+          expect.objectContaining({
+            nativeSessionId: "native_prompted",
+            state: "working",
+            statusUpdatedAt: "2026-05-21T12:00:04.000Z",
+          }),
+        ]);
+        await expect(restarted.persistence.listSessionRecoveryHandles()).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              sessionId: "ses_web_task",
+              target: { kind: "native-session", id: "native_prompted" },
+            }),
+          ]),
+        );
+      } finally {
+        restarted.sqlite.close();
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("keeps the scoped owner authoritative across background activity decay and admits a later scoped execution", async () => {
     let currentTime = now;
     const { sqlite, persistence, eventBus, core, api } = createTestObserver({
@@ -1631,6 +1772,83 @@ function codexLifecycleReport(input: {
           stop_hook_active: input.stopHookActive ?? false,
           last_assistant_message: "Done.",
         };
+  return codexHookPayloadToHarnessEventReport({
+    reportId: input.reportId,
+    observedAt: input.observedAt,
+    payload,
+  });
+}
+
+function interruptedCodexNewConversationReports() {
+  return [
+    codexNewConversationReport({
+      reportId: "report_provisional_start",
+      nativeSessionId: "native_provisional",
+      event: "SessionStart",
+      observedAt: "2026-05-21T12:00:01.000Z",
+    }),
+    codexNewConversationReport({
+      reportId: "report_prompted_start",
+      nativeSessionId: "native_prompted",
+      event: "SessionStart",
+      observedAt: "2026-05-21T12:00:02.000Z",
+    }),
+    codexNewConversationReport({
+      reportId: "report_prompted_submit",
+      nativeSessionId: "native_prompted",
+      event: "UserPromptSubmit",
+      observedAt: "2026-05-21T12:00:03.000Z",
+    }),
+    codexNewConversationReport({
+      reportId: "report_prompted_tool",
+      nativeSessionId: "native_prompted",
+      event: "PreToolUse",
+      observedAt: "2026-05-21T12:00:04.000Z",
+    }),
+  ] as const;
+}
+
+function codexNewConversationReport(input: {
+  reportId: string;
+  nativeSessionId: string;
+  event: "SessionStart" | "UserPromptSubmit" | "PreToolUse";
+  observedAt: string;
+}): HarnessEventReport {
+  const common = {
+    session_id: input.nativeSessionId,
+    transcript_path: null,
+    cwd: "/tmp/station/web/task",
+    model: "gpt-5.4-codex",
+    permission_mode: "default",
+    station_project_id: "web",
+    station_worktree_id: "wt_web_task",
+    station_worktree_path: "/tmp/station/web/task",
+    station_session_id: "ses_web_task",
+    station_terminal_provider: "tmux",
+    station_terminal_target_id: "tmux:station:@1:%2",
+  };
+  const payload =
+    input.event === "SessionStart"
+      ? {
+          ...common,
+          hook_event_name: "SessionStart",
+          source: "startup",
+        }
+      : input.event === "UserPromptSubmit"
+        ? {
+            ...common,
+            hook_event_name: "UserPromptSubmit",
+            turn_id: "turn_prompted",
+            prompt: "Review the current worktree.",
+          }
+        : {
+            ...common,
+            hook_event_name: "PreToolUse",
+            turn_id: "turn_prompted",
+            tool_name: "Bash",
+            tool_input: { command: "git diff --check" },
+            tool_use_id: `call_${input.reportId}`,
+          };
   return codexHookPayloadToHarnessEventReport({
     reportId: input.reportId,
     observedAt: input.observedAt,

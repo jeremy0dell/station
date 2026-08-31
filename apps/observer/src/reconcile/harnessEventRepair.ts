@@ -1,9 +1,14 @@
-import type { HarnessEventObservation, HarnessRunObservation } from "@station/contracts";
+import type {
+  HarnessEventObservation,
+  HarnessRunObservation,
+  SessionRecoveryHandle,
+} from "@station/contracts";
 import {
   bindHarnessRunsToSessionExecutions,
   decideSessionHarnessExecution,
   sessionHarnessExecutionEvidenceFromObservation,
 } from "../harnessExecutionIdentity.js";
+import { sessionRecoveryHandleFromObservation } from "../harnessRecoveryHandle.js";
 import { sessionTurnReadinessMutationFromHarnessObservation } from "../hooks/turnReadiness.js";
 import type {
   ObservationStore,
@@ -51,9 +56,10 @@ export async function harnessRunsWithPersistedEventStatus(input: {
 }
 
 /**
- * Repairs rejected persisted event projections before current reconcile state is assembled.
+ * Repairs provider-incompatible histories and provisional startup ownership before current
+ * reconcile state is assembled.
  */
-export async function repairPersistedHarnessEventCompatibility(input: {
+export async function repairPersistedHarnessDerivedState(input: {
   persistence: ReconcileHarnessPersistence;
   providers: ProviderRegistry;
   now: string;
@@ -72,6 +78,7 @@ export async function repairPersistedHarnessEventCompatibility(input: {
     persisted,
   );
   const currentObservations = observations.filter((observation) => !observation.expired);
+  const repairTargets = new Map<string, HarnessDerivedStateRepairTarget>();
   for (const rejected of rejectedBySession.values()) {
     const currentBinding = bindings.find(
       (binding) =>
@@ -89,14 +96,44 @@ export async function repairPersistedHarnessEventCompatibility(input: {
     ) {
       continue;
     }
+    const key = sessionRepairKey(rejected.provider, rejected.sessionId);
+    repairTargets.set(key, {
+      provider: rejected.provider,
+      sessionId: rejected.sessionId,
+      repairCompatibility: true,
+    });
+  }
+  for (const binding of bindings) {
+    if (binding.state !== "starting") continue;
+    const key = sessionRepairKey(binding.provider, binding.sessionId);
+    const current = repairTargets.get(key);
+    repairTargets.set(key, {
+      provider: binding.provider,
+      sessionId: binding.sessionId,
+      repairCompatibility: current?.repairCompatibility ?? false,
+      provisionalBinding: binding,
+    });
+  }
+  for (const target of repairTargets.values()) {
     const replay = replayAcceptedSessionState({
       observations: currentObservations,
-      provider: rejected.provider,
-      sessionId: rejected.sessionId,
+      provider: target.provider,
+      sessionId: target.sessionId,
     });
+    const promotesProvisionalBinding =
+      target.provisionalBinding !== undefined &&
+      replay.harnessExecution !== undefined &&
+      replay.harnessExecution.nativeSessionId !== target.provisionalBinding.nativeSessionId;
+    if (!target.repairCompatibility && !promotesProvisionalBinding) continue;
+
+    // Recovery evidence is additive and idempotent. Persist it first so an interrupted repair
+    // leaves the provisional binding eligible for the same replay on the next reconcile.
+    if (replay.recoveryHandle !== undefined) {
+      await input.persistence.upsertSessionRecoveryHandle(replay.recoveryHandle);
+    }
     const repair: SessionHarnessDerivedStateRepair = {
-      provider: rejected.provider,
-      sessionId: rejected.sessionId,
+      provider: target.provider,
+      sessionId: target.sessionId,
     };
     if (replay.harnessExecution !== undefined) {
       repair.harnessExecution = replay.harnessExecution;
@@ -178,9 +215,11 @@ export function replayAcceptedSessionState(input: {
   sessionId: string;
 }): {
   harnessExecution?: PersistedSessionHarnessExecution;
+  recoveryHandle?: SessionRecoveryHandle;
   turnReadiness?: PersistedSessionTurnReadiness;
 } {
   let harnessExecution: PersistedSessionHarnessExecution | undefined;
+  let recoveryHandle: SessionRecoveryHandle | undefined;
   let turnReadiness: PersistedSessionTurnReadiness | undefined;
   for (const observation of input.observations) {
     if (
@@ -199,6 +238,10 @@ export function replayAcceptedSessionState(input: {
       harnessExecution = decision.binding;
     }
     if (!decision.mayDeriveState) continue;
+    const observedRecoveryHandle = sessionRecoveryHandleFromObservation(event, observation.id);
+    if (observedRecoveryHandle !== undefined) {
+      recoveryHandle = observedRecoveryHandle;
+    }
     const mutation = sessionTurnReadinessMutationFromHarnessObservation({
       observation: event,
       updatedAt: observation.observedAt,
@@ -214,9 +257,24 @@ export function replayAcceptedSessionState(input: {
   }
   const replay: {
     harnessExecution?: PersistedSessionHarnessExecution;
+    recoveryHandle?: SessionRecoveryHandle;
     turnReadiness?: PersistedSessionTurnReadiness;
   } = {};
   if (harnessExecution !== undefined) replay.harnessExecution = harnessExecution;
+  if (harnessExecution !== undefined && recoveryHandle !== undefined) {
+    replay.recoveryHandle = recoveryHandle;
+  }
   if (turnReadiness !== undefined) replay.turnReadiness = turnReadiness;
   return replay;
+}
+
+type HarnessDerivedStateRepairTarget = {
+  provider: string;
+  sessionId: string;
+  repairCompatibility: boolean;
+  provisionalBinding?: PersistedSessionHarnessExecution;
+};
+
+function sessionRepairKey(provider: string, sessionId: string): string {
+  return `${provider}\u0000${sessionId}`;
 }

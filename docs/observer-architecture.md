@@ -745,15 +745,18 @@ queue drain before its provider scan.
 
 Station-owned harness runs bind provider-native execution identity only from
 active evidence. The provider plus Station session selects the durable binding;
-worktree-only external sessions remain independent. Once a native execution is
-active, a mismatched native report is stored as diagnostic evidence but cannot
-mutate recovery handles, readiness, live or reconciled status, or emit derived
+worktree-only external sessions remain independent. A `starting` binding is
+provisional, so non-stale `working` or `needs_attention` evidence may promote a
+different native execution when the provider abandons one startup before the
+prompt runs. Once a native execution is `working` or `needs_attention`, a
+mismatched native report is stored as diagnostic evidence but cannot mutate
+recovery handles, readiness, live or reconciled status, or emit derived
 state-change/completion notifications. A completion report cannot claim an
-unbound session, and a later active execution may bind only after explicit
-`idle` or `exited` evidence from the prior execution. When evidence identifies
-the pane-scoped run (`nativeSessionId` equals `harnessRunId`), Observer may
-replace an active conversation-scoped binding on the same Station session so a
-provider whose native ids split across hook types can settle the pane.
+unbound session, and a later active execution may otherwise bind only after
+explicit `idle` or `exited` evidence from the prior execution. When evidence
+identifies the pane-scoped run (`nativeSessionId` equals `harnessRunId`), Observer
+may replace an active conversation-scoped binding on the same Station session so
+a provider whose native ids split across hook types can settle the pane.
 Pane-scoped native identity is not a provider resume target and does not mint a
 native-session recovery handle.
 
@@ -983,7 +986,7 @@ expires.
 | Managed target release | Station target IDs are deterministic per worktree, so external release is compare-and-delete on target, expected Station session, and binding generation. Tokenless Host exits reconcile instead of releasing. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Concrete provider adapters own bounded external settlement; command use cases pass cancellation and normalize failures without starting another provider-operation timer. A handler with a non-cancellable durable section calls `beginCommit` after read-only validation and immediately before its first write; cancellation may prevent entry, but the queue drains a begun commit to one completion. Other cancellation remains cooperative, and the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles, exact worktree-create and prepared managed-launch projections, Group mutation commits, and harness-report authorization plus base projection share a non-poisoning promise chain. Create and launch events publish only after their projection commit; a projected launch orders its worktree event before its session event and schedules verification afterward. Rejected projections retain the current snapshot and use reconciliation fallback or verification. A Group mutation projects only its command project and never scans providers, repairs other durable state, or publishes a reconcile event. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; interactive launch verification rechecks global create quiescence at flush, and a stale idle edge remains queued for a later wave. |
-| Persisted harness compatibility | A harness adapter may use a provider-local strict schema to reject recognizable observations accepted by an earlier build. Unparseable legacy data remains admitted. Reconcile excludes only provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |
+| Persisted harness compatibility | A harness adapter may use a provider-local strict schema to reject recognizable observations accepted by an earlier build. Unparseable legacy data remains admitted. Reconcile excludes only provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. Reconcile also replays admitted, unexpired history for provisional `starting` bindings. When that history promotes a different native execution, its additive recovery handle is restored first so interruption leaves the repair retryable, then binding and readiness are replaced atomically. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Every worktree-project, terminal-provider, and harness-provider read produces explicit completeness evidence. Failures become provider health and reconcile errors; worktree failures scope Group absence authority by project, while terminal or harness failures block it globally. |
 | Harness ingress | First-party hook transports delegate delivery and spooling to `stn-ingress`. Known build/schema/handoff incompatibility rejects without spooling. One Observer worker processes a bounded pending map; new reports can replace pending work for the same key, and a full map rejects unrelated work with a backpressure error. |
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
