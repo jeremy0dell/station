@@ -3,6 +3,8 @@ import {
   parseStationHostConvergenceCommand,
   StationHostConvergenceCommandSchema,
   StationHostConvergenceResultSchema,
+  stationHostEvidenceMatchesTargetBuild,
+  stationHostTerminalsAreHandoffEligible,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -42,6 +44,31 @@ const handoff = {
 };
 
 describe("Station Host convergence contracts", () => {
+  it("shares exact-target and handoff-eligibility policy with command admission", () => {
+    expect(stationHostEvidenceMatchesTargetBuild(expected, targetBuild)).toBe(false);
+    expect(
+      stationHostEvidenceMatchesTargetBuild(
+        {
+          ...expected,
+          health: { ...expected.health, buildVersion: targetBuild.buildVersion },
+          buildIdentity: targetBuild.buildIdentity,
+        },
+        targetBuild,
+      ),
+    ).toBe(true);
+    expect(stationHostTerminalsAreHandoffEligible([])).toBe(false);
+    expect(stationHostTerminalsAreHandoffEligible([lifetime])).toBe(true);
+    expect(stationHostTerminalsAreHandoffEligible([{ ...lifetime, alive: false }])).toBe(false);
+    expect(
+      stationHostTerminalsAreHandoffEligible([
+        {
+          ...lifetime,
+          handoffSupport: { kind: "non-releasable", reason: "release-unsupported" },
+        },
+      ]),
+    ).toBe(false);
+  });
+
   it("contextually clones one eligible handoff without I/O", () => {
     const input = {
       ...handoff,

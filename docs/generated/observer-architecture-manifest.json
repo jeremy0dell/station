@@ -14387,7 +14387,7 @@
       ]
     },
     {
-      "path": "apps/cli/src/commands/host/index.ts",
+      "path": "apps/cli/src/commands/host/runHostCommand.ts",
       "declaration": "runHostCommand",
       "kind": "function",
       "role": "ADAPTER",
@@ -14891,7 +14891,7 @@
       "purpose": "Resolves the non-dry update path and preflights default Host preservation before mutation.",
       "dependencies": [
         {
-          "path": "apps/cli/src/commands/host/index.ts",
+          "path": "apps/cli/src/commands/host/runHostCommand.ts",
           "declaration": "runHostCommand",
           "kind": "function",
           "role": "ADAPTER",
@@ -18002,14 +18002,14 @@
       "purpose": "Contextually parses and snapshots exact authority before binding local adapters.",
       "dependencies": [
         {
-          "path": "integrations/terminal/station/src/host/convergeStationHost.ts",
+          "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
           "declaration": "executeStationHostConvergence",
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
         },
         {
-          "path": "integrations/terminal/station/src/host/convergeStationHost.ts",
+          "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
           "declaration": "StationHostConvergencePorts",
           "kind": "type",
           "role": "DRIVEN PORT",
@@ -18037,8 +18037,8 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
-          "declaration": "startCausalStationHost",
+          "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+          "declaration": "startStationHostWithOwnershipProof",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -18053,30 +18053,6 @@
       ]
     },
     {
-      "path": "integrations/terminal/station/src/host/convergeStationHost.ts",
-      "declaration": "executeStationHostConvergence",
-      "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Sequences one-deadline incumbent release, causal transfer, pinned `E1`, exact adoption, and independent proof. A transferred or concurrent proven successor is never signaled later.",
-      "dependencies": [
-        {
-          "path": "integrations/terminal/station/src/host/convergeStationHost.ts",
-          "declaration": "StationHostConvergencePorts",
-          "kind": "type",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        }
-      ]
-    },
-    {
-      "path": "integrations/terminal/station/src/host/convergeStationHost.ts",
-      "declaration": "StationHostConvergencePorts",
-      "kind": "type",
-      "role": "DRIVEN PORT",
-      "purpose": "Supplies pinned sessions, causal start, independent inspection, and one clock.",
-      "dependencies": []
-    },
-    {
       "path": "integrations/terminal/station/src/host/ensureHostRunning.ts",
       "declaration": "ensureStationHostRunning",
       "kind": "function",
@@ -18084,8 +18060,8 @@
       "purpose": "Preserves inaccessible ownership and provides compatibility-only absent/stale start, current protocol and display-version reuse, atomic idle replacement, and busy refusal.",
       "dependencies": [
         {
-          "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
-          "declaration": "startCausalStationHost",
+          "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+          "declaration": "startStationHostWithOwnershipProof",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -18105,6 +18081,30 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
+      "declaration": "executeStationHostConvergence",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Sequences one-deadline incumbent release, direct-child ownership transfer, exact adoption, and independent successor proof. A transferred or concurrent proven successor is never signaled.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
+          "declaration": "StationHostConvergencePorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
+      "declaration": "StationHostConvergencePorts",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies pinned sessions, direct-child ownership proof, independent inspection, and one clock.",
+      "dependencies": []
     },
     {
       "path": "integrations/terminal/station/src/host/hostProcess.ts",
@@ -18185,11 +18185,11 @@
       ]
     },
     {
-      "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
-      "declaration": "startCausalStationHost",
+      "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+      "declaration": "startStationHostWithOwnershipProof",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Starts one direct child and transfers it only after cutoff-bound causal proof.",
+      "purpose": "Starts one direct child and transfers it only after the endpoint and health remain stable across canonical socket-holder evidence before the startup cutoff.",
       "dependencies": [
         {
           "path": "integrations/terminal/station/src/host/hostProcess.ts",
@@ -18206,6 +18206,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+          "declaration": "StationHostStartupProofPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
           "path": "packages/protocol/src/transport.ts",
           "declaration": "readUnixSocketHolderPidsAsync",
           "kind": "function",
@@ -18220,6 +18227,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
+      "declaration": "StationHostStartupProofPorts",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies the clock, endpoint evidence, holder evidence, and pinned session needed to prove a freshly started Host owns its configured socket.",
+      "dependencies": []
     },
     {
       "path": "integrations/terminal/station/src/provider.ts",

@@ -4,7 +4,9 @@ import { HostHandoffFidelitySchema } from "./hostHandoff.js";
 import { nonEmptyStringSchema } from "./shared.js";
 import { StationBuildIdentitySchema } from "./stationBuildIdentity.js";
 import {
+  type StationHostExactEvidence,
   StationHostExactEvidenceSchema,
+  type StationHostTerminalLifetime,
   StationHostTerminalLifetimeSchema,
   stationHostTerminalLifetimeIdentitiesAreCanonical,
 } from "./stationHostInspection.js";
@@ -13,13 +15,31 @@ export const StationHostTargetBuildSchema = z
   .object({ buildVersion: nonEmptyStringSchema, buildIdentity: StationBuildIdentitySchema })
   .strict();
 export type StationHostTargetBuild = z.infer<typeof StationHostTargetBuildSchema>;
-const deadline = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
-const eligibleHandoffEvidence = StationHostExactEvidenceSchema.refine(
-  ({ terminals }) =>
+
+export function stationHostEvidenceMatchesTargetBuild(
+  evidence: Pick<StationHostExactEvidence, "health" | "buildIdentity">,
+  targetBuild: StationHostTargetBuild,
+): boolean {
+  return (
+    evidence.health.buildVersion === targetBuild.buildVersion &&
+    evidence.buildIdentity === targetBuild.buildIdentity
+  );
+}
+
+export function stationHostTerminalsAreHandoffEligible(
+  terminals: readonly StationHostTerminalLifetime[],
+): boolean {
+  return (
     terminals.length > 0 &&
     terminals.every(
       ({ alive, handoffSupport }) => alive && handoffSupport.kind === "bridge-releasable",
-    ),
+    )
+  );
+}
+
+const deadline = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+const eligibleHandoffEvidence = StationHostExactEvidenceSchema.refine(
+  ({ terminals }) => stationHostTerminalsAreHandoffEligible(terminals),
   "Handoff requires live, bridge-releasable terminals.",
 );
 const common = {
@@ -64,10 +84,7 @@ export function parseStationHostConvergenceCommand(
     throw new Error("Station Host convergence authority does not match its context.");
   if (!Number.isSafeInteger(context.nowMs) || command.deadlineMs <= context.nowMs)
     throw new Error("Station Host convergence authority has expired.");
-  if (
-    command.expected.health.buildVersion === command.targetBuild.buildVersion &&
-    command.expected.buildIdentity === command.targetBuild.buildIdentity
-  )
+  if (stationHostEvidenceMatchesTargetBuild(command.expected, command.targetBuild))
     throw new Error("Station Host already has the exact target build.");
   return command;
 }

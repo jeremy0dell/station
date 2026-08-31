@@ -1,4 +1,3 @@
-import type { ChildProcess } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { SafeError } from "@station/contracts";
@@ -17,10 +16,17 @@ import {
   safeErrorFromUnknown,
   stationBuildInfo,
 } from "@station/runtime";
+import type { ChildProcessLike, SpawnStationHostInput, StationHostCommand } from "./hostProcess.js";
 import {
-  type CausalStationHostEvidencePorts,
-  startCausalStationHost,
-} from "./readStationHostEvidence.js";
+  type StationHostStartupProofPorts,
+  startStationHostWithOwnershipProof,
+} from "./startStationHostWithOwnershipProof.js";
+
+export type {
+  ChildProcessLike,
+  SpawnStationHostInput,
+  StationHostCommand,
+} from "./hostProcess.js";
 
 export type StationHostEnsuredBy = "reuse" | "start" | "idle-replace";
 
@@ -34,28 +40,10 @@ export type StationHostHandle =
     }
   | { status: "unavailable"; socketPath: string; error: SafeError };
 
-/**
- * An executable plus its fixed entry prefix; the host layer appends socket and
- * state flags.
- */
-export type StationHostCommand = readonly [command: string, ...prefixArgs: string[]];
-
-export type SpawnStationHostInput = {
-  argv: StationHostCommand;
-  /**
-   * `unref()` releases the caller's event-loop reference; `detached` separately
-   * controls whether the Host leaves the physical process group.
-   */
-  spawnOptions: { detached: boolean; stdio: "ignore" };
-};
-
-/** Exact events, PID, and signals required until direct-child transfer or cleanup settles. */
-export type ChildProcessLike = Pick<ChildProcess, "kill" | "off" | "on" | "pid" | "unref">;
-
 export type EnsureStationHostDeps = {
   clientFactory?: (socketPath: string, expectedBuildVersion: string) => StationHostClient;
   spawnHost?: (input: SpawnStationHostInput) => ChildProcessLike;
-  readiness?: Partial<CausalStationHostEvidencePorts>;
+  readiness?: Partial<StationHostStartupProofPorts>;
   now?: () => number;
 };
 
@@ -139,7 +127,7 @@ export async function ensureStationHostRunning(
 
   try {
     await mkdir(dirname(socketPath), { recursive: true, mode: 0o700 });
-    const started = await startCausalStationHost(
+    const started = await startStationHostWithOwnershipProof(
       {
         socketPath,
         stateDir,

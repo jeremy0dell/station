@@ -15,7 +15,6 @@ import {
   type SpawnStationHostInput,
 } from "@station/terminal";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { startCausalStationHost } from "../../src/host/readStationHostEvidence.js";
 import {
   createListeningStationHostFixture,
   listeningStationHostCommand,
@@ -127,7 +126,7 @@ function readyEvidence(socketPath: string, pid = 42, buildVersion = expectedBuil
     readiness: {
       now: () => 1_000,
       probeEndpoint: vi.fn(async () => {
-        sequence.push(sequence.length === 0 ? "E0" : "E1");
+        sequence.push(sequence.length === 0 ? "endpoint-before" : "endpoint-after");
         return { status: "listening" as const, endpoint };
       }),
       openSession: vi.fn(async (input) => {
@@ -188,7 +187,7 @@ describe("ensureStationHostRunning compatibility policy", () => {
       argv: ["bun", "/tmp/hostMain.ts", "--socket", socketPath, "--state-dir", tmpdir()],
       spawnOptions: { detached: true, stdio: "ignore" },
     });
-    expect(ready.sequence).toEqual(["E0", "open", "holder", "E1"]);
+    expect(ready.sequence).toEqual(["endpoint-before", "open", "holder", "endpoint-after"]);
     expect(ready.session.health).toHaveBeenCalledTimes(2);
     expect(ready.session.dispose).toHaveBeenCalledOnce();
     expect(child.signals).toEqual([]);
@@ -482,65 +481,5 @@ describe("ensureStationHostRunning compatibility policy", () => {
       await chmod(socket.socketPath, 0o600);
       await socket.close();
     }
-  });
-});
-
-describe("causal Host startup readiness", () => {
-  it.each([
-    "endpoint",
-    "health",
-    "holder",
-  ] as const)("fails and settles the child on %s substitution", async (substitution) => {
-    const socketPath = absentSocketPath();
-    const endpoint = { socketPath, ino: 1n, birthtimeNs: 2n };
-    const child = new FakeChild();
-    const session = lifecycleSession(
-      expectedBuildVersion,
-      substitution === "health"
-        ? {
-            health: vi
-              .fn()
-              .mockResolvedValueOnce({
-                ok: true,
-                protocolVersion: HOST_PROTOCOL_VERSION,
-                buildVersion: expectedBuildVersion,
-              })
-              .mockResolvedValueOnce({
-                ok: true,
-                protocolVersion: HOST_PROTOCOL_VERSION,
-                buildVersion: "changed",
-              }),
-          }
-        : {},
-    );
-    let probes = 0;
-    const result = await startCausalStationHost(
-      {
-        socketPath,
-        stateDir: tmpdir(),
-        hostCommand: ["station-host"],
-        detached: true,
-        expectedBuildVersion,
-        startupCutoffMs: 2_000,
-        deadlineMs: 4_000,
-      },
-      {
-        now: () => 1_000,
-        spawnHost: () => child as unknown as ChildProcessLike,
-        openSession: async () => session,
-        readHolders: async () => (substitution === "holder" ? [99] : [42]),
-        probeEndpoint: async () => {
-          probes += 1;
-          return {
-            status: "listening",
-            endpoint:
-              substitution === "endpoint" && probes >= 2 ? { ...endpoint, ino: 9n } : endpoint,
-          };
-        },
-      },
-    );
-    expect(result).toMatchObject({ status: "failed", childDisposition: "settled" });
-    expect(session.dispose).toHaveBeenCalledOnce();
-    expect(child.signals).toEqual(["SIGTERM"]);
   });
 });

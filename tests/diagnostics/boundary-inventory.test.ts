@@ -94,7 +94,7 @@ const setTimeoutAllowlist = new Map([
     "UI-only progress timers report a runtime-bounded observer launch; they do not implement startup timeout or retry control.",
   ],
   [
-    "integrations/terminal/station/src/host/convergeStationHost.ts",
+    "integrations/terminal/station/src/host/executeStationHostConvergence.ts",
     "Same-endpoint shutdown polling consumes the convergence command's absolute deadline before any successor spawn.",
   ],
   [
@@ -102,7 +102,7 @@ const setTimeoutAllowlist = new Map([
     "Direct-child settlement waits enforce bounded TERM and KILL grace while retaining only the spawned child.",
   ],
   [
-    "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+    "integrations/terminal/station/src/host/startStationHostWithOwnershipProof.ts",
     "Fresh disposable readiness attempts use a short cutoff-bounded delay while waiting for the spawned socket.",
   ],
 ]);

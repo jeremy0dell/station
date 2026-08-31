@@ -110,6 +110,7 @@ export const StationHostExactEvidenceSchema = z
     terminals: StationHostTerminalLifetimesSchema,
   })
   .strict();
+export type StationHostExactEvidence = z.infer<typeof StationHostExactEvidenceSchema>;
 /** Unversioned current-only Host inspection outcome. */
 export const StationHostInspectionResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("absent") }).strict(),

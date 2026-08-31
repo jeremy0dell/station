@@ -1,5 +1,16 @@
-import { spawn } from "node:child_process";
-import type { ChildProcessLike, SpawnStationHostInput } from "./ensureHostRunning.js";
+import { type ChildProcess, spawn } from "node:child_process";
+
+/** An executable plus its fixed entry prefix; callers append Host socket and state flags. */
+export type StationHostCommand = readonly [command: string, ...prefixArgs: string[]];
+
+export type SpawnStationHostInput = {
+  argv: StationHostCommand;
+  /** Releasing the event-loop reference and leaving the process group are independent choices. */
+  spawnOptions: { detached: boolean; stdio: "ignore" };
+};
+
+/** Exact events, PID, and signals retained until direct-child transfer or cleanup settles. */
+export type ChildProcessLike = Pick<ChildProcess, "kill" | "off" | "on" | "pid" | "unref">;
 
 /**
  * ADAPTER

@@ -8,6 +8,7 @@ import { type StationHostLifecycleSession, stationHostSafeError } from "@station
 import { describe, expect, it, vi } from "vitest";
 import {
   convergeStationHost,
+  type ExecuteStationHostConvergenceInput,
   executeStationHostConvergence,
   type StationHostConvergencePorts,
 } from "../../src/host/convergeStationHost.js";
@@ -170,7 +171,7 @@ function portsFor(input: {
   };
 }
 
-const executeInput = (action: "replace-idle" | "handoff") => ({
+const executeInput = (action: "replace-idle" | "handoff"): ExecuteStationHostConvergenceInput => ({
   command: command(action),
   stateDir: "/state",
   hostCommand: ["stn", "host", "serve"] as const,
@@ -178,7 +179,7 @@ const executeInput = (action: "replace-idle" | "handoff") => ({
 });
 
 describe("exact Station Host convergence", () => {
-  it("atomically replaces the exact empty incumbent and independently proves E1", async () => {
+  it("atomically replaces the exact empty incumbent and independently proves its successor", async () => {
     const incumbent = lifecycle();
     const setup = portsFor({
       incumbent,
