@@ -1,7 +1,7 @@
 import type { SafeError, SessionGroupId, SessionId } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { dashboardRowIds, selectDashboardTree } from "../../selectors/dashboardTree.js";
-import { selectMoveToGroupSessionContext } from "../../selectors/selectors.js";
+import { selectMoveToGroupSessionContext } from "../../selectors/sessionGroupChoices.js";
 import { safeErrorToToast, toSafeError } from "../../services/errors/errors.js";
 import type { ObserverService } from "../../services/types.js";
 import { buildMoveSessionToGroupCommand } from "../commandBuilders.js";

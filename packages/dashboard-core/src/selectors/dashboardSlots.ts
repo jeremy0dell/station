@@ -16,7 +16,7 @@ import {
   keyedSelectionChoices,
   type SelectionChoice,
   selectionChoices,
-} from "./selectors.js";
+} from "./keyedChoices.js";
 
 /** Session-item counts around the renderer-reported semantic visibility window. */
 export type DashboardSessionOverflow = {

@@ -1,4 +1,4 @@
-import { selectMoveToGroupChoices } from "../../../selectors/selectors.js";
+import { selectMoveToGroupChoices } from "../../../selectors/sessionGroupChoices.js";
 import {
   MOVE_TO_GROUP_CREATE_CHOICE_ID,
   MOVE_TO_GROUP_LIST_ID,

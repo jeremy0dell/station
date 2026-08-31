@@ -1,5 +1,5 @@
 import { selectDashboardSlots } from "../../selectors/dashboardSlots.js";
-import { choiceValueByKey } from "../../selectors/selectors.js";
+import { choiceValueByKey } from "../../selectors/keyedChoices.js";
 import { activateFocusedDashboardCell } from "../dashboardCells.js";
 import {
   focusNextNeedsMe,

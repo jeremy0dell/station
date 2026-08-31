@@ -10,10 +10,8 @@ import type {
   NewSessionReviewFocus,
   NewSessionReviewStateView,
 } from "../../flows/newSession/model.js";
-import {
-  selectNewSessionHarnessOptions,
-  selectNewSessionProject,
-} from "../../selectors/selectors.js";
+import { selectNewSessionHarnessOptions } from "../../selectors/harnessChoices.js";
+import { selectNewSessionProject } from "../../selectors/projectChoices.js";
 import type { DashboardSnapshotView } from "../../state/types.js";
 
 export type NewSessionReviewFieldId = "project" | "name" | "agent" | "group";

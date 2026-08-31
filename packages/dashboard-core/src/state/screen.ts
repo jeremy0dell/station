@@ -1,6 +1,6 @@
 import type { StationSnapshot } from "@station/contracts";
 import { reconcileNewSessionFlow } from "../flows/newSession/reconciliation.js";
-import { selectMoveToGroupSessionContext } from "../selectors/selectors.js";
+import { selectMoveToGroupSessionContext } from "../selectors/sessionGroupChoices.js";
 import { reconcileDashboardFocus } from "./dashboardFocus.js";
 import { createEmptyTuiLocalRows, pruneLocalRowsForSnapshot } from "./localRows.js";
 import { reconcileForkDetailsScreen } from "./screens/fork.js";

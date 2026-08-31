@@ -1,5 +1,5 @@
 import type { ProjectId } from "@station/contracts";
-import { selectProjectChooserChoices } from "../../../selectors/selectors.js";
+import { selectProjectChooserChoices } from "../../../selectors/projectChoices.js";
 import { toggleDashboardProjectCollapsed } from "../../screens/projectCollapse.js";
 import { openProjectSettings } from "../../screens/projectSettings.js";
 import type { DashboardState } from "../../types.js";

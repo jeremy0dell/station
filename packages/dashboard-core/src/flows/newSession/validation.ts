@@ -1,8 +1,6 @@
 import type { ProviderId, SafeError, SessionGroupPlacementIntent } from "@station/contracts";
-import {
-  selectNewSessionHarnessOptions,
-  selectNewSessionProject,
-} from "../../selectors/selectors.js";
+import { selectNewSessionHarnessOptions } from "../../selectors/harnessChoices.js";
+import { selectNewSessionProject } from "../../selectors/projectChoices.js";
 import type { NewSessionFlowStateView, NewSessionSnapshotView } from "./model.js";
 
 export type NewSessionCreateValidation =

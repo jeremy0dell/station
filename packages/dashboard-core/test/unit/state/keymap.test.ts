@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SELECTION_KEYS } from "../../../src/selectors/selectors.js";
+import { SELECTION_KEYS } from "../../../src/selectors/keyedChoices.js";
 import {
   type DashboardFooterWidth,
   dashboardBindingHelp,

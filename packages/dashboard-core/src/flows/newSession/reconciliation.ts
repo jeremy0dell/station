@@ -1,5 +1,5 @@
 import type { ProjectId } from "@station/contracts";
-import { selectNewSessionRootGroup } from "../../selectors/selectors.js";
+import { selectNewSessionRootGroup } from "../../selectors/sessionGroupChoices.js";
 import type {
   NewSessionFlowState,
   NewSessionGroupSelection,

@@ -78,7 +78,9 @@ runtime owns subscriptions, timers, operation bookkeeping, and cancellation;
 disposal is idempotent and testable.
 
 New Session owns one bounded review flow shared by native and standalone
-renderers. Its Group field selects Ungrouped, a current same-project root Group
+renderers. `flows/newSession/` names its model, actions, transitions, validation,
+name generation, and snapshot reconciliation owners directly, without a barrel.
+Its Group field selects Ungrouped, a current same-project root Group
 by stable ID, or a trimmed inline-create draft. Snapshot replacement preserves
 the stable selection through rename and resets missing, cross-project, or newly
 nested Groups to Ungrouped. Submission retains and disables the sheet until the
@@ -316,8 +318,11 @@ barrel and no wildcard subpath access:
 | `@station/dashboard-core/text` | Narrow grapheme segmentation and terminal-cell measurement/clipping shared by compact renderer-neutral leaves |
 | `@station/dashboard-core/widgets` | Widget config shapes (owned by `@station/contracts`), widget resolution, and the widget hook runtime |
 
-Directory layout keeps ownership visible: `selectors/` for snapshot-to-view
-projection, `state/screens/*` for pure screen transitions,
+Directory layout keeps ownership visible: `selectors/keyedChoices.ts` owns the
+shortcut grammar, `projectChoices.ts` owns Project projections,
+`sessionGroupChoices.ts` owns New Session and Move-to-Group projections, and
+`harnessChoices.ts` owns harness options and optimistic defaults.
+`state/screens/*` owns pure screen transitions,
 `state/commandBuilders.ts` for typed observer command construction,
 `state/sourceBridge.ts` for mirroring canonical client state into the
 projection, `state/runtimeEffectScope.ts` for private effect admission and

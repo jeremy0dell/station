@@ -8,10 +8,10 @@ import {
 } from "../../../flows/newSession/flow.js";
 import { createNewSessionNameToken } from "../../../flows/newSession/names.js";
 import {
-  selectNewSessionGroupChoices,
   selectNewSessionProject,
   selectNewSessionProjectChoices,
-} from "../../../selectors/selectors.js";
+} from "../../../selectors/projectChoices.js";
+import { selectNewSessionGroupChoices } from "../../../selectors/sessionGroupChoices.js";
 import type { DashboardState } from "../../types.js";
 import { flatPickerSpec } from "../flatPicker.js";
 import { defineList, type ListRow } from "../types.js";

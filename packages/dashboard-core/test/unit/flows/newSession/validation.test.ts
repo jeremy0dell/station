@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { newSessionActionEnabled } from "../../../../src/flows/newSession/actions.js";
 import { createNewSessionFlow } from "../../../../src/flows/newSession/flow.js";
 import { validateNewSessionCreate } from "../../../../src/flows/newSession/validation.js";
-import { selectNewSessionHarnessOptions } from "../../../../src/selectors/selectors.js";
+import { selectNewSessionHarnessOptions } from "../../../../src/selectors/harnessChoices.js";
 import { createHarnessSnapshot } from "./support.js";
 
 describe("New Session validation", () => {

@@ -3,11 +3,9 @@ import {
   createEditableTextInputState,
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
-import {
-  selectNewSessionHarnessOptions,
-  selectNewSessionProject,
-  selectNewSessionRootGroup,
-} from "../../selectors/selectors.js";
+import { selectNewSessionHarnessOptions } from "../../selectors/harnessChoices.js";
+import { selectNewSessionProject } from "../../selectors/projectChoices.js";
+import { selectNewSessionRootGroup } from "../../selectors/sessionGroupChoices.js";
 import {
   backWizardStep,
   createStepWizardState,
