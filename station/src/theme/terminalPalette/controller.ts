@@ -1,5 +1,4 @@
 import { CliRenderEvents } from "@opentui/core";
-import { nativeStationTheme } from "../builtInTheme.js";
 import type { StationTerminalTheme, StationTheme } from "../types.js";
 import {
   parseStationTerminalPaletteObservation,
@@ -33,7 +32,7 @@ export type StationThemeController = Readonly<{
 export function createStationThemeController(
   renderer: StationThemeRenderer,
 ): StationThemeController {
-  let snapshot: StationTheme = nativeStationTheme;
+  let snapshot: StationTheme = resolveEmbeddedStationTheme(null);
   let observationSignature: string | null = null;
   let generation = 0;
   let started = false;

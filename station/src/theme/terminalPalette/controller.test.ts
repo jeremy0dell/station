@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { CliRenderEvents } from "@opentui/core";
-import { nativeStationTheme } from "../builtInTheme.js";
 import { createStationThemeController, type StationThemeRenderer } from "./controller.js";
+import { resolveEmbeddedStationTheme } from "./theme.js";
 import {
   darkTerminalColors,
   lightTerminalColors,
@@ -97,6 +97,16 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 describe("Station theme controller", () => {
+  it("starts with a terminal-default embedded canvas", () => {
+    const controller = createStationThemeController(new FakeThemeRenderer());
+
+    expect(controller.getSnapshot()).toBe(resolveEmbeddedStationTheme(null));
+    expect(controller.getSnapshot().surfaces.canvas).toMatchObject({
+      kind: "terminal-default",
+      channel: "background",
+    });
+  });
+
   it("publishes the initial valid observation", async () => {
     const renderer = new FakeThemeRenderer();
     renderer.enqueue(darkTerminalColors);
@@ -117,13 +127,13 @@ describe("Station theme controller", () => {
     failedRenderer.enqueueFailure(new Error("palette unavailable"));
     const failed = createStationThemeController(failedRenderer);
     await failed.start();
-    expect(failed.getSnapshot()).toBe(nativeStationTheme);
+    expect(failed.getSnapshot()).toBe(resolveEmbeddedStationTheme(null));
 
     const malformedRenderer = new FakeThemeRenderer();
     malformedRenderer.enqueue(malformedTerminalColors);
     const malformed = createStationThemeController(malformedRenderer);
     await malformed.start();
-    expect(malformed.getSnapshot()).toBe(nativeStationTheme);
+    expect(malformed.getSnapshot()).toBe(resolveEmbeddedStationTheme(null));
   });
 
   it("recovers from a rejected query on the next theme invalidation", async () => {
@@ -131,7 +141,7 @@ describe("Station theme controller", () => {
     renderer.enqueueFailure(new Error("palette unavailable"));
     const controller = createStationThemeController(renderer);
     await controller.start();
-    expect(controller.getSnapshot()).toBe(nativeStationTheme);
+    expect(controller.getSnapshot()).toBe(resolveEmbeddedStationTheme(null));
 
     renderer.enqueue(darkTerminalColors);
     renderer.enqueue(lightTerminalColors);
@@ -285,7 +295,7 @@ describe("Station theme controller", () => {
     initial.resolve(darkTerminalColors);
     await started;
 
-    expect(controller.getSnapshot()).toBe(nativeStationTheme);
+    expect(controller.getSnapshot()).toBe(resolveEmbeddedStationTheme(null));
   });
 
   it("makes repeated start and dispose calls safe", async () => {
