@@ -16,7 +16,11 @@ import {
   ProviderRegistry,
   startObserverServer,
 } from "@station/observer/internal";
-import { createOpenCodeHarnessProvider, installOpenCodePlugin } from "@station/opencode";
+import {
+  createOpenCodeHarnessProvider,
+  installOpenCodePlugin,
+  openCodeHookAdapter,
+} from "@station/opencode";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -76,6 +80,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
     const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory });
     const eventBus = createObserverEventBus();
     const providers = new ProviderRegistry({
+      hookAdapters: [openCodeHookAdapter],
       worktree: new FakeWorktreeProvider({
         now,
         worktrees: [
@@ -161,6 +166,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
           STATION_WORKTREE_PATH: worktreePath,
           STATION_SESSION_ID: "ses_real_opencode",
           STATION_HARNESS_PROVIDER: "opencode",
+          STATION_INGRESS_BIN: join(process.cwd(), "bin", "stn-ingress"),
           STATION_TERMINAL_PROVIDER: "tmux",
           STATION_TERMINAL_TARGET_ID: "real-opencode-target",
           STATION_OBSERVER_SOCKET_PATH: socketPath,
@@ -171,6 +177,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
       });
 
       expect(run.exitCode, run.stderr).toBe(0);
+      await api.reconcile("real-opencode-completion-spool");
       const observation = await pollForOpenCodeStatusObservation(persistence);
       expect(observation.payload).toMatchObject({
         provider: "opencode",
@@ -180,7 +187,6 @@ describeRealOpenCode("real OpenCode event capture", () => {
           source: "harness_event",
         }),
       });
-      await api.reconcile("real-opencode-completion-spool");
       await pollForOpenCodeReadiness(persistence);
       const snapshot = await core.reconcile("real-opencode-observed");
       expect(snapshot.rows[0]?.agent).toMatchObject({

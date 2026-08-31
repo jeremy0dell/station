@@ -18,7 +18,7 @@ import {
   registerObserverCommandHandlers,
   startObserverServer,
 } from "@station/observer/internal";
-import { createPiHarnessProvider } from "@station/pi";
+import { createPiHarnessProvider, piHookAdapter } from "@station/pi";
 import { stationObserverBuildVersion } from "@station/runtime";
 import {
   createFakeTerminalTarget,
@@ -257,6 +257,7 @@ describeRealPi("real Pi session.create launch lane", () => {
       socketPath,
     };
     const providers = new ProviderRegistry({
+      hookAdapters: [piHookAdapter],
       worktree: new FakeWorktreeProvider({
         now,
         worktrees: [
@@ -349,6 +350,7 @@ describeRealPi("real Pi session.create launch lane", () => {
       });
 
       expect(run.exitCode, run.stderr).toBe(0);
+      await api.reconcile("real-pi-callback-ingress");
       const settledObservation = await pollForPiSettlement(persistence);
       const observations = await persistence.listProviderObservations();
       const piObservations = observations.filter(
