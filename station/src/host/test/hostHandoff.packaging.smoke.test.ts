@@ -1,15 +1,18 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStationHostClient } from "@station/host";
+import { stationBuildInfo } from "@station/runtime";
+import { convergeStationHost, inspectStationHost } from "@station/terminal";
 import { describe, expect, it } from "bun:test";
 
 const HOST_ENTRY = fileURLToPath(new URL("../hostMain.ts", import.meta.url));
 const SMOKE = process.env.STATION_PTY_SMOKE === "1";
 const BINARY_PATH = process.env.STATION_BINARY_PATH;
+const PACKAGING_REQUIRED = process.env.STATION_HOST_PACKAGING_REQUIRED === "1";
 const SOURCE_BUILD_IDENTITY = "a".repeat(64);
 const SUCCESSOR_BUILD_IDENTITY = "b".repeat(64);
 
@@ -21,29 +24,9 @@ async function waitForAsync(
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!(await predicate())) {
-    if (Date.now() > deadline) {
-      throw new Error("waitForAsync timed out");
-    }
+    if (Date.now() > deadline) throw new Error("waitForAsync timed out");
     await delay(20);
   }
-}
-
-async function waitForHealth(
-  client: ReturnType<typeof createStationHostClient>,
-  buildVersion?: string,
-): Promise<boolean> {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    try {
-      const health = await client.health();
-      if (health.ok && (buildVersion === undefined || health.buildVersion === buildVersion)) {
-        return true;
-      }
-    } catch {
-      // Not listening yet.
-    }
-    await delay(100);
-  }
-  return false;
 }
 
 function processAlive(pid: number): boolean {
@@ -59,46 +42,45 @@ function spawnSourceHost(input: {
   socketPath: string;
   stateDir: string;
   buildVersion: string;
+  buildIdentity?: string;
 }): ReturnType<typeof spawn> {
   const child = spawn(
-    "bun",
+    process.env.STATION_BUN ?? "bun",
     [
       HOST_ENTRY,
+      "--build-version",
+      input.buildVersion,
+      "--build-identity",
+      input.buildIdentity ?? SOURCE_BUILD_IDENTITY,
       "--socket",
       input.socketPath,
       "--state-dir",
       input.stateDir,
-      "--build-version",
-      input.buildVersion,
-      "--build-identity",
-      SOURCE_BUILD_IDENTITY,
     ],
     {
       detached: true,
-      stdio: ["ignore", "ignore", "ignore"],
-      env: { ...process.env, STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE: "1" },
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE: "1",
+        STATION_PTY_IMPL: "bridge",
+      },
     },
   );
   child.unref();
   return child;
 }
 
-/** argv shape differs from direct `bun hostMain` (source → packaged trampoline). */
-async function writePackagingTrampoline(stateDir: string): Promise<string> {
+/** Imports hostMain in the direct child so the trampoline preserves its holder PID. */
+async function writeExecPreservingTrampoline(stateDir: string): Promise<string> {
   const trampolinePath = join(stateDir, "host-trampoline.mjs");
   await writeFile(
     trampolinePath,
     [
-      "import { spawn } from \"node:child_process\";",
-      `const hostEntry = ${JSON.stringify(HOST_ENTRY)};`,
-      "const child = spawn(\"bun\", [hostEntry, ...process.argv.slice(2)], {",
-      "  stdio: \"inherit\",",
-      "  env: { ...process.env, STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE: \"1\" },",
-      "});",
-      "child.on(\"exit\", (code, signal) => {",
-      "  if (code !== null) process.exit(code);",
-      "  process.exit(signal === \"SIGINT\" ? 130 : 1);",
-      "});",
+      `process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE = "1";`,
+      `process.env.STATION_PTY_IMPL = "bridge";`,
+      `const { runStationHostMain } = await import(${JSON.stringify(HOST_ENTRY)});`,
+      `await runStationHostMain(process.argv.slice(2));`,
       "",
     ].join("\n"),
     "utf8",
@@ -106,30 +88,45 @@ async function writePackagingTrampoline(stateDir: string): Promise<string> {
   return trampolinePath;
 }
 
-async function handoffAcrossPackaging(input: {
-  resolveSuccessor: (stateDir: string) => Promise<{ command: string; argsPrefix: string[] }>;
-  successorBuild: string;
+function binaryVersion(binaryPath: string): string {
+  const result = spawnSync(binaryPath, ["--version"], { encoding: "utf8" });
+  if (result.status !== 0 || result.signal !== null || result.stderr !== "") {
+    throw new Error(`Could not read packaged Station version: ${result.stderr}`);
+  }
+  const version = result.stdout.trim();
+  if (version.length === 0) throw new Error("Packaged Station version was empty.");
+  return version;
+}
+
+async function convergeAcrossPackaging(input: {
+  incumbentBuild: { buildVersion: string; buildIdentity: string };
+  targetBuild: { buildVersion: string; buildIdentity: string };
+  resolveSuccessor: (stateDir: string) => Promise<readonly [string, ...string[]]>;
 }): Promise<void> {
   const stateDir = await mkdtemp(join(tmpdir(), "sp-"));
   const socketPath = join(stateDir, "station-host.sock");
   await mkdir(dirname(socketPath), { recursive: true });
-  const successor = await input.resolveSuccessor(stateDir);
-
   const hostA = spawnSourceHost({
     socketPath,
     stateDir,
-    buildVersion: "0.0.0-packaging-source",
+    buildVersion: input.incumbentBuild.buildVersion,
+    buildIdentity: input.incumbentBuild.buildIdentity,
   });
   const clientA = createStationHostClient({
     socketPath,
-    expectedBuildVersion: "0.0.0-packaging-source",
+    expectedBuildVersion: input.incumbentBuild.buildVersion,
     timeoutMs: 10_000,
   });
-  expect(await waitForHealth(clientA, "0.0.0-packaging-source")).toEqual(true);
-
-  let childPid = 0;
-  let manifest: Awaited<ReturnType<typeof clientA.beginHandoff>>["manifest"] = {};
+  let successorClient: ReturnType<typeof createStationHostClient> | undefined;
+  let terminalPid = 0;
   try {
+    await waitForAsync(async () => {
+      try {
+        return (await clientA.health()).buildVersion === input.incumbentBuild.buildVersion;
+      } catch {
+        return false;
+      }
+    });
     const spawned = await clientA.spawn({
       terminalTargetId: "native:packaging",
       worktreeId: "packaging",
@@ -145,76 +142,133 @@ async function handoffAcrossPackaging(input: {
     });
     await waitForAsync(async () => {
       const entry = (await clientA.list())[0];
-      childPid = entry?.pid ?? 0;
-      return entry?.alive === true && childPid > 0 && childPid !== spawned.pid;
-    }, 5_000);
+      terminalPid = entry?.pid ?? 0;
+      return entry?.alive === true && terminalPid > 0 && terminalPid !== spawned.pid;
+    });
 
-    const begun = await clientA.beginHandoff(input.successorBuild, "processes");
-    manifest = begun.manifest;
-    expect(await clientA.completeHandoff()).toEqual({ stopping: true });
-    await waitForAsync(() => !processAlive(hostA.pid as number), 5_000);
+    const inspection = await inspectStationHost({
+      socketPath,
+      expectedBuildVersion: input.targetBuild.buildVersion,
+      deadlineMs: Date.now() + 10_000,
+    });
+    if (inspection.status !== "exact") {
+      throw new Error(`Incumbent inspection was ${inspection.status}.`);
+    }
+    expect(inspection.evidence).toMatchObject({
+      health: { buildVersion: input.incumbentBuild.buildVersion },
+      buildIdentity: input.incumbentBuild.buildIdentity,
+    });
+
+    const result = await convergeStationHost({
+      command: {
+        action: "handoff",
+        targetBuild: input.targetBuild,
+        socketPath,
+        expected: inspection.evidence,
+        fidelity: "processes",
+        deadlineMs: Date.now() + 20_000,
+      },
+      targetBuild: input.targetBuild,
+      socketPath,
+      stateDir,
+      hostCommand: await input.resolveSuccessor(stateDir),
+    });
+    if (result.status !== "completed" || result.action !== "handoff") {
+      throw new Error(
+        result.status === "failed"
+          ? `${result.error.code}: ${result.error.message}`
+          : "Expected completed handoff convergence.",
+      );
+    }
+    expect(result.handoffReceipt).toEqual({
+      fidelity: "processes",
+      terminals: [
+        {
+          terminalTargetId: spawned.terminalTargetId,
+          ptyId: spawned.ptyId,
+          ptyInstanceId: spawned.ptyInstanceId,
+        },
+      ],
+    });
+    expect(result.finalEvidence).toMatchObject({
+      endpoint: { socketPath },
+      health: { buildVersion: input.targetBuild.buildVersion },
+      buildIdentity: input.targetBuild.buildIdentity,
+      terminals: [{ ptyId: spawned.ptyId, ptyInstanceId: spawned.ptyInstanceId }],
+    });
+    expect(result.finalEvidence.endpoint).not.toEqual(inspection.evidence.endpoint);
+    await waitForAsync(() => !processAlive(hostA.pid as number));
+
+    successorClient = createStationHostClient({
+      socketPath,
+      expectedBuildVersion: input.targetBuild.buildVersion,
+      timeoutMs: 10_000,
+    });
+    expect((await successorClient.list())[0]).toMatchObject({
+      ptyId: spawned.ptyId,
+      ptyInstanceId: spawned.ptyInstanceId,
+      pid: terminalPid,
+      alive: true,
+    });
+    expect(processAlive(terminalPid)).toBe(true);
   } finally {
     clientA.dispose();
-  }
-
-  const hostB = spawn(successor.command, [
-    ...successor.argsPrefix,
-    "--socket",
-    socketPath,
-    "--state-dir",
-    stateDir,
-    "--build-version",
-    input.successorBuild,
-    "--build-identity",
-    SUCCESSOR_BUILD_IDENTITY,
-  ], {
-    detached: true,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: { ...process.env, STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE: "1" },
-  });
-  hostB.unref();
-
-  const clientB = createStationHostClient({
-    socketPath,
-    expectedBuildVersion: input.successorBuild,
-    timeoutMs: 10_000,
-  });
-  try {
-    expect(await waitForHealth(clientB, input.successorBuild)).toEqual(true);
-    const adopted = await clientB.adoptRegistry(manifest);
-    expect(adopted.adopted.length).toBeGreaterThan(0);
-    expect((await clientB.list())[0]?.pid).toEqual(childPid);
-    expect(processAlive(childPid)).toEqual(true);
-  } finally {
-    clientB.dispose();
-    if (hostB.pid !== undefined && processAlive(hostB.pid)) {
-      process.kill(hostB.pid, "SIGTERM");
+    if (successorClient !== undefined) {
+      try {
+        for (const entry of await successorClient.list()) await successorClient.close(entry.ptyId);
+        await waitForAsync(async () => (await successorClient!.list()).length === 0);
+        await successorClient.stopIfIdle("packaging-smoke-cleanup");
+      } catch {
+        // Exact child/terminal handles below remain the cleanup backstop for failed assertions.
+      }
+      successorClient.dispose();
     }
+    if (hostA.pid !== undefined && processAlive(hostA.pid)) process.kill(hostA.pid, "SIGTERM");
+    if (terminalPid > 0 && processAlive(terminalPid)) process.kill(terminalPid, "SIGTERM");
+    await rm(stateDir, { recursive: true, force: true });
   }
 }
 
 if (SMOKE) {
-  describe("host handoff across successor packaging shapes", () => {
-    it("transfers a live child from bun hostMain to a trampoline successor argv", async () => {
-      await handoffAcrossPackaging({
-        successorBuild: "0.0.0-packaging-tramp",
-        resolveSuccessor: async (stateDir) => {
-          const trampoline = await writePackagingTrampoline(stateDir);
-          return { command: process.execPath, argsPrefix: [trampoline] };
+  describe("canonical Host convergence across successor packaging shapes", () => {
+    it("converges a live source Host through an exec-preserving source trampoline", async () => {
+      await convergeAcrossPackaging({
+        incumbentBuild: {
+          buildVersion: "0.0.0-packaging-source",
+          buildIdentity: SOURCE_BUILD_IDENTITY,
         },
+        targetBuild: {
+          buildVersion: "0.0.0-packaging-trampoline",
+          buildIdentity: SUCCESSOR_BUILD_IDENTITY,
+        },
+        resolveSuccessor: async (stateDir) => [
+          process.env.STATION_BUN ?? "bun",
+          await writeExecPreservingTrampoline(stateDir),
+          "--build-version",
+          "0.0.0-packaging-trampoline",
+          "--build-identity",
+          SUCCESSOR_BUILD_IDENTITY,
+        ],
       });
     }, 60_000);
 
-    it("transfers a live child from bun hostMain to a compiled __station-host when STATION_BINARY_PATH is set", async () => {
+    it("converges a same-display source Host to the compiled embedded identity", async () => {
       if (BINARY_PATH === undefined || BINARY_PATH.length === 0 || !existsSync(BINARY_PATH)) {
+        if (PACKAGING_REQUIRED) throw new Error("STATION_BINARY_PATH must name the required binary.");
         return;
       }
-      await handoffAcrossPackaging({
-        successorBuild: "0.0.0-packaging-binary",
-        resolveSuccessor: async () => ({
-          command: BINARY_PATH,
-          argsPrefix: ["__station-host"],
-        }),
+      const targetBuild = {
+        buildVersion: binaryVersion(BINARY_PATH),
+        buildIdentity: stationBuildInfo().buildIdentity,
+      };
+      expect(targetBuild.buildIdentity).not.toBe(SOURCE_BUILD_IDENTITY);
+      await convergeAcrossPackaging({
+        incumbentBuild: {
+          buildVersion: targetBuild.buildVersion,
+          buildIdentity: SOURCE_BUILD_IDENTITY,
+        },
+        targetBuild,
+        resolveSuccessor: async () => [BINARY_PATH, "__station-host"],
       });
     }, 90_000);
   });

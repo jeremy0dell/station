@@ -180,7 +180,17 @@ read-only adapter used by Host status and update preflight. It correlates strict
 health and one identity-bound recovery inventory with the configured socket's
 path, inode, and birth time. The adapter returns evidence but no connection,
 signal, handoff, ensure, or socket-repair capability; update composition may
-inject only its read-only client factory seam.
+inject only its disposable lifecycle-session and endpoint-probe seams.
+
+The integration also owns the separate `convergeStationHost` composition root.
+It contextually admits one immutable exact-Host command before I/O, then wires a
+single absolute deadline across pinned lifecycle sessions, strict endpoint and
+holder evidence, a retained direct child, exact adoption, and independent final
+inspection. Generic `ensureStationHostRunning` remains a display-compatibility
+startup adapter and carries no handoff, adoption, or immutable-build policy.
+Observer application code receives neither convergence command authority nor
+Host process identity; CLI and native Station composition invoke exact
+convergence at their own boundary.
 
 ## Port, Actor, And Adapter Map
 

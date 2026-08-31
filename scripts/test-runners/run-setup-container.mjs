@@ -33,7 +33,7 @@ export const expectations = {
       "diff-viewer": "ok",
       harness: "ok",
       config: "missing",
-      "observer-socket-evidence": "warn",
+      "observer-socket-evidence": "missing",
     },
   },
   "no-git": { exitCode: 1, requiredOk: false, checks: { "git-project": "missing" } },

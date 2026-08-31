@@ -558,7 +558,15 @@ describe("setup dependency checks", () => {
     expect(plan.summary.requiredOk).toBe(false);
     expect(
       plan.checks.filter((check) => check.status === "missing").map((check) => check.id),
-    ).toEqual(["worktrunk", "tmux", "bun", "config", "harness-tracking:codex", "diff-viewer"]);
+    ).toEqual([
+      "observer-socket-evidence",
+      "worktrunk",
+      "tmux",
+      "bun",
+      "config",
+      "harness-tracking:codex",
+      "diff-viewer",
+    ]);
   });
 
   it("warns in setup check when Bun works but the station UI lane is not installed", async () => {
@@ -614,7 +622,14 @@ describe("setup dependency checks", () => {
         "agent --version": "cursor-agent 1.0.0\n",
         "opencode --version": "opencode 1.0.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
+      access: fakeAccess([
+        "/usr/bin/lsof",
+        "/usr/sbin/lsof",
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/hunk",
+      ]),
       fs: readOnlyFs({}),
       now: () => new Date("2026-06-08T12:00:00.000Z"),
       stationUiInstalled: async () => false,
@@ -1057,7 +1072,14 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
+      access: fakeAccess([
+        "/usr/bin/lsof",
+        "/usr/sbin/lsof",
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/hunk",
+      ]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: `${configToml(repo)}
 [harness.codex]

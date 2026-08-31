@@ -6,131 +6,163 @@ import {
   type StationHostInspectionResult,
 } from "@station/contracts";
 import {
-  createStationHostClient,
+  HostHealthResultSchema,
   type HostRecoveryInventoryResult,
-  type StationHostClient,
+  openStationHostLifecycleSession,
+  type StationHostLifecycleSession,
+  stationHostCompatibilityError,
   stationHostSafeError,
 } from "@station/host";
-import { probeUnixSocket } from "@station/protocol";
 import { safeErrorFromUnknown, stationBuildInfo } from "@station/runtime";
+import { z } from "zod";
+import {
+  readStationHostEndpoint,
+  type StationHostEndpointProbe,
+  stationHostEndpointsMatch,
+  stationHostHealthMatches,
+} from "./readStationHostEvidence.js";
 
-type InspectionClient = Pick<StationHostClient, "health" | "recoveryInventory" | "dispose">;
-type EndpointProbe = Awaited<ReturnType<typeof defaultEndpointProbe>>;
+type OpenInspectionSession = (input: {
+  socketPath: string;
+  expectedBuildVersion: string;
+  deadlineMs: number;
+}) => Promise<StationHostLifecycleSession>;
 export type InspectStationHostDeps = {
-  probeEndpoint?: (socketPath: string) => Promise<EndpointProbe>;
-  clientFactory?: (socketPath: string, expectedBuildVersion: string) => InspectionClient;
+  probeEndpoint?: StationHostEndpointProbe;
+  openSession?: OpenInspectionSession;
 };
-export type InspectStationHostOptions = { socketPath: string; expectedBuildVersion?: string };
+export type InspectStationHostOptions = {
+  socketPath: string;
+  expectedBuildVersion?: string;
+  deadlineMs?: number;
+};
 const OptionsSchema = StationHostEndpointSchema.pick({ socketPath: true }).extend({
   expectedBuildVersion: StationHostInspectedHealthSchema.shape.buildVersion.optional(),
+  deadlineMs: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
 });
 const probeError = stationHostSafeError("HOST_UNREACHABLE", "Endpoint probe failed.");
 const inspectionError = stationHostSafeError("HOST_REQUEST_FAILED", "Inspection was not exact.");
+
 /**
  * ADAPTER
  *
- * Reads one current Host lifetime without starting, replacing, handing off, or retaining a
- * connection. Exact evidence is correlated to the configured socket path across both probes.
+ * Reads one current Host lifetime without mutation or retained authority. Discovery and exact
+ * inventory use disposable, non-reconnecting sessions bounded by one absolute deadline.
  */
 export async function inspectStationHost(
   options: InspectStationHostOptions,
   deps: InspectStationHostDeps = {},
 ): Promise<StationHostInspectionResult> {
-  const { socketPath, expectedBuildVersion: requestedBuildVersion } = OptionsSchema.parse(options);
-  const probeEndpoint = deps.probeEndpoint ?? defaultEndpointProbe;
-  const initialProbe = await probeEndpoint(socketPath).catch(
-    (cause): EndpointProbe => ({
-      status: "inaccessible",
-      error: safeErrorFromUnknown(cause, probeError),
-    }),
-  );
-  if (initialProbe.status === "absent") return { status: "absent" };
-  if (initialProbe.status === "inaccessible") return initialProbe;
-  const endpoint = StationHostEndpointSchema.safeParse(initialProbe.endpoint);
-  if (!endpoint.success || endpoint.data.socketPath !== socketPath) {
+  const parsed = OptionsSchema.parse(options);
+  const deadlineMs = parsed.deadlineMs ?? Date.now() + 5_000;
+  const probe = deps.probeEndpoint ?? readStationHostEndpoint;
+  const initial = await probe(parsed.socketPath, deadlineMs).catch((cause) => ({
+    status: "inaccessible" as const,
+    error: safeErrorFromUnknown(cause, probeError),
+  }));
+  if (initial.status === "absent") return initial;
+  if (initial.status === "inaccessible")
+    return { status: "inaccessible", error: safeErrorFromUnknown(initial.error, probeError) };
+  const endpoint = StationHostEndpointSchema.safeParse(initial.endpoint);
+  if (!endpoint.success || endpoint.data.socketPath !== parsed.socketPath)
     return unknownInspection("endpoint-drift", endpoint.error);
-  }
-  if (initialProbe.status === "stale") return { status: "stale", endpoint: endpoint.data };
-  const clientFactory =
-    deps.clientFactory ??
-    ((path, build) => createStationHostClient({ socketPath: path, expectedBuildVersion: build }));
-  const expectedBuildVersion = requestedBuildVersion ?? stationBuildInfo().version;
-  const discoveryClient = clientFactory(socketPath, expectedBuildVersion);
-  let discoveredHealth: StationHostInspectedHealth;
+  if (initial.status === "stale") return { status: "stale", endpoint: endpoint.data };
+
+  const open = deps.openSession ?? openStationHostLifecycleSession;
+  const requestedBuild = parsed.expectedBuildVersion ?? stationBuildInfo().version;
+  const discovered = await readDiscoveryHealth(open, parsed.socketPath, requestedBuild, deadlineMs);
+  if (discovered.status === "failed") return unknownInspection("health-failed", discovered.error);
+
+  let session: StationHostLifecycleSession | undefined;
   try {
-    discoveredHealth = StationHostInspectedHealthSchema.parse(await discoveryClient.health());
-  } catch (cause) {
-    return unknownInspection("health-failed", cause);
-  } finally {
-    discoveryClient.dispose();
-  }
-  const client = clientFactory(socketPath, discoveredHealth.buildVersion);
-  try {
+    session = await open({
+      socketPath: parsed.socketPath,
+      expectedBuildVersion: discovered.health.buildVersion,
+      deadlineMs,
+    });
     let initialHealth: StationHostInspectedHealth;
     try {
-      initialHealth = StationHostInspectedHealthSchema.parse(await client.health());
+      initialHealth = parseInspectedHealth(await session.health(), requestedBuild);
     } catch (cause) {
       return unknownInspection("health-failed", cause);
     }
-    if (!sameHealth(discoveredHealth, initialHealth)) return unknownInspection("health-drift");
-    const inventory: HostRecoveryInventoryResult | ReturnType<typeof unknownInspection> =
-      await client
-        .recoveryInventory()
-        .catch((cause) => unknownInspection("inventory-failed", cause));
-    let finalHealth: StationHostInspectedHealth | undefined;
-    let finalHealthFailure: unknown;
+    if (!stationHostHealthMatches(discovered.health, initialHealth))
+      return unknownInspection("health-drift");
+    let inventory: HostRecoveryInventoryResult | undefined;
+    let inventoryFailure: unknown;
     try {
-      finalHealth = StationHostInspectedHealthSchema.parse(await client.health());
+      inventory = await session.recoveryInventory();
     } catch (cause) {
-      finalHealthFailure = cause;
+      inventoryFailure = cause;
     }
-    let finalProbe: EndpointProbe;
+    let finalHealth: StationHostInspectedHealth;
     try {
-      finalProbe = await probeEndpoint(socketPath);
+      finalHealth = parseInspectedHealth(await session.health(), requestedBuild);
     } catch (cause) {
-      return unknownInspection("endpoint-drift", cause);
+      return unknownInspection("health-failed", cause);
     }
-    if (finalProbe.status !== "listening") {
+    const final = await probe(parsed.socketPath, deadlineMs).catch((cause) => ({
+      status: "inaccessible" as const,
+      error: cause,
+    }));
+    if (final.status !== "listening" || !stationHostEndpointsMatch(endpoint.data, final.endpoint))
       return unknownInspection(
         "endpoint-drift",
-        finalProbe.status === "inaccessible" ? finalProbe.error : undefined,
+        final.status === "inaccessible" ? final.error : undefined,
       );
-    }
-    const finalEndpoint = StationHostEndpointSchema.safeParse(finalProbe.endpoint);
-    if (
-      !finalEndpoint.success ||
-      finalEndpoint.data.socketPath !== endpoint.data.socketPath ||
-      finalEndpoint.data.ino !== endpoint.data.ino ||
-      finalEndpoint.data.birthtimeNs !== endpoint.data.birthtimeNs
-    ) {
-      return unknownInspection("endpoint-drift", finalEndpoint.error);
-    }
-    if (finalHealth === undefined) return unknownInspection("health-failed", finalHealthFailure);
-    if (!sameHealth(initialHealth, finalHealth)) return unknownInspection("health-drift");
-    if ("status" in inventory) return inventory;
-    const exact = StationHostExactEvidenceSchema.safeParse({
+    if (!stationHostHealthMatches(initialHealth, finalHealth))
+      return unknownInspection("health-drift");
+    if (inventory === undefined) return unknownInspection("inventory-failed", inventoryFailure);
+    const evidence = StationHostExactEvidenceSchema.safeParse({
       endpoint: endpoint.data,
       health: initialHealth,
       buildIdentity: inventory.buildIdentity,
       terminals: inventory.ptys,
     });
-    return exact.success
-      ? { status: "exact", evidence: exact.data }
-      : unknownInspection("inventory-failed", exact.error);
+    return evidence.success
+      ? { status: "exact", evidence: evidence.data }
+      : unknownInspection("inventory-failed", evidence.error);
   } finally {
-    client.dispose();
+    session?.dispose();
   }
 }
-async function defaultEndpointProbe(socketPath: string) {
-  const probe = await probeUnixSocket(socketPath);
-  if (probe.status === "absent") return probe;
-  if (probe.status === "inaccessible")
-    return { status: "inaccessible", error: probe.error } as const;
-  return { status: probe.status, endpoint: { socketPath, ...probe.identity } } as const;
+
+async function readDiscoveryHealth(
+  open: OpenInspectionSession,
+  socketPath: string,
+  expectedBuildVersion: string,
+  deadlineMs: number,
+): Promise<
+  { status: "read"; health: StationHostInspectedHealth } | { status: "failed"; error: unknown }
+> {
+  let session: StationHostLifecycleSession | undefined;
+  try {
+    session = await open({ socketPath, expectedBuildVersion, deadlineMs });
+    return {
+      status: "read",
+      health: parseInspectedHealth(await session.health(), expectedBuildVersion),
+    };
+  } catch (error) {
+    return { status: "failed", error };
+  } finally {
+    session?.dispose();
+  }
 }
-function sameHealth(left: StationHostInspectedHealth, right: StationHostInspectedHealth): boolean {
-  return left.protocolVersion === right.protocolVersion && left.buildVersion === right.buildVersion;
+
+function parseInspectedHealth(
+  value: unknown,
+  expectedBuildVersion: string,
+): StationHostInspectedHealth {
+  const current = StationHostInspectedHealthSchema.safeParse(value);
+  if (current.success) return current.data;
+  const raw = HostHealthResultSchema.safeParse(value);
+  if (raw.success) {
+    const compatibility = stationHostCompatibilityError(raw.data, expectedBuildVersion);
+    if (compatibility !== undefined) throw compatibility;
+  }
+  throw current.error;
 }
+
 function unknownInspection(
   reason: Extract<StationHostInspectionResult, { status: "unknown" }>["reason"],
   cause?: unknown,

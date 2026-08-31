@@ -39,7 +39,7 @@ function deriveIssues(
     issues.push({ code: "state-directory-unwritable", tier: "required" });
   }
   if (!facts.socketEvidenceAvailable) {
-    issues.push({ code: "socket-evidence-unavailable", tier: "recommended" });
+    issues.push({ code: "socket-evidence-unavailable", tier: "required" });
   }
   if (!facts.compiled && facts.xcodeTools === "missing") {
     issues.push({ code: "xcode-tools-missing", tier: "required" });

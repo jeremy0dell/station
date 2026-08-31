@@ -86,9 +86,13 @@ function profileExecutablePaths(state: ProfileState): Set<string> {
     [state.bun, "bun"],
     [state.diffViewer, "hunk"],
   ] as const;
-  return new Set(
+  const paths = new Set(
     tools.flatMap(([presence, binary]) => (presence === "present" ? [`/fake/bin/${binary}`] : [])),
   );
+  if (state.lsof === "present") {
+    paths.add(state.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof");
+  }
+  return paths;
 }
 
 function profileVersionOutputs(state: ProfileState): Record<string, string> {

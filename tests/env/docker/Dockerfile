@@ -30,7 +30,7 @@ RUN CI=true bun install --frozen-lockfile --ignore-scripts --filter '!@station/w
 
 # ---- base: the built CLI on a full toolchain -----------------------------------
 # git + tmux present; an agent CLI is faked with a tiny shim so the harness check
-# passes. This stage is the "happy-path-linux" profile.
+# passes. lsof is deliberately withheld for the all-tools-present evidence profile.
 FROM node:24-bookworm AS happy-linux
 RUN apt-get update && apt-get install -y --no-install-recommends git tmux \
   && rm -rf /var/lib/apt/lists/*

@@ -6,7 +6,11 @@ import {
   PtyHandoffEntrySchema,
   type PtyHandoffManifest,
 } from "@station/contracts";
-import { stationHostSafeError } from "@station/host";
+import {
+  type StationHostClient,
+  stationHostErrorFromUnknown,
+  stationHostSafeError,
+} from "@station/host";
 
 const PARK_SUFFIX = ".park.json";
 
@@ -60,10 +64,45 @@ export async function loadParkedOrphanManifest(stateDir: string): Promise<PtyHan
   return manifest;
 }
 
+/**
+ * ADAPTER
+ *
+ * Adopts exactly the unique parked PTY set; acknowledgements never authorize less.
+ */
+export async function adoptParkedOrphanManifest(
+  client: Pick<StationHostClient, "adoptRegistry">,
+  manifest: PtyHandoffManifest,
+): Promise<void> {
+  const expected = Object.keys(manifest).sort();
+  try {
+    const report = await client.adoptRegistry(manifest);
+    const adopted = [...new Set(report.adopted)].sort();
+    if (
+      report.failed.length > 0 ||
+      adopted.length !== expected.length ||
+      adopted.some((ptyId, index) => ptyId !== expected[index])
+    )
+      throw invalidAdoptionError();
+  } catch (error) {
+    throw stationHostErrorFromUnknown(error, {
+      code: "HOST_HANDOFF_MANIFEST_INVALID",
+      message: "Successor host could not adopt every expected parked terminal.",
+      hint: "Parked bridges remain under the state dir until TTL reap or a retry.",
+    });
+  }
+}
+
 function invalidParkEvidenceError() {
   return stationHostSafeError(
     "HOST_HANDOFF_MANIFEST_INVALID",
     "Parked terminal recovery evidence could not be validated.",
     { hint: "Inspect the parked bridge files before launching a replacement agent." },
+  );
+}
+
+function invalidAdoptionError() {
+  return stationHostSafeError(
+    "HOST_HANDOFF_MANIFEST_INVALID",
+    "Successor host returned incomplete parked-terminal adoption evidence.",
   );
 }

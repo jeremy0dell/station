@@ -52,7 +52,7 @@ async function resolveHostHandoff(input: UpdateScenarioInput): Promise<HostHando
       hint: "Run stn host status and resolve its reported socket error before retrying.",
     });
   }
-  if (status.compatibility.action === "reuse") {
+  if (status.compatibility.action === "reuse" && status.handoffEligible !== true) {
     return { kind: "not-needed" };
   }
   if (status.livePtyCount === undefined) {

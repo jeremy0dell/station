@@ -1235,49 +1235,53 @@ async function createLiveHostFixture(
   const state = await createTempState();
   const socketPath = stationHostSocketPath(state.config);
   const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
-  const clientFactory = vi.fn(
-    () =>
-      ({
-        health: async () => ({
-          ok: true,
+  const clientFactory = vi.fn(async () => {
+    if (options.listError !== undefined) {
+      return {
+        status: "unknown" as const,
+        reason: "inventory-failed" as const,
+        error: {
+          tag: "TerminalProviderError",
+          code: "HOST_REQUEST_FAILED",
+          message: options.listError.message,
+        },
+      };
+    }
+    return {
+      status: "exact" as const,
+      evidence: {
+        endpoint: { socketPath, ino: 1n, birthtimeNs: 1n },
+        health: {
+          ok: true as const,
           protocolVersion: HOST_PROTOCOL_VERSION,
           buildVersion: options.hostBuildVersion ?? "1.0.0",
-        }),
-        list: async () => {
-          if (options.listError !== undefined) throw options.listError;
-          return [{ ptyId: "pty-1", pid: 42, alive: true }];
         },
-        recoveryInventory: async () => {
-          if (options.listError !== undefined) throw options.listError;
-          return {
-            buildIdentity: "b".repeat(64),
-            ptys: [
-              {
-                kind: "agent",
-                terminalTargetId: "target-1",
-                ptyId: "pty-1",
-                ptyInstanceId: "instance-1",
-                worktreeId: "worktree-1",
-                projectId: "project-1",
-                sessionId: "session-1",
-                worktreePath: "/repo/one",
-                harnessProvider: "codex",
-                pid: 42,
-                alive: true,
-                cols: 80,
-                rows: 24,
-                handoffSupport: { kind: "bridge-releasable" },
-              },
-            ],
-          };
-        },
-        dispose: () => undefined,
-      }) as never,
-  );
+        buildIdentity: "a".repeat(64),
+        terminals: [
+          {
+            kind: "agent" as const,
+            terminalTargetId: "target-1",
+            ptyId: "pty-1",
+            ptyInstanceId: "instance-1",
+            worktreeId: "worktree-1",
+            projectId: "project-1",
+            sessionId: "session-1",
+            worktreePath: "/repo/one",
+            harnessProvider: "codex",
+            pid: 42,
+            alive: true,
+            cols: 80,
+            rows: 24,
+            handoffSupport: { kind: "bridge-releasable" as const },
+          },
+        ],
+      },
+    };
+  });
   return {
     state,
     clientFactory,
-    hostDeps: { clientFactory },
+    hostDeps: { inspectHost: clientFactory, expectedBuildIdentity: "a".repeat(64) },
     close: () => server.close(),
   };
 }

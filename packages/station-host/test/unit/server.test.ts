@@ -5,6 +5,7 @@ import {
   HostAttachAckSchema,
   type HostAttachmentSource,
   type HostClientIdentity,
+  type HostConnectionOwner,
   type HostControlState,
   type HostFrame,
   type HostHandlers,
@@ -157,6 +158,45 @@ function disposalHandlers(buildVersion: string): HostHandlers {
 }
 
 describe("serveHostConnection", () => {
+  it("assigns one opaque owner per physical connection through response and teardown", async () => {
+    const pairA = inMemoryNdjsonConnectionPair();
+    const pairB = inMemoryNdjsonConnectionPair();
+    const handled: HostConnectionOwner[] = [];
+    const after: HostConnectionOwner[] = [];
+    const closed: HostConnectionOwner[] = [];
+    const handlers: HostHandlers = {
+      hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      unary: {
+        "host.health": (_params, _client, owner) => {
+          handled.push(owner);
+          return { ok: true, protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" };
+        },
+      },
+      afterUnaryResponseSent: (_method, owner) => after.push(owner),
+      onConnectionClosed: (owner) => closed.push(owner),
+    };
+    const servedA = serveHostConnection(pairA.server, handlers);
+    const servedB = serveHostConnection(pairB.server, handlers);
+    const responsesA = pairA.client.messages()[Symbol.asyncIterator]();
+    const responsesB = pairB.client.messages()[Symbol.asyncIterator]();
+
+    pairA.client.send(hostRequest("a1", "host.health"));
+    await responsesA.next();
+    pairA.client.send(hostRequest("a2", "host.health"));
+    await responsesA.next();
+    pairB.client.send(hostRequest("b1", "host.health"));
+    await responsesB.next();
+
+    expect(handled[0]).toBe(handled[1]);
+    expect(handled[0]).not.toBe(handled[2]);
+    expect(after).toEqual(handled);
+    pairA.client.close();
+    pairB.client.close();
+    await Promise.all([servedA, servedB]);
+    expect(closed).toHaveLength(2);
+    expect(closed).toEqual(expect.arrayContaining([handled[0], handled[2]]));
+  });
+
   it("does not report a cross-build health-only client when it disposes", async () => {
     const errors: Array<Parameters<NonNullable<HostServerLogger["onError"]>>[0]> = [];
     const lifecycle: Array<Parameters<NonNullable<HostServerLogger["onLifecycle"]>>[0]> = [];

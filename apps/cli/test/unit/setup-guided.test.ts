@@ -2100,6 +2100,8 @@ describe("guided setup command", () => {
         // resolve only once their formula has been installed.
         access: async (path) => {
           const present =
+            path === "/usr/bin/lsof" ||
+            path === "/usr/sbin/lsof" ||
             path.startsWith(`${setupPackageRoot()}/`) ||
             (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
             (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
@@ -2237,6 +2239,8 @@ describe("guided setup command", () => {
         },
         access: async (path) => {
           const present =
+            path === "/usr/bin/lsof" ||
+            path === "/usr/sbin/lsof" ||
             path.startsWith(`${setupPackageRoot()}/`) ||
             (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
             (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
@@ -2430,7 +2434,7 @@ function commandResult(input: ExternalCommandInput, stdout: string): ExternalCom
 }
 
 function fakeAccess(paths: readonly string[]): (path: string) => Promise<void> {
-  const available = new Set(paths);
+  const available = new Set(["/usr/bin/lsof", "/usr/sbin/lsof", ...paths]);
   const packageRoot = setupPackageRoot();
   return async (path) => {
     if (!available.has(path) && !path.startsWith(`${packageRoot}/`)) {
