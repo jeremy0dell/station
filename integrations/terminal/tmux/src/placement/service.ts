@@ -19,8 +19,17 @@ import {
   systemClock,
 } from "@station/runtime";
 import { createPlacementCommandRunner, isExpectedWorkbenchAbsence } from "../command.js";
-import { TmuxTerminalProviderError } from "../errors.js";
-import { parseTmuxPaneProofLines, tmuxPaneProofFormat } from "../parse.js";
+import { isTmuxNoServerListError, TmuxTerminalProviderError } from "../errors.js";
+import {
+  parseTmuxClientIdentities,
+  parseTmuxClientSelections,
+  parseTmuxPaneProofLines,
+  type TmuxClientIdentity,
+  type TmuxClientSelection,
+  tmuxClientIdentityFormat,
+  tmuxClientSelectionFormat,
+  tmuxPaneProofFormat,
+} from "../parse.js";
 import { parseTmuxTargetId } from "../targetId.js";
 import {
   buildWorkbenchWindowName,
@@ -54,7 +63,8 @@ export type TmuxPlacementServiceOptions = {
  * ADAPTER
  *
  * Proves caller-owned tmux topology on one configured endpoint and applies
- * one-shot sibling or source-free detached placement with exact rollback authority.
+ * one-shot sibling or source-free detached placement with exact rollback authority,
+ * preserving attached client selection while creating a missing workbench session.
  */
 export class TmuxPlacementService implements TerminalPlacementPort {
   readonly id: ProviderId = "tmux";
@@ -131,6 +141,7 @@ export class TmuxPlacementService implements TerminalPlacementPort {
     const bindingToken = this.#newBindingToken();
     let expectedGeneration: string | undefined;
     let siblingProof: TmuxPrivateProof | undefined;
+    let preservedClientSelections: TmuxClientSelection[] | undefined;
     let mutationMayExist = false;
     try {
       let destination:
@@ -153,6 +164,9 @@ export class TmuxPlacementService implements TerminalPlacementPort {
               sessionName: this.#config.workbenchSession,
             };
         configureWorkbench = true;
+        if (!sessionExists) {
+          preservedClientSelections = await this.#clientSelections();
+        }
       }
 
       const windowName = buildWorkbenchWindowName({
@@ -194,6 +208,9 @@ export class TmuxPlacementService implements TerminalPlacementPort {
         mutationMayExist = false;
         throw placementRejected("The tmux caller topology changed before sibling mutation.");
       }
+      if (preservedClientSelections !== undefined) {
+        await this.#restoreClientSelections(preservedClientSelections);
+      }
       const proofOutput = parseTmuxPaneProofLines(output.stdout).find(
         (candidate) => candidate.openToken === bindingToken,
       );
@@ -210,12 +227,23 @@ export class TmuxPlacementService implements TerminalPlacementPort {
       return placedWorkspaceResult(request, sessionId, proof, windowName, bindingToken);
     } catch (error) {
       if (!mutationMayExist) throw error;
+      const cleanupFailures: unknown[] = [];
       try {
         await this.#cleanup.rollback(bindingToken, expectedGeneration);
       } catch (rollbackError) {
+        cleanupFailures.push(rollbackError);
+      }
+      if (preservedClientSelections !== undefined) {
+        try {
+          await this.#restoreClientSelections(preservedClientSelections);
+        } catch (restoreError) {
+          cleanupFailures.push(restoreError);
+        }
+      }
+      if (cleanupFailures.length > 0) {
         throw cleanupUncertain(
-          "tmux could not prove that the partially placed target was rolled back.",
-          rollbackError,
+          "tmux could not prove partial-placement rollback and client selection restoration.",
+          new AggregateError([error, ...cleanupFailures]),
         );
       }
       throw error;
@@ -296,6 +324,81 @@ export class TmuxPlacementService implements TerminalPlacementPort {
     }
   }
 
+  async #clientSelections(): Promise<TmuxClientSelection[]> {
+    const identities = await this.#clientIdentities();
+    const selections: TmuxClientSelection[] = [];
+    for (const identity of identities) {
+      try {
+        const output = await this.#run(
+          ["display-message", "-p", "-c", identity.clientName, tmuxClientSelectionFormat],
+          "open",
+        );
+        const parsed = parseTmuxClientSelections(output.stdout);
+        const selection = parsed.length === 1 ? parsed[0] : undefined;
+        if (selection === undefined) throw new Error("tmux returned ambiguous client selection.");
+        if (sameClient(selection, identity)) selections.push(selection);
+      } catch (error) {
+        const current = await this.#clientIdentities();
+        if (!current.some((candidate) => sameClient(candidate, identity))) continue;
+        if (error instanceof TmuxTerminalProviderError) throw error;
+        throw new TmuxTerminalProviderError(
+          "TERMINAL_OPEN_FAILED",
+          "tmux returned invalid attached client selection.",
+          { cause: error },
+        );
+      }
+    }
+    return selections;
+  }
+
+  async #clientIdentities(): Promise<TmuxClientIdentity[]> {
+    try {
+      const output = await this.#run(["list-clients", "-F", tmuxClientIdentityFormat], "open");
+      return parseTmuxClientIdentities(output.stdout);
+    } catch (error) {
+      if (isTmuxNoServerListError(error)) return [];
+      if (error instanceof TmuxTerminalProviderError) throw error;
+      throw new TmuxTerminalProviderError(
+        "TERMINAL_OPEN_FAILED",
+        "tmux returned invalid attached client identity.",
+        { cause: error },
+      );
+    }
+  }
+
+  async #restoreClientSelections(expected: readonly TmuxClientSelection[]): Promise<void> {
+    if (expected.length === 0) return;
+    const current = await this.#clientSelections();
+    for (const selection of expected) {
+      const observed = current.find((candidate) => sameClient(candidate, selection));
+      if (observed === undefined || sameSelection(observed, selection)) continue;
+      const beforeSwitch = await this.#clientIdentities();
+      if (!beforeSwitch.some((candidate) => sameClient(candidate, selection))) continue;
+      try {
+        await this.#run(
+          ["switch-client", "-E", "-Z", "-c", selection.clientName, "-t", selection.paneId],
+          "open",
+        );
+      } catch (error) {
+        const afterFailure = await this.#clientIdentities();
+        if (!afterFailure.some((candidate) => sameClient(candidate, selection))) continue;
+        throw error;
+      }
+    }
+
+    const verified = await this.#clientSelections();
+    const changed = expected.some((selection) => {
+      const observed = verified.find((candidate) => sameClient(candidate, selection));
+      return observed !== undefined && !sameSelection(observed, selection);
+    });
+    if (changed) {
+      throw new TmuxTerminalProviderError(
+        "TERMINAL_OPEN_FAILED",
+        "tmux did not preserve attached client selection.",
+      );
+    }
+  }
+
   #assertSupported(request: TerminalPlacementRequest): void {
     if (!this.supportedIntents.includes(request.intent)) {
       throw new TmuxTerminalProviderError(
@@ -304,6 +407,18 @@ export class TmuxPlacementService implements TerminalPlacementPort {
       );
     }
   }
+}
+
+function sameClient(left: TmuxClientIdentity, right: TmuxClientIdentity): boolean {
+  return left.clientName === right.clientName && left.clientPid === right.clientPid;
+}
+
+function sameSelection(left: TmuxClientSelection, right: TmuxClientSelection): boolean {
+  return (
+    left.sessionId === right.sessionId &&
+    left.windowId === right.windowId &&
+    left.paneId === right.paneId
+  );
 }
 
 function placedWorkspaceResult(

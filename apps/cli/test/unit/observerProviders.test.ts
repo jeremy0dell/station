@@ -657,7 +657,7 @@ describe("observer providers", () => {
         [
           "switch --no-hooks --create feature --base main --no-cd --format=json",
           "list --format=json",
-          `-C ${createdWorktreePath} remove --no-hooks --format=json`,
+          `-C ${createdWorktreePath} remove --no-hooks --foreground --format=json`,
           "",
         ].join("\n"),
       );

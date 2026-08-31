@@ -226,6 +226,7 @@ describe("WorktrunkProvider", () => {
       "-C",
       physical,
       "remove",
+      "--foreground",
       "--format=json",
     ]);
   });
@@ -562,7 +563,15 @@ describe("WorktrunkProvider", () => {
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
       ["list", "--format=json"],
-      ["-C", "/tmp/station/web/feature", "remove", "--force", "--force-delete", "--format=json"],
+      [
+        "-C",
+        "/tmp/station/web/feature",
+        "remove",
+        "--force",
+        "--force-delete",
+        "--foreground",
+        "--format=json",
+      ],
     ]);
   });
 
@@ -639,7 +648,16 @@ describe("WorktrunkProvider", () => {
     expect(calls.map((call) => call.args)).toEqual([
       ["list", "--format=json"],
       ["list", "--format=json"],
-      ["-C", linkedPath, "remove", "--no-hooks", "--force", "--no-delete-branch", "--format=json"],
+      [
+        "-C",
+        linkedPath,
+        "remove",
+        "--no-hooks",
+        "--force",
+        "--no-delete-branch",
+        "--foreground",
+        "--format=json",
+      ],
     ]);
   });
 
@@ -879,7 +897,7 @@ describe("WorktrunkProvider", () => {
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--no-hooks", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
       ["list", "--format=json"],
-      ["-C", "/tmp/station/web/feature", "remove", "--no-hooks", "--format=json"],
+      ["-C", "/tmp/station/web/feature", "remove", "--no-hooks", "--foreground", "--format=json"],
     ]);
   });
 
@@ -919,7 +937,7 @@ describe("WorktrunkProvider", () => {
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--yes", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
       ["list", "--format=json"],
-      ["-C", "/tmp/station/web/feature", "remove", "--yes", "--format=json"],
+      ["-C", "/tmp/station/web/feature", "remove", "--yes", "--foreground", "--format=json"],
     ]);
   });
 
@@ -1548,7 +1566,13 @@ describe("WorktrunkProvider", () => {
       tag: "WorktreeProviderError",
       code: "WORKTRUNK_TIMEOUT",
     });
-    expect(removeArgs).toEqual(["-C", "/tmp/station/web/feature", "remove", "--format=json"]);
+    expect(removeArgs).toEqual([
+      "-C",
+      "/tmp/station/web/feature",
+      "remove",
+      "--foreground",
+      "--format=json",
+    ]);
     expect(aborted).toBe(true);
   });
 

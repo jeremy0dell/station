@@ -1,9 +1,56 @@
 import { TerminalTargetObservationSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import { parseTmuxTargetLines } from "../../src/parse";
+import {
+  parseTmuxClientIdentities,
+  parseTmuxClientSelections,
+  parseTmuxTargetLines,
+  tmuxClientIdentityFormat,
+  tmuxClientSelectionFormat,
+} from "../../src/parse";
 
 const now = "2026-05-21T12:00:00.000Z";
 const generation = "a".repeat(64);
+
+describe("tmux client selection parser", () => {
+  it("parses stable attached-client identity and selection", () => {
+    expect(tmuxClientIdentityFormat).toBe("#{client_name}\t#{client_pid}");
+    expect(parseTmuxClientIdentities("/dev/ttys001\t123\n/dev/ttys002\t456")).toEqual([
+      { clientName: "/dev/ttys001", clientPid: 123 },
+      { clientName: "/dev/ttys002", clientPid: 456 },
+    ]);
+    expect(tmuxClientSelectionFormat).toBe(
+      "#{client_name}\t#{client_pid}\t#{session_id}\t#{window_id}\t#{pane_id}",
+    );
+    expect(
+      parseTmuxClientSelections(
+        ["/dev/ttys001\t123\t$1\t@2\t%3", "/dev/ttys002\t456\t$4\t@5\t%6"].join("\n"),
+      ),
+    ).toEqual([
+      {
+        clientName: "/dev/ttys001",
+        clientPid: 123,
+        sessionId: "$1",
+        windowId: "@2",
+        paneId: "%3",
+      },
+      {
+        clientName: "/dev/ttys002",
+        clientPid: 456,
+        sessionId: "$4",
+        windowId: "@5",
+        paneId: "%6",
+      },
+    ]);
+  });
+
+  it("rejects malformed or unstable client selection evidence", () => {
+    expect(() => parseTmuxClientIdentities("client\tnot-a-pid")).toThrow();
+    expect(() => parseTmuxClientSelections("client\t123\tstation\t@2\t%3")).toThrow();
+    expect(() => parseTmuxClientSelections("client\t123\t$1\t@2")).toThrow(
+      "tmux returned malformed client selection.",
+    );
+  });
+});
 
 describe("tmux target parser", () => {
   it("normalizes workbench pane output into TerminalTargetObservation values", () => {

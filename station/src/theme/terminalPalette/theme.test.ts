@@ -74,16 +74,25 @@ describe("terminal palette theme construction", () => {
   });
 
   it("selects one whole fallback for absent or unreadable embedded evidence", () => {
-    expect(resolveEmbeddedStationTheme(undefined)).toBe(nativeStationTheme);
-    expect(resolveEmbeddedStationTheme(null)).toBe(nativeStationTheme);
+    const fallback = resolveEmbeddedStationTheme(null);
+
+    expect(resolveEmbeddedStationTheme(undefined)).toBe(fallback);
     expect(
       resolveEmbeddedStationTheme(observation(lowContrastTerminalColors)),
-    ).toBe(nativeStationTheme);
+    ).toBe(fallback);
+    expect(fallback.surfaces.canvas).toMatchObject({
+      kind: "terminal-default",
+      channel: "background",
+    });
+    expect(fallback.text.primary).toMatchObject({
+      kind: "terminal-default",
+      channel: "foreground",
+    });
   });
 
   it("guards direct construction against unreadable default contrast", () => {
     expect(createTerminalPaletteTheme(observation(lowContrastTerminalColors))).toBe(
-      nativeStationTheme,
+      resolveEmbeddedStationTheme(null),
     );
   });
 

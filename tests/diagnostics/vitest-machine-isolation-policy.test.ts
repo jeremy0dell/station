@@ -59,7 +59,8 @@ const realMachineConfigs = [
   },
   {
     file: "vitest.tmux-popup-real.config.ts",
-    rationale: "The lane drives a real tmux server and production popup process boundaries.",
+    rationale:
+      "The lane drives a real tmux server and production placement and popup process boundaries.",
   },
   {
     file: "vitest.worktrunk-real.config.ts",

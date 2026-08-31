@@ -14,6 +14,9 @@ export default defineConfig({
       "packages/*/test/integration/**/*.test.ts",
       "integrations/*/*/test/integration/**/*.test.ts",
     ],
-    exclude: ["integrations/terminal/tmux/test/integration/popup-real.test.ts"],
+    exclude: [
+      "integrations/terminal/tmux/test/integration/placement-real.test.ts",
+      "integrations/terminal/tmux/test/integration/popup-real.test.ts",
+    ],
   },
 });

@@ -46,10 +46,10 @@ describe("bootstrap exact Bun runtime", () => {
         'if [ "$1" = "--prefix" ] && [ "$2" = "node@24" ]; then exit 1; fi',
         "exit 2",
       ]);
-      writeExecutable(join(ambientBin, "bun"), [
+      writeExecutable(join(ambientBin, "npx"), [
         "#!/bin/sh",
         "set -eu",
-        'if [ "$1" != "x" ] || [ "$2" != "bun@1.4.0" ]; then exit 64; fi',
+        'if [ "$1" != "--yes" ] || [ "$2" != "bun@1.4.0" ]; then exit 64; fi',
         "shift 2",
         'PATH="$STATION_BOOTSTRAP_BUN_LOCATOR:$PATH"',
         "export PATH",

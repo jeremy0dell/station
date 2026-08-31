@@ -1,6 +1,7 @@
 import { externalCommandErrorFromUnknown, publicSafeErrorFromUnknown } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import {
+  isTmuxNoServerListError,
   TmuxTerminalProviderError,
   tmuxProviderErrorFromUnknown,
   tmuxSafeError,
@@ -12,6 +13,30 @@ const fallback = {
 };
 
 describe("tmux provider error mapping", () => {
+  it("recognizes exact no-server failures only for topology listings", () => {
+    const noServer = (args: string[]) =>
+      externalCommandErrorFromUnknown(
+        { code: 1, stderr: "no server running on /tmp/private.sock" },
+        { command: "tmux", args },
+      );
+
+    expect(
+      isTmuxNoServerListError(
+        noServer(["-S", "/tmp/private.sock", "list-panes", "-a", "-F", "#{pane_id}"]),
+      ),
+    ).toBe(true);
+    expect(
+      isTmuxNoServerListError(
+        noServer(["-S", "/tmp/private.sock", "list-clients", "-F", "#{client_name}"]),
+      ),
+    ).toBe(true);
+    expect(
+      isTmuxNoServerListError(
+        noServer(["-S", "/tmp/private.sock", "has-session", "-t", "station"]),
+      ),
+    ).toBe(false);
+  });
+
   it("classifies missing targets from typed command evidence", () => {
     const commandError = externalCommandErrorFromUnknown(
       { code: 1, stderr: "can't find pane: %12" },

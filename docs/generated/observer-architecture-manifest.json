@@ -18340,7 +18340,7 @@
       "declaration": "TmuxPlacementService",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Proves caller-owned tmux topology on one configured endpoint and applies one-shot sibling or source-free detached placement with exact rollback authority.",
+      "purpose": "Proves caller-owned tmux topology on one configured endpoint and applies one-shot sibling or source-free detached placement with exact rollback authority, preserving attached client selection while creating a missing workbench session.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
