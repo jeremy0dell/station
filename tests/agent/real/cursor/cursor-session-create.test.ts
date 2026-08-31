@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
-import { createCursorHarnessProvider, installCursorHooks } from "@station/cursor";
+import {
+  createCursorHarnessProvider,
+  cursorHookAdapter,
+  installCursorHooks,
+} from "@station/cursor";
 import { writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
@@ -277,6 +281,7 @@ describeRealCursor("real Cursor session.create launch lane", () => {
     }
     testConfig.observer.socketPath = socketPath;
     const providers = new ProviderRegistry({
+      hookAdapters: [cursorHookAdapter],
       worktree: new FakeWorktreeProvider({
         now,
         worktrees: [
@@ -345,6 +350,29 @@ describeRealCursor("real Cursor session.create launch lane", () => {
 
     try {
       await core.reconcile("real-cursor-hook-initial");
+      const hookEnv = {
+        STATION_PROJECT_ID: "web",
+        STATION_WORKTREE_ID: "wt_real_cursor_hook",
+        STATION_WORKTREE_PATH: worktreePath,
+        STATION_SESSION_ID: "ses_real_cursor_hook",
+        STATION_HARNESS_PROVIDER: "cursor",
+        STATION_TERMINAL_PROVIDER: "tmux",
+        STATION_TERMINAL_TARGET_ID: "real-cursor-hook-target",
+        STATION_CONFIG_PATH: configPath,
+        STATION_OBSERVER_SOCKET_PATH: socketPath,
+        STATION_HOOK_SPOOL_DIR: hookSpoolDir,
+      };
+      expect(
+        await runHookScript(
+          hookScriptPath,
+          JSON.stringify({
+            hook_event_name: "sessionStart",
+            cwd: worktreePath,
+            session_id: "cursor_session_real",
+          }),
+          hookEnv,
+        ),
+      ).toEqual({ code: 0, stdout: "", stderr: "" });
       const result = await runHookScript(
         hookScriptPath,
         JSON.stringify({
@@ -353,21 +381,11 @@ describeRealCursor("real Cursor session.create launch lane", () => {
           cwd: worktreePath,
           session_id: "cursor_session_real",
         }),
-        {
-          STATION_PROJECT_ID: "web",
-          STATION_WORKTREE_ID: "wt_real_cursor_hook",
-          STATION_WORKTREE_PATH: worktreePath,
-          STATION_SESSION_ID: "ses_real_cursor_hook",
-          STATION_HARNESS_PROVIDER: "cursor",
-          STATION_TERMINAL_PROVIDER: "tmux",
-          STATION_TERMINAL_TARGET_ID: "real-cursor-hook-target",
-          STATION_CONFIG_PATH: configPath,
-          STATION_OBSERVER_SOCKET_PATH: socketPath,
-          STATION_HOOK_SPOOL_DIR: hookSpoolDir,
-        },
+        hookEnv,
       );
 
       expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
+      await api.reconcile("real-cursor-hook-ingress");
       const snapshot = await core.reconcile("real-cursor-hook-observed");
       expect(snapshot.rows[0]?.agent).toMatchObject({
         harness: "cursor",
