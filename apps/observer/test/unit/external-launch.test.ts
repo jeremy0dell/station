@@ -559,12 +559,11 @@ describe("prepareExternalLaunch", () => {
           },
         }),
         harnessProviderId: "fake-harness",
-        session: expect.objectContaining({
-          lifecycle: "open",
+        sessionId: expect.stringMatching(/^ses_/),
+        baseRow: expect.objectContaining({
+          id: "wt_web_feature",
           projectId: "web",
-          worktreeId: "wt_web_feature",
-          harness: "fake-harness",
-          terminalProvider: "managed-test",
+          path: "/tmp/station/web/feature",
         }),
       }),
     );

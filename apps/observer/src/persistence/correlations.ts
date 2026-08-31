@@ -82,6 +82,13 @@ export function listSessions(database: SqlDatabase): PersistedSession[] {
   );
 }
 
+export function getSession(database: SqlDatabase, sessionId: string): PersistedSession | undefined {
+  const row = database.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as
+    | SqliteSessionRow
+    | undefined;
+  return row === undefined ? undefined : sessionFromRow(row);
+}
+
 type RememberedHarnessSessionRow = {
   id: string;
   worktree_id: string;

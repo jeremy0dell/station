@@ -39,7 +39,6 @@ import {
   projectCreatedWorktreeOntoSnapshot,
   projectPreparedExternalLaunchOntoSnapshot,
 } from "./graph/authoritativeLaunch.js";
-import type { ObserverSessionMetadata } from "./graph/evidence.js";
 import { projectProviderHealthOntoSnapshot } from "./graph/providerHealth.js";
 import type { ProviderReadOptions } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
@@ -81,7 +80,8 @@ export type ObserverCore = {
     terminalTargetId: string;
     terminalTarget: TerminalTargetObservation;
     harnessProviderId: string;
-    session: ObserverSessionMetadata;
+    baseRow: WorktreeRow;
+    sessionId: string;
   }): Promise<SnapshotProjectionCommitResult<PreparedExternalLaunchProjectionRejectionReason>>;
   commitProviderHealthProbe(health: ProviderHealth): Promise<StationEvent | undefined>;
   projectHarnessEventStatus(report: HarnessEventReport): Promise<StatusProjectionResult>;
@@ -220,10 +220,16 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       }),
     commitPreparedExternalLaunch: (launch) =>
       enqueueSnapshotWrite(async () => {
-        const sessionGroups =
+        const [sessionGroups, durableSession] =
           input.persistence === undefined
-            ? snapshot.sessionGroups
-            : await input.persistence.listSessionGroups();
+            ? [snapshot.sessionGroups, undefined]
+            : await Promise.all([
+                input.persistence.listSessionGroups(),
+                input.persistence.getSession(launch.sessionId),
+              ]);
+        if (durableSession === undefined) {
+          return { status: "rejected", events: [], reason: "session_not_open" };
+        }
         const harnessCapabilities = Object.fromEntries(
           [...input.providers.harnesses.values()].map((provider) => [
             provider.id,
@@ -243,7 +249,8 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
           terminalTargetId: launch.terminalTargetId,
           terminalTarget: launch.terminalTarget,
           harnessProviderId: launch.harnessProviderId,
-          session: launch.session,
+          session: durableSession,
+          baseRow: launch.baseRow,
           sessionGroups,
           harnessCapabilities,
           ...(terminalCapabilities === undefined ? {} : { terminalCapabilities }),

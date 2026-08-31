@@ -288,6 +288,9 @@ export function createSqliteObserverPersistence(
         });
       }),
 
+    getSession: (sessionId) =>
+      readTransaction((database) => correlationStore.getSession(database, sessionId)),
+
     listSessions: () => readTransaction(correlationStore.listSessions),
 
     listSessionGroups: () =>

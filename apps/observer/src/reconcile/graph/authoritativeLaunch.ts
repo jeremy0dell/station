@@ -10,7 +10,7 @@ import type {
   WorktreeObservation,
   WorktreeRow,
 } from "@station/contracts";
-import { terminalBoundHarnessRunObservation } from "@station/contracts";
+import { sameObservedPath, terminalBoundHarnessRunObservation } from "@station/contracts";
 import { projectSessionGroups } from "../sessionGroups.js";
 import { countsForSnapshot } from "../snapshotCounts.js";
 import type { ObserverSessionMetadata } from "./evidence.js";
@@ -42,7 +42,6 @@ export type PreparedExternalLaunchProjectionRejectionReason =
   | "session_not_open"
   | "session_identity_mismatch"
   | "session_harness_mismatch"
-  | "session_terminal_provider_mismatch"
   | "session_conflict"
   | "terminal_provider_mismatch"
   | "terminal_target_mismatch"
@@ -95,7 +94,7 @@ export function projectCreatedWorktreeOntoSnapshot(input: {
       ? { status: "already-exact", snapshot: input.snapshot, value: sameId }
       : rejectedProjection(input.snapshot, "worktree_id_collision");
   }
-  if (input.snapshot.rows.some((row) => row.path === input.worktree.path)) {
+  if (input.snapshot.rows.some((row) => sameObservedPath(row.path, input.worktree.path))) {
     return rejectedProjection(input.snapshot, "worktree_path_collision");
   }
   if (
@@ -140,6 +139,7 @@ export function projectPreparedExternalLaunchOntoSnapshot(input: {
   terminalTarget: TerminalTargetObservation;
   harnessProviderId: ProviderId;
   session: ObserverSessionMetadata;
+  baseRow: WorktreeRow;
   sessionGroups: readonly SessionGroupView[];
   harnessCapabilities: Record<string, HarnessCapabilities>;
   terminalCapabilities?: {
@@ -168,6 +168,7 @@ export function projectPreparedExternalLaunchOntoSnapshot(input: {
   if (
     input.worktree.projectId !== project.id ||
     input.worktree.state !== "exists" ||
+    !worktreeRowHasExactIdentity(input.baseRow, input.worktree) ||
     !worktreeRowHasExactIdentity(currentRow, input.worktree)
   ) {
     return rejectedProjection(input.snapshot, "worktree_identity_mismatch");
@@ -181,9 +182,7 @@ export function projectPreparedExternalLaunchOntoSnapshot(input: {
   if (input.session.harness !== input.harnessProviderId) {
     return rejectedProjection(input.snapshot, "session_harness_mismatch");
   }
-  if (input.session.terminalProvider !== input.terminalProviderId) {
-    return rejectedProjection(input.snapshot, "session_terminal_provider_mismatch");
-  }
+  // A retained session's terminalProvider names its prior launch; the exact target below owns this launch.
   if (input.harnessCapabilities[input.harnessProviderId] === undefined) {
     return rejectedProjection(input.snapshot, "harness_not_registered");
   }
@@ -261,7 +260,8 @@ export function projectPreparedExternalLaunchOntoSnapshot(input: {
     currentRow.agent !== undefined &&
     currentRow.agent.sessionId === input.session.id &&
     currentRow.agent.harness === input.harnessProviderId &&
-    Date.parse(currentRow.agent.updatedAt) > Date.parse(terminalBoundRun.status.updatedAt);
+    (!snapshotValueEquals(currentRow.agent, input.baseRow.agent) ||
+      Date.parse(currentRow.agent.updatedAt) > Date.parse(terminalBoundRun.status.updatedAt));
   const row: WorktreeRow = {
     ...currentRow,
     title: projectedRow.title,
@@ -269,6 +269,7 @@ export function projectPreparedExternalLaunchOntoSnapshot(input: {
     agent: preserveCurrentAgent ? currentRow.agent : projectedRow.agent,
     display: preserveCurrentAgent ? currentRow.display : projectedRow.display,
   };
+  delete row.recovery;
 
   const projectedSession = buildStationSession({
     project,
@@ -286,7 +287,11 @@ export function projectPreparedExternalLaunchOntoSnapshot(input: {
   if (projectedSession === undefined) {
     return rejectedProjection(input.snapshot, "session_identity_mismatch");
   }
-  const session = preserveNewerSessionStatus(projectedSession, currentSession);
+  const session = preserveCommittedSessionStatus(
+    projectedSession,
+    currentSession,
+    preserveCurrentAgent,
+  );
   const created = currentSession === undefined;
   const rows = input.snapshot.rows
     .map((candidate) => (candidate.id === row.id ? row : candidate))
@@ -341,7 +346,7 @@ function worktreeRowHasExactIdentity(row: WorktreeRow, worktree: WorktreeObserva
   return (
     row.id === worktree.id &&
     row.projectId === worktree.projectId &&
-    row.path === worktree.path &&
+    sameObservedPath(row.path, worktree.path) &&
     row.branch === worktree.branch &&
     row.registrationIdentity === worktree.registrationIdentity &&
     row.worktree.state === worktree.state &&
@@ -387,13 +392,15 @@ function terminalEvidenceIsNewer(
   );
 }
 
-function preserveNewerSessionStatus(
+function preserveCommittedSessionStatus(
   projected: SessionView,
   current: SessionView | undefined,
+  preserveCurrentAgent: boolean,
 ): SessionView {
   if (
     current === undefined ||
-    Date.parse(current.status.updatedAt) <= Date.parse(projected.status.updatedAt)
+    (!preserveCurrentAgent &&
+      Date.parse(current.status.updatedAt) <= Date.parse(projected.status.updatedAt))
   ) {
     return projected;
   }

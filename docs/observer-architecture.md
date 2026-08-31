@@ -750,7 +750,10 @@ Live events optimize freshness and incremental rendering. They are not a
 durable log, replay protocol, or substitute for resynchronization. Any future
 replay guarantee requires sequence identity, retention semantics, bounded
 subscriber behavior, and a protocol contract rather than an adapter-local
-patch.
+patch. In particular, the shared client treats unsequenced `worktree.added`
+as a canonical-snapshot refresh hint instead of appending its row locally;
+that prevents delayed or duplicate delivery from exposing stale ordering,
+counts, or row state.
 
 ### Managed Launch Preflight
 
@@ -807,16 +810,20 @@ handle ID. An explicitly selected imported handle may proceed without a local li
 while legacy, ended, or contradictory local identity always refuses. All failures occur before
 terminal mutation, and only typed provider-neutral resume options reach the launch adapter.
 
-After the binding-token-qualified managed process launch succeeds, preparation carries either
-the durable seed or rename result for a new session or the canonical retained open session chosen
-under the worktree mutation coordinator. It may project that evidence only when project,
-worktree, session, terminal provider and target, harness binding and role, worktree path, open
-state, and selected harness agree exactly. Older terminal evidence, conflicting sessions, and
-identity mismatches reject projection; newer status already committed for the same session is
-preserved. The projection derives the provider-neutral terminal-bound unknown run identity so an
-immediate harness report can correlate before verification. In one snapshot-writer turn it updates
-the worktree title, terminal and agent, canonical session, durable Group membership, deterministic
-ordering, counts, and `generatedAt`.
+After the binding-token-qualified managed process launch succeeds, preparation carries the exact
+preflight worktree row and session identity into the snapshot writer. The writer reloads that one
+durable session and current Group projection before committing, so a rename, lifecycle transition,
+or other durable session change after preflight cannot be replaced by cached runtime metadata. It
+may project only when project, worktree, open durable session, target provider and identity, harness
+binding and role, normalized worktree path, open target state, and selected harness agree exactly.
+A retained session's recorded terminal provider describes its prior launch; the exact newly opened
+target is authoritative for the current terminal provider. Older terminal evidence, conflicting
+sessions, and identity mismatches reject projection. Correlated agent and session status committed
+after preflight, as well as status newer than the synthetic launch evidence, is preserved. The
+projection derives the provider-neutral terminal-bound unknown run identity so an immediate harness
+report can correlate before verification. In one snapshot-writer turn it updates the durable title,
+terminal and agent, canonical session, durable Group membership, deterministic ordering, counts,
+and `generatedAt`, and removes any recovery action superseded by the successful launch.
 
 An applied launch projection returns committed `worktree.updated` followed by
 `session.created` or `session.updated`; API composition publishes them before requesting the

@@ -330,6 +330,7 @@ describe("SQLite-only Observer persistence behavior", () => {
       await expect(
         persistence.getSessionHarnessExecution({ provider: "codex", sessionId: "ses_missing" }),
       ).resolves.toBeUndefined();
+      await expect(persistence.getSession("ses_missing")).resolves.toBeUndefined();
       await expect(
         persistence.findRememberedHarnessProviderForWorktree({
           projectId: "web",

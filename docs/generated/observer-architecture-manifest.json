@@ -5850,7 +5850,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7528,6 +7528,12 @@
           "purpose": null
         },
         {
+          "name": "getSession",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "listSessions",
           "kind": "function",
           "role": null,
@@ -8043,7 +8049,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -8334,7 +8340,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -8394,6 +8400,7 @@
             "SafeError",
             "SessionGroupId",
             "SessionGroupView",
+            "SessionId",
             "SessionRecoveryHandle",
             "StationCommand",
             "StationCommandResult",
@@ -9768,12 +9775,6 @@
           ]
         },
         {
-          "specifier": "./graph/evidence.js",
-          "resolvedPath": "apps/observer/src/reconcile/graph/evidence.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverSessionMetadata"]
-        },
-        {
           "specifier": "./graph/providerHealth.js",
           "resolvedPath": "apps/observer/src/reconcile/graph/providerHealth.ts",
           "edgeKind": "runtime",
@@ -9951,7 +9952,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["terminalBoundHarnessRunObservation"]
+          "bindings": ["sameObservedPath", "terminalBoundHarnessRunObservation"]
         },
         {
           "specifier": "@station/contracts",
@@ -11709,7 +11710,7 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group. After the binding-token-qualified process launch succeeds, exact durable and managed-terminal evidence is projected before return; reconciliation verifies it and remains the fallback for any rejection."
+          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group. After the binding-token-qualified process launch succeeds, the serialized projection reloads exact durable session authority and preserves correlated state committed since preflight before return; reconciliation verifies it and remains the fallback for any rejection."
         },
         {
           "name": "reportExternalExit",
@@ -11762,7 +11763,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["PersistedSession", "SessionSeedGroupProvenance", "SessionStore"]
+          "bindings": ["SessionSeedGroupProvenance", "SessionStore"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -11775,12 +11776,6 @@
           "resolvedPath": "apps/observer/src/reconcile/core.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverCore"]
-        },
-        {
-          "specifier": "../reconcile/graph/evidence.js",
-          "resolvedPath": "apps/observer/src/reconcile/graph/evidence.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverSessionMetadata"]
         },
         {
           "specifier": "../sessionRecovery/resolve.js",
@@ -16657,7 +16652,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh.",
+      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh.",
       "dependencies": []
     },
     {
@@ -16992,7 +16987,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group. After the binding-token-qualified process launch succeeds, exact durable and managed-terminal evidence is projected before return; reconciliation verifies it and remains the fallback for any rejection.",
+      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group. After the binding-token-qualified process launch succeeds, the serialized projection reloads exact durable session authority and preserves correlated state committed since preflight before return; reconciliation verifies it and remains the fallback for any rejection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",

@@ -5,7 +5,17 @@ import {
   projectCreatedWorktreeOntoSnapshot,
   projectPreparedExternalLaunchOntoSnapshot,
 } from "../../../src/reconcile/graph/authoritativeLaunch";
-import { build, preparedProjectionFixture, projectedAt, projects, worktree } from "./fixtures";
+import {
+  build,
+  preparedProjectionFixture,
+  projectedAt,
+  projects,
+  recoveryFeatureFlags,
+  recoveryHandle,
+  recoverySession,
+  resumableHarnessCapabilities,
+  worktree,
+} from "./fixtures";
 
 describe("authoritative graph projections", () => {
   it("applies and then recognizes an exact created worktree", () => {
@@ -87,6 +97,23 @@ describe("authoritative graph projections", () => {
       ...mutate(created),
     });
     expect(result).toMatchObject({ status: "rejected", reason });
+  });
+
+  it("rejects a created worktree at an authorized alias of an existing path", () => {
+    const existing = worktree("wt_web_existing", "web", "existing");
+    existing.path = "/private/var/station/web/existing";
+    const created = worktree("wt_web_created", "web", "created");
+    created.path = "/var/station/web/existing";
+
+    const result = projectCreatedWorktreeOntoSnapshot({
+      snapshot: build({ worktrees: [existing] }),
+      project: projects[0],
+      worktreeProviderId: "fake-worktree",
+      worktree: created,
+      projectedAt,
+    });
+
+    expect(result).toMatchObject({ status: "rejected", reason: "worktree_path_collision" });
   });
 
   it.each([
@@ -246,12 +273,6 @@ describe("authoritative graph projections", () => {
       "session_harness_mismatch",
       (fixture: ReturnType<typeof preparedProjectionFixture>) => ({
         session: { ...fixture.session, harness: "other" },
-      }),
-    ],
-    [
-      "session_terminal_provider_mismatch",
-      (fixture: ReturnType<typeof preparedProjectionFixture>) => ({
-        session: { ...fixture.session, terminalProvider: "other" },
       }),
     ],
     [
@@ -464,5 +485,97 @@ describe("authoritative graph projections", () => {
     if (result.status === "rejected") throw new Error("expected accepted projection");
     expect(result.value.row.agent?.state).toBe("working");
     expect(result.value.session.status).toEqual(newerStatus);
+  });
+
+  it("preserves correlated status committed after preflight even when its evidence is older", () => {
+    const fixture = preparedProjectionFixture();
+    const projected = projectPreparedExternalLaunchOntoSnapshot(fixture.input);
+    if (projected.status !== "applied") throw new Error("expected applied projection");
+    const committedStatus = {
+      value: "working" as const,
+      confidence: "high" as const,
+      reason: "Delayed harness evidence arrived after launch preflight.",
+      source: "harness_event" as const,
+      updatedAt: fixture.snapshot.generatedAt,
+    };
+    const snapshot = {
+      ...projected.snapshot,
+      rows: projected.snapshot.rows.map((row) => ({
+        ...row,
+        agent:
+          row.agent === undefined
+            ? undefined
+            : {
+                ...row.agent,
+                state: committedStatus.value,
+                confidence: committedStatus.confidence,
+                reason: committedStatus.reason,
+                updatedAt: committedStatus.updatedAt,
+              },
+        display: { statusLabel: "working" as const, sortPriority: 20, alert: false },
+      })),
+      sessions: projected.snapshot.sessions.map((session) => ({
+        ...session,
+        updatedAt: committedStatus.updatedAt,
+        status: committedStatus,
+      })),
+    };
+
+    const result = projectPreparedExternalLaunchOntoSnapshot({
+      ...fixture.input,
+      snapshot,
+    });
+
+    expect(result.status).toBe("already-exact");
+    if (result.status === "rejected") throw new Error("expected accepted projection");
+    expect(result.value.row.agent?.state).toBe("working");
+    expect(result.value.session.status).toEqual(committedStatus);
+  });
+
+  it("projects the durable session title instead of the preflight title", () => {
+    const fixture = preparedProjectionFixture();
+    const projected = projectPreparedExternalLaunchOntoSnapshot(fixture.input);
+    if (projected.status !== "applied") throw new Error("expected applied projection");
+
+    const result = projectPreparedExternalLaunchOntoSnapshot({
+      ...fixture.input,
+      snapshot: projected.snapshot,
+      session: { ...fixture.session, title: "Concurrent durable rename" },
+    });
+
+    expect(result.status).toBe("applied");
+    if (result.status !== "applied") throw new Error("expected applied projection");
+    expect(result.value.row.title).toBe("Concurrent durable rename");
+    expect(result.value.session.title).toBe("Concurrent durable rename");
+  });
+
+  it("clears a recovery action after the prepared launch succeeds", () => {
+    const fixture = preparedProjectionFixture();
+    const persistedSession = recoverySession(fixture.observed, fixture.session);
+    const handle = recoveryHandle(fixture.observed, {
+      id: "rec_projected",
+      sessionId: fixture.session.id,
+    });
+    const snapshot = build({
+      worktrees: [fixture.observed],
+      sessionMetadata: [persistedSession],
+      recoveryHandles: [handle],
+      harnessCapabilities: { "fake-harness": resumableHarnessCapabilities },
+      featureFlags: recoveryFeatureFlags,
+    });
+    const baseRow = snapshot.rows[0];
+    if (baseRow === undefined) throw new Error("expected recovery worktree row");
+    expect(baseRow.recovery).toMatchObject({ kind: "agent-resume", sessionId: fixture.session.id });
+
+    const result = projectPreparedExternalLaunchOntoSnapshot({
+      ...fixture.input,
+      snapshot,
+      baseRow,
+      session: persistedSession,
+    });
+
+    expect(result.status).toBe("applied");
+    if (result.status !== "applied") throw new Error("expected applied projection");
+    expect(result.value.row.recovery).toBeUndefined();
   });
 });

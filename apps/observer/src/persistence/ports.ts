@@ -6,6 +6,7 @@ import type {
   SafeError,
   SessionGroupId,
   SessionGroupView,
+  SessionId,
   SessionRecoveryHandle,
   StationCommand,
   StationCommandResult,
@@ -152,13 +153,16 @@ export interface ReconcileStore {
  * native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed,
  * explicit root Group placement or current source-Group inheritance, and provenance-safe discard
  * are one atomic conversation; canonical-title handoff and recovery import also commit before
- * recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without
- * classifying eligibility, so one result never combines different persistence lifetimes.
+ * recovery reconciles. Exact session lookup lets serialized launch projection consume current
+ * durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory
+ * reads sessions and handles from one snapshot without classifying eligibility, so one result never
+ * combines different persistence lifetimes.
  * Provider-native recovery keys permanently bind project and worktree, may fill Station session
  * identity once, and reject contradictory identity before mutable evidence can refresh.
  */
 export interface SessionStore {
   readRecoveryInventory(): Promise<ObserverRecoveryInventoryPersistenceSnapshot>;
+  getSession(sessionId: SessionId): Promise<PersistedSession | undefined>;
   listSessions(): Promise<PersistedSession[]>;
   listWorktreeDisplayTitles(): Promise<PersistedWorktreeDisplayTitle[]>;
   getSessionHarnessExecution(input: {

@@ -15,14 +15,15 @@ type OptionalPatch<T> = {
 
 /**
  * Reduce relationship-safe events immediately and signal when the client must
- * replace its state from a canonical snapshot, including ambiguous Group changes.
+ * replace its state from a canonical snapshot, including unsequenced additions
+ * and ambiguous Group changes.
  */
 export function applyStationEvent(
   snapshot: StationSnapshot,
   event: StationEvent,
 ): ApplyStationEventResult {
   if (event.type === "worktree.added") {
-    return withSnapshot(snapshot, { rows: [...snapshot.rows, event.row] });
+    return unchanged(snapshot, true);
   }
   if (event.type === "worktree.updated") {
     return withSnapshot(snapshot, {

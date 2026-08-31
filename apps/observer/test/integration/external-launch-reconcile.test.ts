@@ -214,6 +214,71 @@ describe("observer external-launch reconcile", () => {
     fixture.sqlite.close();
   });
 
+  it("preserves durable rename and harness truth committed while launch projection waits", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const fixture = createFixture(providerIngressSpoolDir(stateDir));
+    await fixture.api.reconcile("seed-concurrent-launch");
+
+    const originalCommit = fixture.core.commitPreparedExternalLaunch;
+    type CommitInput = Parameters<typeof originalCommit>[0];
+    let releaseCommit = () => {};
+    const commitReleased = new Promise<void>((resolve) => {
+      releaseCommit = resolve;
+    });
+    let acceptCommitInput = (_input: CommitInput) => {};
+    const commitInput = new Promise<CommitInput>((resolve) => {
+      acceptCommitInput = resolve;
+    });
+    fixture.core.commitPreparedExternalLaunch = async (input) => {
+      acceptCommitInput(input);
+      await commitReleased;
+      return originalCommit(input);
+    };
+
+    const launch = fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      title: "Preflight title",
+    });
+    const prepared = await commitInput;
+    await fixture.persistence.renameSession({
+      sessionId: prepared.sessionId,
+      title: "Concurrent durable rename",
+      renamedAt: "2026-05-20T12:00:02.000Z",
+    });
+    fixture.harness.addRun(
+      createFakeHarnessRun({
+        id: "run_web_concurrent",
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        sessionId: prepared.sessionId,
+        state: "working",
+        now: "2026-05-20T11:59:59.000Z",
+      }),
+    );
+    await fixture.core.reconcile("concurrent-launch-evidence");
+    const concurrentSnapshot = fixture.core.getSnapshot();
+    releaseCommit();
+    const result = await launch;
+    if (result.kind !== "prepared") throw new Error("expected prepared launch");
+
+    expect(concurrentSnapshot.rows[0]).toMatchObject({
+      title: "Concurrent durable rename",
+      agent: { sessionId: prepared.sessionId, state: "working" },
+    });
+    expect(fixture.core.getSnapshot().rows[0]).toMatchObject({
+      title: "Concurrent durable rename",
+      agent: { sessionId: prepared.sessionId, state: "working" },
+    });
+    expect(fixture.core.getSnapshot().sessions[0]).toMatchObject({
+      id: prepared.sessionId,
+      title: "Concurrent durable rename",
+      status: { value: "working" },
+    });
+
+    fixture.sqlite.close();
+  });
+
   it("seeds a native fork into the source's current Group before canonical publication", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
     const source = createFakeWorktree({
@@ -515,6 +580,7 @@ describe("observer external-launch reconcile", () => {
         status: expect.objectContaining({ value: "unknown" }),
       }),
     ]);
+    expect((await fixture.api.getSnapshot()).rows[0]).not.toHaveProperty("recovery");
     harness.addRun(
       createFakeHarnessRun({
         id: "run_web_recovered",

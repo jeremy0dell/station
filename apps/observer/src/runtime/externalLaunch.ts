@@ -25,14 +25,9 @@ import {
   sessionSeedGroupPlacement,
   worktreeObservationFromRow,
 } from "../commands/session/shared.js";
-import type {
-  PersistedSession,
-  SessionSeedGroupProvenance,
-  SessionStore,
-} from "../persistence/index.js";
+import type { SessionSeedGroupProvenance, SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
-import type { ObserverSessionMetadata } from "../reconcile/graph/evidence.js";
 import { resolveSessionRecovery } from "../sessionRecovery/resolve.js";
 import type { StationLogger } from "../stationLogger.js";
 import { nowIso } from "../utils/time.js";
@@ -69,8 +64,9 @@ export type ExternalLaunchOutcome<T> = {
  * preflight only the selected provider. A fresh Station identity is atomically seeded with explicit
  * root placement or the requested source session's current Group before target publication, and
  * confirmed failed launch cleanup removes only its membership and owned inline Group. After the
- * binding-token-qualified process launch succeeds, exact durable and managed-terminal evidence is
- * projected before return; reconciliation verifies it and remains the fallback for any rejection.
+ * binding-token-qualified process launch succeeds, the serialized projection reloads exact durable
+ * session authority and preserves correlated state committed since preflight before return;
+ * reconciliation verifies it and remains the fallback for any rejection.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -243,7 +239,6 @@ async function prepareExternalLaunchForWorktree(
   const seededAt = nowIso(deps.clock);
   let opened: ManagedOpenWorkspaceResult | undefined;
   let sessionSeeded = false;
-  let seededSession: PersistedSession | undefined;
   let groupProvenance: SessionSeedGroupProvenance | undefined;
   try {
     if (freshSession) {
@@ -259,18 +254,14 @@ async function prepareExternalLaunchForWorktree(
         clock: deps.clock,
       });
       sessionSeeded = true;
-      seededSession = seed.session;
       groupProvenance = seed.groupProvenance;
       if (params.title !== undefined && params.title !== row.title) {
         // New-session intent may replace reconcile's branch fallback before the target becomes visible.
-        const renamed = await deps.persistence.renameSession({
+        await deps.persistence.renameSession({
           sessionId,
           title: params.title,
           renamedAt: seededAt,
         });
-        if (renamed !== undefined) {
-          seededSession = renamed;
-        }
       }
     }
 
@@ -334,17 +325,8 @@ async function prepareExternalLaunchForWorktree(
           terminalTargetId: opened.target.targetId,
           terminalTarget: projectedTerminalTarget,
           harnessProviderId,
-          session: externalLaunchSessionMetadata({
-            sessionId,
-            projectId: project.id,
-            worktreeId: worktree.id,
-            title: row.title,
-            harness: harnessProviderId,
-            terminalProvider: managedTerminal.id,
-            seededAt,
-            ...(seededSession === undefined ? {} : { seededSession }),
-            ...(retainedSession === undefined ? {} : { retainedSession }),
-          }),
+          sessionId,
+          baseRow: row,
         });
         if (projection.status === "rejected") {
           await deps.logger
@@ -407,36 +389,6 @@ async function prepareExternalLaunchForWorktree(
     }
     throw error;
   }
-}
-
-function externalLaunchSessionMetadata(input: {
-  sessionId: string;
-  projectId: string;
-  worktreeId: string;
-  title: string;
-  harness: string;
-  terminalProvider: string;
-  seededAt: string;
-  seededSession?: PersistedSession;
-  retainedSession?: SessionView;
-}): ObserverSessionMetadata {
-  const metadata: ObserverSessionMetadata = {
-    id: input.sessionId,
-    projectId: input.projectId,
-    worktreeId: input.worktreeId,
-    lifecycle: "open",
-    title: input.seededSession?.title ?? input.retainedSession?.title ?? input.title,
-    harness: input.seededSession?.harness ?? input.harness,
-    terminalProvider: input.seededSession?.terminalProvider ?? input.terminalProvider,
-    createdAt: input.seededSession?.createdAt ?? input.retainedSession?.createdAt ?? input.seededAt,
-    lastSeenAt:
-      input.seededSession?.lastSeenAt ?? input.retainedSession?.updatedAt ?? input.seededAt,
-  };
-  const state = input.seededSession?.state ?? input.retainedSession?.status.value;
-  if (state !== undefined) {
-    metadata.state = state;
-  }
-  return metadata;
 }
 
 async function releaseOpenedTargetBestEffort(input: {

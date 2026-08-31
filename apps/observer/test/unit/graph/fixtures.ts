@@ -237,6 +237,8 @@ export function preparedProjectionFixture() {
   const observed = worktree("wt_web_projected", "web", "projected");
   observed.registrationIdentity = "registration:projected";
   const snapshot = build({ worktrees: [observed] });
+  const baseRow = snapshot.rows[0];
+  if (baseRow === undefined) throw new Error("expected projected worktree row");
   const session: ObserverSessionMetadata = {
     id: "ses_web_projected",
     projectId: "web",
@@ -286,10 +288,11 @@ export function preparedProjectionFixture() {
     terminalTarget: target,
     harnessProviderId: "fake-harness",
     session,
+    baseRow,
     sessionGroups: [group],
     harnessCapabilities: { "fake-harness": resumableHarnessCapabilities },
     terminalCapabilities: { canFocusTarget: false, canCloseTarget: false },
     projectedAt,
   };
-  return { observed, snapshot, session, target, group, input };
+  return { observed, snapshot, baseRow, session, target, group, input };
 }
