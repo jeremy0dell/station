@@ -7,6 +7,10 @@ import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import type { StationLogger } from "../stationLogger.js";
 import {
+  createWorktreeCreateCoordinator,
+  type WorktreeCreateCoordinator,
+} from "../worktreeCreateCoordinator.js";
+import {
   createWorktreeMutationCoordinator,
   type WorktreeMutationCoordinator,
 } from "../worktreeMutationCoordinator.js";
@@ -55,6 +59,7 @@ export type RegisterObserverCommandHandlersOptions = {
   launchPreflight?: HarnessLaunchPreflight | undefined;
   projectConfigWriter: ProjectConfigWriter;
   worktreeMutations?: WorktreeMutationCoordinator | undefined;
+  worktreeCreates?: WorktreeCreateCoordinator | undefined;
 };
 
 /**
@@ -63,15 +68,17 @@ export type RegisterObserverCommandHandlersOptions = {
  * Constructs process-lifetime Observer command use cases and registers their
  * handlers with the command queue.
  *
- * Runtime-prebound config-aware launch preflight and ProjectConfigWriter are composed here;
- * one shared worktree mutation coordinator serializes lifecycle use cases across command and native
- * activation boundaries. Handlers remain provider-neutral and receive no configuration or home paths.
+ * Runtime-prebound config-aware launch preflight and ProjectConfigWriter are composed here. One
+ * shared create policy bounds per-project provider pressure and retains cross-command branch
+ * ownership through rollback; the existing mutation coordinator serializes lifecycle use cases
+ * across command and native activation boundaries. Handlers receive no configuration or home paths.
  */
 export function registerObserverCommandHandlers(
   options: RegisterObserverCommandHandlersOptions,
 ): void {
   const getProjects = options.getProjects ?? (() => options.projects);
   const worktreeMutations = options.worktreeMutations ?? createWorktreeMutationCoordinator();
+  const worktreeCreates = options.worktreeCreates ?? createWorktreeCreateCoordinator();
   const featureFlags = options.featureFlags ?? createFeatureFlagEvaluator();
   const launchPreflight: HarnessLaunchPreflight =
     options.launchPreflight ??
@@ -98,6 +105,7 @@ export function registerObserverCommandHandlers(
       eventBus: options.eventBus,
       clock: options.clock,
       logger: options.logger,
+      worktreeCreates,
     }),
     "worktree.fork": createWorktreeForkHandler({
       getProjects,
@@ -107,6 +115,7 @@ export function registerObserverCommandHandlers(
       eventBus: options.eventBus,
       clock: options.clock,
       logger: options.logger,
+      worktreeCreates,
     }),
     "worktree.remove": createWorktreeRemoveHandler({
       getProjects,
@@ -128,6 +137,7 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       logger: options.logger,
+      worktreeCreates,
     }),
     "session.startAgent": createSessionStartAgentHandler({
       getProjects,
@@ -173,6 +183,7 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       logger: options.logger,
+      worktreeCreates,
     }),
     "terminal.focus": createTerminalFocusHandler({
       core: options.core,

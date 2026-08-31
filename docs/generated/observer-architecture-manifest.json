@@ -1283,6 +1283,18 @@
           "bindings": ["StationLogger"]
         },
         {
+          "specifier": "../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeCreateCoordinator"]
+        },
+        {
+          "specifier": "../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeCreateCoordinator"]
+        },
+        {
           "specifier": "../worktreeMutationCoordinator.js",
           "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
           "edgeKind": "runtime",
@@ -1479,7 +1491,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command. Success returns the exact created identities, resolved Group identity when grouped, and provider-resolved placement projection."
+          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation. Shared branch ownership spans the complete seed, launch, publication, and rollback transaction while per-project capacity spans only provider creation. Rollback removes only state owned by this command. Success returns the exact created identities, resolved Group identity when grouped, and placement projection."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -1583,6 +1595,18 @@
           "bindings": ["StationLogger"]
         },
         {
+          "specifier": "../../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeCreateCoordinator"]
+        },
+        {
+          "specifier": "../../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeCreateCoordinator"]
+        },
+        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
@@ -1603,7 +1627,7 @@
           "name": "createSessionForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback. Success returns the exact created identities, transaction-resolved Group identity when grouped, and the provider-resolved placement projection."
+          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation. Shared branch ownership spans seed, launch, publication, and verified rollback while per-project capacity spans only provider creation. Cleanup retires only fork-owned state. Success returns the exact created identities, transaction-resolved Group identity when grouped, and the placement projection."
         },
         {
           "name": "CreateSessionForkHandlerOptions",
@@ -1709,6 +1733,18 @@
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
           "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "../../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeCreateCoordinator"]
+        },
+        {
+          "specifier": "../../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeCreateCoordinator"]
         },
         {
           "specifier": "@station/contracts",
@@ -2857,7 +2893,7 @@
           "name": "createWorktreeCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch. Exact provider-returned launch evidence commits through the serialized snapshot writer before publication; ambiguous evidence and worktree-only creation retain synchronous reconciliation."
+          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch. Exact provider-returned launch evidence commits through the serialized snapshot writer before publication; ambiguous evidence and worktree-only creation retain synchronous reconciliation. Shared branch ownership spans projection, reconciliation, and late cancellation; provider-call capacity spans only the bounded create operation."
         },
         {
           "name": "CreateWorktreeCreateHandlerOptions",
@@ -2922,6 +2958,18 @@
           "bindings": ["StationLogger"]
         },
         {
+          "specifier": "../../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeCreateCoordinator"]
+        },
+        {
+          "specifier": "../../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeCreateCoordinator"]
+        },
+        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
@@ -2948,7 +2996,7 @@
           "name": "createWorktreeForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot. Success returns the exact project and forked-worktree identities."
+          "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot. Shared branch ownership spans the completion reconcile while provider-call capacity spans only creation. Success returns the exact project and forked-worktree identities."
         },
         {
           "name": "WorktreeForkHandlerOptions",
@@ -3018,6 +3066,18 @@
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
           "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "../../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeCreateCoordinator"]
+        },
+        {
+          "specifier": "../../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeCreateCoordinator"]
         },
         {
           "specifier": "@station/contracts",
@@ -4464,7 +4524,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, create-quiescent verification, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -5629,6 +5689,12 @@
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Admits only canonical requested-provider results from one provider callback."
+        },
+        {
+          "name": "ReconcileReadiness",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "ReconcileScheduler",
@@ -11332,7 +11398,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, create-quiescent verification, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -11538,7 +11604,7 @@
           "specifier": "./reconcileScheduler.js",
           "resolvedPath": "apps/observer/src/runtime/reconcileScheduler.ts",
           "edgeKind": "type-only",
-          "bindings": ["CreateReconcileSchedulerOptions"]
+          "bindings": ["CreateReconcileSchedulerOptions", "ReconcileReadiness"]
         },
         {
           "specifier": "./sessionContext.js",
@@ -11575,6 +11641,12 @@
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
           "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeCreateCoordinator"]
         },
         {
           "specifier": "../worktreeMutationCoordinator.js",
@@ -12323,6 +12395,12 @@
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
           "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "../worktreeCreateCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeCreateCoordinator"]
         },
         {
           "specifier": "../worktreeMutationCoordinator.js",
@@ -13401,6 +13479,12 @@
           "purpose": null
         },
         {
+          "name": "ReconcileReadiness",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ReconcileScheduler",
           "kind": "type",
           "role": null,
@@ -14161,6 +14245,36 @@
           "bindings": ["RuntimeClock"]
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/worktreeCreateCoordinator.ts",
+      "exports": [
+        {
+          "name": "createWorktreeCreateCoordinator",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Admits provider-neutral worktree-create transactions with FIFO branch ownership and a bounded per-project provider-call capacity while retaining branch ownership through downstream rollback."
+        },
+        {
+          "name": "CreateWorktreeCreateCoordinatorOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "RunWorktreeProviderCreate",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "WorktreeCreateCoordinator",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": []
     },
     {
       "path": "apps/observer/src/worktreeDisplayTitle.ts",
@@ -16179,6 +16293,13 @@
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "declaration": "createWorktreeCreateCoordinator",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
         }
       ]
     },
@@ -16195,13 +16316,20 @@
       "declaration": "createSessionCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command. Success returns the exact created identities, resolved Group identity when grouped, and provider-resolved placement projection.",
+      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation. Shared branch ownership spans the complete seed, launch, publication, and rollback transaction while per-project capacity spans only provider creation. Rollback removes only state owned by this command. Success returns the exact created identities, resolved Group identity when grouped, and placement projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",
           "declaration": "ensureAgentWorkspace",
           "kind": "function",
           "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "declaration": "createWorktreeCreateCoordinator",
+          "kind": "function",
+          "role": "POLICY",
           "edgeKind": "runtime"
         }
       ]
@@ -16211,13 +16339,20 @@
       "declaration": "createSessionForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback. Success returns the exact created identities, transaction-resolved Group identity when grouped, and the provider-resolved placement projection.",
+      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation. Shared branch ownership spans seed, launch, publication, and verified rollback while per-project capacity spans only provider creation. Cleanup retires only fork-owned state. Success returns the exact created identities, transaction-resolved Group identity when grouped, and the placement projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",
           "declaration": "ensureAgentWorkspace",
           "kind": "function",
           "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "declaration": "createWorktreeCreateCoordinator",
+          "kind": "function",
+          "role": "POLICY",
           "edgeKind": "runtime"
         }
       ]
@@ -16343,16 +16478,32 @@
       "declaration": "createWorktreeCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch. Exact provider-returned launch evidence commits through the serialized snapshot writer before publication; ambiguous evidence and worktree-only creation retain synchronous reconciliation.",
-      "dependencies": []
+      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch. Exact provider-returned launch evidence commits through the serialized snapshot writer before publication; ambiguous evidence and worktree-only creation retain synchronous reconciliation. Shared branch ownership spans projection, reconciliation, and late cancellation; provider-call capacity spans only the bounded create operation.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "declaration": "createWorktreeCreateCoordinator",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/worktree/fork.ts",
       "declaration": "createWorktreeForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot. Success returns the exact project and forked-worktree identities.",
-      "dependencies": []
+      "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot. Shared branch ownership spans the completion reconcile while provider-call capacity spans only creation. Success returns the exact project and forked-worktree identities.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "declaration": "createWorktreeCreateCoordinator",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/worktree/remove.ts",
@@ -16851,7 +17002,7 @@
       "declaration": "createObserverApi",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, read-only singleton diagnostics, and adapter shutdown behind the application API.",
+      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, authoritative launch projection and event ordering, create-quiescent verification, read-only singleton diagnostics, and adapter shutdown behind the application API.",
       "dependencies": [
         {
           "path": "apps/observer/src/diagnostics/collector.ts",
@@ -17237,6 +17388,13 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/worktreeCreateCoordinator.ts",
+          "declaration": "createWorktreeCreateCoordinator",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
         },
         {
           "path": "packages/contracts/src/observer.ts",
@@ -17768,6 +17926,14 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Records Observer operational events without exposing their storage representation or destination.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/worktreeCreateCoordinator.ts",
+      "declaration": "createWorktreeCreateCoordinator",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Admits provider-neutral worktree-create transactions with FIFO branch ownership and a bounded per-project provider-call capacity while retaining branch ownership through downstream rollback.",
       "dependencies": []
     },
     {
@@ -18395,7 +18561,7 @@
       "declaration": "WorktrunkProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated before Worktrunk runs, and removal freshly revalidates native Git identity, path, and branch before mutation.",
+      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated before Worktrunk runs. Concurrent creates share only an in-flight managed-path identity probe and retain their common-case mutation overlap. Reads and removals drain active creates; the exact nested Git sibling-registration race does the same before Worktrunk resumes its half-created branch. Removal freshly revalidates native Git identity, path, and branch before mutation.",
       "dependencies": [
         {
           "path": "packages/contracts/src/observedPaths.ts",

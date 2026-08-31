@@ -436,6 +436,96 @@ describe("observer command queue", () => {
     sqlite.close();
   });
 
+  it("serializes create-owning commands by branch while another branch progresses", async () => {
+    const { sqlite, queue } = createPersistenceAndQueue();
+    const starts: string[] = [];
+    let releaseFirst = () => {};
+    const firstBlocked = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    queue.registerHandler("worktree.create", async ({ commandId }) => {
+      starts.push(commandId);
+      await firstBlocked;
+      return { type: "worktree.create", projectId: "web", worktreeId: "wt_auth" };
+    });
+    queue.registerHandler("session.create", async ({ commandId }) => {
+      starts.push(commandId);
+      return {
+        type: "session.create",
+        projectId: "web",
+        worktreeId: "wt_auth_session",
+        sessionId: "ses_auth",
+        requestedPlacement: "detached",
+        resolvedPlacement: {
+          provider: "tmux",
+          targetId: "target_auth",
+          generation: "generation_auth",
+          presentation: "detached",
+        },
+      };
+    });
+    queue.registerHandler("worktree.fork", async ({ commandId }) => {
+      starts.push(commandId);
+      return { type: "worktree.fork", projectId: "web", worktreeId: "wt_payments" };
+    });
+    queue.registerHandler("session.fork", async ({ commandId }) => {
+      starts.push(commandId);
+      return {
+        type: "session.fork",
+        projectId: "web",
+        worktreeId: "wt_auth_fork",
+        sessionId: "ses_auth_fork",
+        requestedPlacement: "detached",
+        resolvedPlacement: {
+          provider: "tmux",
+          targetId: "target_auth_fork",
+          generation: "generation_auth_fork",
+          presentation: "detached",
+        },
+      };
+    });
+
+    await Promise.all([
+      queue.dispatch(createWorktreeCommand),
+      queue.dispatch({
+        type: "session.create",
+        payload: {
+          projectId: "web",
+          branch: "feature/auth",
+          harness: { provider: "codex" },
+          terminal: { provider: "tmux" },
+          placement: { intent: "detached" },
+        },
+      }),
+      queue.dispatch({
+        type: "worktree.fork",
+        payload: {
+          projectId: "web",
+          sourceWorktreeId: "wt_main",
+          branch: "feature/payments",
+        },
+      }),
+      queue.dispatch({
+        type: "session.fork",
+        payload: {
+          projectId: "web",
+          sourceWorktreeId: "wt_main",
+          branch: "feature/auth",
+          terminal: { provider: "tmux" },
+          placement: { intent: "detached" },
+        },
+      }),
+    ]);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(starts).toEqual(["cmd_1", "cmd_3"]);
+    releaseFirst();
+    await queue.drain();
+    expect(starts).toEqual(["cmd_1", "cmd_3", "cmd_2", "cmd_4"]);
+    sqlite.close();
+  });
+
   it("serializes terminal close execution by session scope", async () => {
     const { sqlite, queue } = createPersistenceAndQueue();
     const starts: string[] = [];

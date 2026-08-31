@@ -71,6 +71,7 @@ import { type ObserverCore, providerProjectsFromConfig } from "../reconcile/core
 import { inspectObserverRecoveryAssessment } from "../sessionRecovery/assessment.js";
 import { inspectObserverRecoveryInventory } from "../sessionRecovery/inventory.js";
 import type { StationLogger } from "../stationLogger.js";
+import type { WorktreeCreateCoordinator } from "../worktreeCreateCoordinator.js";
 import {
   createWorktreeMutationCoordinator,
   type WorktreeMutationCoordinator,
@@ -89,6 +90,7 @@ import { logReconcileSchedulerProfile } from "./reconcileProfiling.js";
 import {
   type CreateReconcileSchedulerOptions,
   createReconcileScheduler,
+  type ReconcileReadiness,
 } from "./reconcileScheduler.js";
 import { resolveCurrentSessionContext } from "./sessionContext.js";
 import { createSpoolDrainer, type SpoolDrainDeps } from "./spoolDrain.js";
@@ -100,6 +102,7 @@ export type CreateObserverApiOptions = {
   persistenceHealth: PersistenceHealthSource;
   commandQueue: CommandQueue;
   worktreeMutations?: WorktreeMutationCoordinator;
+  worktreeCreates?: WorktreeCreateCoordinator;
   eventBus: ObserverEventBus;
   diagnosticEvidenceSource: DiagnosticEvidenceSource;
   clock?: RuntimeClock;
@@ -121,6 +124,7 @@ export type CreateObserverApiOptions = {
   onShutdownStarted?: () => Promise<void> | void;
   onStop?: () => Promise<void> | void;
   hookReconcileDebounceMs?: number;
+  interactiveReconcileDebounceMs?: number;
   duplicateInspection?: () => Promise<ObserverReapPlan> | undefined;
 };
 
@@ -130,12 +134,19 @@ export type CreateObserverApiOptions = {
  * Wires Observer use cases with supplied durable, local-metadata, and diagnostic-
  * evidence roles, ingress workers, provider-health publication, scheduling, exact
  * build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment
- * queries, authoritative launch projection and event ordering, read-only singleton diagnostics,
- * and adapter shutdown behind the application API.
+ * queries, authoritative launch projection and event ordering, create-quiescent verification,
+ * read-only singleton diagnostics, and adapter shutdown behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
   const worktreeMutations = options.worktreeMutations ?? createWorktreeMutationCoordinator();
+  const createQuiescence: ReconcileReadiness | undefined =
+    options.worktreeCreates === undefined
+      ? undefined
+      : {
+          isReady: options.worktreeCreates.isIdle,
+          whenReady: options.worktreeCreates.whenIdle,
+        };
   const reconciling = { reconciling: false };
   const providerHealthCache = options.providers?.healthCache;
   const pendingProviderHealthPublications = new Set<Promise<void>>();
@@ -181,6 +192,9 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
   };
   if (options.hookReconcileDebounceMs !== undefined) {
     schedulerOptions.debounceMs = options.hookReconcileDebounceMs;
+  }
+  if (options.interactiveReconcileDebounceMs !== undefined) {
+    schedulerOptions.interactiveDebounceMs = options.interactiveReconcileDebounceMs;
   }
   if (options.logger !== undefined) {
     schedulerOptions.onError = async (error) => {
@@ -316,7 +330,13 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     reportHarnessEvent: async (report: HarnessEventReport): Promise<HarnessEventReportReceipt> =>
       harnessIngressQueue.enqueue(report),
     prepareExternalLaunch: (params) =>
-      prepareExternalLaunchSafe(options, worktreeMutations, reconcileScheduler, params),
+      prepareExternalLaunchSafe(
+        options,
+        worktreeMutations,
+        reconcileScheduler,
+        createQuiescence,
+        params,
+      ),
     reportExternalExit: (params) => reportExternalExitSafe(options, reconcileScheduler, params),
     prepareWorktreeRemoval: (params) =>
       prepareWorktreeRemovalSafe(options, worktreeMutations, params),
@@ -386,6 +406,7 @@ async function prepareExternalLaunchSafe(
   options: CreateObserverApiOptions,
   worktreeMutations: WorktreeMutationCoordinator,
   reconcileScheduler: ReturnType<typeof createReconcileScheduler>,
+  createQuiescence: ReconcileReadiness | undefined,
   params: Parameters<ObserverApi["prepareExternalLaunch"]>[0],
 ): ReturnType<ObserverApi["prepareExternalLaunch"]> {
   const deps = assertProvidersAvailable(options, worktreeMutations);
@@ -418,7 +439,14 @@ async function prepareExternalLaunchSafe(
     options.eventBus.publish(event);
   }
   if (reconcile) {
-    reconcileScheduler.request("agent.prepareExternalLaunch");
+    if (createQuiescence === undefined) {
+      reconcileScheduler.requestInteractive("agent.prepareExternalLaunch");
+    } else {
+      reconcileScheduler.requestInteractiveWhenReady(
+        "agent.prepareExternalLaunch",
+        createQuiescence,
+      );
+    }
   }
   return outcome;
 }

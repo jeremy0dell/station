@@ -2,12 +2,21 @@ import { Effect } from "@station/runtime";
 
 export type ReconcileScheduler = {
   request(reason: string): void;
+  requestInteractive(reason: string): void;
+  requestWhenReady(reason: string, readiness: ReconcileReadiness): void;
+  requestInteractiveWhenReady(reason: string, readiness: ReconcileReadiness): void;
+};
+
+export type ReconcileReadiness = {
+  isReady(): boolean;
+  whenReady(): Promise<void>;
 };
 
 export type CreateReconcileSchedulerOptions = {
   reconcile(reason: string): Promise<unknown>;
   debounceMs?: number;
   backlogDebounceMs?: number;
+  interactiveDebounceMs?: number;
   onError?: (error: unknown) => Promise<void> | void;
   onFlushFinish?: (profile: ReconcileSchedulerFlushProfile) => Promise<void> | void;
 };
@@ -23,39 +32,72 @@ export type ReconcileSchedulerFlushProfile = {
 
 const defaultDebounceMs = 100;
 const defaultBacklogDebounceMs = 1000;
+const defaultInteractiveDebounceMs = 25;
+
+type QueuedReconcileRequest = {
+  reason: string;
+  queuedAt: number;
+  interactive: boolean;
+  readiness?: ReconcileReadiness;
+};
 
 export function createReconcileScheduler(
   options: CreateReconcileSchedulerOptions,
 ): ReconcileScheduler {
   const debounceMs = options.debounceMs ?? defaultDebounceMs;
   const backlogDebounceMs = options.backlogDebounceMs ?? defaultBacklogDebounceMs;
+  const interactiveDebounceMs = options.interactiveDebounceMs ?? defaultInteractiveDebounceMs;
   let running = false;
   let timerScheduled = false;
-  let firstQueuedAt: number | undefined;
-  const queuedReasons: string[] = [];
+  let scheduledFor: number | undefined;
+  let timerGeneration = 0;
+  let waitingForReadiness = false;
+  let readinessGeneration = 0;
+  const queuedRequests: QueuedReconcileRequest[] = [];
 
   return {
-    request: (reason) => {
-      if (queuedReasons.length === 0) {
-        firstQueuedAt = Date.now();
-      }
-      queuedReasons.push(reason);
-      if (running || timerScheduled) {
-        return;
-      }
-      scheduleFlush(debounceMs);
-    },
+    request: (reason) => request({ reason, queuedAt: Date.now(), interactive: false }),
+    requestInteractive: (reason) => request({ reason, queuedAt: Date.now(), interactive: true }),
+    requestWhenReady: (reason, readiness) =>
+      request({ reason, queuedAt: Date.now(), interactive: false, readiness }),
+    requestInteractiveWhenReady: (reason, readiness) =>
+      request({ reason, queuedAt: Date.now(), interactive: true, readiness }),
   };
 
+  function request(queued: QueuedReconcileRequest): void {
+    queuedRequests.push(queued);
+    if (running) return;
+    if (queued.readiness !== undefined && !queued.readiness.isReady()) {
+      armReadinessWait();
+      return;
+    }
+    const delayMs = queued.interactive ? interactiveDebounceMs : debounceMs;
+    if (timerScheduled) {
+      const requestedFor = queued.queuedAt + delayMs;
+      if (queued.interactive && (scheduledFor === undefined || requestedFor < scheduledFor)) {
+        scheduleFlush(delayMs);
+      }
+      return;
+    }
+    scheduleFlush(delayMs);
+  }
+
   function scheduleFlush(delayMs: number): void {
+    const generation = ++timerGeneration;
     timerScheduled = true;
+    scheduledFor = Date.now() + delayMs;
     void sleep(delayMs).then(
       () => {
+        if (generation !== timerGeneration) return;
         timerScheduled = false;
+        scheduledFor = undefined;
         void flush().catch((error: unknown) => reportError(error));
       },
       () => {
-        timerScheduled = false;
+        if (generation === timerGeneration) {
+          timerScheduled = false;
+          scheduledFor = undefined;
+        }
       },
     );
   }
@@ -64,32 +106,87 @@ export function createReconcileScheduler(
     if (running) {
       return;
     }
-    const reasons = queuedReasons.splice(0);
-    if (reasons.length === 0) {
+    const ready: QueuedReconcileRequest[] = [];
+    const blocked: QueuedReconcileRequest[] = [];
+    for (const queued of queuedRequests.splice(0)) {
+      if (queued.readiness === undefined || queued.readiness.isReady()) {
+        ready.push(queued);
+      } else {
+        blocked.push(queued);
+      }
+    }
+    queuedRequests.push(...blocked);
+    if (ready.length === 0) {
+      armReadinessWait();
       return;
     }
-    const queuedAt = firstQueuedAt;
-    firstQueuedAt = undefined;
-    const reason = summarizeReasons(reasons);
+    const queuedAt = Math.min(...ready.map((queued) => queued.queuedAt));
+    const reason = summarizeReasons(ready.map((queued) => queued.reason));
     const startedAt = Date.now();
 
     running = true;
     try {
       await options.reconcile(reason);
     } finally {
-      const queuedAfter = queuedReasons.length;
+      const queuedAfter = queuedRequests.length;
       running = false;
       reportFlushFinish({
         reason,
-        queuedCount: reasons.length,
+        queuedCount: ready.length,
         queuedWhileRunning: queuedAfter,
-        waitMs: queuedAt === undefined ? 0 : Math.max(0, startedAt - queuedAt),
+        waitMs: Math.max(0, startedAt - queuedAt),
         durationMs: Math.max(0, Date.now() - startedAt),
         queuedAfter,
       });
-      if (queuedReasons.length > 0 && !timerScheduled) {
-        scheduleFlush(backlogDebounceMs);
+      if (queuedRequests.length > 0 && !timerScheduled) {
+        if (hasReadyRequest()) {
+          scheduleFlush(hasReadyInteractiveRequest() ? interactiveDebounceMs : backlogDebounceMs);
+        } else {
+          armReadinessWait();
+        }
       }
+    }
+  }
+
+  function hasReadyRequest(): boolean {
+    return queuedRequests.some(
+      (queued) => queued.readiness === undefined || queued.readiness.isReady(),
+    );
+  }
+
+  function hasReadyInteractiveRequest(): boolean {
+    return queuedRequests.some(
+      (queued) =>
+        queued.interactive && (queued.readiness === undefined || queued.readiness.isReady()),
+    );
+  }
+
+  function armReadinessWait(): void {
+    if (waitingForReadiness || queuedRequests.length === 0 || hasReadyRequest()) return;
+    const readiness = [
+      ...new Set(
+        queuedRequests.flatMap((queued) =>
+          queued.readiness === undefined ? [] : [queued.readiness],
+        ),
+      ),
+    ];
+    if (readiness.length === 0) return;
+    waitingForReadiness = true;
+    const generation = ++readinessGeneration;
+    for (const candidate of readiness) {
+      void candidate.whenReady().then(
+        () => readinessSettled(generation),
+        (error: unknown) => readinessSettled(generation, error),
+      );
+    }
+  }
+
+  function readinessSettled(generation: number, error?: unknown): void {
+    if (generation !== readinessGeneration || !waitingForReadiness) return;
+    waitingForReadiness = false;
+    if (error !== undefined) reportError(error);
+    if (!running && !timerScheduled && queuedRequests.length > 0) {
+      scheduleFlush(hasReadyInteractiveRequest() ? interactiveDebounceMs : debounceMs);
     }
   }
 

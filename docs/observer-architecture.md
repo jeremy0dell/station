@@ -248,6 +248,7 @@ areas contain the following responsibilities:
 | `runtime/` | API assembly, process lifecycle, exact read-only ownership inspection, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. Exact inspection consumes purpose-specific status, pidfile, cooperative process, and pinned recovery ports without lifecycle mutation authority. |
 | `stationLogger.ts`, `commands/projectConfigWriter.ts` | Observer-private logging and authoritative project-configuration capabilities | Driven application ports free of JSONL records and configuration/home-path plumbing. |
 | `runtime/logging.ts`, `runtime/projectConfigWriter.ts` | Redacted JSONL writes and `@station/config` project mutation translation | Outbound adapters retaining log, config, and home paths at composition. |
+| `worktreeCreateCoordinator.ts` | branch ownership, per-project create capacity, cancellation, and create-transaction quiescence | Provider-neutral deterministic admission policy shared by all create-owning command use cases; it performs no provider operation or reconciliation and retains a branch until its owning transaction, including rollback, settles. |
 | `providers/` | provider aggregation and health cache | Provider aggregation and health only; provider modules must not own or import application orchestration. |
 | `metadata/` | metadata refresh, repository lookup, local Git execution, and ref watching | The refresh use case depends on path-free local-metadata ports; local Git command and filesystem adapters resolve Station identities privately, while runtime composition selects and shuts down both roles. |
 | `persistence/ports.ts`, `persistence/types.ts` | eight purpose-owned persistence ports, their eight-port composition bundle, the separate persistence-health port, and Observer application records and inputs | Observer-private application boundary; no SQL, SQLite handles, or SQLite row representations. The bundle is composition-only. |
@@ -368,7 +369,8 @@ Application composition proceeds around that boundary in this order:
    ports and `PersistenceHealthSource` to that handle. Runtime composition owns
    the concrete handle lifecycle and distributes narrow application views.
 5. Runtime composition creates the event bus, logging and project-config
-   adapters, command queue, feature evaluator, core, handlers, and configured
+   adapters, command queue, process-lifetime create-admission and worktree-
+   mutation coordinators, feature evaluator, core, handlers, and configured
    event hooks around the provider registry.
 6. Runtime composition captures the resolved state, socket, diagnostics, log,
    and hook-spool locations in the local diagnostic-evidence adapter before
@@ -491,6 +493,18 @@ The handler checks post-provider cancellation after projection or fallback, so a
 completed external mutation is visible even when the command ultimately records
 cancellation.
 
+`worktree.create`, `worktree.fork`, `session.create`, and `session.fork` use one
+project-plus-branch command scope, so same-branch command lifecycle stays FIFO
+across command types while distinct branches can begin independently. Their
+process-lifetime create coordinator independently retains the same branch lease
+through the owning handler's projection, publication, downstream launch, and
+rollback. A separate FIFO capacity admits at most four active provider create
+calls per project; different projects remain independent, and downstream work
+does not occupy provider-call capacity. Cancellation before either admission
+removes that waiter, while an admitted call releases capacity only after the
+provider boundary settles. The coordinator becomes globally idle only after
+queued and active transactions, including rollback, have all completed.
+
 Successful `worktree.create`, `worktree.fork`, `session.create`, `session.fork`,
 and `sessionGroup.create` handlers return strict application identities. Session
 results additionally project only requested `sibling | detached` intent and the
@@ -547,7 +561,14 @@ unreserved commands fail whenever an external Station renderer still owns the
 active terminal. The command refreshes canonical runtime state after renderer settlement, while the
 worktree adapter retains no earlier list as authority and freshly rechecks the expected registration identity, path, and branch immediately
 before mutation so an external checkout replacement cannot reuse the selected
-path and branch as removal identity. Adapter race refusals retain provider-neutral,
+path and branch as removal identity. The Worktrunk adapter keeps common-case
+distinct-branch creates concurrent, but its project-local Git-registry coordinator
+drains those creates before list or removal work. If Worktrunk reports the exact
+nested `git worktree add` sibling-`commondir` initialization race, the same gate
+closes new create admission, drains older attempts, and resumes the requested
+half-created branch without `--create`; ordinary failures are never retried, and
+the normal branch, path, managed-root, and opaque registration checks still decide
+whether recovery is usable. Adapter race refusals retain provider-neutral,
 trace-correlated diagnostic evidence.
 
 ### Session Recovery Cutover
@@ -648,10 +669,18 @@ Narrow authoritative projections do not replace that context, provider-observati
 or reconcile debug evidence. Rejection and projection failure therefore preserve the last
 committed snapshot and require full reconciliation rather than publishing speculative state.
 The scheduler debounces and coalesces reasons while ensuring only one scheduled
-run is active. Startup-compatible requests may join the startup flight; other
-direct requests retain the rule that their scan starts at or after the request.
-Provider read failures degrade health and contribute errors without fabricating
-successful observations.
+run is active. A prepared launch submits a 25ms interactive conditional
+verification request against process-global create quiescence; ready interactive
+work can advance an ordinary pending timer and uses the shorter follow-up delay
+behind a running scan. The scheduler rechecks quiescence at flush rather than
+trusting an earlier idle edge; a create that begins before flush leaves
+verification queued until a later true idle transition. Ready hook or metadata
+reasons may still run without consuming the blocked verification, and repeated
+launch requests from one burst coalesce into one verification wave.
+Startup-compatible requests may join the startup flight; other direct requests
+retain the rule that their scan starts at or after the request. Provider read
+failures degrade health and contribute errors without fabricating successful
+observations.
 
 ### Provider Hook And Harness Report Ingress
 
@@ -945,10 +974,10 @@ expires.
 | Socket ownership evidence | Connect success proves listening. Only `ECONNREFUSED`, or Bun's existing-path `ENOENT`, plus strict zero-holder `lsof` evidence proves stale. Permission failures, timeouts, live holders, evidence failure, path replacement, and non-socket collisions are inaccessible and authorize no spawn, unlink, stop, or signal. |
 | Stale lifecycle evidence | Start, stop, and restart may repair a strict pidfile only after a claim-serialized admission and fresh agreement on socket state, exact pidfile bytes, process existence, and exact process identity classification. The compare/remove commit is atomic and restores non-matching evidence; two bounded attempts never adopt a successor identity. Cancellation and deadline checks prevent entering the commit, while an entered atomic commit drains. Exact live or unavailable ownership refuses visibly. Repair is idempotent, never signals, and leaves socket unlink to the successful binder's fresh holder/path checks. The typed stop summary is transport output only and adds no persisted state or migration. |
 | Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak, except that the declared public reset orders `0.0.0-pre-alpha.*` after internal `0.7.1-rc.*` previews. The pure update convergence policy may use this build-only precedence classification for an exact selected Observer build; the dependency carries no PID, start-time, lifecycle capability, or replacement authority. An explicit restart from a higher build cooperatively stops the health-pinned incumbent before spawning its successor, which lets an already installed launcher replace the Observer even when the old process executable names the now-replaced installation path. Lower-build restarts still refuse. Automatic handoff and signal recovery continue to require complete executable-provenance evidence, and replacement never uses automatic SIGKILL. |
-| Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
+| Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. All four create-owning commands share project-plus-branch scope; the create coordinator additionally retains same-branch ownership through rollback and admits provider calls through one FIFO four-per-project capacity. Cancellation removes queued branch or capacity admission without consuming it, and different projects remain independent. |
 | Managed target release | Station target IDs are deterministic per worktree, so external release is compare-and-delete on target, expected Station session, and binding generation. Tokenless Host exits reconcile instead of releasing. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Concrete provider adapters own bounded external settlement; command use cases pass cancellation and normalize failures without starting another provider-operation timer. A handler with a non-cancellable durable section calls `beginCommit` after read-only validation and immediately before its first write; cancellation may prevent entry, but the queue drains a begun commit to one completion. Other cancellation remains cooperative, and the process shutdown backstop handles ignored signals. |
-| Snapshot writer ordering | Full reconciles, exact worktree-create and prepared managed-launch projections, Group mutation commits, and harness-report authorization plus base projection share a non-poisoning promise chain. Create and launch events publish only after their projection commit; a projected launch orders its worktree event before its session event and schedules verification afterward. Rejected projections retain the current snapshot and use reconciliation fallback or verification. A Group mutation projects only its command project and never scans providers, repairs other durable state, or publishes a reconcile event. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
+| Snapshot writer ordering | Full reconciles, exact worktree-create and prepared managed-launch projections, Group mutation commits, and harness-report authorization plus base projection share a non-poisoning promise chain. Create and launch events publish only after their projection commit; a projected launch orders its worktree event before its session event and schedules verification afterward. Rejected projections retain the current snapshot and use reconciliation fallback or verification. A Group mutation projects only its command project and never scans providers, repairs other durable state, or publishes a reconcile event. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; interactive launch verification rechecks global create quiescence at flush, and a stale idle edge remains queued for a later wave. |
 | Persisted harness compatibility | A harness adapter may use a provider-local strict schema to reject recognizable observations accepted by an earlier build. Unparseable legacy data remains admitted. Reconcile excludes only provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Every worktree-project, terminal-provider, and harness-provider read produces explicit completeness evidence. Failures become provider health and reconcile errors; worktree failures scope Group absence authority by project, while terminal or harness failures block it globally. |
 | Harness ingress | First-party hook transports delegate delivery and spooling to `stn-ingress`. Known build/schema/handoff incompatibility rejects without spooling. One Observer worker processes a bounded pending map; new reports can replace pending work for the same key, and a full map rejects unrelated work with a backpressure error. |
@@ -1181,7 +1210,7 @@ participate. Nonliteral dynamic module edges fail because their ownership cannot
 be resolved. External imports such as `node:sqlite` remain recorded external
 edges rather than source-cycle members.
 
-The current Observer graph contains 146 production modules and no strongly
+The current Observer graph contains 170 production modules and no strongly
 connected component. `migrations/migration.ts` now owns
 `ObserverSqliteMigration`, so numbered migration declarations do not depend on
 their ordered aggregator. `reconcile/reconcileResult.ts` owns
