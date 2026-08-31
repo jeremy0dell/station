@@ -146,6 +146,26 @@ describe("Unix socket NDJSON transport", () => {
     }
   });
 
+  it("accepts a complete frame above 4 MiB when it remains within the frame limit", async () => {
+    const pair = inMemoryNdjsonConnectionPair();
+    const payload = "x".repeat(5 * 1024 * 1024);
+
+    try {
+      expect(pair.server.send({ payload })).toBe(true);
+      await expect(pair.client.messages()[Symbol.asyncIterator]().next()).resolves.toEqual({
+        done: false,
+        value: { payload },
+      });
+      expect(pair.client.diagnostics()).toMatchObject({
+        overflowCount: 0,
+        inboundQueueDepth: 0,
+      });
+    } finally {
+      pair.server.close();
+      pair.client.close();
+    }
+  });
+
   it("rejects oversized outbound and partial frames without retaining their contents", async () => {
     const outboundPair = inMemoryNdjsonConnectionPair();
     expect(

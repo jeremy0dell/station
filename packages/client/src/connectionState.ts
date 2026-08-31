@@ -4,6 +4,7 @@ import type { ClientNotice, StationClientConnectionState } from "./types.js";
 const OBSERVER_CONNECT_ERROR_CODES = new Set<SafeError["code"]>([
   "PROTOCOL_CONNECT_FAILED",
   "PROTOCOL_CONNECT_TIMEOUT",
+  "PROTOCOL_TRANSPORT_OVERFLOW",
 ]);
 
 export function isObserverConnectError(error: SafeError): boolean {

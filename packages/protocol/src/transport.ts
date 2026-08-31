@@ -18,7 +18,7 @@ const DEFAULT_SOCKET_PROBE_TIMEOUT_MS = 1000;
 const MIN_SOCKET_PROBE_TIMEOUT_MS = 1;
 export const NDJSON_TRANSPORT_LIMITS = Object.freeze({
   maxQueuedFrames: 1_024,
-  maxQueuedBytes: 4 * 1024 * 1024,
+  maxQueuedBytes: 16 * 1024 * 1024,
   maxFrameBytes: 16 * 1024 * 1024,
 });
 const CanonicalPositivePidSchema = z
@@ -696,9 +696,12 @@ function createNdjsonState(options: NdjsonStateOptions) {
 }
 
 function transportOverflowError(reason: NdjsonTransportOverflowReason): Error {
-  return Object.assign(new Error("NDJSON transport capacity was exceeded."), {
-    name: "ProtocolError",
+  const safeError = protocolSafeError({
     code: "PROTOCOL_TRANSPORT_OVERFLOW",
+    message: "NDJSON transport capacity was exceeded.",
+    hint: "Reconnect and load a fresh snapshot before continuing.",
+  });
+  return Object.assign(new Error(safeError.message), safeError, {
     reason,
   });
 }

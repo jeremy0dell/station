@@ -1,4 +1,10 @@
-import { createObserverService, createStationClientRuntime } from "@station/client";
+import { once } from "node:events";
+import { createServer, type Socket } from "node:net";
+import {
+  createObserverService,
+  createStationClientRuntime,
+  type ObserverService,
+} from "@station/client";
 import type {
   CommandId,
   CommandRecord,
@@ -20,6 +26,8 @@ import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   listenUnixSocket,
   type ObserverClient,
+  ProtocolRequestSchema,
+  protocolSuccessResponse,
   startProtocolServer,
   type TerminalCommandRecord,
 } from "@station/protocol";
@@ -121,6 +129,116 @@ describe("observer client service", () => {
     } finally {
       await runtime.stop();
       await server.close();
+    }
+  });
+
+  it("shows a transport overflow as display-only until snapshot resync converges", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const initialSnapshot = createCommandSnapshot("idle");
+    const recoveredSnapshot = createCommandSnapshot("idle", { dirty: true });
+    const event: StationEvent = {
+      type: "command.accepted",
+      commandId: "cmd_transport_overflow",
+      command: {
+        type: "observer.reconcile",
+        payload: { reason: "x".repeat(4_000) },
+      },
+    };
+    let subscriptionCalls = 0;
+    let firstSubscriptionClosed = false;
+    let snapshotCalls = 0;
+    let releaseFirstPull: () => void = () => undefined;
+    let releaseSnapshot: () => void = () => undefined;
+    const firstPull = new Promise<void>((resolve) => {
+      releaseFirstPull = resolve;
+    });
+    const snapshotLoad = new Promise<void>((resolve) => {
+      releaseSnapshot = resolve;
+    });
+    const sockets = new Set<Socket>();
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.setEncoding("utf8");
+      let buffer = "";
+      socket.on("data", (chunk) => {
+        buffer += chunk;
+        for (;;) {
+          const newline = buffer.indexOf("\n");
+          if (newline < 0) return;
+          const request = ProtocolRequestSchema.parse(JSON.parse(buffer.slice(0, newline)));
+          buffer = buffer.slice(newline + 1);
+          if (request.method === "events.subscribe") {
+            subscriptionCalls += 1;
+            writeFrame(
+              socket,
+              protocolSuccessResponse(request.id, "events.subscribe", { subscribed: true }),
+            );
+            if (subscriptionCalls === 1) {
+              socket.once("close", () => {
+                firstSubscriptionClosed = true;
+              });
+              const envelope = { schemaVersion: STATION_SCHEMA_VERSION, event };
+              for (let index = 0; index < 2_048; index += 1) writeFrame(socket, envelope);
+            }
+          } else if (request.method === "snapshot.get") {
+            snapshotCalls += 1;
+            void snapshotLoad.then(() => {
+              writeFrame(
+                socket,
+                protocolSuccessResponse(request.id, "snapshot.get", recoveredSnapshot),
+              );
+            });
+          }
+        }
+      });
+      socket.on("close", () => sockets.delete(socket));
+      socket.on("error", () => undefined);
+    });
+    server.listen(socketPath);
+    await once(server, "listening");
+    const transportService = createObserverService({
+      socketPath,
+      requestId: ids("runtime-overflow"),
+    });
+    let delayFirstEvent = true;
+    const service: ObserverService = {
+      ...transportService,
+      subscribeEvents: () => {
+        const events = transportService.subscribeEvents();
+        if (!delayFirstEvent) return events;
+        delayFirstEvent = false;
+        return delayFirstEventDelivery(events, firstPull);
+      },
+    };
+    const runtime = createStationClientRuntime({
+      service,
+      initialSnapshot,
+      reconnect: { initialDelayMs: 5, maxDelayMs: 20 },
+    });
+
+    try {
+      runtime.start();
+      await waitFor(() => firstSubscriptionClosed, 3_000);
+      releaseFirstPull();
+
+      await waitFor(() => runtime.getState().connection.state === "displayOnly", 3_000);
+      await waitFor(() => subscriptionCalls >= 2 && snapshotCalls === 1, 3_000);
+      const recovering = runtime.getState().connection;
+      expect(recovering).toMatchObject({
+        state: "displayOnly",
+        lastError: { code: "PROTOCOL_TRANSPORT_OVERFLOW" },
+      });
+      expect(runtime.getState().snapshot?.rows[0]?.worktree.dirty).toBe(false);
+
+      releaseSnapshot();
+      await waitFor(() => runtime.getState().connection.state === "connected", 3_000);
+      expect(runtime.getState().snapshot?.rows[0]?.worktree.dirty).toBe(true);
+    } finally {
+      releaseFirstPull();
+      releaseSnapshot();
+      await runtime.stop();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
 
@@ -609,6 +727,36 @@ async function* stream(events: StationEvent[]): AsyncIterable<StationEvent> {
   }
 }
 
+function delayFirstEventDelivery(
+  events: AsyncIterable<StationEvent>,
+  release: Promise<void>,
+): AsyncIterable<StationEvent> {
+  return {
+    [Symbol.asyncIterator]: () => {
+      const iterator = events[Symbol.asyncIterator]();
+      let first = true;
+      return {
+        next: async () => {
+          const result = await iterator.next();
+          if (first) {
+            first = false;
+            await release;
+          }
+          return result;
+        },
+        return: async () => {
+          await iterator.return?.();
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+}
+
+function writeFrame(socket: Socket, value: unknown): void {
+  socket.write(`${JSON.stringify(value)}\n`);
+}
+
 function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
   return {
     health: async () => fakeHealth(),
@@ -734,4 +882,12 @@ function ids(prefix: string): () => string {
 
 async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for observer client state.");
+    await delay(5);
+  }
 }
