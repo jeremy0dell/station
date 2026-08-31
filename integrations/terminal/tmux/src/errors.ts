@@ -139,7 +139,7 @@ export function isTmuxNoServerListError(error: unknown): boolean {
   if (
     diagnostic?.exitCode !== 1 ||
     diagnostic.stderrSnippet === undefined ||
-    !/(?:^|\s)list-panes\s+-a(?:\s|$)/.test(diagnostic.command)
+    !/(?:^|\s)(?:list-panes\s+-a|list-clients)(?:\s|$)/.test(diagnostic.command)
   ) {
     return false;
   }
