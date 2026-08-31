@@ -1,4 +1,6 @@
+import { once } from "node:events";
 import { access, mkdir, stat, unlink, writeFile } from "node:fs/promises";
+import { createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 import {
   connectUnixSocket,
@@ -36,6 +38,46 @@ describe("Unix socket NDJSON transport", () => {
     });
 
     client.close();
+    await server.close();
+  });
+
+  it("disconnects before a non-consuming client can retain an unbounded frame backlog", async () => {
+    const { socketPath } = await createTempSocketPath();
+    let accepted: Socket | undefined;
+    const server = createServer((socket) => {
+      accepted = socket;
+      socket.on("error", () => undefined);
+    });
+    server.listen(socketPath);
+    await once(server, "listening");
+    const client = await connectUnixSocket(socketPath);
+    await waitFor(() => accepted !== undefined);
+
+    try {
+      const frame = `${JSON.stringify({ payload: "x".repeat(4_000) })}\n`;
+      for (let index = 0; index < 2_048 && accepted?.destroyed === false; index += 1) {
+        if (!accepted.write(frame)) {
+          await Promise.race([once(accepted, "drain"), once(accepted, "close")]);
+        }
+      }
+
+      await expect(settlesWithin(client.closed, 500)).resolves.toBe(true);
+    } finally {
+      client.close();
+      accepted?.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("closes the connection when its message iterator is returned", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+    const client = await connectUnixSocket(socketPath);
+    const iterator = client.messages()[Symbol.asyncIterator]();
+
+    await iterator.return?.();
+
+    await expect(settlesWithin(client.closed, 500)).resolves.toBe(true);
     await server.close();
   });
 
@@ -422,4 +464,22 @@ describe("Unix socket NDJSON transport", () => {
 
 function metadata(ino: bigint) {
   return { ino, birthtimeNs: ino * 10n, isSocket: true };
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for transport test state.");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+function settlesWithin(promise: Promise<unknown>, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    promise.then(() => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
 }
