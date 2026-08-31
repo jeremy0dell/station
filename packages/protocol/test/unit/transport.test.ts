@@ -105,9 +105,14 @@ describe("Unix socket NDJSON transport", () => {
       socketPath,
       onConnection: (connection) => {
         const frame = { payload: "x".repeat(64 * 1024) };
-        while (connection.diagnostics().outboundBackpressureCount === 0) {
+        for (
+          let sent = 0;
+          sent < 256 && connection.diagnostics().outboundBackpressureCount === 0;
+          sent += 1
+        ) {
           expect(connection.send(frame)).toBe(true);
         }
+        expect(connection.diagnostics().outboundBackpressureCount).toBe(1);
         expect(connection.send(frame)).toBe(false);
         diagnostics = connection.diagnostics();
         releaseChecked();
