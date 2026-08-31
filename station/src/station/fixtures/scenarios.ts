@@ -10,7 +10,7 @@ import type {
   WorktreeRow,
 } from "@station/contracts";
 import { STATION_SCHEMA_VERSION, worktreeDisplayForAgentState } from "@station/contracts";
-import { mockObserverSnapshot } from "../../sources/fixtures/mockObserverSnapshot.js";
+import { mockObserverSnapshot } from "../../client/fixtures/mockObserverSnapshot.js";
 
 export const SCENARIO_NOW = "2026-06-12T12:00:00.000Z";
 const SCENARIO_NOW_MS = Date.parse(SCENARIO_NOW);

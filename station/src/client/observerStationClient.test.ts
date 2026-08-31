@@ -3,7 +3,7 @@ import type { StationEvent, StationSnapshot } from "@station/contracts";
 import { afterEach, describe, expect, it } from "bun:test";
 import { mockObserverSnapshot } from "./fixtures/mockObserverSnapshot.js";
 import { createObserverStationClient } from "./observerStationClient.js";
-import type { StationClient } from "./types.js";
+import type { StationClient } from "./stationClient.js";
 
 describe("createObserverStationClient", () => {
   const clients: StationClient[] = [];

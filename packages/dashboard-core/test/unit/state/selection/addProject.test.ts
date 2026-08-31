@@ -148,7 +148,7 @@ describe("add-project shared selection", () => {
       { type: "loadProjectDirectory", path: "/workspace/station" },
     ]);
     expect(handleTuiKey(child, { input: "", leftArrow: true }, KEY_CONTEXT).operations).toEqual([
-      { type: "loadProjectDirectory", path: "/" },
+      { type: "loadProjectDirectory", path: "/workspace", parent: true },
     ]);
   });
 

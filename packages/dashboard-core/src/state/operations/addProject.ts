@@ -25,10 +25,15 @@ type ProjectPathOperationInput = {
   scope: DashboardRuntimeEffectScope;
 };
 
+type LoadProjectDirectoryOperationInput = ProjectPathOperationInput & {
+  parent?: true;
+};
+
 export async function runLoadProjectDirectoryOperation(
-  input: ProjectPathOperationInput,
+  input: LoadProjectDirectoryOperationInput,
 ): Promise<void> {
-  const { store, folderService, path, clientLabel, scope } = input;
+  const { store, folderService, clientLabel, scope } = input;
+  const path = input.parent === true ? folderService.parent(input.path) : input.path;
   await runFolderRequest(
     scope,
     () => folderService.readDirectory(path),

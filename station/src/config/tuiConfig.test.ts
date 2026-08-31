@@ -6,6 +6,7 @@ import type { DashboardRuntime } from "@station/dashboard-core/runtime";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
+import { createFakeFolderService } from "../station/test/support/fakeFolderService.js";
 import {
   createStationTestDashboardRuntime,
   makeStationTestRuntime,
@@ -197,6 +198,7 @@ root = "${projectRoot}"
     let shutdown: Promise<void> | undefined;
     let composition!: ReturnType<typeof createStation>;
     composition = createStation({
+      folderService: createFakeFolderService(),
       store: createStationStore(),
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {

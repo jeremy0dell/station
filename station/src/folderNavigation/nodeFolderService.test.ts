@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { createNodeFolderService } from "../../../src/services/folderService.js";
+import { afterEach, describe, expect, it } from "bun:test";
+import { createNodeFolderService } from "./nodeFolderService.js";
 
 describe("node folder service", () => {
   const temporaryRoots: string[] = [];

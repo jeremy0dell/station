@@ -88,6 +88,7 @@ export function createTuiLocalOperationRunner(input: {
           store: store(),
           folderService: input.folderService,
           path: operation.path,
+          ...(operation.parent === true ? { parent: true } : {}),
           clientLabel: input.clientLabel,
           scope: input.scope,
         }),

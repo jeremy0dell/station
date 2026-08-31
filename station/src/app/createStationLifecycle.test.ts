@@ -4,6 +4,7 @@ import { createStationStore } from "../state/store.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
+import { createFakeFolderService } from "../station/test/support/fakeFolderService.js";
 import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { waitFor } from "../terminal/testing/waitFor.js";
 import { createStation } from "./createStation.js";
@@ -16,6 +17,7 @@ describe("native Station lifecycle", () => {
     const scripted = createScriptedTerminal();
     const store = createStationStore();
     const composition = createStation({
+      folderService: createFakeFolderService(),
       store,
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {
@@ -58,6 +60,7 @@ describe("native Station lifecycle", () => {
     let stopAttempts = 0;
     let shutdowns = 0;
     const composition = createStation({
+      folderService: createFakeFolderService(),
       store,
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {
@@ -109,6 +112,7 @@ describe("native Station lifecycle", () => {
     let cleanup: Promise<void> | undefined;
     let composition!: ReturnType<typeof createStation>;
     composition = createStation({
+      folderService: createFakeFolderService(),
       store: createStationStore(),
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
       stationClient: {
