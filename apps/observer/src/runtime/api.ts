@@ -278,6 +278,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
         options,
         harnessIngressQueue,
         metadataRefresh,
+        reconcileScheduler,
         stopProviderHealthPublication,
         clock,
       ),
@@ -609,10 +610,12 @@ async function buildStop(
   options: CreateObserverApiOptions,
   harnessIngressQueue: HarnessIngressQueue,
   metadataRefresh: WorktreeMetadataRefreshService | undefined,
+  reconcileScheduler: ReturnType<typeof createReconcileScheduler>,
   stopProviderHealthPublication: () => Promise<void>,
   clock: RuntimeClock,
 ): Promise<ObserverStopReceipt> {
   await options.onShutdownStarted?.();
+  await reconcileScheduler.shutdown();
   const providerHealthStopped = stopProviderHealthPublication();
   await harnessIngressQueue.shutdown();
   await metadataRefresh?.shutdown();
