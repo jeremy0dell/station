@@ -390,6 +390,7 @@ describe("the station-button layer (island ↵ jump)", () => {
       sessionId: flagged.session.id,
       terminalTargetId: `native:${flagged.worktree.id}`,
     });
+    store.actions.focusPane(MAIN_PANE_ID);
     store.actions.setStationButtonHover(true);
     expect(routeKey("\r", store.getState(), keymapFor(snapshot))).toEqual({
       kind: "focus",
@@ -397,7 +398,26 @@ describe("the station-button layer (island ↵ jump)", () => {
     });
   });
 
-  it("opens the overlay instead of focusing another session in the same worktree", () => {
+  it("delivers ↵ to the flagged session when its agent pane is already focused", () => {
+    const snapshot = attentionAndFailuresSnapshot();
+    const flagged = flaggedSession(snapshot);
+    const paneId = agentWorktreePaneId(flagged.worktree.id);
+    const store = createStationStore();
+    store.actions.createPane(paneId, { role: "primary-agent" });
+    store.actions.setPrimaryAgent(paneId, {
+      sessionId: flagged.session.id,
+      terminalTargetId: `native:${flagged.worktree.id}`,
+    });
+    store.actions.setStationButtonHover(true);
+
+    expect(routeKey("\r", store.getState(), keymapFor(snapshot))).toEqual({
+      kind: "terminal-write",
+      paneId,
+      bytes: "\r",
+    });
+  });
+
+  it("opens the overlay when the focused pane belongs to another session in the same worktree", () => {
     const base = attentionAndFailuresSnapshot();
     const flagged = flaggedSession(base);
     const local = base.sessions.find((session) => session.status.value === "working");
