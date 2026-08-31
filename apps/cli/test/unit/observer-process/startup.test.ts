@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { startObserver } from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
 import type { ObserverHealth, SafeError } from "@station/contracts";
@@ -68,6 +68,33 @@ function unavailableClientFactory(message = "stopped") {
 }
 
 describe("CLI observer process startup", () => {
+  it("narrows an existing socket directory before spawning", async () => {
+    const fixture = await createTempState();
+    const socketDir = dirname(fixture.socketPath);
+    await mkdir(socketDir, { recursive: true });
+    await chmod(socketDir, 0o755);
+    let modeAtSpawn: number | undefined;
+    let spawned = false;
+
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 10_000 },
+      {
+        spawnObserver: async () => {
+          modeAtSpawn = (await stat(socketDir)).mode & 0o777;
+          spawned = true;
+          return fakeChild();
+        },
+        clientFactory: fakeClientFactory(async () => {
+          if (!spawned) throw new Error("stopped");
+          return healthyObserver();
+        }),
+      },
+    );
+
+    expect(result).toMatchObject({ status: "running" });
+    expect(modeAtSpawn).toBe(0o700);
+  });
+
   it("recomputes the child startup timeout immediately before spawn", async () => {
     const fixture = await createTempState();
     const deadlineMs = Date.now() + 10_000;

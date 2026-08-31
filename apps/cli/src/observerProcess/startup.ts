@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { chmod, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES,
@@ -95,7 +95,9 @@ export async function startObserverProcess(
     async ({ signal }) => {
       try {
         await mkdir(input.paths.stateDir, { recursive: true, mode: 0o700 });
-        await mkdir(dirname(input.paths.socketPath), { recursive: true, mode: 0o700 });
+        const socketDir = dirname(input.paths.socketPath);
+        await mkdir(socketDir, { recursive: true, mode: 0o700 });
+        await chmod(socketDir, 0o700);
         const spawnInput: SpawnObserverInput = {
           paths: input.paths,
           startupTimeoutMs: input.timeoutMs,
