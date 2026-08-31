@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { resolveStationObserverSocketPath } from "./stationSocketPath.js";
+import { resolveStationObserverSocketPath } from "./observerSocketPath.js";
 
 describe("resolveStationObserverSocketPath", () => {
   it("prefers the explicit override", () => {

@@ -30,7 +30,7 @@ import { createSessionReaper } from "../state/reconcilers/sessionReaper.js";
 import { selectPaneRecord } from "../state/selectors.js";
 import type { StationStore } from "../state/store.js";
 import type { PaneId } from "../state/types.js";
-import type { StationClient } from "../sources/types.js";
+import type { StationClient } from "../client/stationClient.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import {
   createStationDashboardRuntime,

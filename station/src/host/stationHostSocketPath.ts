@@ -1,5 +1,5 @@
 import { dirname, join } from "node:path";
-import { resolveStationObserverSocketPath } from "./stationSocketPath.js";
+import { resolveStationObserverSocketPath } from "../config/observerSocketPath.js";
 
 /**
  * Station host socket lives beside the observer socket unless explicitly

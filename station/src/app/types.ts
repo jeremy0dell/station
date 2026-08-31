@@ -15,7 +15,7 @@ import type { ClipboardEffects } from "../copy/clipboard.js";
 import type { StationInputRuntime } from "../input/stationInput.js";
 import type { StationLayoutSnapshot } from "../state/layout/layoutSnapshot.js";
 import type { StationStore } from "../state/store.js";
-import type { StationClient } from "../sources/types.js";
+import type { StationClient } from "../client/stationClient.js";
 import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import type { ManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import type { DashboardScrollController } from "../station/view/layout/scroll/dashboardScrollController.js";

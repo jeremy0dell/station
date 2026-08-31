@@ -7,7 +7,7 @@ import { createDashboardRuntime } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities, DashboardRuntime, TuiFolderService } from "@station/dashboard-core/runtime";
 import type { DashboardGroupHeaderActionVisibility } from "@station/dashboard-core/state";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
-import type { StationClient } from "../../sources/types.js";
+import type { StationClient } from "../../client/stationClient.js";
 import { stationHelpEntryOrder } from "../helpEntries.js";
 import {
   createDashboardScrollController,

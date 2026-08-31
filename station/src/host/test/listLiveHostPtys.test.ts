@@ -7,7 +7,7 @@ import {
   StationHostProviderError,
   type HostListEntry,
 } from "@station/host";
-import { listLiveHostPtys } from "./listLiveHostPtys.js";
+import { listLiveHostPtys } from "../listLiveHostPtys.js";
 
 const EXPECTED_BUILD_VERSION = "build-current";
 

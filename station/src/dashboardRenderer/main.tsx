@@ -21,7 +21,7 @@ import { DecMode } from "../terminal/protocol/decset.js";
 import { CsiCommand } from "../terminal/protocol/identifiers.js";
 import { VtPrefix } from "../terminal/protocol/syntax.js";
 import { openExternalUrl } from "../openUrl.js";
-import { createStationClient } from "../sources/createStationClient.js";
+import { createStationClient } from "../client/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { stationHelpEntryOrder } from "../station/helpEntries.js";
 import { createDashboardScrollController } from "../station/view/layout/scroll/dashboardScrollController.js";

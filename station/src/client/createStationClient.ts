@@ -2,8 +2,8 @@ import type { SafeError } from "@station/contracts";
 import { stationObserverBuildVersion } from "@station/runtime";
 import { createMockStationClient } from "./mockStationClient.js";
 import { createObserverStationClient } from "./observerStationClient.js";
-import { resolveStationObserverSocketPath } from "./stationSocketPath.js";
-import type { StationClient } from "./types.js";
+import { resolveStationObserverSocketPath } from "../config/observerSocketPath.js";
+import type { StationClient } from "./stationClient.js";
 import {
   STATION_SCENARIO_NAMES,
   type StationScenarioName,

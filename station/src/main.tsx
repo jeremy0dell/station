@@ -48,12 +48,12 @@ import {
   type HostAttachedTerminalOptions,
 } from "./terminal/pty/hostAttachedTerminal.js";
 import { createStationHostManagedTerminalAttacher } from "./terminal/pty/managedTerminalAttacher.js";
-import { playStationAttentionSound } from "./sources/attentionSound.js";
-import { createStationClient } from "./sources/createStationClient.js";
+import { playStationAttentionSound } from "./attention/attentionSound.js";
+import { createStationClient } from "./client/createStationClient.js";
 import { openExternalUrl } from "./openUrl.js";
-import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
-import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js";
-import { resolveStationLayoutPath } from "./sources/stationLayoutPath.js";
+import { listLiveHostPtys } from "./host/listLiveHostPtys.js";
+import { resolveStationHostSocketPath } from "./host/stationHostSocketPath.js";
+import { resolveStationLayoutPath } from "./state/layout/stationLayoutPath.js";
 import { nativeStationTheme, StationThemeProvider } from "./theme/index.js";
 import type { PreparedPtyRuntime } from "./bin/packagedAssets.js";
 import {

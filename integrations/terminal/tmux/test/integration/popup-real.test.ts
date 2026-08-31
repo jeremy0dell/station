@@ -24,7 +24,7 @@ import {
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { tmuxPopupRunShellCommand } from "../../../../../apps/cli/src/commands/setup/checks/tmuxBinding.js";
-import { mockObserverSnapshot } from "../../../../../station/src/sources/fixtures/mockObserverSnapshot.js";
+import { mockObserverSnapshot } from "../../../../../station/src/client/fixtures/mockObserverSnapshot.js";
 import {
   buildManagedFastPopupRunShellCommand,
   ensurePersistentPopupSession,

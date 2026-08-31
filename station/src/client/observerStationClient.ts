@@ -4,7 +4,7 @@ import {
   type ObserverService,
 } from "@station/client";
 import { isStationAttentionEvent, type StationAttentionEvent } from "./attentionEvents.js";
-import type { StationClient } from "./types.js";
+import type { StationClient } from "./stationClient.js";
 
 export type CreateObserverStationClientOptions = {
   socketPath?: string;

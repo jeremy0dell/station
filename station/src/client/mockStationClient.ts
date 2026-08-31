@@ -1,7 +1,7 @@
 import type { StationClientState, StationClientStateSource } from "@station/client";
 import { scenarioState, type StationScenarioName } from "../station/fixtures/scenarios.js";
 import { createStationStubObserverService } from "../station/store/stubObserverService.js";
-import type { StationClient } from "./types.js";
+import type { StationClient } from "./stationClient.js";
 
 export function createMockStationClient(scenario: StationScenarioName = "baseline"): StationClient {
   const state = createStaticStateSource(scenarioState(scenario));
