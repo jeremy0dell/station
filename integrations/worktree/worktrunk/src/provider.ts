@@ -536,7 +536,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         "remove",
         ...this.#automationHookArgs(),
         ...removalFlags,
-        // Omit --foreground so staged-trash cleanup can remain detached after logical removal.
+        "--foreground",
         "--format=json",
       ]),
       undefined,
