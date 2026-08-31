@@ -2,7 +2,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -186,7 +186,10 @@ async function runCell(input) {
   const cellId = `${input.version}-${input.mode}-${input.role}`;
   const cellRoot = join(input.matrixRoot, "cells", cellId);
   await mkdir(cellRoot, { recursive: true, mode: 0o700 });
-  const fixture = await writeIncidentFixture(join(cellRoot, "fixture"));
+  const socketRoot = await mkdtemp(join(tmpdir(), "stn-mem-"));
+  const fixture = await writeIncidentFixture(join(cellRoot, "fixture"), {
+    socketPath: join(socketRoot, "observer.sock"),
+  });
   const schedulePath = join(fixture.root, "schedule.json");
   await writeJson(schedulePath, fixture.schedule);
   const targetSamplePath = join(cellRoot, "target-memory.jsonl");
@@ -238,7 +241,7 @@ async function runCell(input) {
     role: "memory-profile",
     checkoutRoot: repoRoot,
     stateDir: ownerStateDir,
-    socketRoots: [join(fixture.root, "run")],
+    socketRoots: [socketRoot],
     persistenceRoots: [cellRoot, fixture.stateDir],
     survivorPolicy: "preserve-persistent-station-runtime",
     terminalKey: `memory-profile-${cellId}`,
@@ -252,6 +255,7 @@ async function runCell(input) {
       env: { STATION_RUNTIME_OWNER_FOREGROUND: "1" },
     },
   });
+  await rm(socketRoot, { recursive: true });
   let cellResult;
   try {
     cellResult = JSON.parse(await readFile(join(cellRoot, "cell-result.json"), "utf8"));
