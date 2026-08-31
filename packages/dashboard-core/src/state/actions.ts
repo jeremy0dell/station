@@ -1,7 +1,7 @@
 import type { ProjectId, SessionGroupId, SessionId } from "@station/contracts";
 import type { CreateGroupActionId } from "../components/GroupCreateSheet/content.js";
 import type { AddProjectActionId } from "../flows/addProject/actions.js";
-import type { NewSessionActionId } from "../flows/newSession.js";
+import type { NewSessionActionId } from "../flows/newSession/actions.js";
 import type { DashboardCellId, DashboardRowId } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
 import { activateDashboardCell } from "./dashboardCells.js";
@@ -9,7 +9,7 @@ import type { TuiKey } from "./keys.js";
 import { openDashboardRowShell } from "./rowActivation.js";
 import { tuiScreenBehavior } from "./screenBehavior.js";
 import { handleAddProjectAction, selectAddProjectRow } from "./screens/addProjectScreen.js";
-import { handleFirstProjectAddAction, openNewSession } from "./screens/dashboard.js";
+import { handleFirstProjectAddAction } from "./screens/dashboard.js";
 import {
   type ForkSessionActionId,
   handleForkSessionAction,
@@ -35,7 +35,7 @@ import {
   selectMoveToGroupDestination,
   submitMoveToGroupCreate,
 } from "./screens/moveToGroup.js";
-import { handleNewSessionAction } from "./screens/newSession.js";
+import { handleNewSessionAction, openNewSession } from "./screens/newSession.js";
 import {
   applyDashboardPersistentFilter,
   clearDashboardPersistentFilter,

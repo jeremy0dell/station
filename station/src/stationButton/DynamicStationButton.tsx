@@ -1,6 +1,6 @@
 import type { MouseEvent } from "@opentui/core";
 import { textCellUnits } from "@station/dashboard-core/text";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   isPrimaryMouseEvent,
   isRightMouseEvent,
@@ -66,11 +66,25 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
   const { input, onHoverChange } = props;
   const attention = input.status.attention;
   const [internalHover, setInternalHover] = useState(false);
+  const externalHoverActive = useRef(false);
+  const onHoverChangeRef = useRef(onHoverChange);
+  onHoverChangeRef.current = onHoverChange;
   const expanded = (props.hovered ?? false) || (props.focused ?? false) || internalHover;
   const handleHoverChange = (hovering: boolean): void => {
     setInternalHover(hovering);
-    onHoverChange?.(hovering);
+    externalHoverActive.current = hovering;
+    onHoverChangeRef.current?.(hovering);
   };
+  useEffect(
+    () => () => {
+      if (!externalHoverActive.current) {
+        return;
+      }
+      externalHoverActive.current = false;
+      onHoverChangeRef.current?.(false);
+    },
+    [],
+  );
   const pointerProps = useHoverPointer({
     acquireOnMouseOver: false,
     onHoverChange: handleHoverChange,

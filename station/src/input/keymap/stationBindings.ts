@@ -195,6 +195,11 @@ function createStationButtonLayer(
             pane?.role === "primary-agent" &&
             pane.agentIdentity?.sessionId === row.session.id
           ) {
+            // The island may intercept Enter only to change surfaces. Once the
+            // requesting pane owns focus, Enter is terminal input for Codex.
+            if (state.input.focus.kind === "pane" && state.input.focus.paneId === paneId) {
+              return { kind: "terminal-write", paneId, bytes: C0.CarriageReturn };
+            }
             return { kind: "focus", target: { kind: "pane", paneId } };
           }
           return { kind: "overlay-open", overlayId: STATION_OVERLAY_ID };
