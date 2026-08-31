@@ -309,7 +309,14 @@ async function spawnProfileProcess(spec, manifest, label) {
         } catch {
           // The owner will still verify and reap the process group.
         }
-        await Promise.race([exited, delay(3_000)]);
+        const terminated = await Promise.race([
+          exited.then(() => true),
+          delay(3_000).then(() => false),
+        ]);
+        if (!terminated) {
+          child.kill("SIGKILL");
+          await Promise.race([exited, delay(3_000)]);
+        }
       },
     };
   }
