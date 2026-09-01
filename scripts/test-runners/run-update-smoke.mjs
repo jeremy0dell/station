@@ -310,7 +310,7 @@ async function runScenario(input) {
   const stateDir = join(scenarioRoot, "state");
   const runtimeDir = join(input.root, "r", scenarioKey);
   const tempDir = join(scenarioRoot, "tmp");
-  const tmuxTempDir = join(input.root, "m", scenarioKey);
+  const tmuxTempDir = await mkdtemp(join("/tmp", `stn-tmux-${scenarioKey}-`));
   const installDir = join(scenarioRoot, "bin");
   const configPath = join(configHome, "station", "config.toml");
   const socketPath = join(runtimeDir, "observer.sock");
@@ -534,22 +534,12 @@ async function runScenario(input) {
           );
     assertEqual(updateResult.code, expectedUpdateCode, `${input.name} update exit code`);
     if (preservedRefusal) {
-      assertEqual(updateResult.stdout, "", `${input.name} refused update stdout`);
-      assertIncludes(
-        updateResult.stderr,
-        "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
-        `${input.name} refused update code`,
+      const report = parseComposedUpdateReport(
+        parseJson(updateResult.stdout, `${input.name} update report`),
+        input.options.incumbentVersion,
       );
-      assertIncludes(
-        updateResult.stderr,
-        "Host terminals are not all eligible for live handoff.",
-        `${input.name} refused update reason`,
-      );
-      assertDeepEqual(
-        await captureDryRunState(dryRunStateInput),
-        beforeDryRun,
-        `${input.name} refused update persistent and runtime state`,
-      );
+      assertUpdateReport(report, input, installedBinary, configPath);
+      assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
     } else {
       const report = parseComposedUpdateReport(
         parseJson(updateResult.stdout, `${input.name} update report`),
@@ -563,19 +553,28 @@ async function runScenario(input) {
     }
 
     if (preservedRefusal) {
-      const preservedObserver = await waitForObserver(
-        observerClient,
-        input.options.incumbentVersion,
+      const targetObserver = await waitForObserver(observerClient, input.target.version);
+      diagnostics.observerPid = targetObserver.pid;
+      await recordProcessIdentity(processIdentities, "target-observer", targetObserver.pid);
+      assertObserverBuildIdentity(
+        targetObserver.version,
+        input.target.buildIdentity,
+        `${input.name} target Observer`,
       );
-      assertEqual(
-        preservedObserver.pid,
+      assertNotEqual(
+        targetObserver.pid,
         incumbentObserver.pid,
-        `${input.name} incumbent Observer identity preserved`,
+        `${input.name} Observer replacement PID`,
       );
       assertDeepEqual(
         readUnixSocketHolderPids(socketPath),
-        [incumbentObserver.pid],
-        `${input.name} incumbent Observer holder preserved`,
+        [targetObserver.pid],
+        `${input.name} target Observer holder`,
+      );
+      assertEqual(
+        await waitForExactProcessExit(processIdentities.get("incumbent-observer"), 10_000),
+        true,
+        `${input.name} incumbent Observer exit`,
       );
     } else {
       const targetObserver = await waitForObserver(observerClient, input.target.version);
@@ -696,7 +695,7 @@ async function runScenario(input) {
       tmuxTempDir,
       tmuxServer,
       name: input.name,
-      expectNativeRefusal: false,
+      expectNativeRefusal: preservedRefusal,
       processIdentities,
     });
     if (input.busyHost) {
@@ -735,10 +734,7 @@ async function runScenario(input) {
     await observerClient.stop();
     await waitForMissing(socketPath, 10_000);
     assertEqual(
-      await waitForExactProcessExit(
-        processIdentities.get(preservedRefusal ? "incumbent-observer" : "target-observer"),
-        10_000,
-      ),
+      await waitForExactProcessExit(processIdentities.get("target-observer"), 10_000),
       true,
       `${input.name} active Observer cleanup`,
     );
@@ -785,6 +781,9 @@ async function runScenario(input) {
     await cleanupAction(cleanupWarnings, "tmux residue", async () => {
       await assertNoSocketsUnder(tmuxTempDir);
       assertEqual((await readFile(tmuxAudit.bareLogPath, "utf8")).length, 0, "bare tmux audit log");
+    });
+    await cleanupAction(cleanupWarnings, "tmux temp directory", async () => {
+      await rm(tmuxTempDir, { recursive: true, force: true });
     });
     await cleanupAction(cleanupWarnings, "Host cleanup", async () => {
       if (!(await pathExists(hostSocketPath))) return;
@@ -1182,14 +1181,10 @@ async function assertExactTransportRequests(transportDir, input) {
   ];
   const expected = [
     ...detectionRequests,
-    ...(input.busyHost && input.options.busyHostOutcome === "preserved-refusal"
-      ? []
-      : [
-          releaseDownloadUrl(input.target.tag, "install.sh"),
-          releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
-          releaseDownloadUrl(input.target.tag, archiveName),
-          releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
-        ]),
+    releaseDownloadUrl(input.target.tag, "install.sh"),
+    releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
+    releaseDownloadUrl(input.target.tag, archiveName),
+    releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
   ].sort();
   assertDeepEqual(actual, expected, `${input.name} exact update transport requests`);
 }
@@ -1659,7 +1654,7 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
       "completed",
       "completed",
       "completed",
-      refusal ? "failed" : "completed",
+      refusal ? "failed" : input.busyHost ? "completed" : "skipped",
     ],
     `${input.name} exact update step outcomes`,
   );

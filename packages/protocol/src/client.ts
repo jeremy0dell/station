@@ -80,6 +80,8 @@ export type CreateObserverClientOptions = {
   expectedObserverIdentity?: ExpectedObserverIdentity;
   /** Negotiates the immediately previous schema for health, readiness, and stop during an upgrade crossover. */
   acceptPreviousLifecycleSchema?: boolean;
+  /** Records when a lifecycle response was received from the immediately previous schema. */
+  onPreviousLifecycleSchema?: () => void;
   /** Receives content-free metrics after each physical connection settles. */
   onConnectionDiagnostics?: (diagnostics: NdjsonTransportDiagnostics) => void;
 };
@@ -333,6 +335,7 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
             params,
             acceptPreviousLifecycleSchema,
             usePreviousLifecycleSchema,
+            options.onPreviousLifecycleSchema,
           );
         });
 
@@ -399,6 +402,7 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
   params?: unknown,
   acceptPreviousLifecycleSchema = false,
   usePreviousLifecycleSchema = false,
+  onPreviousLifecycleSchema?: () => void,
 ): Promise<ProtocolResult<TMethod>> {
   const request = protocolRequest(id, method, params);
   sendProtocolMessage(
@@ -416,6 +420,7 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
     if (acceptPreviousLifecycleSchema && !usePreviousLifecycleSchema) {
       const previousError = PreviousLifecycleErrorResponseSchema.safeParse(next.value);
       if (previousError.success && previousError.data.id === id) {
+        onPreviousLifecycleSchema?.();
         throw protocolSafeError({
           code: PREVIOUS_LIFECYCLE_SCHEMA_REQUIRED,
           message: "Observer requires the immediately previous lifecycle schema.",
@@ -426,6 +431,7 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
     if (response.id !== id) {
       continue;
     }
+    if (isPreviousLifecycleSchemaMessage(next.value)) onPreviousLifecycleSchema?.();
     return parseProtocolResponseResult(response, method);
   }
 }
@@ -735,6 +741,11 @@ function parseProtocolResponseMessage(
   }
   throwProtocolSchemaMismatchIfPresent(message);
   throw parsed.error;
+}
+
+function isPreviousLifecycleSchemaMessage(message: unknown): boolean {
+  const parsed = ProtocolSchemaVersionProbeSchema.safeParse(message);
+  return parsed.success && parsed.data.schemaVersion === PREVIOUS_LIFECYCLE_SCHEMA_VERSION;
 }
 
 function normalizePreviousLifecycleResponse(message: unknown): ProtocolResponse | undefined {
