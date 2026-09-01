@@ -23,6 +23,10 @@ export type ObserverStatus =
       status: "running";
       paths: ObserverPaths;
       health: ObserverHealth;
+      /** The incumbent answered with the previous lifecycle schema during restart. */
+      previousLifecycleSchema?: true;
+      /** Render the restart result for a predecessor that only understands the previous schema. */
+      restartResultSchema?: "0.11.0";
     }
   | {
       status: "stopped" | "stale" | "unhealthy";
@@ -68,7 +72,10 @@ export type ObserverProcessDeps = {
     socketPath: string,
     options?: Pick<
       CreateObserverClientOptions,
-      "acceptPreviousLifecycleSchema" | "expectedObserverIdentity" | "timeoutMs"
+      | "acceptPreviousLifecycleSchema"
+      | "expectedObserverIdentity"
+      | "onPreviousLifecycleSchema"
+      | "timeoutMs"
     >,
   ) => ReturnType<typeof createObserverClient>;
   /** Test/composition seam for bounded Unix-socket ownership inspection. */

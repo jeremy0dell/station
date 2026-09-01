@@ -122,7 +122,7 @@ describe("contract schemas", () => {
       schemaVersion: 1,
       launcher: "/source/bin/stn-ingress",
       runtimeKind: "source",
-      version: "0.0.0-pre-alpha.10",
+      version: "0.0.0-pre-alpha.11",
       buildIdentity: "a".repeat(64),
     } as const;
     const current = {
@@ -2641,6 +2641,16 @@ describe("contract schemas", () => {
         startupEvidence,
       }),
     ).toMatchObject({ status: "unhealthy", cause, startupEvidence });
+    expect(
+      ObserverRestartCommandResultSchema.parse({
+        status: "running",
+        socketPath: "/tmp/station/run/observer.sock",
+        health: {
+          schemaVersion: "0.11.0",
+          status: "healthy",
+        },
+      }),
+    ).toMatchObject({ status: "running", health: { schemaVersion: "0.11.0" } });
     expect(
       ObserverStartupFailureReportSchema.parse({
         kind: "observer-startup-failure",

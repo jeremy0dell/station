@@ -1116,6 +1116,7 @@ describe("protocol client/server", () => {
       at: protocolTestNow,
     } as const;
     let connectionCount = 0;
+    let previousLifecycleSchemaResponses = 0;
     const server = await listenUnixSocket({
       socketPath,
       onConnection: async (connection) => {
@@ -1154,6 +1155,9 @@ describe("protocol client/server", () => {
     const client = createObserverClient({
       socketPath,
       acceptPreviousLifecycleSchema: true,
+      onPreviousLifecycleSchema: () => {
+        previousLifecycleSchemaResponses += 1;
+      },
     });
 
     try {
@@ -1175,6 +1179,7 @@ describe("protocol client/server", () => {
         schemaVersion: STATION_SCHEMA_VERSION,
       });
       expect(connectionCount).toBe(6);
+      expect(previousLifecycleSchemaResponses).toBeGreaterThan(0);
     } finally {
       await server.close();
     }

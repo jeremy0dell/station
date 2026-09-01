@@ -269,7 +269,7 @@ describe("setup plan projection", () => {
       schemaVersion: 1 as const,
       launcher: "/source/bin/stn-ingress",
       runtimeKind: "source" as const,
-      version: "0.0.0-pre-alpha.10",
+      version: "0.0.0-pre-alpha.11",
       buildIdentity: "a".repeat(64),
     };
     const current = {
