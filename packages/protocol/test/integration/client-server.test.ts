@@ -1079,6 +1079,107 @@ describe("protocol client/server", () => {
     }
   });
 
+  it("normalizes previous health provider IDs and readiness responses", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const previousRequestSchema = z
+      .object({
+        schemaVersion: z.literal("0.11.0"),
+        jsonrpc: z.literal("2.0"),
+        id: z.string().min(1),
+        method: z.enum(["observer.health", "session.recoveryReadiness", "observer.stop"]),
+      })
+      .strict();
+    const legacyHealth = {
+      schemaVersion: "0.11.0",
+      status: "healthy",
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: "0.0.0",
+      providerHealth: {
+        tmux: {
+          providerId: "tmux",
+          providerType: "terminal",
+          status: "healthy",
+          lastCheckedAt: protocolTestNow,
+        },
+      },
+    } as const;
+    const readiness = {
+      resumeEnabled: true,
+      canonicalTitleImport: true,
+      managedTerminal: { provider: "native", canLaunchProcessPersistently: true },
+      harnesses: [],
+    } as const;
+    const legacyStop = {
+      schemaVersion: "0.11.0",
+      stopped: true,
+      at: protocolTestNow,
+    } as const;
+    let connectionCount = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const request = (await iterator.next()).value;
+        if (connectionCount % 2 === 1) {
+          const currentRequest = ProtocolRequestSchema.parse(request);
+          connection.send({
+            schemaVersion: "0.11.0",
+            jsonrpc: "2.0",
+            id: currentRequest.id,
+            error: {
+              tag: "ProtocolError",
+              code: "PROTOCOL_ERROR",
+              message: "Invalid protocol request.",
+            },
+          });
+          return;
+        }
+
+        const previousRequest = previousRequestSchema.parse(request);
+        connection.send({
+          schemaVersion: "0.11.0",
+          jsonrpc: "2.0",
+          id: previousRequest.id,
+          result:
+            previousRequest.method === "observer.health"
+              ? legacyHealth
+              : previousRequest.method === "observer.stop"
+                ? legacyStop
+                : readiness,
+        });
+      },
+    });
+    const client = createObserverClient({
+      socketPath,
+      acceptPreviousLifecycleSchema: true,
+    });
+
+    try {
+      await expect(client.health()).resolves.toEqual({
+        ...legacyHealth,
+        schemaVersion: STATION_SCHEMA_VERSION,
+        providerHealth: {
+          tmux: {
+            provider: "tmux",
+            providerType: "terminal",
+            status: "healthy",
+            lastCheckedAt: protocolTestNow,
+          },
+        },
+      });
+      await expect(client.getSessionRecoveryReadiness()).resolves.toEqual(readiness);
+      await expect(client.stop()).resolves.toEqual({
+        ...legacyStop,
+        schemaVersion: STATION_SCHEMA_VERSION,
+      });
+      expect(connectionCount).toBe(6);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("checks legacy process health and stops it on one connection", async () => {
     const { socketPath } = await createTempSocketPath();
     const expectedObserverIdentity = {

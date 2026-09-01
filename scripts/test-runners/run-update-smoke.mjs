@@ -397,7 +397,11 @@ async function runScenario(input) {
     );
     diagnostics.observerPid = incumbentObserver.pid;
     await recordProcessIdentity(processIdentities, "incumbent-observer", incumbentObserver.pid);
-    observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+    observerClient = createObserverClient({
+      socketPath,
+      timeoutMs: 5000,
+      acceptPreviousLifecycleSchema: true,
+    });
 
     if (input.busyHost) {
       incumbentHostProcess = spawn(
@@ -1005,6 +1009,7 @@ async function captureDryRunState(input) {
     socketPath: input.socketPath,
     timeoutMs: 5000,
     expectedBuildVersion: input.observerBuildVersion,
+    acceptPreviousLifecycleSchema: true,
   });
   const observerHealth = await observer.health();
   const observerIdentity = {
