@@ -166,10 +166,14 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
     };
   }
   if ("health" in result) {
+    const health =
+      "restartResultSchema" in result && result.restartResultSchema === "0.11.0"
+        ? previousObserverHealth(result.health)
+        : result.health;
     return {
       status: result.status,
       socketPath: result.paths.socketPath,
-      health: result.health satisfies ObserverHealth,
+      health,
       ...("lifecycle" in result ? { lifecycle: result.lifecycle } : {}),
     };
   }
@@ -177,4 +181,28 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
     return result;
   }
   return result satisfies ObserverStopReceipt;
+}
+
+type PreviousObserverHealth = Omit<ObserverHealth, "schemaVersion" | "providerHealth"> & {
+  schemaVersion: "0.11.0";
+};
+
+function previousObserverHealth(health: ObserverHealth): PreviousObserverHealth {
+  const result: PreviousObserverHealth = {
+    schemaVersion: "0.11.0",
+    status: health.status,
+  };
+  if (health.pid !== undefined) result.pid = health.pid;
+  if (health.startedAt !== undefined) result.startedAt = health.startedAt;
+  if (health.version !== undefined) result.version = health.version;
+  if (health.socketPath !== undefined) result.socketPath = health.socketPath;
+  if (health.stateDir !== undefined) result.stateDir = health.stateDir;
+  if (health.uptimeMs !== undefined) result.uptimeMs = health.uptimeMs;
+  if (health.hookSpoolDepth !== undefined) result.hookSpoolDepth = health.hookSpoolDepth;
+  if (health.harnessIngressQueue !== undefined) {
+    result.harnessIngressQueue = health.harnessIngressQueue;
+  }
+  if (health.sqlite !== undefined) result.sqlite = health.sqlite;
+  if (health.lastReconcile !== undefined) result.lastReconcile = health.lastReconcile;
+  return result;
 }

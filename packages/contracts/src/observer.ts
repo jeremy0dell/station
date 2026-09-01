@@ -230,6 +230,11 @@ export const ObserverHealthSchema = z
 
 export type ObserverHealth = z.infer<typeof ObserverHealthSchema>;
 
+const PreviousObserverHealthSchema = ObserverHealthSchema.omit({
+  schemaVersion: true,
+  providerHealth: true,
+}).extend({ schemaVersion: z.literal("0.11.0") });
+
 /** Concrete local paths emitted with a non-running Observer command result. */
 export const ObserverCommandPathsSchema = z
   .object({
@@ -243,12 +248,19 @@ export const ObserverCommandPathsSchema = z
   .strict();
 
 /** Strict JSON result consumed when an update asks its selected launcher to converge Observer. */
-export const ObserverRestartCommandResultSchema = z.discriminatedUnion("status", [
+export const ObserverRestartCommandResultSchema = z.union([
   z
     .object({
       status: z.literal("running"),
       socketPath: nonEmptyStringSchema,
       health: ObserverHealthSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("running"),
+      socketPath: nonEmptyStringSchema,
+      health: PreviousObserverHealthSchema,
     })
     .strict(),
   ObserverLifecycleFailureSchema.extend({

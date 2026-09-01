@@ -7,7 +7,7 @@ can use it or help improve it.
 
 > [!IMPORTANT]
 > Station is experimental pre-alpha software. The current public version is
-> `v0.0.0-pre-alpha.10`. Native binaries support macOS 13+ and glibc 2.39+ Linux
+> `v0.0.0-pre-alpha.11`. Native binaries support macOS 13+ and glibc 2.39+ Linux
 > on arm64 and x64.
 
 ## Start Here
@@ -26,7 +26,7 @@ Choose the path that matches what you want to do:
 Install the current release:
 
 ```sh
-curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.10/install.sh | sh
+curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.11/install.sh | sh
 ```
 
 Then complete and verify setup:

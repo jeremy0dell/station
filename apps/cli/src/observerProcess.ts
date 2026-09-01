@@ -81,22 +81,25 @@ export async function getObserverStatus(
     return probe.status === "absent" ? { status: "stopped", paths } : observerHealthTimedOut(paths);
   }
 
+  let previousLifecycleSchema = false;
+  const clientOptions = {
+    timeoutMs: healthTimeoutMs,
+    acceptPreviousLifecycleSchema: true,
+    onPreviousLifecycleSchema: () => {
+      previousLifecycleSchema = true;
+    },
+  } as const;
   const client =
-    deps.clientFactory?.(paths.socketPath, {
-      timeoutMs: healthTimeoutMs,
-      acceptPreviousLifecycleSchema: true,
-    }) ??
-    createObserverClient({
-      socketPath: paths.socketPath,
-      timeoutMs: healthTimeoutMs,
-      acceptPreviousLifecycleSchema: true,
-    });
+    deps.clientFactory?.(paths.socketPath, clientOptions) ??
+    createObserverClient({ socketPath: paths.socketPath, ...clientOptions });
   try {
-    return {
+    const result: Extract<ObserverStatus, { status: "running" }> = {
       status: "running",
       paths,
       health: await client.health(),
     };
+    if (previousLifecycleSchema) result.previousLifecycleSchema = true;
+    return result;
   } catch (error) {
     const socketExists = probe.status === "listening";
     const safeError = observerConnectionError(error, paths, socketExists);
@@ -515,6 +518,8 @@ export async function restartObserver(
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverStatus> {
   const status = await getObserverStatus(options, deps);
+  const usePreviousLifecycleResult =
+    status.status === "running" && status.previousLifecycleSchema === true;
   const incumbentHealth = status.status === "running" ? status.health : undefined;
   if (status.status === "running") {
     const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
@@ -558,6 +563,9 @@ export async function restartObserver(
       ...started,
       error: annotateReplacedIncumbent(started.error, incumbentHealth),
     };
+  }
+  if (started.status === "running" && usePreviousLifecycleResult) {
+    return { ...started, restartResultSchema: "0.11.0" };
   }
   return started;
 }
