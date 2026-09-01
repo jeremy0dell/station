@@ -1676,7 +1676,7 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
       "completed",
       refusal
         ? "failed"
-        : !input.busyHost && input.target.mode === "staged"
+        : !input.busyHost && input.target.mode !== "source"
           ? "skipped"
           : "completed",
     ],
@@ -1726,7 +1726,7 @@ function assertLegacyUpdateReport(report, input, installedBinary, configPath) {
       "completed",
       refusal
         ? "failed"
-        : !input.busyHost && input.target.mode === "staged"
+        : !input.busyHost && input.target.mode !== "source"
           ? "skipped"
           : "completed",
     ],
