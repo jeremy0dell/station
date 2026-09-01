@@ -34,6 +34,8 @@ export type CreateObserverServiceOptions = {
   expectedBuildVersion?: string;
   timeoutMs?: number;
   reconcileTimeoutMs?: number;
+  /** Budget for host negotiation and process preparation. */
+  prepareExternalLaunchTimeoutMs?: number;
   commandWaitTimeoutMs?: number;
   clientLabel?: string;
   requestId?: () => string;
@@ -42,6 +44,7 @@ export type CreateObserverServiceOptions = {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_RECONCILE_TIMEOUT_MS = 30_000;
+const DEFAULT_PREPARE_EXTERNAL_LAUNCH_TIMEOUT_MS = 30_000;
 const DEFAULT_COMMAND_WAIT_TIMEOUT_MS = 35_000;
 
 /**
@@ -55,6 +58,8 @@ export function createObserverService(options: CreateObserverServiceOptions): Ob
   const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const reconcileTimeoutMs =
     options.reconcileTimeoutMs ?? options.timeoutMs ?? DEFAULT_RECONCILE_TIMEOUT_MS;
+  const prepareExternalLaunchTimeoutMs =
+    options.prepareExternalLaunchTimeoutMs ?? DEFAULT_PREPARE_EXTERNAL_LAUNCH_TIMEOUT_MS;
   const commandWaitTimeoutMs = options.commandWaitTimeoutMs ?? DEFAULT_COMMAND_WAIT_TIMEOUT_MS;
   let transportDiagnostics = emptyTransportDiagnostics();
   const recordConnectionDiagnostics = (diagnostics: NdjsonTransportDiagnostics) => {
@@ -63,6 +68,9 @@ export function createObserverService(options: CreateObserverServiceOptions): Ob
   const client = options.client ?? createClient(options, timeoutMs, recordConnectionDiagnostics);
   const reconcileClient =
     options.client ?? createClient(options, reconcileTimeoutMs, recordConnectionDiagnostics);
+  const prepareExternalLaunchClient =
+    options.client ??
+    createClient(options, prepareExternalLaunchTimeoutMs, recordConnectionDiagnostics);
   const copy = createObserverServiceCopy(options.clientLabel);
 
   return {
@@ -75,7 +83,12 @@ export function createObserverService(options: CreateObserverServiceOptions): Ob
     reconcile: (reason?: string) =>
       requestReconcile(reconcileClient, reason, reconcileTimeoutMs, copy),
     prepareExternalLaunch: (params: AgentPrepareExternalLaunchParams) =>
-      prepareExternalLaunch(client, params, timeoutMs, copy),
+      prepareExternalLaunch(
+        prepareExternalLaunchClient,
+        params,
+        prepareExternalLaunchTimeoutMs,
+        copy,
+      ),
     reportExternalExit: (params: AgentReportExternalExitParams) =>
       reportExternalExit(client, params, timeoutMs, copy),
     prepareWorktreeRemoval: (params: WorktreePrepareRemovalParams) =>
