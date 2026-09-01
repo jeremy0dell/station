@@ -12,7 +12,15 @@ import type {
   StationEvent,
   TerminalCallerContextRequest,
 } from "@station/contracts";
-import { STATION_SCHEMA_VERSION, StationEventSchema } from "@station/contracts";
+import {
+  ObserverHealthSchema,
+  ObserverStopReceiptSchema,
+  ProviderHealthSchema,
+  ProviderIdSchema,
+  SessionRecoveryReadinessSchema,
+  STATION_SCHEMA_VERSION,
+  StationEventSchema,
+} from "@station/contracts";
 import { Effect, isSafeError, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { z } from "zod";
 import {
@@ -70,7 +78,7 @@ export type CreateObserverClientOptions = {
   expectedBuildVersion?: string;
   /** Exact process identity required before an ownership-changing operation. */
   expectedObserverIdentity?: ExpectedObserverIdentity;
-  /** Negotiates the immediately previous schema for health and stop during an upgrade crossover. */
+  /** Negotiates the immediately previous schema for health, readiness, and stop during an upgrade crossover. */
   acceptPreviousLifecycleSchema?: boolean;
   /** Receives content-free metrics after each physical connection settles. */
   onConnectionDiagnostics?: (diagnostics: NdjsonTransportDiagnostics) => void;
@@ -106,7 +114,7 @@ const PreviousLifecycleSuccessResponseSchema = z
     schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION),
     jsonrpc: JsonRpcVersionSchema,
     id: z.string().min(1),
-    result: z.object({ schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION) }).passthrough(),
+    result: z.unknown(),
   })
   .strict();
 const PreviousLifecycleErrorResponseSchema = z
@@ -117,6 +125,38 @@ const PreviousLifecycleErrorResponseSchema = z
     error: z.unknown(),
   })
   .strict();
+const PreviousProviderHealthSchema = ProviderHealthSchema.omit({ provider: true }).extend({
+  providerId: ProviderIdSchema,
+});
+const PreviousObserverHealthSchema = ObserverHealthSchema.omit({
+  schemaVersion: true,
+  providerHealth: true,
+})
+  .extend({
+    schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION),
+    providerHealth: z.record(ProviderIdSchema, PreviousProviderHealthSchema).optional(),
+  })
+  .transform(({ schemaVersion: _schemaVersion, providerHealth, ...health }) => {
+    const normalizedProviderHealth =
+      providerHealth === undefined
+        ? undefined
+        : Object.fromEntries(
+            Object.entries(providerHealth).map(([providerId, entry]) => {
+              const { providerId: _legacyProviderId, ...provider } = entry;
+              return [providerId, { ...provider, provider: providerId }];
+            }),
+          );
+    return {
+      ...health,
+      schemaVersion: STATION_SCHEMA_VERSION,
+      ...(normalizedProviderHealth === undefined
+        ? {}
+        : { providerHealth: normalizedProviderHealth }),
+    };
+  });
+const PreviousObserverStopReceiptSchema = ObserverStopReceiptSchema.omit({
+  schemaVersion: true,
+}).extend({ schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION) });
 
 /**
  * ADAPTER
@@ -266,7 +306,9 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
     method === "observer.health" ? undefined : resolveExpectedObserver(options);
   const acceptPreviousLifecycleSchema =
     options.acceptPreviousLifecycleSchema === true &&
-    (method === "observer.health" || method === "observer.stop");
+    (method === "observer.health" ||
+      method === "session.recoveryReadiness" ||
+      method === "observer.stop");
   const result = await runRuntimeBoundaryWithTimeout(
     protocolClientBoundary(method, requestTimeoutMs(options)),
     async ({ signal }) => {
@@ -698,10 +740,12 @@ function parseProtocolResponseMessage(
 function normalizePreviousLifecycleResponse(message: unknown): ProtocolResponse | undefined {
   const success = PreviousLifecycleSuccessResponseSchema.safeParse(message);
   if (success.success) {
+    const result = normalizePreviousLifecycleResult(success.data.result);
+    if (result === undefined) return undefined;
     const normalized = ProtocolResponseSchema.safeParse({
       ...success.data,
       schemaVersion: STATION_SCHEMA_VERSION,
-      result: { ...success.data.result, schemaVersion: STATION_SCHEMA_VERSION },
+      result,
     });
     return normalized.success ? normalized.data : undefined;
   }
@@ -712,6 +756,22 @@ function normalizePreviousLifecycleResponse(message: unknown): ProtocolResponse 
     schemaVersion: STATION_SCHEMA_VERSION,
   });
   return normalized.success ? normalized.data : undefined;
+}
+
+function normalizePreviousLifecycleResult(result: unknown): unknown | undefined {
+  const health = PreviousObserverHealthSchema.safeParse(result);
+  if (health.success) return ObserverHealthSchema.parse(health.data);
+
+  const stop = PreviousObserverStopReceiptSchema.safeParse(result);
+  if (stop.success) {
+    return ObserverStopReceiptSchema.parse({
+      ...stop.data,
+      schemaVersion: STATION_SCHEMA_VERSION,
+    });
+  }
+
+  const readiness = SessionRecoveryReadinessSchema.safeParse(result);
+  return readiness.success ? readiness.data : undefined;
 }
 
 function parseProtocolEventEnvelope(message: unknown) {
