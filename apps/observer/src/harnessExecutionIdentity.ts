@@ -28,6 +28,7 @@ type HarnessExecutionMatch = {
 };
 
 const ACTIVE_EXECUTION_STATES = new Set<AgentState>(["starting", "working", "needs_attention"]);
+const CORROBORATED_EXECUTION_STATES = new Set<AgentState>(["working", "needs_attention"]);
 const REPLACEABLE_EXECUTION_STATES = new Set<AgentState>(["idle", "exited"]);
 
 export type SessionHarnessExecutionDecision = {
@@ -139,7 +140,8 @@ export function sessionHarnessExecutionEvidenceFromObservation(
  * Authorizes state derivation for the bound provider-native execution and advances that binding
  * only from non-stale lifecycle evidence.
  *
- * Completion cannot establish a binding, and a mismatch cannot replace an active binding.
+ * Completion cannot establish a binding. A mismatch cannot replace an established active binding,
+ * but non-stale activity or attention may supersede a provisional `starting` binding.
  *
  * Pane-scoped native identity (`nativeSessionId` equal to `harnessRunId`) may replace an active
  * conversation-scoped binding on the same Station session; stale evidence still fails closed.
@@ -181,6 +183,23 @@ export function decideSessionHarnessExecution(input: {
       !statusIsStale(status, current) &&
       isPaneScopedNativeIdentity(input.evidence)
     ) {
+      return {
+        mayDeriveState: true,
+        binding: bindingFromEvidence({
+          evidence: input.evidence,
+          sessionId,
+          nativeSessionId,
+          status,
+        }),
+      };
+    }
+    if (
+      status !== undefined &&
+      current.state === "starting" &&
+      CORROBORATED_EXECUTION_STATES.has(status.value) &&
+      !statusIsStale(status, current)
+    ) {
+      // Startup can race ahead of the native execution that actually receives the prompt.
       return {
         mayDeriveState: true,
         binding: bindingFromEvidence({

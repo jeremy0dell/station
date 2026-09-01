@@ -112,12 +112,17 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    trusting it forever. Attention and idle states never decay, and the next
    real event restores live status.
 8. **Native completion fails closed.** Active evidence may bind an unbound
-   provider plus Station session to one native execution; a replacement may
-   bind only after explicit `idle` or `exited` evidence. While an execution is
-   active, evidence from another native execution is diagnostic-only: it cannot
-   derive recovery, readiness, projected state changes, or completion
-   notifications. Worktree-only external sessions remain independently keyed
-   by native identity, and idle/completion evidence never establishes a binding.
+   provider plus Station session to one native execution. A `starting` binding
+   is provisional: non-stale `working` or `needs_attention` evidence may promote
+   a different native execution, while another startup or completion cannot.
+   Once activity or attention establishes the execution, replacement requires
+   explicit `idle` or `exited` evidence. Mismatched evidence remains
+   diagnostic-only and cannot derive recovery, readiness, projected state
+   changes, or completion notifications. Worktree-only external sessions remain
+   independently keyed by native identity, and idle/completion evidence never
+   establishes a binding.
+   Restart repair evaluates retained history against the current provisional
+   binding, so observations retired by an explicit fresh start cannot reclaim it.
    Pane-scoped native identity (`nativeSessionId` equal to `harnessRunId`) is the
    same execution as the Station-launched pane run, so it may replace an active
    conversation-scoped binding on that session; stale evidence still fails closed.

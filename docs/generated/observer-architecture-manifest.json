@@ -3733,6 +3733,31 @@
       ]
     },
     {
+      "path": "apps/observer/src/harnessRecoveryHandle.ts",
+      "exports": [
+        {
+          "name": "sessionRecoveryHandleFromObservation",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "sessionRecoveryHandleFromReport",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessEventObservation", "HarnessEventReport", "SessionRecoveryHandle"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/hooks/harnessIngressQueue.ts",
       "exports": [
         {
@@ -3850,6 +3875,12 @@
           "bindings": ["sessionHarnessExecutionEvidenceFromReport"]
         },
         {
+          "specifier": "../harnessRecoveryHandle.js",
+          "resolvedPath": "apps/observer/src/harnessRecoveryHandle.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sessionRecoveryHandleFromReport"]
+        },
+        {
           "specifier": "./turnReadiness.js",
           "resolvedPath": "apps/observer/src/hooks/turnReadiness.ts",
           "edgeKind": "runtime",
@@ -3922,7 +3953,6 @@
             "ProviderHookEvent",
             "ProviderHookReceipt",
             "SafeError",
-            "SessionRecoveryHandle",
             "StationEvent"
           ]
         },
@@ -10486,7 +10516,7 @@
           "purpose": null
         },
         {
-          "name": "repairPersistedHarnessEventCompatibility",
+          "name": "repairPersistedHarnessDerivedState",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -10508,6 +10538,12 @@
             "decideSessionHarnessExecution",
             "sessionHarnessExecutionEvidenceFromObservation"
           ]
+        },
+        {
+          "specifier": "../harnessRecoveryHandle.js",
+          "resolvedPath": "apps/observer/src/harnessRecoveryHandle.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sessionRecoveryHandleFromObservation"]
         },
         {
           "specifier": "../hooks/turnReadiness.js",
@@ -10544,7 +10580,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["HarnessEventObservation", "HarnessRunObservation"]
+          "bindings": ["HarnessEventObservation", "HarnessRunObservation", "SessionRecoveryHandle"]
         }
       ]
     },
@@ -10824,7 +10860,7 @@
           "specifier": "./harnessEventRepair.js",
           "resolvedPath": "apps/observer/src/reconcile/harnessEventRepair.ts",
           "edgeKind": "runtime",
-          "bindings": ["repairPersistedHarnessEventCompatibility"]
+          "bindings": ["repairPersistedHarnessDerivedState"]
         },
         {
           "specifier": "./providerObservations.js",
