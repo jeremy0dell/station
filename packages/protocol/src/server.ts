@@ -38,6 +38,7 @@ import {
 
 const defaultRequestTimeoutMs = 5000;
 const diagnosticRequestTimeoutMs = 30_000;
+const externalLaunchRequestTimeoutMs = 30_000;
 
 export type ProtocolServerOptions = {
   socketPath: string;
@@ -149,6 +150,8 @@ async function routeRequest(
 
 function protocolHandlerTimeoutMs(method: ProtocolMethod, requestTimeoutMs: number): number {
   switch (method) {
+    case "agent.prepareExternalLaunch":
+      return Math.max(requestTimeoutMs, externalLaunchRequestTimeoutMs);
     case "doctor.run":
     case "diagnostics.collect":
       return Math.max(requestTimeoutMs, diagnosticRequestTimeoutMs);

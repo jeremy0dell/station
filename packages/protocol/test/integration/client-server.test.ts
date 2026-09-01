@@ -1684,6 +1684,48 @@ describe("protocol client/server", () => {
     }
   });
 
+  it("lets external launch preparation outlive the ordinary protocol handler timeout", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const launchedWorktrees: string[] = [];
+    const server = await startProtocolServer({
+      socketPath,
+      requestTimeoutMs: 10,
+      api: createFakeObserverApi({
+        prepareExternalLaunch: async (params) => {
+          launchedWorktrees.push(params.worktreeId);
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          return {
+            kind: "existing-session",
+            sessionId: "ses_slow_protocol_launch",
+            harnessProvider: "pi",
+          };
+        },
+      }),
+    });
+    const client = createObserverClient({
+      socketPath,
+      timeoutMs: 100,
+      requestId: ids("slow-protocol-launch"),
+    });
+
+    try {
+      const result = await client
+        .prepareExternalLaunch({
+          projectId: "web",
+          worktreeId: "wt_web_slow_protocol_launch",
+        })
+        .catch((error: unknown) => error);
+      expect(launchedWorktrees).toEqual(["wt_web_slow_protocol_launch"]);
+      expect(result).toEqual({
+        kind: "existing-session",
+        sessionId: "ses_slow_protocol_launch",
+        harnessProvider: "pi",
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("lets diagnostic handlers use the diagnostic timeout budget", async () => {
     const { socketPath } = await createTempSocketPath();
     const server = await startProtocolServer({

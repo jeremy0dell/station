@@ -7,7 +7,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
 import type { StationClientCommandCompletion } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
-import { dashboardRowIds } from "@station/dashboard-core/selectors";
+import { dashboardRowIds, selectDashboardTree } from "@station/dashboard-core/selectors";
 import type { TopRowWidgetRuntimeDeps, TuiConfig } from "@station/dashboard-core/widgets";
 import type { StationMouseEvent } from "../input/mouse.js";
 import { createStation, StationApp } from "./createStation.js";
@@ -474,6 +474,136 @@ describe("Station app composition", () => {
         expectedBindingToken: "binding_app_exit",
       },
     ]);
+  });
+
+  it("keeps an uncertain native launch pending and blocks duplicate activation", async () => {
+    const snapshot = manyProjectsSnapshot();
+    const source = new FakeStationSource(snapshot);
+    const service = new FakeTuiObserverService(snapshot);
+    service.prepareExternalLaunch = async (params) => {
+      service.preparedLaunches.push(params);
+      throw {
+        tag: "TimeoutError",
+        code: "CLIENT_PREPARE_EXTERNAL_LAUNCH_TIMEOUT",
+        message: "Station timed out while preparing the external agent launch.",
+      };
+    };
+    const store = createStationStore();
+    const composition = createStation({
+      folderService: createFakeFolderService(),
+      store,
+      clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
+      stationClient: {
+        state: source,
+        service,
+        start: () => source.start(),
+        stop: () => source.stop(),
+      },
+      shutdown: () => {},
+    });
+    teardowns.push(() => composition.dispose());
+    composition.start();
+
+    const activate = () => {
+      composition.dashboard.actions.dispatch({
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.session("ses_wt_station_none"),
+        cellId: "identity",
+      });
+      composition.dashboard.actions.dispatch({
+        type: "freshStart.activate",
+        actionId: "confirm.startFresh",
+      });
+    };
+    activate();
+    await waitFor(() => composition.dashboard.state.getState().toasts.length > 0);
+
+    activate();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const state = composition.dashboard.state.getState();
+    if (state.snapshot === undefined) {
+      throw new Error("dashboard snapshot is unavailable");
+    }
+    const tree = selectDashboardTree(state.snapshot, state, state.screen);
+    const row = tree.rowById.get(dashboardRowIds.session("ses_wt_station_none"));
+    const launchToasts = state.toasts
+      .map((entry) => entry.toast)
+      .filter(
+        (toast) =>
+          toast.message.includes("docs-cleanup") || toast.message.includes("Could not open session"),
+      );
+    expect({
+      prepareCalls: service.preparedLaunches.length,
+      pendingStart: state.localRows.pendingStart.map((pending) => ({
+        localId: pending.localId,
+        operation: pending.operation,
+        worktreeId: pending.worktreeId,
+      })),
+      activity: row?.payload.type === "session" ? row.payload.presentation.activity : undefined,
+      launchToasts,
+    }).toEqual({
+      prepareCalls: 1,
+      pendingStart: [
+        {
+          localId: "fresh:wt_station_none",
+          operation: "startAgent",
+          worktreeId: "wt_station_none",
+        },
+      ],
+      activity: "starting...",
+      launchToasts: [
+        {
+          kind: "info",
+          message:
+            'Session "docs-cleanup" may still be starting. Station is waiting for Observer state before allowing another launch.',
+        },
+      ],
+    });
+
+    const startingRow = snapshot.rows.find((candidate) => candidate.id === "wt_station_starting");
+    const startingSession = snapshot.sessions.find(
+      (candidate) => candidate.id === "ses_wt_station_starting",
+    );
+    if (
+      startingRow?.agent === undefined ||
+      startingRow.terminal === undefined ||
+      startingSession?.terminal === undefined
+    ) {
+      throw new Error("starting session fixture is incomplete");
+    }
+    const startingAgent = startingRow.agent;
+    const startingTerminal = startingRow.terminal;
+    const startingSessionTerminal = startingSession.terminal;
+    source.setSnapshot({
+      ...snapshot,
+      rows: snapshot.rows.map((candidate) =>
+        candidate.id === "wt_station_none"
+          ? {
+              ...candidate,
+              agent: {
+                ...startingAgent,
+                runId: "run_wt_station_none",
+                sessionId: "ses_wt_station_none",
+              },
+              terminal: startingTerminal,
+            }
+          : candidate,
+      ),
+      sessions: snapshot.sessions.map((candidate) =>
+        candidate.id === "ses_wt_station_none"
+          ? {
+              ...candidate,
+              harness: { ...candidate.harness, runId: "run_wt_station_none" },
+              status: startingSession.status,
+              terminal: startingSessionTerminal,
+            }
+          : candidate,
+      ),
+    });
+    await waitFor(
+      () => composition.dashboard.state.getState().localRows.pendingStart.length === 0,
+    );
   });
 
   it("drains dashboard command work before hot-reload client shutdown", async () => {

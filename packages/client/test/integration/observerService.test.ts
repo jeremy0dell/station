@@ -358,6 +358,56 @@ describe("observer client service", () => {
     await server.close();
   });
 
+  it("lets a started external launch outlive the ordinary client request timeout", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const launchedWorktrees: string[] = [];
+    const server = await startProtocolServer({
+      socketPath,
+      requestTimeoutMs: 100,
+      api: fakeApi({
+        prepareExternalLaunch: async (params) => {
+          launchedWorktrees.push(params.worktreeId);
+          await delay(25);
+          return {
+            kind: "prepared",
+            sessionId: "ses_slow_external",
+            terminalTargetId: `native:${params.worktreeId}`,
+            launchPlan: {
+              provider: "pi",
+              command: "pi",
+              args: [],
+              cwd: "/tmp/station/web/slow-external",
+              mode: "interactive",
+            },
+            attachment: {
+              kind: "managed-terminal",
+              terminalTargetId: `native:${params.worktreeId}`,
+            },
+          };
+        },
+      }),
+    });
+    const service = createObserverService({
+      socketPath,
+      timeoutMs: 10,
+      requestId: ids("slow-external"),
+    });
+
+    try {
+      const result = await service
+        .prepareExternalLaunch({ projectId: "web", worktreeId: "wt_web_slow_external" })
+        .catch((error: unknown) => error);
+      expect(launchedWorktrees).toEqual(["wt_web_slow_external"]);
+      expect(result).toMatchObject({
+        kind: "prepared",
+        sessionId: "ses_slow_external",
+        attachment: { terminalTargetId: "native:wt_web_slow_external" },
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("maps protocol SafeErrors without dropping diagnostic IDs", async () => {
     const { socketPath } = await createTempSocketPath();
     const server = await startProtocolServer({
