@@ -174,6 +174,53 @@ describe("reconcile harness event repair", () => {
     });
   });
 
+  it("anchors provisional replay so retired activity cannot reclaim a fresh start", () => {
+    const provisionalBinding: PersistedSessionHarnessExecution = {
+      provider: "codex",
+      sessionId: "session_1",
+      nativeSessionId: "native_new",
+      state: "starting",
+      statusUpdatedAt: "2026-06-19T12:00:02.000Z",
+    };
+    const observations = [
+      persistedEvent({
+        id: "obs_old_working",
+        sessionId: "session_1",
+        nativeSessionId: "native_old",
+        projectId: "web",
+        worktreeId: "wt_task",
+        reportId: "report_old_working",
+        status: status("working", "2026-06-19T12:00:01.000Z"),
+        observedAt: "2026-06-19T12:00:01.000Z",
+      }),
+      persistedEvent({
+        id: "obs_new_start",
+        sessionId: "session_1",
+        nativeSessionId: "native_new",
+        projectId: "web",
+        worktreeId: "wt_task",
+        reportId: "report_new_start",
+        status: status("starting", "2026-06-19T12:00:02.000Z"),
+        observedAt: "2026-06-19T12:00:02.000Z",
+      }),
+    ];
+
+    expect(
+      replayAcceptedSessionState({
+        observations,
+        provider: "codex",
+        sessionId: "session_1",
+        initialHarnessExecution: provisionalBinding,
+      }),
+    ).toMatchObject({
+      harnessExecution: provisionalBinding,
+      recoveryHandle: {
+        id: "report_new_start",
+        target: { kind: "native-session", id: "native_new" },
+      },
+    });
+  });
+
   it("does not repair derived state that is newer than the rejected event", () => {
     const binding: PersistedSessionHarnessExecution = {
       provider: "codex",

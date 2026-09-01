@@ -445,6 +445,63 @@ describe("observer reconcile with Codex harness", () => {
     }
   });
 
+  it("keeps retained pre-reset activity from reclaiming an explicit fresh start", async () => {
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock: { now: () => new Date(now) },
+    });
+
+    try {
+      await core.reconcile("initial-codex-fresh-start-history");
+      await reportAndReconcile(
+        api,
+        eventBus,
+        codexLifecycleReport({
+          reportId: "report_retired_working",
+          nativeSessionId: "native_retired",
+          event: "PreToolUse",
+          observedAt: "2026-05-21T12:00:01.000Z",
+        }),
+      );
+      await persistence.resetSessionForFreshStart({
+        provider: "codex",
+        sessionId: "ses_web_task",
+      });
+
+      await reportAndReconcile(
+        api,
+        eventBus,
+        codexNewConversationReport({
+          reportId: "report_fresh_start",
+          nativeSessionId: "native_fresh",
+          event: "SessionStart",
+          observedAt: "2026-05-21T12:00:02.000Z",
+        }),
+      );
+
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "starting",
+        updatedAt: "2026-05-21T12:00:02.000Z",
+      });
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          nativeSessionId: "native_fresh",
+          state: "starting",
+          statusUpdatedAt: "2026-05-21T12:00:02.000Z",
+        }),
+      ]);
+      await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([
+        expect.objectContaining({
+          sessionId: "ses_web_task",
+          target: { kind: "native-session", id: "native_fresh" },
+        }),
+      ]);
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("repairs an unsettled provisional Codex startup after restart", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-codex-provisional-startup-"));
     const sqlitePath = join(root, "observer.sqlite");

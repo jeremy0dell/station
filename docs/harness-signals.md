@@ -121,6 +121,8 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    changes, or completion notifications. Worktree-only external sessions remain
    independently keyed by native identity, and idle/completion evidence never
    establishes a binding.
+   Restart repair evaluates retained history against the current provisional
+   binding, so observations retired by an explicit fresh start cannot reclaim it.
    Pane-scoped native identity (`nativeSessionId` equal to `harnessRunId`) is the
    same execution as the Station-launched pane run, so it may replace an active
    conversation-scoped binding on that session; stale evidence still fails closed.
