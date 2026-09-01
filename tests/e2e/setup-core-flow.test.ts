@@ -24,6 +24,9 @@ describe("setup core flow e2e", () => {
       const bunBin = run("/bin/sh", ["-c", "command -v bun"], {
         cwd: repoRoot,
       }).stdout.trim();
+      const nodeBin = run("/bin/sh", ["-c", "command -v node"], {
+        cwd: repoRoot,
+      }).stdout.trim();
       await mkdir(bin, { recursive: true });
       await writeShim(
         bin,
@@ -77,7 +80,7 @@ describe("setup core flow e2e", () => {
         XDG_CACHE_HOME: join(root, "xdg-cache"),
         XDG_STATE_HOME: join(root, "xdg-state"),
         XDG_RUNTIME_DIR: runtimeDir,
-        PATH: `${join(bunHome, "bin")}:${bin}:${dirname(bunBin)}:${dirname(process.execPath)}:/usr/bin:/bin`,
+        PATH: `${join(bunHome, "bin")}:${bin}:${dirname(nodeBin)}:${dirname(bunBin)}:${dirname(process.execPath)}:/usr/bin:/bin`,
         NO_COLOR: "1",
         STATION_FAST_POPUP_NO_FALLBACK: "1",
       };
@@ -90,6 +93,7 @@ describe("setup core flow e2e", () => {
         mkdir(env.XDG_CACHE_HOME, { recursive: true }),
         mkdir(env.XDG_STATE_HOME, { recursive: true }),
       ]);
+      expect(run("node", ["--version"], { cwd: repoRoot, env }).stdout.trim()).toMatch(/^v24\./u);
       expect(run("bun", ["--version"], { cwd: repoRoot, env }).stdout.trim()).toBe("1.4.0");
       const bootstrap = run(join(repoRoot, "scripts/setup/bootstrap.sh"), [], { cwd: root, env });
       expect(bootstrap.stdout).toContain("Linking STATION launchers onto your PATH");
