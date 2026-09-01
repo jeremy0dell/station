@@ -17,7 +17,7 @@ import { createTempState } from "../../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
 const sourceBuildVersion = `0.0.0-pre-alpha.4+station.${"e".repeat(64)}`;
-const compiledBuildVersion = `0.0.0-pre-alpha.8.2+station.${"d".repeat(64)}`;
+const compiledBuildVersion = `0.0.0-pre-alpha.9+station.${"d".repeat(64)}`;
 
 const bootReason = "FATAL: socket owned by foreign build dbf7f368";
 
