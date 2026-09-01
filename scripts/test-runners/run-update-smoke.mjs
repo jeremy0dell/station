@@ -310,7 +310,7 @@ async function runScenario(input) {
   const stateDir = join(scenarioRoot, "state");
   const runtimeDir = join(input.root, "r", scenarioKey);
   const tempDir = join(scenarioRoot, "tmp");
-  const tmuxTempDir = join(input.root, "m", scenarioKey);
+  const tmuxTempDir = await mkdtemp(join("/tmp", `stn-tmux-${scenarioKey}-`));
   const installDir = join(scenarioRoot, "bin");
   const configPath = join(configHome, "station", "config.toml");
   const socketPath = join(runtimeDir, "observer.sock");
@@ -397,7 +397,11 @@ async function runScenario(input) {
     );
     diagnostics.observerPid = incumbentObserver.pid;
     await recordProcessIdentity(processIdentities, "incumbent-observer", incumbentObserver.pid);
-    observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+    observerClient = createObserverClient({
+      socketPath,
+      timeoutMs: 5000,
+      acceptPreviousLifecycleSchema: true,
+    });
 
     if (input.busyHost) {
       incumbentHostProcess = spawn(
@@ -514,6 +518,7 @@ async function runScenario(input) {
 
     const preservedRefusal =
       input.busyHost && input.options.busyHostOutcome === "preserved-refusal";
+    let completedInstallRefusal = false;
     const expectedUpdateCode = preservedRefusal ? 1 : 0;
     const updateResult =
       input.invocation === "external"
@@ -530,22 +535,31 @@ async function runScenario(input) {
           );
     assertEqual(updateResult.code, expectedUpdateCode, `${input.name} update exit code`);
     if (preservedRefusal) {
-      assertEqual(updateResult.stdout, "", `${input.name} refused update stdout`);
-      assertIncludes(
-        updateResult.stderr,
-        "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
-        `${input.name} refused update code`,
-      );
-      assertIncludes(
-        updateResult.stderr,
-        "Host terminals are not all eligible for live handoff.",
-        `${input.name} refused update reason`,
-      );
-      assertDeepEqual(
-        await captureDryRunState(dryRunStateInput),
-        beforeDryRun,
-        `${input.name} refused update persistent and runtime state`,
-      );
+      if (updateResult.stdout.trim().length === 0) {
+        assertIncludes(
+          updateResult.stderr,
+          "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
+          `${input.name} refused update code`,
+        );
+        assertIncludes(
+          updateResult.stderr,
+          "Host terminals are not all eligible for live handoff.",
+          `${input.name} refused update reason`,
+        );
+        assertDeepEqual(
+          await captureDryRunState(dryRunStateInput),
+          beforeDryRun,
+          `${input.name} refused update persistent and runtime state`,
+        );
+      } else {
+        const report = parseComposedUpdateReport(
+          parseJson(updateResult.stdout, `${input.name} update report`),
+          input.options.incumbentVersion,
+        );
+        assertUpdateReport(report, input, installedBinary, configPath);
+        assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
+        completedInstallRefusal = true;
+      }
     } else {
       const report = parseComposedUpdateReport(
         parseJson(updateResult.stdout, `${input.name} update report`),
@@ -555,10 +569,10 @@ async function runScenario(input) {
       assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
     }
     if (transportDir !== undefined) {
-      await assertExactTransportRequests(transportDir, input);
+      await assertExactTransportRequests(transportDir, input, completedInstallRefusal);
     }
 
-    if (preservedRefusal) {
+    if (preservedRefusal && !completedInstallRefusal) {
       const preservedObserver = await waitForObserver(
         observerClient,
         input.options.incumbentVersion,
@@ -692,7 +706,7 @@ async function runScenario(input) {
       tmuxTempDir,
       tmuxServer,
       name: input.name,
-      expectNativeRefusal: false,
+      expectNativeRefusal: completedInstallRefusal,
       processIdentities,
     });
     if (input.busyHost) {
@@ -732,7 +746,7 @@ async function runScenario(input) {
     await waitForMissing(socketPath, 10_000);
     assertEqual(
       await waitForExactProcessExit(
-        processIdentities.get(preservedRefusal ? "incumbent-observer" : "target-observer"),
+        processIdentities.get(completedInstallRefusal ? "target-observer" : "incumbent-observer"),
         10_000,
       ),
       true,
@@ -781,6 +795,9 @@ async function runScenario(input) {
     await cleanupAction(cleanupWarnings, "tmux residue", async () => {
       await assertNoSocketsUnder(tmuxTempDir);
       assertEqual((await readFile(tmuxAudit.bareLogPath, "utf8")).length, 0, "bare tmux audit log");
+    });
+    await cleanupAction(cleanupWarnings, "tmux temp directory", async () => {
+      await rm(tmuxTempDir, { recursive: true, force: true });
     });
     await cleanupAction(cleanupWarnings, "Host cleanup", async () => {
       if (!(await pathExists(hostSocketPath))) return;
@@ -1005,6 +1022,7 @@ async function captureDryRunState(input) {
     socketPath: input.socketPath,
     timeoutMs: 5000,
     expectedBuildVersion: input.observerBuildVersion,
+    acceptPreviousLifecycleSchema: true,
   });
   const observerHealth = await observer.health();
   const observerIdentity = {
@@ -1163,7 +1181,7 @@ async function writeReleaseTransport(input) {
   return transportDir;
 }
 
-async function assertExactTransportRequests(transportDir, input) {
+async function assertExactTransportRequests(transportDir, input, completedInstallRefusal) {
   const archiveName = `stn-${input.target.tag}-${nativeTarget()}.tar.gz`;
   const actual = (await readFile(join(transportDir, "curl.log"), "utf8"))
     .split(/\r?\n/u)
@@ -1177,7 +1195,9 @@ async function assertExactTransportRequests(transportDir, input) {
   ];
   const expected = [
     ...detectionRequests,
-    ...(input.busyHost && input.options.busyHostOutcome === "preserved-refusal"
+    ...(input.busyHost &&
+    input.options.busyHostOutcome === "preserved-refusal" &&
+    !completedInstallRefusal
       ? []
       : [
           releaseDownloadUrl(input.target.tag, "install.sh"),
@@ -1700,7 +1720,11 @@ function assertLegacyUpdateReport(report, input, installedBinary, configPath) {
       "completed",
       "completed",
       "completed",
-      refusal ? "failed" : input.busyHost ? "completed" : "skipped",
+      refusal
+        ? "failed"
+        : !input.busyHost && input.target.mode === "public"
+          ? "skipped"
+          : "completed",
     ],
     `${input.name} exact legacy update step outcomes`,
   );

@@ -1,9 +1,13 @@
+import { once } from "node:events";
 import { access, mkdir, stat, unlink, writeFile } from "node:fs/promises";
+import { createConnection, createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 import {
   connectUnixSocket,
   inMemoryNdjsonConnectionPair,
   listenUnixSocket,
+  NDJSON_TRANSPORT_LIMITS,
+  type NdjsonTransportDiagnostics,
   probeUnixSocket,
   readUnixSocketHolderPids,
   readUnixSocketHolderPidsAsync,
@@ -26,7 +30,9 @@ describe("Unix socket NDJSON transport", () => {
       },
     });
 
-    const client = await connectUnixSocket(socketPath);
+    const client = await connectUnixSocket(socketPath, {
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
+    });
     client.send({ hello: "world" });
 
     const iterator = client.messages()[Symbol.asyncIterator]();
@@ -37,6 +43,197 @@ describe("Unix socket NDJSON transport", () => {
 
     client.close();
     await server.close();
+  });
+
+  it("disconnects before a non-consuming client can retain an unbounded frame backlog", async () => {
+    const { socketPath } = await createTempSocketPath();
+    let accepted: Socket | undefined;
+    const server = createServer((socket) => {
+      accepted = socket;
+      socket.on("error", () => undefined);
+    });
+    server.listen(socketPath);
+    await once(server, "listening");
+    const client = await connectUnixSocket(socketPath, {
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
+    });
+    await waitFor(() => accepted !== undefined);
+
+    try {
+      const frame = `${JSON.stringify({ payload: "x".repeat(4_000) })}\n`;
+      for (let index = 0; index < 2_048 && accepted?.destroyed === false; index += 1) {
+        if (!accepted.write(frame)) {
+          if ((await waitForDrainOrClose(accepted)) === "closed") break;
+        }
+      }
+
+      await expect(settlesWithin(client.closed, 500)).resolves.toBe(true);
+      expect(client.diagnostics()).toMatchObject({
+        inboundQueueDepth: 0,
+        inboundHighWaterDepth: NDJSON_TRANSPORT_LIMITS.maxQueuedFrames,
+        overflowCount: 1,
+        closeCount: 1,
+        lastOverflowReason: "queued-frames",
+      });
+      expect(client.diagnostics().inboundHighWaterBytes).toBeLessThanOrEqual(
+        NDJSON_TRANSPORT_LIMITS.maxQueuedBytes,
+      );
+    } finally {
+      client.close();
+      accepted?.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("closes the connection when its message iterator is returned", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const server = await listenUnixSocket({
+      socketPath,
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
+      onConnection: (connection) => {
+        connection.send({ queued: true });
+      },
+    });
+    const client = await connectUnixSocket(socketPath);
+    const iterator = client.messages()[Symbol.asyncIterator]();
+    await waitFor(() => client.diagnostics().inboundQueueDepth === 1);
+
+    await iterator.return?.();
+
+    await expect(settlesWithin(client.closed, 500)).resolves.toBe(true);
+    expect(client.diagnostics()).toMatchObject({
+      inboundQueueDepth: 0,
+      inboundQueueBytes: 0,
+      closeCount: 1,
+    });
+    await server.close();
+  });
+
+  it("disconnects a producer that continues writing through socket backpressure", async () => {
+    const { socketPath } = await createTempSocketPath();
+    let releaseChecked: () => void = () => undefined;
+    const checked = new Promise<void>((resolve) => {
+      releaseChecked = resolve;
+    });
+    let diagnostics: NdjsonTransportDiagnostics | undefined;
+    const server = await listenUnixSocket({
+      socketPath,
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
+      onConnection: (connection) => {
+        const frame = { payload: "x".repeat(64 * 1024) };
+        for (
+          let sent = 0;
+          sent < 256 && connection.diagnostics().outboundBackpressureCount === 0;
+          sent += 1
+        ) {
+          expect(connection.send(frame)).toBe(true);
+        }
+        expect(connection.diagnostics().outboundBackpressureCount).toBe(1);
+        expect(connection.send(frame)).toBe(false);
+        diagnostics = connection.diagnostics();
+        releaseChecked();
+      },
+    });
+    const stalled = createConnection(socketPath);
+    stalled.on("error", () => undefined);
+    stalled.pause();
+
+    try {
+      await checked;
+      expect(diagnostics).toMatchObject({
+        outboundBackpressureCount: 1,
+        overflowCount: 1,
+        closeCount: 1,
+        lastOverflowReason: "outbound-backpressure",
+      });
+    } finally {
+      stalled.destroy();
+      await server.close();
+    }
+  });
+
+  it("accepts a complete frame above 4 MiB when it remains within the frame limit", async () => {
+    const pair = inMemoryNdjsonConnectionPair(NDJSON_TRANSPORT_LIMITS);
+    const payload = "x".repeat(5 * 1024 * 1024);
+
+    try {
+      expect(pair.server.send({ payload })).toBe(true);
+      await expect(pair.client.messages()[Symbol.asyncIterator]().next()).resolves.toEqual({
+        done: false,
+        value: { payload },
+      });
+      expect(pair.client.diagnostics()).toMatchObject({
+        overflowCount: 0,
+        inboundQueueDepth: 0,
+      });
+    } finally {
+      pair.server.close();
+      pair.client.close();
+    }
+  });
+
+  it("rejects oversized outbound and partial frames without retaining their contents", async () => {
+    const outboundPair = inMemoryNdjsonConnectionPair(NDJSON_TRANSPORT_LIMITS);
+    expect(
+      outboundPair.client.send({ payload: "x".repeat(NDJSON_TRANSPORT_LIMITS.maxFrameBytes) }),
+    ).toBe(false);
+    expect(outboundPair.client.diagnostics()).toMatchObject({
+      inboundQueueDepth: 0,
+      overflowCount: 1,
+      lastOverflowReason: "outbound-frame-bytes",
+    });
+
+    const { socketPath } = await createTempSocketPath();
+    let accepted: Socket | undefined;
+    const server = createServer((socket) => {
+      accepted = socket;
+      socket.on("error", () => undefined);
+    });
+    server.listen(socketPath);
+    await once(server, "listening");
+    const client = await connectUnixSocket(socketPath, {
+      transportLimits: NDJSON_TRANSPORT_LIMITS,
+    });
+    await waitFor(() => accepted !== undefined);
+
+    try {
+      const chunk = "x".repeat(1024 * 1024);
+      for (
+        let bytes = 0;
+        bytes <= NDJSON_TRANSPORT_LIMITS.maxFrameBytes && accepted?.destroyed === false;
+        bytes += chunk.length
+      ) {
+        if (!accepted.write(chunk) && (await waitForDrainOrClose(accepted)) === "closed") break;
+      }
+      await expect(settlesWithin(client.closed, 2_000)).resolves.toBe(true);
+      expect(client.diagnostics()).toMatchObject({
+        inboundQueueDepth: 0,
+        overflowCount: 1,
+        lastOverflowReason: "partial-frame-bytes",
+      });
+    } finally {
+      client.close();
+      accepted?.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 10_000);
+
+  it("preserves unbounded framing for Station Host transports unless limits are explicit", () => {
+    const pair = inMemoryNdjsonConnectionPair();
+
+    try {
+      for (let index = 0; index <= NDJSON_TRANSPORT_LIMITS.maxQueuedFrames; index += 1) {
+        expect(pair.server.send({ index })).toBe(true);
+      }
+      expect(pair.client.diagnostics()).toMatchObject({
+        inboundQueueDepth: NDJSON_TRANSPORT_LIMITS.maxQueuedFrames + 1,
+        overflowCount: 0,
+        closeCount: 0,
+      });
+    } finally {
+      pair.server.close();
+      pair.client.close();
+    }
   });
 
   it("creates a user-only socket directory and classifies socket states", async () => {
@@ -422,4 +619,38 @@ describe("Unix socket NDJSON transport", () => {
 
 function metadata(ino: bigint) {
   return { ino, birthtimeNs: ino * 10n, isSocket: true };
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for transport test state.");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+function settlesWithin(promise: Promise<unknown>, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    promise.then(() => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+function waitForDrainOrClose(socket: Socket): Promise<"drain" | "closed"> {
+  return new Promise((resolve) => {
+    const finish = (result: "drain" | "closed") => {
+      socket.off("drain", onDrain);
+      socket.off("close", onClose);
+      socket.off("error", onClose);
+      resolve(result);
+    };
+    const onDrain = () => finish("drain");
+    const onClose = () => finish("closed");
+    socket.once("drain", onDrain);
+    socket.once("close", onClose);
+    socket.once("error", onClose);
+  });
 }

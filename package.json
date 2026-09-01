@@ -1,6 +1,6 @@
 {
   "name": "station",
-  "version": "0.0.0-pre-alpha.8.2",
+  "version": "0.0.0-pre-alpha.14",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -61,6 +61,7 @@
     "smoke:binary": "node scripts/test-runners/run-binary-smoke.mjs",
     "smoke:update": "node scripts/test-runners/run-update-smoke.mjs",
     "stress:binary-handoff": "node scripts/test-runners/run-binary-smoke.mjs --mode handoff-stress",
+    "profile:transport-memory": "bun scripts/test-runners/run-memory-transport-profile.mjs",
     "smoke:install": "node scripts/test-runners/run-install-smoke.mjs",
     "typecheck": "bun run turbo run typecheck --filter=!@station/workspace",
     "architecture:observer:generate": "node tools/lint/check-observer-architecture.mjs --write",

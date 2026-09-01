@@ -250,6 +250,18 @@ function settleNativeActivation(
   if (result.kind === "notice") {
     return result;
   }
+  if (
+    result.error.tag === "TimeoutError" &&
+    result.error.code === "CLIENT_PREPARE_EXTERNAL_LAUNCH_TIMEOUT"
+  ) {
+    return {
+      kind: "success",
+      notice: {
+        kind: "info",
+        message: `Session "${sessionTitle}" may still be starting. Station is waiting for Observer state before allowing another launch.`,
+      },
+    };
+  }
   return {
     kind: "failure",
     error: {

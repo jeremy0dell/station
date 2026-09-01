@@ -710,6 +710,7 @@ async function runClaimedObserverRuntime(input: {
       api,
       clock: systemClock,
       guardOperation: startupGate.assertReadyForOperation,
+      logger,
     });
     ownsSocket = true;
     const boundIdentity = await readSocketIdentity(socketPath);

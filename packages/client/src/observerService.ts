@@ -13,7 +13,11 @@ import type {
   WorktreePrepareRemovalParams,
   WorktreePrepareRemovalResult,
 } from "@station/contracts";
-import { createObserverClient, type ObserverClient } from "@station/protocol";
+import {
+  createObserverClient,
+  type NdjsonTransportDiagnostics,
+  type ObserverClient,
+} from "@station/protocol";
 import {
   type RuntimeBoundaryTask,
   type RuntimeSafeErrorFallback,
@@ -30,6 +34,8 @@ export type CreateObserverServiceOptions = {
   expectedBuildVersion?: string;
   timeoutMs?: number;
   reconcileTimeoutMs?: number;
+  /** Budget for host negotiation and process preparation. */
+  prepareExternalLaunchTimeoutMs?: number;
   commandWaitTimeoutMs?: number;
   clientLabel?: string;
   requestId?: () => string;
@@ -38,24 +44,37 @@ export type CreateObserverServiceOptions = {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_RECONCILE_TIMEOUT_MS = 30_000;
+const DEFAULT_PREPARE_EXTERNAL_LAUNCH_TIMEOUT_MS = 30_000;
 const DEFAULT_COMMAND_WAIT_TIMEOUT_MS = 35_000;
 
 /**
  * ADAPTER
  *
  * Presents one build-pinned Observer protocol endpoint as the shared client
- * service and preserves durable command results loaded at terminal completion.
+ * service, preserves durable command results loaded at terminal completion,
+ * and aggregates content-free metrics across discarded physical connections.
  */
 export function createObserverService(options: CreateObserverServiceOptions): ObserverService {
   const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const reconcileTimeoutMs =
     options.reconcileTimeoutMs ?? options.timeoutMs ?? DEFAULT_RECONCILE_TIMEOUT_MS;
+  const prepareExternalLaunchTimeoutMs =
+    options.prepareExternalLaunchTimeoutMs ?? DEFAULT_PREPARE_EXTERNAL_LAUNCH_TIMEOUT_MS;
   const commandWaitTimeoutMs = options.commandWaitTimeoutMs ?? DEFAULT_COMMAND_WAIT_TIMEOUT_MS;
-  const client = options.client ?? createClient(options, timeoutMs);
-  const reconcileClient = options.client ?? createClient(options, reconcileTimeoutMs);
+  let transportDiagnostics = emptyTransportDiagnostics();
+  const recordConnectionDiagnostics = (diagnostics: NdjsonTransportDiagnostics) => {
+    transportDiagnostics = mergeTransportDiagnostics(transportDiagnostics, diagnostics);
+  };
+  const client = options.client ?? createClient(options, timeoutMs, recordConnectionDiagnostics);
+  const reconcileClient =
+    options.client ?? createClient(options, reconcileTimeoutMs, recordConnectionDiagnostics);
+  const prepareExternalLaunchClient =
+    options.client ??
+    createClient(options, prepareExternalLaunchTimeoutMs, recordConnectionDiagnostics);
   const copy = createObserverServiceCopy(options.clientLabel);
 
   return {
+    diagnostics: () => ({ ...transportDiagnostics }),
     loadSnapshot: () => loadSnapshot(client, timeoutMs, copy),
     subscribeEvents: () => wrapSubscription(client.subscribe()),
     dispatch: (command: StationCommand) => dispatchCommand(client, command, timeoutMs, copy),
@@ -64,7 +83,12 @@ export function createObserverService(options: CreateObserverServiceOptions): Ob
     reconcile: (reason?: string) =>
       requestReconcile(reconcileClient, reason, reconcileTimeoutMs, copy),
     prepareExternalLaunch: (params: AgentPrepareExternalLaunchParams) =>
-      prepareExternalLaunch(client, params, timeoutMs, copy),
+      prepareExternalLaunch(
+        prepareExternalLaunchClient,
+        params,
+        prepareExternalLaunchTimeoutMs,
+        copy,
+      ),
     reportExternalExit: (params: AgentReportExternalExitParams) =>
       reportExternalExit(client, params, timeoutMs, copy),
     prepareWorktreeRemoval: (params: WorktreePrepareRemovalParams) =>
@@ -316,7 +340,11 @@ async function waitForCommandTerminalRecord(
   }
 }
 
-function createClient(options: CreateObserverServiceOptions, timeoutMs: number): ObserverClient {
+function createClient(
+  options: CreateObserverServiceOptions,
+  timeoutMs: number,
+  onConnectionDiagnostics: (diagnostics: NdjsonTransportDiagnostics) => void,
+): ObserverClient {
   if (options.socketPath === undefined) {
     throw new Error("createObserverService requires socketPath or client.");
   }
@@ -327,7 +355,48 @@ function createClient(options: CreateObserverServiceOptions, timeoutMs: number):
       ? {}
       : { expectedBuildVersion: options.expectedBuildVersion }),
     ...(options.requestId === undefined ? {} : { requestId: options.requestId }),
+    onConnectionDiagnostics,
   });
+}
+
+function emptyTransportDiagnostics(): NdjsonTransportDiagnostics {
+  return {
+    inboundQueueDepth: 0,
+    inboundQueueBytes: 0,
+    inboundHighWaterDepth: 0,
+    inboundHighWaterBytes: 0,
+    outboundBackpressureCount: 0,
+    overflowCount: 0,
+    closeCount: 0,
+  };
+}
+
+function mergeTransportDiagnostics(
+  aggregate: NdjsonTransportDiagnostics,
+  connection: NdjsonTransportDiagnostics,
+): NdjsonTransportDiagnostics {
+  const merged: NdjsonTransportDiagnostics = {
+    inboundQueueDepth: connection.inboundQueueDepth,
+    inboundQueueBytes: connection.inboundQueueBytes,
+    inboundHighWaterDepth: Math.max(
+      aggregate.inboundHighWaterDepth,
+      connection.inboundHighWaterDepth,
+    ),
+    inboundHighWaterBytes: Math.max(
+      aggregate.inboundHighWaterBytes,
+      connection.inboundHighWaterBytes,
+    ),
+    outboundBackpressureCount:
+      aggregate.outboundBackpressureCount + connection.outboundBackpressureCount,
+    overflowCount: aggregate.overflowCount + connection.overflowCount,
+    closeCount: aggregate.closeCount + connection.closeCount,
+  };
+  if (connection.lastOverflowReason !== undefined) {
+    merged.lastOverflowReason = connection.lastOverflowReason;
+  } else if (aggregate.lastOverflowReason !== undefined) {
+    merged.lastOverflowReason = aggregate.lastOverflowReason;
+  }
+  return merged;
 }
 
 function wrapSubscription(events: AsyncIterable<StationEvent>): AsyncIterable<StationEvent> {

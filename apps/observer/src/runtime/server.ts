@@ -11,6 +11,7 @@ import {
   unixSocketHolderEvidencePath,
 } from "@station/protocol";
 import { type RuntimeClock, runRuntimeBoundary, systemClock } from "@station/runtime";
+import type { StationLogger } from "../stationLogger.js";
 import type { ObserverIncumbentLifecycle } from "./observerHandoff.js";
 
 const DEFAULT_SOCKET_PROBE_TIMEOUT_MS = 1000;
@@ -28,6 +29,7 @@ export type StartObserverServerOptions = {
   clock?: RuntimeClock;
   /** Rejects application operations that were not admitted before shutdown. */
   guardOperation?: () => void;
+  logger?: StationLogger;
 };
 
 export type ObserverSocketProbe =
@@ -110,7 +112,8 @@ export function createObserverLifecycleClient(options: {
  * ADAPTER
  *
  * Owns the Observer protocol socket lifecycle, including owned close versus
- * displaced abandon, and enforces admission before application operations.
+ * displaced abandon, enforces admission before application operations, and
+ * retains content-free overloaded-connection evidence in Observer logs.
  */
 export async function startObserverServer(
   options: StartObserverServerOptions,
@@ -133,6 +136,17 @@ export async function startObserverServer(
         ...(options.guardOperation === undefined
           ? {}
           : { requestGuard: lifecycleRequestGuard(options.guardOperation) }),
+        onConnectionDiagnostics: (diagnostics) => {
+          if (diagnostics.overflowCount === 0 && diagnostics.outboundBackpressureCount === 0) {
+            return;
+          }
+          void options.logger
+            ?.warn("Observer protocol transport closed an overloaded connection.", {
+              boundary: "protocol.transport",
+              ...diagnostics,
+            })
+            .catch(() => undefined);
+        },
       }),
   );
 

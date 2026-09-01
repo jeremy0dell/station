@@ -385,7 +385,14 @@ describe("observer client runtime permanent-error halt", () => {
     }
     expect(connection.lastError.code).toBe("PROTOCOL_SCHEMA_MISMATCH");
     expect(runtime.getState().snapshot?.counts.worktrees).toBe(1);
-    expect(infos).toEqual([{ isConnectError: false, alreadyReported: false, willRetry: false }]);
+    expect(infos).toEqual([
+      {
+        isConnectError: false,
+        alreadyReported: false,
+        willRetry: false,
+        resubscriptionCount: 0,
+      },
+    ]);
 
     // Halted means the runtime stops hitting the socket: no resubscribes
     // across several would-be backoff periods.

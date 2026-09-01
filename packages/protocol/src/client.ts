@@ -12,7 +12,15 @@ import type {
   StationEvent,
   TerminalCallerContextRequest,
 } from "@station/contracts";
-import { STATION_SCHEMA_VERSION, StationEventSchema } from "@station/contracts";
+import {
+  ObserverHealthSchema,
+  ObserverStopReceiptSchema,
+  ProviderHealthSchema,
+  ProviderIdSchema,
+  SessionRecoveryReadinessSchema,
+  STATION_SCHEMA_VERSION,
+  StationEventSchema,
+} from "@station/contracts";
 import { Effect, isSafeError, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { z } from "zod";
 import {
@@ -26,7 +34,12 @@ import {
   protocolSocketClosedError,
 } from "./messages.js";
 import { unwrapBoundaryResult } from "./runtime.js";
-import { connectUnixSocket, type NdjsonConnection } from "./transport.js";
+import {
+  connectUnixSocket,
+  NDJSON_TRANSPORT_LIMITS,
+  type NdjsonConnection,
+  type NdjsonTransportDiagnostics,
+} from "./transport.js";
 
 type ProtocolResult<TMethod extends ProtocolMethod> = z.infer<
   (typeof ProtocolResultSchemas)[TMethod]
@@ -65,8 +78,12 @@ export type CreateObserverClientOptions = {
   expectedBuildVersion?: string;
   /** Exact process identity required before an ownership-changing operation. */
   expectedObserverIdentity?: ExpectedObserverIdentity;
-  /** Negotiates the immediately previous schema for health and stop during an upgrade crossover. */
+  /** Negotiates the immediately previous schema for health, readiness, and stop during an upgrade crossover. */
   acceptPreviousLifecycleSchema?: boolean;
+  /** Records when a lifecycle response was received from the immediately previous schema. */
+  onPreviousLifecycleSchema?: () => void;
+  /** Receives content-free metrics after each physical connection settles. */
+  onConnectionDiagnostics?: (diagnostics: NdjsonTransportDiagnostics) => void;
 };
 
 /** Health, recovery, and cooperative-stop operations bound to one physical connection. */
@@ -99,7 +116,7 @@ const PreviousLifecycleSuccessResponseSchema = z
     schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION),
     jsonrpc: JsonRpcVersionSchema,
     id: z.string().min(1),
-    result: z.object({ schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION) }).passthrough(),
+    result: z.unknown(),
   })
   .strict();
 const PreviousLifecycleErrorResponseSchema = z
@@ -110,11 +127,44 @@ const PreviousLifecycleErrorResponseSchema = z
     error: z.unknown(),
   })
   .strict();
+const PreviousProviderHealthSchema = ProviderHealthSchema.omit({ provider: true }).extend({
+  providerId: ProviderIdSchema,
+});
+const PreviousObserverHealthSchema = ObserverHealthSchema.omit({
+  schemaVersion: true,
+  providerHealth: true,
+})
+  .extend({
+    schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION),
+    providerHealth: z.record(ProviderIdSchema, PreviousProviderHealthSchema).optional(),
+  })
+  .transform(({ schemaVersion: _schemaVersion, providerHealth, ...health }) => {
+    const normalizedProviderHealth =
+      providerHealth === undefined
+        ? undefined
+        : Object.fromEntries(
+            Object.entries(providerHealth).map(([providerId, entry]) => {
+              const { providerId: _legacyProviderId, ...provider } = entry;
+              return [providerId, { ...provider, provider: providerId }];
+            }),
+          );
+    return {
+      ...health,
+      schemaVersion: STATION_SCHEMA_VERSION,
+      ...(normalizedProviderHealth === undefined
+        ? {}
+        : { providerHealth: normalizedProviderHealth }),
+    };
+  });
+const PreviousObserverStopReceiptSchema = ObserverStopReceiptSchema.omit({
+  schemaVersion: true,
+}).extend({ schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION) });
 
 /**
  * ADAPTER
  *
- * Presents Observer operations to clients through validated NDJSON requests.
+ * Presents Observer operations through validated NDJSON requests and surfaces
+ * bounded transport overload as a retryable connection failure.
  */
 export function createObserverClient(options: CreateObserverClientOptions): ObserverClient {
   const requestId = options.requestId ?? defaultRequestId;
@@ -258,7 +308,9 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
     method === "observer.health" ? undefined : resolveExpectedObserver(options);
   const acceptPreviousLifecycleSchema =
     options.acceptPreviousLifecycleSchema === true &&
-    (method === "observer.health" || method === "observer.stop");
+    (method === "observer.health" ||
+      method === "session.recoveryReadiness" ||
+      method === "observer.stop");
   const result = await runRuntimeBoundaryWithTimeout(
     protocolClientBoundary(method, requestTimeoutMs(options)),
     async ({ signal }) => {
@@ -283,6 +335,7 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
             params,
             acceptPreviousLifecycleSchema,
             usePreviousLifecycleSchema,
+            options.onPreviousLifecycleSchema,
           );
         });
 
@@ -328,10 +381,11 @@ async function openRequestConnection<T>(
   signal: AbortSignal,
   task: (connection: NdjsonConnection) => Promise<T>,
 ): Promise<T> {
-  const connection = await connectUnixSocket(
-    options.socketPath,
-    options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs },
-  );
+  const connection = await connectUnixSocket(options.socketPath, {
+    transportLimits: NDJSON_TRANSPORT_LIMITS,
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+  });
+  observeConnectionDiagnostics(connection, options.onConnectionDiagnostics);
 
   try {
     return await withConnectionAbort(connection, signal, () => task(connection));
@@ -348,9 +402,11 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
   params?: unknown,
   acceptPreviousLifecycleSchema = false,
   usePreviousLifecycleSchema = false,
+  onPreviousLifecycleSchema?: () => void,
 ): Promise<ProtocolResult<TMethod>> {
   const request = protocolRequest(id, method, params);
-  connection.send(
+  sendProtocolMessage(
+    connection,
     usePreviousLifecycleSchema
       ? { ...request, schemaVersion: PREVIOUS_LIFECYCLE_SCHEMA_VERSION }
       : request,
@@ -364,6 +420,7 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
     if (acceptPreviousLifecycleSchema && !usePreviousLifecycleSchema) {
       const previousError = PreviousLifecycleErrorResponseSchema.safeParse(next.value);
       if (previousError.success && previousError.data.id === id) {
+        onPreviousLifecycleSchema?.();
         throw protocolSafeError({
           code: PREVIOUS_LIFECYCLE_SCHEMA_REQUIRED,
           message: "Observer requires the immediately previous lifecycle schema.",
@@ -374,6 +431,7 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
     if (response.id !== id) {
       continue;
     }
+    if (isPreviousLifecycleSchemaMessage(next.value)) onPreviousLifecycleSchema?.();
     return parseProtocolResponseResult(response, method);
   }
 }
@@ -500,8 +558,11 @@ function subscriptionIterator(
             // Event streams are long-lived after the bounded subscription acknowledgement.
             const event = await readSubscriptionEvent(opened);
             if (event === undefined) {
-              await close();
-              return { done: true, value: undefined };
+              throw protocolSafeError({
+                code: "PROTOCOL_SUBSCRIPTION_CLOSED",
+                message: "Observer event subscription closed unexpectedly.",
+                hint: "Reconnect and load a fresh snapshot before continuing.",
+              });
             }
             return { done: false, value: event };
           } catch (error) {
@@ -529,10 +590,11 @@ async function openSubscription(
   signal?: AbortSignal,
 ): Promise<OpenSubscription> {
   const expectedObserver = resolveExpectedObserver(options);
-  const connection = await connectUnixSocket(
-    options.socketPath,
-    options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs },
-  );
+  const connection = await connectUnixSocket(options.socketPath, {
+    transportLimits: NDJSON_TRANSPORT_LIMITS,
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+  });
+  observeConnectionDiagnostics(connection, options.onConnectionDiagnostics);
   const iterator = connection.messages()[Symbol.asyncIterator]();
   try {
     if (expectedObserver !== undefined) {
@@ -545,7 +607,7 @@ async function openSubscription(
         signal,
       );
     }
-    connection.send(protocolRequest(id, "events.subscribe", filter));
+    sendProtocolMessage(connection, protocolRequest(id, "events.subscribe", filter));
     // The acknowledgement is bounded; the event stream itself remains long-lived.
     await readSubscriptionAck(connection, iterator, id, requestTimeoutMs(options), signal);
     return { connection, iterator };
@@ -553,6 +615,16 @@ async function openSubscription(
     connection.close();
     throw error;
   }
+}
+
+function observeConnectionDiagnostics(
+  connection: NdjsonConnection,
+  onConnectionDiagnostics: CreateObserverClientOptions["onConnectionDiagnostics"],
+): void {
+  if (onConnectionDiagnostics === undefined) return;
+  void connection.closed
+    .then(() => onConnectionDiagnostics(connection.diagnostics()))
+    .catch(() => undefined);
 }
 
 function resolveExpectedObserver(
@@ -575,7 +647,7 @@ async function assertExpectedObserverForSubscription(
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<void> {
-  connection.send(protocolRequest(id, "observer.health"));
+  sendProtocolMessage(connection, protocolRequest(id, "observer.health"));
   const message = await readNextProtocolMessage(
     connection,
     iterator,
@@ -595,6 +667,15 @@ async function assertExpectedObserverForSubscription(
   }
   const health = parseProtocolResponseResult(response, "observer.health");
   assertObserverIdentity(expectedObserver, health);
+}
+
+function sendProtocolMessage(connection: NdjsonConnection, message: unknown): void {
+  if (connection.send(message)) return;
+  throw protocolSafeError({
+    code: "PROTOCOL_TRANSPORT_OVERFLOW",
+    message: "Observer transport could not accept another frame.",
+    hint: "Reconnect and load a fresh snapshot before continuing.",
+  });
 }
 
 async function readSubscriptionAck(
@@ -662,13 +743,20 @@ function parseProtocolResponseMessage(
   throw parsed.error;
 }
 
+function isPreviousLifecycleSchemaMessage(message: unknown): boolean {
+  const parsed = ProtocolSchemaVersionProbeSchema.safeParse(message);
+  return parsed.success && parsed.data.schemaVersion === PREVIOUS_LIFECYCLE_SCHEMA_VERSION;
+}
+
 function normalizePreviousLifecycleResponse(message: unknown): ProtocolResponse | undefined {
   const success = PreviousLifecycleSuccessResponseSchema.safeParse(message);
   if (success.success) {
+    const result = normalizePreviousLifecycleResult(success.data.result);
+    if (result === undefined) return undefined;
     const normalized = ProtocolResponseSchema.safeParse({
       ...success.data,
       schemaVersion: STATION_SCHEMA_VERSION,
-      result: { ...success.data.result, schemaVersion: STATION_SCHEMA_VERSION },
+      result,
     });
     return normalized.success ? normalized.data : undefined;
   }
@@ -679,6 +767,22 @@ function normalizePreviousLifecycleResponse(message: unknown): ProtocolResponse 
     schemaVersion: STATION_SCHEMA_VERSION,
   });
   return normalized.success ? normalized.data : undefined;
+}
+
+function normalizePreviousLifecycleResult(result: unknown): unknown | undefined {
+  const health = PreviousObserverHealthSchema.safeParse(result);
+  if (health.success) return ObserverHealthSchema.parse(health.data);
+
+  const stop = PreviousObserverStopReceiptSchema.safeParse(result);
+  if (stop.success) {
+    return ObserverStopReceiptSchema.parse({
+      ...stop.data,
+      schemaVersion: STATION_SCHEMA_VERSION,
+    });
+  }
+
+  const readiness = SessionRecoveryReadinessSchema.safeParse(result);
+  return readiness.success ? readiness.data : undefined;
 }
 
 function parseProtocolEventEnvelope(message: unknown) {

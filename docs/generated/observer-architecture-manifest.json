@@ -5970,7 +5970,7 @@
           "name": "startObserverServer",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Owns the Observer protocol socket lifecycle, including owned close versus displaced abandon, and enforces admission before application operations."
+          "purpose": "Owns the Observer protocol socket lifecycle, including owned close versus displaced abandon, enforces admission before application operations, and retains content-free overloaded-connection evidence in Observer logs."
         },
         {
           "name": "StartObserverServerOptions",
@@ -13585,7 +13585,7 @@
           "name": "startObserverServer",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Owns the Observer protocol socket lifecycle, including owned close versus displaced abandon, and enforces admission before application operations."
+          "purpose": "Owns the Observer protocol socket lifecycle, including owned close versus displaced abandon, enforces admission before application operations, and retains content-free overloaded-connection evidence in Observer logs."
         },
         {
           "name": "StartObserverServerOptions",
@@ -13600,6 +13600,12 @@
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverIncumbentLifecycle"]
+        },
+        {
+          "specifier": "../stationLogger.js",
+          "resolvedPath": "apps/observer/src/stationLogger.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationLogger"]
         },
         {
           "specifier": "@station/contracts",
@@ -17828,7 +17834,7 @@
       "declaration": "startObserverServer",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Owns the Observer protocol socket lifecycle, including owned close versus displaced abandon, and enforces admission before application operations.",
+      "purpose": "Owns the Observer protocol socket lifecycle, including owned close versus displaced abandon, enforces admission before application operations, and retains content-free overloaded-connection evidence in Observer logs.",
       "dependencies": [
         {
           "path": "packages/protocol/src/server.ts",
@@ -18643,7 +18649,7 @@
       "declaration": "createObserverService",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Presents one build-pinned Observer protocol endpoint as the shared client service and preserves durable command results loaded at terminal completion.",
+      "purpose": "Presents one build-pinned Observer protocol endpoint as the shared client service, preserves durable command results loaded at terminal completion, and aggregates content-free metrics across discarded physical connections.",
       "dependencies": [
         {
           "path": "packages/contracts/src/observer.ts",
@@ -18794,7 +18800,7 @@
       "declaration": "createObserverClient",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Presents Observer operations to clients through validated NDJSON requests.",
+      "purpose": "Presents Observer operations through validated NDJSON requests and surfaces bounded transport overload as a retryable connection failure.",
       "dependencies": []
     },
     {
@@ -18810,7 +18816,7 @@
       "declaration": "startProtocolServer",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Exposes Observer operations through validated NDJSON requests on a Unix socket.",
+      "purpose": "Exposes Observer operations through validated NDJSON requests and disconnects subscriptions that exceed the transport's bounded delivery capacity while reporting content-free settlement metrics to the composition boundary.",
       "dependencies": [
         {
           "path": "packages/contracts/src/observer.ts",
