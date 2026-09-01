@@ -518,6 +518,7 @@ async function runScenario(input) {
 
     const preservedRefusal =
       input.busyHost && input.options.busyHostOutcome === "preserved-refusal";
+    let completedInstallRefusal = false;
     const expectedUpdateCode = preservedRefusal ? 1 : 0;
     const updateResult =
       input.invocation === "external"
@@ -534,12 +535,31 @@ async function runScenario(input) {
           );
     assertEqual(updateResult.code, expectedUpdateCode, `${input.name} update exit code`);
     if (preservedRefusal) {
-      const report = parseComposedUpdateReport(
-        parseJson(updateResult.stdout, `${input.name} update report`),
-        input.options.incumbentVersion,
-      );
-      assertUpdateReport(report, input, installedBinary, configPath);
-      assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
+      if (updateResult.stdout.trim().length === 0) {
+        assertIncludes(
+          updateResult.stderr,
+          "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
+          `${input.name} refused update code`,
+        );
+        assertIncludes(
+          updateResult.stderr,
+          "Host terminals are not all eligible for live handoff.",
+          `${input.name} refused update reason`,
+        );
+        assertDeepEqual(
+          await captureDryRunState(dryRunStateInput),
+          beforeDryRun,
+          `${input.name} refused update persistent and runtime state`,
+        );
+      } else {
+        const report = parseComposedUpdateReport(
+          parseJson(updateResult.stdout, `${input.name} update report`),
+          input.options.incumbentVersion,
+        );
+        assertUpdateReport(report, input, installedBinary, configPath);
+        assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
+        completedInstallRefusal = true;
+      }
     } else {
       const report = parseComposedUpdateReport(
         parseJson(updateResult.stdout, `${input.name} update report`),
@@ -549,32 +569,23 @@ async function runScenario(input) {
       assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
     }
     if (transportDir !== undefined) {
-      await assertExactTransportRequests(transportDir, input);
+      await assertExactTransportRequests(transportDir, input, completedInstallRefusal);
     }
 
-    if (preservedRefusal) {
-      const targetObserver = await waitForObserver(observerClient, input.target.version);
-      diagnostics.observerPid = targetObserver.pid;
-      await recordProcessIdentity(processIdentities, "target-observer", targetObserver.pid);
-      assertObserverBuildIdentity(
-        targetObserver.version,
-        input.target.buildIdentity,
-        `${input.name} target Observer`,
+    if (preservedRefusal && !completedInstallRefusal) {
+      const preservedObserver = await waitForObserver(
+        observerClient,
+        input.options.incumbentVersion,
       );
-      assertNotEqual(
-        targetObserver.pid,
+      assertEqual(
+        preservedObserver.pid,
         incumbentObserver.pid,
-        `${input.name} Observer replacement PID`,
+        `${input.name} incumbent Observer identity preserved`,
       );
       assertDeepEqual(
         readUnixSocketHolderPids(socketPath),
-        [targetObserver.pid],
-        `${input.name} target Observer holder`,
-      );
-      assertEqual(
-        await waitForExactProcessExit(processIdentities.get("incumbent-observer"), 10_000),
-        true,
-        `${input.name} incumbent Observer exit`,
+        [incumbentObserver.pid],
+        `${input.name} incumbent Observer holder preserved`,
       );
     } else {
       const targetObserver = await waitForObserver(observerClient, input.target.version);
@@ -695,7 +706,7 @@ async function runScenario(input) {
       tmuxTempDir,
       tmuxServer,
       name: input.name,
-      expectNativeRefusal: preservedRefusal,
+      expectNativeRefusal: completedInstallRefusal,
       processIdentities,
     });
     if (input.busyHost) {
@@ -734,7 +745,10 @@ async function runScenario(input) {
     await observerClient.stop();
     await waitForMissing(socketPath, 10_000);
     assertEqual(
-      await waitForExactProcessExit(processIdentities.get("target-observer"), 10_000),
+      await waitForExactProcessExit(
+        processIdentities.get(completedInstallRefusal ? "target-observer" : "incumbent-observer"),
+        10_000,
+      ),
       true,
       `${input.name} active Observer cleanup`,
     );
@@ -1167,7 +1181,7 @@ async function writeReleaseTransport(input) {
   return transportDir;
 }
 
-async function assertExactTransportRequests(transportDir, input) {
+async function assertExactTransportRequests(transportDir, input, completedInstallRefusal) {
   const archiveName = `stn-${input.target.tag}-${nativeTarget()}.tar.gz`;
   const actual = (await readFile(join(transportDir, "curl.log"), "utf8"))
     .split(/\r?\n/u)
@@ -1181,10 +1195,16 @@ async function assertExactTransportRequests(transportDir, input) {
   ];
   const expected = [
     ...detectionRequests,
-    releaseDownloadUrl(input.target.tag, "install.sh"),
-    releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
-    releaseDownloadUrl(input.target.tag, archiveName),
-    releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
+    ...(input.busyHost &&
+    input.options.busyHostOutcome === "preserved-refusal" &&
+    !completedInstallRefusal
+      ? []
+      : [
+          releaseDownloadUrl(input.target.tag, "install.sh"),
+          releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
+          releaseDownloadUrl(input.target.tag, archiveName),
+          releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
+        ]),
   ].sort();
   assertDeepEqual(actual, expected, `${input.name} exact update transport requests`);
 }
@@ -1654,7 +1674,11 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
       "completed",
       "completed",
       "completed",
-      refusal ? "failed" : input.busyHost ? "completed" : "skipped",
+      refusal
+        ? "failed"
+        : !input.busyHost && input.target.mode === "staged"
+          ? "skipped"
+          : "completed",
     ],
     `${input.name} exact update step outcomes`,
   );
@@ -1700,7 +1724,11 @@ function assertLegacyUpdateReport(report, input, installedBinary, configPath) {
       "completed",
       "completed",
       "completed",
-      refusal ? "failed" : input.busyHost ? "completed" : "skipped",
+      refusal
+        ? "failed"
+        : !input.busyHost && input.target.mode === "staged"
+          ? "skipped"
+          : "completed",
     ],
     `${input.name} exact legacy update step outcomes`,
   );
