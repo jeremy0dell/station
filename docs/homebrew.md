@@ -10,7 +10,7 @@ only with explicit `stn update --drive-package-manager`; it does not install a
 tap, formula, or cask.
 
 The public installation path for experimental pre-alpha
-`v0.0.0-pre-alpha.12` is the exact-tag native installer documented in
+`v0.0.0-pre-alpha.13` is the exact-tag native installer documented in
 [Install Station](install.md). Do not use the historical tap for public
 onboarding, and do not update it as part of pre-alpha publication.
 
