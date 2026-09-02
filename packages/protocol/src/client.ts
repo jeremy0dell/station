@@ -15,8 +15,6 @@ import type {
 import {
   ObserverHealthSchema,
   ObserverStopReceiptSchema,
-  ProviderHealthSchema,
-  ProviderIdSchema,
   SessionRecoveryReadinessSchema,
   STATION_SCHEMA_VERSION,
   StationEventSchema,
@@ -127,35 +125,16 @@ const PreviousLifecycleErrorResponseSchema = z
     error: z.unknown(),
   })
   .strict();
-const PreviousProviderHealthSchema = ProviderHealthSchema.omit({ provider: true }).extend({
-  providerId: ProviderIdSchema,
-});
 const PreviousObserverHealthSchema = ObserverHealthSchema.omit({
   schemaVersion: true,
-  providerHealth: true,
 })
   .extend({
     schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION),
-    providerHealth: z.record(ProviderIdSchema, PreviousProviderHealthSchema).optional(),
   })
-  .transform(({ schemaVersion: _schemaVersion, providerHealth, ...health }) => {
-    const normalizedProviderHealth =
-      providerHealth === undefined
-        ? undefined
-        : Object.fromEntries(
-            Object.entries(providerHealth).map(([providerId, entry]) => {
-              const { providerId: _legacyProviderId, ...provider } = entry;
-              return [providerId, { ...provider, provider: providerId }];
-            }),
-          );
-    return {
-      ...health,
-      schemaVersion: STATION_SCHEMA_VERSION,
-      ...(normalizedProviderHealth === undefined
-        ? {}
-        : { providerHealth: normalizedProviderHealth }),
-    };
-  });
+  .transform(({ schemaVersion: _schemaVersion, ...health }) => ({
+    ...health,
+    schemaVersion: STATION_SCHEMA_VERSION,
+  }));
 const PreviousObserverStopReceiptSchema = ObserverStopReceiptSchema.omit({
   schemaVersion: true,
 }).extend({ schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION) });
