@@ -9,6 +9,7 @@ import { toSafeError } from "@station/client";
 import { createDashboardRuntime } from "@station/dashboard-core/runtime";
 import {
   loadStationTuiConfig,
+  resolveSessionCreatePolicies,
   startWidgetConfigWrites,
   type WidgetConfigWrites,
 } from "../config/tuiConfig.js";
@@ -114,6 +115,7 @@ export async function runDashboardMain(): Promise<void> {
     clientState: client.state,
     observerService: client.service,
     popupRuntime,
+    sessionCreatePolicies: resolveSessionCreatePolicies(tuiConfig.config?.sessionCreate),
     exitRenderer: exit,
   });
   const dashboardLayout = createDashboardScrollController();

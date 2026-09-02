@@ -54,9 +54,15 @@ describe("station command dispatch through the shared client", () => {
         clientLabel: "Station test",
         waitForFocusCompletion: true,
       }),
+      createdSession: { applyUiPolicy: async () => ({ kind: "success" }) },
       managedSessions: createObserverManagedSessionCapabilities({
+        source: client.state,
         service: client.service,
         clientLabel: "Station test",
+        policyForTerminalProvider: () => ({
+          focusCreatedSession: true,
+          dismissDashboard: true,
+        }),
       }),
       worktreeRemoval: createObserverWorktreeRemovalCapabilities({
         service: client.service,

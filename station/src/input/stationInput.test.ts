@@ -822,6 +822,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
         paneEffects,
         registry,
         managedLaunch,
+        createdSessionPolicy: { focusCreatedSession: true, dismissDashboard: true },
       }),
     });
     const runtime = createStationInputRuntime({
@@ -998,6 +999,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
         paneEffects,
         registry,
         managedLaunch,
+        createdSessionPolicy: { focusCreatedSession: true, dismissDashboard: true },
       }),
     });
     let lastPanes: readonly PaneRecord[] | undefined;

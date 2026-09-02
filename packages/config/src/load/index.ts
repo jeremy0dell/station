@@ -124,7 +124,7 @@ function collectTuiWorkspaceDiagnostics(
       code: "CONFIG_TUI_SECTION_INVALID",
       message: `The [tui] section is invalid (${formatZodError(
         tuiResult.error,
-      )}) and was ignored; using widget defaults.`,
+      )}) and was ignored; using TUI defaults.`,
       severity: "warn",
       configPath,
     });

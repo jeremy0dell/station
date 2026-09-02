@@ -14,7 +14,12 @@ import {
 import { createStation } from "../app/createStation.js";
 import { NO_OP_CLIPBOARD_EFFECTS } from "../copy/testing.js";
 import { createStationStore } from "../state/store.js";
-import { loadStationTuiConfig, startWidgetConfigWrites } from "./tuiConfig.js";
+import {
+  loadStationTuiConfig,
+  resolveSessionCreatePolicies,
+  sessionCreatePolicyForTerminal,
+  startWidgetConfigWrites,
+} from "./tuiConfig.js";
 
 describe("loadStationTuiConfig", () => {
   const dirs: string[] = [];
@@ -299,6 +304,36 @@ root = "${projectRoot}"
 
     expect(dismisses).toBe(1);
     expect(exits).toBe(0);
+  });
+});
+
+describe("session-create policy resolution", () => {
+  it("defaults globally and inherits partial terminal overrides", () => {
+    const defaults = resolveSessionCreatePolicies(undefined);
+    expect(sessionCreatePolicyForTerminal(defaults, "tmux")).toEqual({
+      focusCreatedSession: true,
+      dismissDashboard: true,
+    });
+
+    const resolved = resolveSessionCreatePolicies({
+      focusCreatedSession: false,
+      terminals: {
+        tmux: { dismissDashboard: false },
+        native: { focusCreatedSession: true },
+      },
+    });
+    expect(sessionCreatePolicyForTerminal(resolved, "tmux")).toEqual({
+      focusCreatedSession: false,
+      dismissDashboard: false,
+    });
+    expect(sessionCreatePolicyForTerminal(resolved, "native")).toEqual({
+      focusCreatedSession: true,
+      dismissDashboard: true,
+    });
+    expect(sessionCreatePolicyForTerminal(resolved, "future")).toEqual({
+      focusCreatedSession: false,
+      dismissDashboard: true,
+    });
   });
 });
 

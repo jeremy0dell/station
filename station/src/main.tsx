@@ -9,7 +9,11 @@ import { stationBuildInfo } from "@station/runtime";
 import { convergeStationHost } from "@station/terminal";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
-import { loadStationTuiConfig } from "./config/tuiConfig.js";
+import {
+  loadStationTuiConfig,
+  resolveSessionCreatePolicies,
+  sessionCreatePolicyForTerminal,
+} from "./config/tuiConfig.js";
 import { createNodeFolderService } from "./folderNavigation/nodeFolderService.js";
 import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "./copy/runtimeClipboard.js";
@@ -344,6 +348,10 @@ async function startStationMain(
     openExternalUrl,
     ...(tuiConfig.config === undefined ? {} : { tuiConfig: tuiConfig.config }),
     ...(tuiConfig.configPath === undefined ? {} : { tuiConfigPath: tuiConfig.configPath }),
+    createdSessionPolicy: sessionCreatePolicyForTerminal(
+      resolveSessionCreatePolicies(tuiConfig.config?.sessionCreate),
+      "native",
+    ),
     shellAutoCloseOverlay: readShellAutoCloseOverlay(env.STATION_SHELL_AUTOCLOSE),
     ...(auxShellPlacement === undefined ? {} : { resolveAuxShellPlacement: auxShellPlacement }),
     ...(managedTerminalAttacher === undefined ? {} : { managedTerminalAttacher }),

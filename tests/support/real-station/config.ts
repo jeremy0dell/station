@@ -33,6 +33,13 @@ export type WriteRealStationConfigOptions = {
   recovery?: boolean;
   stationPersistentAgents?: boolean;
   tmuxSession?: string;
+  sessionCreatePolicy?: {
+    focusCreatedSession: boolean;
+    dismissDashboard: boolean;
+    terminals?: Readonly<
+      Record<string, { focusCreatedSession?: boolean; dismissDashboard?: boolean }>
+    >;
+  };
   eventHook?: {
     command: string;
     args?: string[];
@@ -81,6 +88,7 @@ export async function writeRealStationConfig(
     `workbench_socket_path = ${tomlString(tmuxEndpoint.socketPath)}`,
     `workbench_session = ${tomlString(tmuxSession)}`,
     "",
+    ...sessionCreateConfigLines(options),
     ...harnessLines,
     ...eventHookConfigLines(options),
     ...featureFlagConfigLines(options),
@@ -123,6 +131,28 @@ export async function writeRealStationConfig(
     tmuxSession,
     projectId,
   };
+}
+
+function sessionCreateConfigLines(options: WriteRealStationConfigOptions): string[] {
+  const policy = options.sessionCreatePolicy;
+  if (policy === undefined) return [];
+  const lines = [
+    "[tui.session_create]",
+    `focus_created_session = ${policy.focusCreatedSession}`,
+    `dismiss_dashboard = ${policy.dismissDashboard}`,
+    "",
+  ];
+  for (const [provider, override] of Object.entries(policy.terminals ?? {})) {
+    lines.push(`[tui.session_create.terminals.${tomlKey(provider)}]`);
+    if (override.focusCreatedSession !== undefined) {
+      lines.push(`focus_created_session = ${override.focusCreatedSession}`);
+    }
+    if (override.dismissDashboard !== undefined) {
+      lines.push(`dismiss_dashboard = ${override.dismissDashboard}`);
+    }
+    lines.push("");
+  }
+  return lines;
 }
 
 function featureFlagConfigLines(options: WriteRealStationConfigOptions): string[] {
@@ -223,4 +253,8 @@ export function uniqueTmuxSession(prefix = "station-real"): string {
 
 function tomlString(value: string): string {
   return JSON.stringify(value);
+}
+
+function tomlKey(value: string): string {
+  return /^[A-Za-z0-9_-]+$/u.test(value) ? value : tomlString(value);
 }

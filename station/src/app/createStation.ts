@@ -78,6 +78,10 @@ export function createStation(options: CreateStationOptions): Station {
     paneEffects,
     registry,
     managedLaunch,
+    createdSessionPolicy: options.createdSessionPolicy ?? {
+      focusCreatedSession: true,
+      dismissDashboard: true,
+    },
   });
   const dashboardRuntime = createStationDashboardRuntime(
     stationClient,

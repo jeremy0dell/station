@@ -136,7 +136,16 @@ function makeStore(folderService?: TuiFolderService): StationDashboardRuntime {
   const service = createStationStubObserverService(source, { dispatchDelayMs: 1 });
   const capabilities: DashboardCapabilities = {
     activation: createObserverActivationCapabilities({ source, service, clientLabel: "Station" }),
-    managedSessions: createObserverManagedSessionCapabilities({ service, clientLabel: "Station" }),
+    createdSession: { applyUiPolicy: async () => ({ kind: "success" }) },
+    managedSessions: createObserverManagedSessionCapabilities({
+      source,
+      service,
+      clientLabel: "Station",
+      policyForTerminalProvider: () => ({
+        focusCreatedSession: true,
+        dismissDashboard: true,
+      }),
+    }),
     worktreeRemoval: createObserverWorktreeRemovalCapabilities({ service, clientLabel: "Station" }),
     shell: { open: () => dashboardExecution({ kind: "success" }) },
     dismissal: {

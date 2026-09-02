@@ -53,6 +53,11 @@ describe("real Station config support", () => {
       repo,
       harnessProvider: "scripted",
       scriptedCommand: "/usr/local/bin/node",
+      sessionCreatePolicy: {
+        focusCreatedSession: true,
+        dismissDashboard: true,
+        terminals: { tmux: { dismissDashboard: false } },
+      },
     });
     endpointRoots.push(fixture.tmuxEndpoint.rootPath);
 
@@ -72,6 +77,10 @@ describe("real Station config support", () => {
       `[terminal.tmux]\ncommand = ${JSON.stringify(fixture.tmuxEndpoint.wrapperPath)}\nworkbench_socket_path = ${JSON.stringify(fixture.tmuxEndpoint.socketPath)}`,
     );
     expect(config).toContain('[harness.scripted]\nenabled = true\ncommand = "/usr/local/bin/node"');
+    expect(config).toContain(
+      "[tui.session_create]\nfocus_created_session = true\ndismiss_dashboard = true",
+    );
+    expect(config).toContain("[tui.session_create.terminals.tmux]\ndismiss_dashboard = false");
 
     const second = await writeRealStationConfig({
       env,

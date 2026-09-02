@@ -13,6 +13,7 @@ import type {
   TuiFolderReadResult,
   TuiFolderService,
 } from "../../../src/services/folderService.js";
+import type { CreatedSessionUiCommand } from "../../../src/state/capabilities/createdSession.js";
 import { dashboardExecution } from "../../../src/state/capabilities/execution.js";
 import { createEmptyTuiLocalRows } from "../../../src/state/localRows.js";
 import { selectedAddProjectFolderRow } from "../../../src/state/selection/addProject.js";
@@ -263,6 +264,52 @@ describe("dashboard runtime", () => {
     completion.resolve({ kind: "success" });
     await waitFor(() => store.state.getState().screen.name === "dashboard");
     expect(store.state.getState().localRows.pendingCreate).toEqual([]);
+  });
+
+  it("settles deliberate New Session before applying its created-session UI command", async () => {
+    const snapshot = createDashboardSnapshot();
+    const capabilities = createFakeDashboardCapabilities();
+    capabilities.createHandle = () =>
+      dashboardExecution({
+        kind: "success",
+        createdSessionCommand: createdSessionCommand(),
+      });
+    let screenAtInvocation: DashboardStateView["screen"] | undefined;
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      capabilities,
+    });
+    capabilities.createdSessionResult = () => {
+      screenAtInvocation = store.state.getState().screen;
+      return { kind: "success" };
+    };
+
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "C" });
+
+    await waitFor(() => capabilities.createdSessionCommands.length === 1);
+    expect(screenAtInvocation).toEqual({ name: "dashboard" });
+  });
+
+  it("discards a created-session UI command after the dashboard scope closes", async () => {
+    const snapshot = createDashboardSnapshot();
+    const capabilities = createFakeDashboardCapabilities();
+    const completion = deferred<Awaited<ReturnType<typeof dashboardExecution>["completion"]>>();
+    capabilities.createHandle = () => dashboardExecution(completion.promise);
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      capabilities,
+    });
+
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "C" });
+    const disposal = store.dispose();
+    completion.resolve({ kind: "success", createdSessionCommand: createdSessionCommand() });
+    await disposal;
+
+    expect(capabilities.createdSessionCommands).toEqual([]);
   });
 
   it("closes deliberate New Session and surfaces a non-retryable success notice", async () => {
@@ -1539,6 +1586,20 @@ function snapshotWithProjectHarness(
         ? { ...project, defaults: { ...project.defaults, harness } }
         : project,
     ),
+  };
+}
+
+function createdSessionCommand(): CreatedSessionUiCommand {
+  return {
+    type: "createdSession.applyUiPolicy",
+    target: {
+      sessionId: "ses_wt_web_idle",
+      projectId: "web",
+      worktreeId: "wt_web_idle",
+      branch: "fix-nav-mobile",
+      terminalProvider: "tmux",
+    },
+    policy: { focusCreatedSession: true, dismissDashboard: true },
   };
 }
 

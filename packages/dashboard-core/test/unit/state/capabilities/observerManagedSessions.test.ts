@@ -1,14 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { createObserverManagedSessionCapabilities } from "../../../../src/state/capabilities/managedSessions.js";
 import { createCommandSnapshot } from "../../../fixtures/snapshots.js";
+import { FakeClientStateSource } from "../../../support/fakeClientStateSource.js";
 import { FakeTuiObserverService } from "../../../support/fakeObserverService.js";
+
+function createCapability(snapshot: ReturnType<typeof createCommandSnapshot>) {
+  const service = new FakeTuiObserverService(snapshot);
+  const capability = createObserverManagedSessionCapabilities({
+    service,
+    source: new FakeClientStateSource(snapshot),
+    policyForTerminalProvider: () => ({
+      focusCreatedSession: true,
+      dismissDashboard: false,
+    }),
+  });
+  return { service, capability };
+}
 
 describe("observer managed-session capability", () => {
   it("creates from product values without an optimistic row and returns the bounded failure", async () => {
     const snapshot = createCommandSnapshot("idle");
     const project = snapshot.projects[0];
     if (project === undefined) throw new Error("project fixture missing");
-    const service = new FakeTuiObserverService(snapshot);
+    const { service, capability } = createCapability(snapshot);
     service.nextCompletion = {
       status: "failed",
       commandId: "cmd_tui_1",
@@ -18,8 +32,6 @@ describe("observer managed-session capability", () => {
         message: "Create failed.",
       },
     };
-    const capability = createObserverManagedSessionCapabilities({ service });
-
     const handle = capability.create({
       project,
       title: "Feature session",
@@ -50,14 +62,12 @@ describe("observer managed-session capability", () => {
     const snapshot = createCommandSnapshot("idle");
     const project = snapshot.projects[0];
     if (project === undefined) throw new Error("project fixture missing");
-    const service = new FakeTuiObserverService(snapshot);
+    const { service, capability } = createCapability(snapshot);
     service.nextCompletion = {
       status: "failed",
       commandId: "cmd_tui_quick",
       error: { tag: "CommandExecutionError", code: "CREATE_FAILED", message: "Create failed." },
     };
-    const capability = createObserverManagedSessionCapabilities({ service });
-
     const handle = capability.quickCreate({
       project,
       title: "Quick session",
@@ -76,8 +86,7 @@ describe("observer managed-session capability", () => {
     const snapshot = createCommandSnapshot("idle");
     const project = snapshot.projects[0];
     if (project === undefined) throw new Error("project fixture missing");
-    const service = new FakeTuiObserverService(snapshot);
-    const capability = createObserverManagedSessionCapabilities({ service });
+    const { service, capability } = createCapability(snapshot);
 
     const handle = capability.fork({
       project,
@@ -109,6 +118,94 @@ describe("observer managed-session capability", () => {
         harness: { provider: "codex" },
         placement: { intent: "detached" },
       },
+    });
+  });
+
+  it("returns one exact data-only UI command from the durable create result", async () => {
+    const snapshot = createCommandSnapshot("idle");
+    const project = snapshot.projects[0];
+    if (project === undefined) throw new Error("project fixture missing");
+    const { service, capability } = createCapability(snapshot);
+    service.nextCompletion = {
+      status: "succeeded",
+      commandId: "cmd_tui_1",
+      result: {
+        type: "session.create",
+        projectId: "web",
+        worktreeId: "wt_web_idle",
+        sessionId: "ses_wt_web_idle",
+        requestedPlacement: "detached",
+        resolvedPlacement: {
+          provider: "tmux",
+          targetId: "tmux:web:fix-nav-mobile",
+          generation: "1",
+          presentation: "detached",
+        },
+      },
+    };
+
+    await expect(
+      capability.quickCreate({
+        project,
+        title: "Quick session",
+        hiddenBranch: "fix-nav-mobile",
+        harness: "codex",
+      }).completion,
+    ).resolves.toEqual({
+      kind: "success",
+      createdSessionCommand: {
+        type: "createdSession.applyUiPolicy",
+        target: {
+          sessionId: "ses_wt_web_idle",
+          projectId: "web",
+          worktreeId: "wt_web_idle",
+          branch: "fix-nav-mobile",
+          terminalProvider: "tmux",
+        },
+        policy: { focusCreatedSession: true, dismissDashboard: false },
+      },
+    });
+  });
+
+  it.each([
+    ["missing", undefined],
+    [
+      "provider-mismatched",
+      {
+        type: "session.create" as const,
+        projectId: "web",
+        worktreeId: "wt_web_idle",
+        sessionId: "ses_wt_web_idle",
+        requestedPlacement: "detached" as const,
+        resolvedPlacement: {
+          provider: "native",
+          targetId: "native:wt_web_idle",
+          generation: "1",
+          presentation: "detached" as const,
+        },
+      },
+    ],
+  ])("returns a non-retryable notice for a %s durable result", async (_case, result) => {
+    const snapshot = createCommandSnapshot("idle");
+    const project = snapshot.projects[0];
+    if (project === undefined) throw new Error("project fixture missing");
+    const { service, capability } = createCapability(snapshot);
+    service.nextCompletion = {
+      status: "succeeded",
+      commandId: "cmd_tui_1",
+      ...(result === undefined ? {} : { result }),
+    };
+
+    await expect(
+      capability.create({
+        project,
+        title: "Quick session",
+        hiddenBranch: "fix-nav-mobile",
+        harness: "codex",
+      }).completion,
+    ).resolves.toMatchObject({
+      kind: "success",
+      notice: { kind: "error" },
     });
   });
 });

@@ -71,6 +71,19 @@ welcome_on_boot = true      # show the welcome intro over the restored layout on
 #   [[workspace.automations.steps]]
 #   command = 'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; hunk diff "$base" --watch --no-exclude-untracked'
 
+# Dashboard behavior after New Session, Quick Session, or Quick Group creation.
+[tui.session_create]
+focus_created_session = true
+dismiss_dashboard = true
+
+# Terminal-provider overrides inherit omitted values from the global policy.
+[tui.session_create.terminals.tmux]
+dismiss_dashboard = false
+
+[tui.session_create.terminals.native]
+focus_created_session = true
+dismiss_dashboard = true
+
 [[hooks.event]]
 id = "notify-agent-state"
 events = ["worktree.agentStateChanged"]

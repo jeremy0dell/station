@@ -1,6 +1,7 @@
 import { toSafeError, type ObserverService, type StationClientStateSource } from "@station/client";
 import {
   createObserverActivationCapabilities,
+  createObserverCreatedSessionCapabilities,
   createObserverManagedSessionCapabilities,
   createObserverWorktreeRemovalCapabilities,
   dashboardExecution,
@@ -10,6 +11,10 @@ import {
   resolveDashboardShellTarget,
   STALE_DASHBOARD_TARGET_NOTICE,
 } from "../dashboardCapabilities/shellTarget.js";
+import {
+  sessionCreatePolicyForTerminal,
+  type ResolvedSessionCreatePolicies,
+} from "../config/tuiConfig.js";
 import type { PopupRuntime } from "./popupRuntime.js";
 
 /** Standalone composition inputs for semantic dashboard execution. */
@@ -17,6 +22,8 @@ export type CreateStandaloneDashboardCapabilitiesOptions = {
   clientState: StationClientStateSource;
   observerService: ObserverService;
   popupRuntime: PopupRuntime;
+  /** Renderer-resolved policy table; this boundary never receives raw `[tui]` config. */
+  sessionCreatePolicies: ResolvedSessionCreatePolicies;
   exitRenderer(exitCode: number): void;
 };
 
@@ -27,6 +34,13 @@ export type CreateStandaloneDashboardCapabilitiesOptions = {
 export function createDashboardCapabilities(
   options: CreateStandaloneDashboardCapabilitiesOptions,
 ): DashboardCapabilities {
+  const dismissCreatedSessionDashboard = async (): Promise<void> => {
+    if (options.popupRuntime.dismissDashboard !== undefined) {
+      await options.popupRuntime.dismissDashboard();
+      return;
+    }
+    options.exitRenderer(0);
+  };
   const onFocusSuccess = options.popupRuntime.exitOnFocusSuccess
     ? async (): Promise<void> => {
         options.exitRenderer(0);
@@ -51,17 +65,28 @@ export function createDashboardCapabilities(
 
   const managedOptions: Parameters<typeof createObserverManagedSessionCapabilities>[0] = {
     service: options.observerService,
+    source: options.clientState,
     clientLabel: "station",
+    policyForTerminalProvider: (provider) =>
+      sessionCreatePolicyForTerminal(options.sessionCreatePolicies, provider),
+  };
+
+  const createdSessionOptions: Parameters<typeof createObserverCreatedSessionCapabilities>[0] = {
+    source: options.clientState,
+    service: options.observerService,
+    clientLabel: "station",
+    dismissDashboard: dismissCreatedSessionDashboard,
   };
   if (options.popupRuntime.focusOrigin !== undefined) {
-    managedOptions.focusOrigin = options.popupRuntime.focusOrigin;
+    createdSessionOptions.focusOrigin = options.popupRuntime.focusOrigin;
   }
   if (options.popupRuntime.resolveFocusTarget !== undefined) {
-    managedOptions.resolveFocusTarget = options.popupRuntime.resolveFocusTarget;
+    createdSessionOptions.resolveFocusTarget = options.popupRuntime.resolveFocusTarget;
   }
 
   return {
     activation: createObserverActivationCapabilities(activationOptions),
+    createdSession: createObserverCreatedSessionCapabilities(createdSessionOptions),
     managedSessions: createObserverManagedSessionCapabilities(managedOptions),
     worktreeRemoval: createObserverWorktreeRemovalCapabilities({
       service: options.observerService,

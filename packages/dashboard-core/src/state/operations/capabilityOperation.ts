@@ -1,6 +1,7 @@
 import type { SafeError } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { safeErrorToToast, toSafeError } from "../../services/errors/errors.js";
+import type { CreatedSessionUiCommand } from "../capabilities/createdSession.js";
 import type {
   DashboardCapabilities,
   DashboardExecutionHandle,
@@ -27,10 +28,12 @@ import type { DashboardCapabilityOperation } from "./types.js";
 
 /**
  * Scope-bound executor returning the settled capability result after applying optimistic and
- * feedback policy, so composite operations can continue from the same execution.
+ * feedback policy, so composite operations can continue from the same execution. Created-session
+ * commands execute after local settlement, or remain owned by a compound Group operation.
  */
 export type DashboardCapabilityOperationRunner = {
   run(operation: DashboardCapabilityOperation): Promise<DashboardExecutionResult>;
+  executeCreatedSession(command: CreatedSessionUiCommand): Promise<DashboardExecutionResult>;
 };
 
 export function createDashboardCapabilityOperationRunner(input: {
@@ -43,7 +46,7 @@ export function createDashboardCapabilityOperationRunner(input: {
     getStore: input.getStore,
     scope: input.scope,
   });
-  return {
+  const runner: DashboardCapabilityOperationRunner = {
     run: (operation) =>
       runDashboardCapabilityOperation({
         store: input.getStore(),
@@ -52,8 +55,18 @@ export function createDashboardCapabilityOperationRunner(input: {
         clientLabel: input.clientLabel,
         scope: input.scope,
         expiry,
+        executeCreatedSession: (command) => runner.executeCreatedSession(command),
+      }),
+    executeCreatedSession: (command) =>
+      executeCreatedSessionCommand({
+        store: input.getStore(),
+        capabilities: input.capabilities,
+        command,
+        clientLabel: input.clientLabel,
+        scope: input.scope,
       }),
   };
+  return runner;
 }
 
 function markCreateSessionRowFailed(
@@ -88,6 +101,7 @@ async function runDashboardCapabilityOperation(input: {
   clientLabel: string;
   scope: DashboardRuntimeEffectScope;
   expiry: FailedCreateExpiryScheduler;
+  executeCreatedSession(command: CreatedSessionUiCommand): Promise<DashboardExecutionResult>;
 }): Promise<DashboardExecutionResult> {
   const { store, capabilities, operation, clientLabel, scope, expiry } = input;
   let handle: DashboardExecutionHandle;
@@ -171,7 +185,17 @@ async function runDashboardCapabilityOperation(input: {
     scope.commit(() =>
       settleDashboardCapabilityOperation({ store, operation, handle, result, expiry }),
     );
-    return result;
+    if (
+      result.kind !== "success" ||
+      result.createdSessionCommand === undefined ||
+      (operation.type === "quickCreateManagedSession" && operation.targetGroupId !== undefined)
+    ) {
+      return result;
+    }
+    if (!scope.isOpen()) {
+      return successWithoutCreatedSessionCommand(result);
+    }
+    return input.executeCreatedSession(result.createdSessionCommand);
   } catch (error: unknown) {
     const result: DashboardExecutionResult = {
       kind: "failure",
@@ -187,6 +211,40 @@ async function runDashboardCapabilityOperation(input: {
     });
     return result;
   }
+}
+
+async function executeCreatedSessionCommand(input: {
+  store: StoreApi<DashboardState>;
+  capabilities: DashboardCapabilities;
+  command: CreatedSessionUiCommand;
+  clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
+}): Promise<DashboardExecutionResult> {
+  if (!input.scope.isOpen()) return { kind: "success" };
+
+  let result: DashboardExecutionResult;
+  try {
+    result = await input.capabilities.createdSession.applyUiPolicy(input.command);
+  } catch (error: unknown) {
+    result = {
+      kind: "failure",
+      error: toSafeError(error, { clientLabel: input.clientLabel }),
+      disposition: "remove-immediately",
+    };
+  }
+  if (result.kind === "success") return result;
+
+  const notice = result.kind === "notice" ? result.notice : safeErrorToToast(result.error);
+  input.scope.commit(() => input.store.setState(addTuiToast(input.store.getState(), notice)));
+  return { kind: "success", notice };
+}
+
+function successWithoutCreatedSessionCommand(
+  result: Extract<DashboardExecutionResult, { kind: "success" }>,
+): DashboardExecutionResult {
+  return result.notice === undefined
+    ? { kind: "success" }
+    : { kind: "success", notice: result.notice };
 }
 
 function applyCapabilityOptimisticState(

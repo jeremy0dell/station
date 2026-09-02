@@ -5,7 +5,13 @@ import {
   createObserverWorktreeRemovalCapabilities,
   dashboardExecution,
 } from "@station/dashboard-core/runtime";
-import type { DashboardCapabilities, DashboardExecutionHandle, DashboardExecutionResult } from "@station/dashboard-core/runtime";
+import type {
+  CreatedSessionUiCommand,
+  CreatedSessionUiPolicy,
+  DashboardCapabilities,
+  DashboardExecutionHandle,
+  DashboardExecutionResult,
+} from "@station/dashboard-core/runtime";
 import {
   resolveDashboardShellTarget,
   STALE_DASHBOARD_TARGET_NOTICE,
@@ -16,7 +22,6 @@ import type { ManagedLaunch, ManagedLaunchResult } from "../input/runtime/manage
 import type { PaneEffects } from "../input/runtime/paneEffects.js";
 import {
   findSessionPlacementByBranch,
-  waitForSessionByBranch,
   waitForSessionPlacementByBranch,
 } from "../input/runtime/stationRows.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
@@ -39,6 +44,8 @@ export type CreateNativeDashboardCapabilitiesOptions = {
   paneEffects: PaneEffects;
   registry: PtyRegistry;
   managedLaunch: ManagedLaunch;
+  /** Fully resolved native policy; capability composition receives no raw config. */
+  createdSessionPolicy: CreatedSessionUiPolicy;
 };
 
 /**
@@ -72,48 +79,19 @@ export function createDashboardCapabilities(
       runManagedSessionCreate(request).then(async (result): Promise<DashboardExecutionResult> => {
         if (result.kind === "failure") return managedSessionResult(result);
         if (result.kind === "notice") return { kind: "success", notice: result.notice };
-
-        const session = await waitForSessionPlacementByBranch(
-          options.clientState,
-          request.project.id,
-          request.hiddenBranch,
-          request.group,
-        );
-        if (session !== undefined) return { kind: "success" };
-
-        try {
-          const refreshed = await options.observerService.loadSnapshot();
-          const placed = findSessionPlacementByBranch(
-            refreshed,
-            request.project.id,
-            request.hiddenBranch,
-            request.group,
-          );
-          if (placed !== undefined) {
-            return { kind: "success" };
-          }
-        } catch {
-          // Launch already succeeded, so refresh failure must not make Create retryable.
-        }
-        return { kind: "success", notice: SESSION_PLACEMENT_UNCONFIRMED_NOTICE };
+        return resolveNativeCreatedSessionCommand(options, request);
       }),
       { successDisposition: "wait-for-canonical" },
     );
   const quickCreateManagedSession: DashboardCapabilities["managedSessions"]["quickCreate"] = (
     request,
   ) =>
-    managedSessionExecution(
-      runManagedSessionCreate(request).then(async (result) => {
-        if (result.kind === "success") {
-          // Native preparation publishes its session through an asynchronous Observer reconcile.
-          await waitForSessionByBranch(
-            options.clientState,
-            request.project.id,
-            request.hiddenBranch,
-          );
-        }
-        return result;
+    dashboardExecution(
+      runManagedSessionCreate(request).then(async (result): Promise<DashboardExecutionResult> => {
+        if (result.kind !== "success") return managedSessionResult(result);
+        return resolveNativeCreatedSessionCommand(options, request);
       }),
+      { optimistic: "pending-create", successDisposition: "wait-for-canonical" },
     );
   const closeDashboard: DashboardCapabilities["dismissal"]["dismissDashboard"] = () => {
     options.store.actions.closeOverlay();
@@ -166,6 +144,9 @@ export function createDashboardCapabilities(
           },
         );
       },
+    },
+    createdSession: {
+      applyUiPolicy: (command) => applyNativeCreatedSessionPolicy(options, command),
     },
     managedSessions: {
       create: createManagedSession,
@@ -232,6 +213,143 @@ export function createDashboardCapabilities(
     dismissal: {
       dismissDashboard: closeDashboard,
       exitRenderer: closeDashboard,
+    },
+  };
+}
+
+async function resolveNativeCreatedSessionCommand(
+  options: CreateNativeDashboardCapabilitiesOptions,
+  request: Parameters<DashboardCapabilities["managedSessions"]["create"]>[0],
+): Promise<DashboardExecutionResult> {
+  const observed = await waitForSessionPlacementByBranch(
+    options.clientState,
+    request.project.id,
+    request.hiddenBranch,
+    request.group,
+  );
+  if (observed !== undefined) {
+    const command = nativeCreatedSessionCommand(
+      options.clientState.getState().snapshot,
+      request,
+      observed.id,
+      options.createdSessionPolicy,
+    );
+    if (command !== undefined) return { kind: "success", createdSessionCommand: command };
+  }
+
+  try {
+    const refreshed = await options.observerService.loadSnapshot();
+    const placed = findSessionPlacementByBranch(
+      refreshed,
+      request.project.id,
+      request.hiddenBranch,
+      request.group,
+    );
+    const command =
+      placed === undefined
+        ? undefined
+        : nativeCreatedSessionCommand(
+            refreshed,
+            request,
+            placed.id,
+            options.createdSessionPolicy,
+          );
+    if (command !== undefined) return { kind: "success", createdSessionCommand: command };
+  } catch {
+    // Launch already succeeded, so refresh failure must not make Create retryable.
+  }
+  return { kind: "success", notice: SESSION_PLACEMENT_UNCONFIRMED_NOTICE };
+}
+
+function nativeCreatedSessionCommand(
+  snapshot: ReturnType<StationClientStateSource["getState"]>["snapshot"],
+  request: Parameters<DashboardCapabilities["managedSessions"]["create"]>[0],
+  sessionId: string,
+  policy: CreatedSessionUiPolicy,
+): CreatedSessionUiCommand | undefined {
+  const session = snapshot?.sessions.find(
+    (candidate) =>
+      candidate.id === sessionId && candidate.projectId === request.project.id,
+  );
+  const row = snapshot?.rows.find(
+    (candidate) =>
+      candidate.id === session?.worktreeId &&
+      candidate.projectId === request.project.id &&
+      candidate.branch === request.hiddenBranch,
+  );
+  if (session === undefined || row === undefined) return undefined;
+  return {
+    type: "createdSession.applyUiPolicy",
+    target: {
+      sessionId: session.id,
+      projectId: session.projectId,
+      worktreeId: session.worktreeId,
+      branch: row.branch,
+      terminalProvider: "native",
+    },
+    policy,
+  };
+}
+
+async function applyNativeCreatedSessionPolicy(
+  options: CreateNativeDashboardCapabilitiesOptions,
+  command: CreatedSessionUiCommand,
+): Promise<DashboardExecutionResult> {
+  if (!command.policy.focusCreatedSession) {
+    if (command.policy.dismissDashboard) options.store.actions.closeOverlay();
+    return { kind: "success" };
+  }
+
+  const snapshot = options.clientState.getState().snapshot;
+  const session = snapshot?.sessions.find(
+    (candidate) =>
+      candidate.id === command.target.sessionId &&
+      candidate.projectId === command.target.projectId &&
+      candidate.worktreeId === command.target.worktreeId,
+  );
+  const row = snapshot?.rows.find(
+    (candidate) =>
+      candidate.id === command.target.worktreeId &&
+      candidate.projectId === command.target.projectId &&
+      candidate.branch === command.target.branch,
+  );
+  if (command.target.terminalProvider !== "native" || session === undefined || row === undefined) {
+    return createdSessionFailure(
+      "CREATED_SESSION_TARGET_MISMATCH",
+      "The created session no longer matches its canonical native pane.",
+    );
+  }
+
+  const result = await options.managedLaunch.activate(agentWorktreePaneId(row.id), {
+    projectId: row.projectId,
+    worktreeId: row.id,
+    cwd: row.path,
+  });
+  if (result.kind === "failure") {
+    return { kind: "failure", error: result.error, disposition: "remove-immediately" };
+  }
+  if (result.kind === "notice") {
+    return createdSessionFailure("CREATED_SESSION_FOCUS_FAILED", result.notice.message);
+  }
+  if (!result.landed) {
+    return createdSessionFailure(
+      "CREATED_SESSION_FOCUS_UNCONFIRMED",
+      "Station could not confirm that the created session was focused.",
+    );
+  }
+  if (command.policy.dismissDashboard) options.store.actions.closeOverlay();
+  return { kind: "success" };
+}
+
+function createdSessionFailure(code: string, message: string): DashboardExecutionResult {
+  return {
+    kind: "failure",
+    disposition: "remove-immediately",
+    error: {
+      tag: "TuiCreatedSessionError",
+      code,
+      message,
+      hint: "The session was created successfully and remains available in the dashboard.",
     },
   };
 }

@@ -1,7 +1,9 @@
 import type { SessionActivationRequest } from "../../src/state/capabilities/activation.js";
+import type { CreatedSessionUiCommand } from "../../src/state/capabilities/createdSession.js";
 import type {
   DashboardCapabilities,
   DashboardExecutionHandle,
+  DashboardExecutionResult,
 } from "../../src/state/capabilities/execution.js";
 import { dashboardExecution } from "../../src/state/capabilities/execution.js";
 import type {
@@ -19,6 +21,7 @@ export class FakeDashboardCapabilities implements DashboardCapabilities {
   readonly removeWorktreeRequests: RemoveWorktreeRequest[] = [];
   readonly shellRequests: OpenDashboardShellRequest[] = [];
   readonly rendererExitCodes: number[] = [];
+  readonly createdSessionCommands: CreatedSessionUiCommand[] = [];
   dashboardDismissals = 0;
 
   activationHandle: (request: SessionActivationRequest) => DashboardExecutionHandle = () =>
@@ -36,11 +39,21 @@ export class FakeDashboardCapabilities implements DashboardCapabilities {
   dismissHandle: () => DashboardExecutionHandle = () => dashboardExecution({ kind: "success" });
   exitHandle: (exitCode: number) => DashboardExecutionHandle = () =>
     dashboardExecution({ kind: "success" });
+  createdSessionResult: (
+    command: CreatedSessionUiCommand,
+  ) => Promise<DashboardExecutionResult> | DashboardExecutionResult = () => ({ kind: "success" });
 
   readonly activation = {
     activate: (request: SessionActivationRequest): DashboardExecutionHandle => {
       this.activationRequests.push(request);
       return this.activationHandle(request);
+    },
+  };
+
+  readonly createdSession = {
+    applyUiPolicy: async (command: CreatedSessionUiCommand) => {
+      this.createdSessionCommands.push(command);
+      return this.createdSessionResult(command);
     },
   };
 

@@ -62,6 +62,9 @@ describe("Create Session Group operation", () => {
       rowId: "session:ses_wt_web_quick_group",
       cellId: "identity",
     });
+    expect(setup.capabilities.createdSessionCommands).toEqual([
+      createdSessionCommand(request?.hiddenBranch ?? ""),
+    ]);
     expect(request?.hiddenBranch).toBe(request?.title);
     await setup.scope.dispose();
   });
@@ -159,7 +162,16 @@ describe("Create Session Group operation", () => {
     const setup = createOperationSetup(true);
     setup.capabilities.quickCreateHandle = () => {
       setup.service.setSnapshot(withCreatedGroup(createGroupedDashboardSnapshot()));
-      return dashboardExecution({ kind: "success" }, { optimistic: "pending-create" });
+      return dashboardExecution(
+        {
+          kind: "success",
+          notice: {
+            kind: "error",
+            message: "The session was created, but its canonical identity did not converge.",
+          },
+        },
+        { optimistic: "pending-create" },
+      );
     };
 
     await setup.run();
@@ -171,7 +183,7 @@ describe("Create Session Group operation", () => {
     expect(setup.store.getState().localRows.pendingCreate).toEqual([]);
     expect(setup.store.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",
-      message: "The new session could not be identified uniquely.",
+      message: "The session was created, but its canonical identity did not converge.",
     });
     await setup.scope.dispose();
   });
@@ -251,6 +263,7 @@ describe("Create Session Group operation", () => {
       rowId: "session:ses_wt_web_quick_group",
       cellId: "identity",
     });
+    expect(setup.capabilities.createdSessionCommands).toEqual([]);
     expect(setup.store.getState().toasts.at(-1)?.toast).toMatchObject({
       message: "The new session did not converge into its Group.",
     });
@@ -398,6 +411,9 @@ describe("Quick Session in existing Group operation", () => {
       rowId: "session:ses_wt_web_quick_group",
       cellId: "identity",
     });
+    expect(setup.capabilities.createdSessionCommands).toEqual([
+      createdSessionCommand(setup.operation.hiddenBranch),
+    ]);
     await setup.scope.dispose();
   });
 
@@ -453,6 +469,36 @@ describe("Quick Session in existing Group operation", () => {
     });
     await setup.scope.dispose();
   });
+
+  it("preserves canonical membership when the deferred UI effect fails", async () => {
+    const setup = createExistingGroupQuickSetup();
+    setup.capabilities.createdSessionResult = () => ({
+      kind: "failure",
+      disposition: "remove-immediately",
+      error: {
+        tag: "TuiCreatedSessionError",
+        code: "CREATED_SESSION_FOCUS_FAILED",
+        message: "The created session could not be focused.",
+      },
+    });
+
+    await setup.run();
+
+    expect(
+      setup.store
+        .getState()
+        .snapshot?.sessionGroups.find((group) => group.id === setup.operation.groupId)?.sessionIds,
+    ).toContain("ses_wt_web_quick_group");
+    expect(setup.store.getState().dashboardFocus).toEqual({
+      rowId: "session:ses_wt_web_quick_group",
+      cellId: "identity",
+    });
+    expect(setup.store.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "The created session could not be focused.",
+    });
+    await setup.scope.dispose();
+  });
 });
 
 function createOperationSetup(
@@ -476,7 +522,10 @@ function createOperationSetup(
 
   capabilities.quickCreateHandle = (request) => {
     service.setSnapshot(withLaunchedSession(created, request.hiddenBranch));
-    return dashboardExecution({ kind: "success" }, { optimistic: "pending-create" });
+    return dashboardExecution(
+      { kind: "success", createdSessionCommand: createdSessionCommand(request.hiddenBranch) },
+      { optimistic: "pending-create" },
+    );
   };
   service.waitForCommandCompletion = async (commandId) => {
     const command = service.dispatched.at(-1);
@@ -555,7 +604,13 @@ function createExistingGroupQuickSetup() {
   });
   capabilities.quickCreateHandle = () => {
     service.setSnapshot(withLaunchedSession(initial, operation.hiddenBranch));
-    return dashboardExecution({ kind: "success" }, { optimistic: "pending-create" });
+    return dashboardExecution(
+      {
+        kind: "success",
+        createdSessionCommand: createdSessionCommand(operation.hiddenBranch),
+      },
+      { optimistic: "pending-create" },
+    );
   };
   service.waitForCommandCompletion = async (commandId) => {
     const current = store.getState().snapshot;
@@ -592,6 +647,20 @@ function createExistingGroupQuickSetup() {
         clientLabel: "test",
         scope,
       }),
+  };
+}
+
+function createdSessionCommand(branch: string) {
+  return {
+    type: "createdSession.applyUiPolicy" as const,
+    target: {
+      sessionId: "ses_wt_web_quick_group",
+      projectId: "web",
+      worktreeId: "wt_web_quick_group",
+      branch,
+      terminalProvider: "tmux",
+    },
+    policy: { focusCreatedSession: true, dismissDashboard: true },
   };
 }
 

@@ -672,6 +672,63 @@ ${projectToml("web", root)}
     expect(loaded.config.tui?.island).toEqual({ restCounts: true, projectRollup: false });
   });
 
+  it("normalizes global and partial terminal session-create policy", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+
+    const loaded = await loadConfigFromToml(
+      `
+schema_version = 1
+
+[defaults]
+worktree_provider = "worktrunk"
+terminal = "tmux"
+harness = "codex"
+layout = "agent-build-shell"
+
+[tui.session_create]
+focus_created_session = false
+dismiss_dashboard = true
+
+[tui.session_create.terminals.tmux]
+dismiss_dashboard = false
+
+[tui.session_create.terminals.future]
+focus_created_session = true
+
+${projectToml("web", root)}
+`,
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    expect(loaded.config.tui?.sessionCreate).toEqual({
+      focusCreatedSession: false,
+      dismissDashboard: true,
+      terminals: {
+        tmux: { dismissDashboard: false },
+        future: { focusCreatedSession: true },
+      },
+    });
+  });
+
+  it.each([
+    '[tui.session_create]\nfocus_created_session = "yes"',
+    "[tui.session_create]\nunknown = true",
+    '[tui.session_create.terminals.tmux]\ndismiss_dashboard = "yes"',
+  ])("drops invalid session-create policy with the [tui] diagnostic", async (policyToml) => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+    const loaded = await loadConfigFromToml(
+      `${baseToml(projectToml("web", root))}\n${policyToml}\n`,
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    expect(loaded.config.tui).toBeUndefined();
+    expect(loaded.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "CONFIG_TUI_SECTION_INVALID", severity: "warn" }),
+    );
+  });
+
   it.each([
     [
       "unknown widget type",

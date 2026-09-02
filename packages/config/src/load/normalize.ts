@@ -127,7 +127,37 @@ function normalizeTuiConfig(value: unknown): unknown {
   return normalizeObject(
     value,
     {},
-    { widgets: normalizeTuiWidgetConfigs, island: normalizeTuiIslandConfig },
+    {
+      widgets: normalizeTuiWidgetConfigs,
+      island: normalizeTuiIslandConfig,
+      sessionCreate: normalizeTuiSessionCreateConfig,
+    },
+  );
+}
+
+function normalizeTuiSessionCreateConfig(value: unknown): unknown {
+  return normalizeObject(
+    value,
+    {
+      focus_created_session: "focusCreatedSession",
+      dismiss_dashboard: "dismissDashboard",
+    },
+    { terminals: normalizeTuiSessionCreateTerminalConfigs },
+  );
+}
+
+function normalizeTuiSessionCreateTerminalConfigs(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([providerId, policy]) => [
+      providerId,
+      normalizeObject(policy, {
+        focus_created_session: "focusCreatedSession",
+        dismiss_dashboard: "dismissDashboard",
+      }),
+    ]),
   );
 }
 
