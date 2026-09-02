@@ -109,7 +109,7 @@ describe("observer providers", () => {
     expect("terminalOperations" in registry).toBe(false);
   });
 
-  it("registers tmux placement explicitly while Station remains ordinary-only", () => {
+  it("registers tmux and native placement roles independently", () => {
     const registry = createProviderRegistry({
       ...config,
       defaults: { ...config.defaults, terminal: "tmux" },
@@ -126,7 +126,10 @@ describe("observer providers", () => {
       id: "tmux",
       supportedIntents: ["sibling", "detached"],
     });
-    expect(registry.terminalPlacements.has("native")).toBe(false);
+    expect(registry.terminalPlacements.get("native")).toMatchObject({
+      id: "native",
+      supportedIntents: ["sibling"],
+    });
   });
 
   it("registers OpenCode hook normalization at the CLI composition root", () => {

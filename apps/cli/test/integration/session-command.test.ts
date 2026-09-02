@@ -36,7 +36,7 @@ async function runCli(...args: Parameters<RunCli>): ReturnType<RunCli> {
 }
 
 describe("session current command", () => {
-  it("prints the strict JSON result and forwards only bounded tmux claims", async () => {
+  it("prints the strict JSON result and forwards only bounded terminal claims", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const callers: TerminalCallerContextRequest[] = [];
@@ -50,6 +50,7 @@ describe("session current command", () => {
           environment: {
             TMUX: "/tmp/tmux.sock,123,0",
             TMUX_PANE: "%3",
+            STATION_PANE: "1",
             STATION_MUST_NOT_CROSS_RPC: "secret",
           },
         },
@@ -66,6 +67,7 @@ describe("session current command", () => {
       expect(callers[0]?.claims).toEqual({
         TMUX: "/tmp/tmux.sock,123,0",
         TMUX_PANE: "%3",
+        STATION_PANE: "1",
       });
     } finally {
       await fixture.cleanup();
@@ -99,10 +101,9 @@ describe("session current command", () => {
     const manual = textOutput(result);
     expect(manual).toContain("Normal execution loads configuration");
     expect(manual).toContain("may start or contact the Observer");
-    expect(manual).toContain("tmux is currently the only placement-capable terminal provider");
-    expect(manual).toContain("short-lived, one-shot bearer input");
+    expect(manual).toContain("tmux and native Station panes can provide placement authority");
     expect(manual).toContain("session create/fork --from-current");
-    expect(manual).toContain("raw sibling dispatch");
+    expect(manual).toContain("short-lived, one-shot bearer input");
     expect(manual).toContain("do not persist or log it");
     expect(manual).toContain("Detached placement is source-free");
     expect(manual).toContain("does not use stn session current");

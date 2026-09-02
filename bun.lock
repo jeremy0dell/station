@@ -150,6 +150,7 @@
         "@station/host": "workspace:*",
         "@station/protocol": "workspace:*",
         "@station/runtime": "workspace:*",
+        "zod": "^4.1.12",
       },
     },
     "integrations/terminal/tmux": {

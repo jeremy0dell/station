@@ -75,7 +75,8 @@ type EnsureAgentWorkspaceInput = {
  * adapter alone revalidates the authority immediately before target mutation;
  * failures close only the target opened by this invocation and never fall back
  * to a current, recent, or focused terminal. Successful explicit placement
- * returns the provider's resolved destination proof.
+ * returns the provider's resolved destination proof after the final cancellation
+ * check discards adapter-retained rollback authority.
  */
 export function ensureAgentWorkspace(
   input: EnsureAgentWorkspaceInput & {
@@ -178,6 +179,10 @@ export async function ensureAgentWorkspace(
         targetId: opened.target.targetId,
       });
     }
+    if (placedOpened !== undefined && input.placementPort !== undefined) {
+      throwIfAborted(input.context.signal);
+      await input.placementPort.finalizePlacedTarget(placedTargetRequest(input, placedOpened));
+    }
   } catch (error) {
     if (placedOpened !== undefined && input.placementPort !== undefined) {
       await releasePlacedTargetOrThrow({
@@ -258,13 +263,7 @@ async function releasePlacedTargetOrThrow(
           provider: input.placementPort.id,
         },
       },
-      () =>
-        input.placementPort.releasePlacedTarget({
-          targetId: input.opened.target.targetId,
-          sessionId: input.sessionId,
-          generation: input.opened.placement.generation,
-          bindingToken: input.opened.bindingToken,
-        }),
+      () => input.placementPort.releasePlacedTarget(placedTargetRequest(input, input.opened)),
     );
   } catch (error) {
     const normalized = safeErrorFromUnknown(error, {
@@ -287,6 +286,15 @@ async function releasePlacedTargetOrThrow(
       provider: input.placementPort.id,
     } satisfies SafeError;
   }
+}
+
+function placedTargetRequest(input: { sessionId: string }, opened: OpenPlacedWorkspaceResult) {
+  return {
+    targetId: opened.target.targetId,
+    sessionId: input.sessionId,
+    generation: opened.placement.generation,
+    bindingToken: opened.bindingToken,
+  };
 }
 
 /** Resolves and focuses one provider-owned target from product session/worktree identity. */

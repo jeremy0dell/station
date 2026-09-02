@@ -582,6 +582,9 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         // A persistent Host can outlive or reattach through renderers, so no inherited or launch-plan tmux pair is authoritative.
         TMUX: undefined,
         TMUX_PANE: undefined,
+        // Native caller discovery is proven against this PTY's process lifetime;
+        // the marker is only a hint that permits that proof attempt.
+        STATION_PANE: "1",
       };
       // The ptyId must exist before spawn: orphan-mode bridges name their
       // control socket and park state after it.

@@ -3,6 +3,7 @@ import type {
   PtyInstanceId,
   TerminalOutputCompatibility,
 } from "@station/contracts";
+import type { HostPtyAttachExpectation } from "@station/host";
 
 export type StationTerminalId = string;
 
@@ -78,6 +79,8 @@ export type StationTerminalProcess = {
    * not the PTY child, because the bridge is what survives owner death.
    */
   readonly bridgePid?: number | undefined;
+  /** Exact Host lifetime for an attached PTY; absent for locally owned processes. */
+  readonly hostPtyRef?: HostPtyAttachExpectation | undefined;
   readonly size: StationTerminalSize;
   /**
    * The last ordered geometry barrier consumed from the backing PTY, when the

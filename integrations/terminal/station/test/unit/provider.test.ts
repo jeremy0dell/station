@@ -73,6 +73,15 @@ describe("StationTerminalProvider", () => {
     });
   });
 
+  it("exposes sibling-only native placement when a renderer state directory is composed", () => {
+    const provider = new StationTerminalProvider({
+      clock,
+      placement: { stateDir: "/tmp/station-state", hostSocketPath: "/tmp/station-host.sock" },
+    });
+
+    expect(provider.placement).toMatchObject({ id: "native", supportedIntents: ["sibling"] });
+  });
+
   it("launchProcess does not spawn without a host (the UI owns the PTY)", async () => {
     const provider = new StationTerminalProvider({ clock });
     const opened = await provider.openWorkspace(openRequest());

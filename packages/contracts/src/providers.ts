@@ -484,6 +484,8 @@ export interface TerminalProvider {
  * `openPlacedWorkspace` immediately before terminal mutation. Implementations
  * must reject expiry, generation change, topology mismatch, and unknown intent;
  * they must never fall back to a current, recent, focused, or configured target.
+ * After launch cancellation can no longer roll back the target, the caller
+ * finalizes the exact binding so adapters can discard retained cleanup authority.
  */
 export interface TerminalPlacementPort {
   id: ProviderId;
@@ -493,6 +495,7 @@ export interface TerminalPlacementPort {
   ): Promise<TerminalPlacementSource | undefined>;
   validatePlacement(placement: TerminalPlacementRequest): Promise<void>;
   openPlacedWorkspace(request: OpenPlacedWorkspaceRequest): Promise<OpenPlacedWorkspaceResult>;
+  finalizePlacedTarget(request: ReleasePlacedTerminalTargetRequest): Promise<void>;
   releasePlacedTarget(
     request: ReleasePlacedTerminalTargetRequest,
   ): Promise<{ status: "released" | "already-absent" }>;

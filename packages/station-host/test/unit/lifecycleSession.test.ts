@@ -57,6 +57,7 @@ describe("Station Host lifecycle session", () => {
           buildVersion: "1.0.0",
         },
         "host.recoveryInventory": { buildIdentity: "a".repeat(64), ptys: [] },
+        "host.close": { closed: true },
         "host.stopIfIdle": { stopping: true },
         "host.beginHandoff": {
           manifest,
@@ -81,6 +82,7 @@ describe("Station Host lifecycle session", () => {
 
     await expect(session.health()).resolves.toMatchObject({ buildVersion: "1.0.0" });
     await expect(session.recoveryInventory()).resolves.toMatchObject({ ptys: [] });
+    await expect(session.close("pty-1")).resolves.toEqual({ closed: true });
     await expect(session.stopIfIdle("2.0.0")).resolves.toEqual({ stopping: true });
     await expect(session.beginHandoff("2.0.0", "processes")).resolves.toMatchObject({
       status: "accepted",
@@ -92,7 +94,7 @@ describe("Station Host lifecycle session", () => {
     });
 
     expect(connects).toBe(1);
-    expect(requests.map(({ id }) => id)).toEqual(["l0", "l1", "l2", "l3", "l4", "l5"]);
+    expect(requests.map(({ id }) => id)).toEqual(["l0", "l1", "l2", "l3", "l4", "l5", "l6"]);
     const identityRequests = requests.filter(({ client }) => client !== undefined);
     expect(identityRequests.map(({ method }) => method)).toEqual([
       "host.recoveryInventory",

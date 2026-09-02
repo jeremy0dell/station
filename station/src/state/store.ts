@@ -32,6 +32,8 @@ export type CreatePaneOptions = {
   role?: PaneRole;
   /** Stable owner copied to every pane created within a worktree tree. */
   worktreeId?: string;
+  /** Defaults to true; placement can reserve an unselected root without stealing focus. */
+  activate?: boolean;
 };
 
 export type StationStoreActions = {
@@ -162,7 +164,7 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
           ...state,
           workspace: { ...state.workspace, panes: [...state.workspace.panes, record] },
         };
-        setState(withActivePane(appended, paneId));
+        setState(options?.activate === false ? appended : withActivePane(appended, paneId));
       },
       // Role bookkeeping only: flips an existing pane's record to "primary-agent"
       // and stamps its observer-minted identity onto the record so its exit can

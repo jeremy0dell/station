@@ -32,6 +32,10 @@ import {
   type NativeProcessLifecycle,
 } from "./lifecycle/nativeProcessLifecycle.js";
 import { installLiveHostTtyDimensions } from "./liveHostTtyDimensions.js";
+import {
+  createStationNativePlacementEndpoint,
+  type StationNativePlacementEndpoint,
+} from "./nativePlacementEndpoint.js";
 import { createRenderProfiler, readRenderProfileEnabled } from "./profiling/renderProfiler.js";
 import {
   acquireStationTtyOwnership,
@@ -371,9 +375,46 @@ async function startStationMain(
     process.exitCode = 1;
     return false;
   }
+  let nativePlacementEndpoint: StationNativePlacementEndpoint | undefined =
+    stationRuntime.nativePlacementEndpoint;
+  if (nativePlacementEndpoint === undefined) {
+    try {
+      nativePlacementEndpoint = await createStationNativePlacementEndpoint({
+        stateDir: stationConfig.stateDir,
+        uiRunId: uiContext.uiRunId,
+      });
+      stationRuntime.nativePlacementEndpoint = nativePlacementEndpoint;
+    } catch (error) {
+      await tuiLogger
+        .warn("Native session placement is unavailable; Station startup will continue.", {
+          error: toSafeError(error, {
+            tag: "TerminalProviderError",
+            code: "TERMINAL_PLACEMENT_EVIDENCE_UNAVAILABLE",
+            message: "Station could not create its native placement endpoint.",
+            provider: "native",
+          }),
+        })
+        .catch(() => undefined);
+    }
+  }
+  const nativePlacementGeneration = nativePlacementEndpoint?.attach({
+    store,
+    registry: stationRuntime.registry,
+    createHostTerminal,
+  });
   processLifecycle = createNativeProcessLifecycle({
     stopSurfaceObservation: () => stopSurfaceObservation?.(),
     cleanupSteps: [
+      ...(nativePlacementEndpoint === undefined
+        ? []
+        : [
+            async () => {
+              await nativePlacementEndpoint.close();
+              if (stationRuntime.nativePlacementEndpoint === nativePlacementEndpoint) {
+                delete stationRuntime.nativePlacementEndpoint;
+              }
+            },
+          ]),
       () => station.disposeForShutdown(),
       () => rootForShutdown?.unmount(),
       () => rendererForInput?.destroy(),
@@ -447,6 +488,14 @@ async function startStationMain(
           settleCleanupSteps(
             [
               () => processLifecycle?.dispose(),
+              () => {
+                if (
+                  nativePlacementEndpoint !== undefined &&
+                  nativePlacementGeneration !== undefined
+                ) {
+                  nativePlacementEndpoint.suspend(nativePlacementGeneration);
+                }
+              },
               // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
               () => stopSurfaceObservation?.(),
               () => root.unmount(),

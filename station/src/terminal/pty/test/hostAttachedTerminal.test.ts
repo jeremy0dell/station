@@ -258,6 +258,7 @@ describe("createHostAttachedTerminal", () => {
     await flush();
     expect(received).toEqual(["scroll-", "live"]);
     expect(terminal.pid).toBe(4242);
+    expect(terminal.hostPtyRef).toEqual(PTY_EXPECTATION);
   });
 
   it("delivers ordered replay in one awaited callback before live frames", async () => {

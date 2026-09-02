@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
 import type { PaneId } from "../../state/types.js";
 import type { StationTerminalTheme } from "../../theme/index.js";
@@ -30,6 +31,8 @@ const GEOMETRY_SETTLE_MS = 2_000;
  */
 export type PtyRegistryEntry = {
   readonly paneId: PaneId;
+  /** Opaque lifetime identity; changes whenever this pane's registry entry is replaced. */
+  readonly generation: string;
   readonly screen: StationVtScreen | null;
   readonly terminal: StationTerminalProcess | null;
   /** Proven process exit; the only local state that authorizes managed-pane recycling. */
@@ -144,6 +147,7 @@ export type PtyRegistryOptions = {
 
 type InternalEntry = {
   paneId: PaneId;
+  generation: string;
   screen: StationVtScreen | null;
   terminal: StationTerminalProcess | null;
   exited: boolean;
@@ -200,6 +204,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     }
     const entry: InternalEntry = {
       paneId,
+      generation: `ptyg_${randomUUID()}`,
       screen: null,
       terminal: null,
       exited: false,

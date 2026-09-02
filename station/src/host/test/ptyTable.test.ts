@@ -84,6 +84,7 @@ describe("createPtyTable", () => {
     expect(received?.env).toEqual({
       FORCE_COLOR: undefined,
       NO_COLOR: undefined,
+      STATION_PANE: "1",
       TMUX: undefined,
       TMUX_PANE: undefined,
       USER_SETTING: "ordinary",

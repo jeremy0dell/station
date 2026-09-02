@@ -8,6 +8,8 @@ import {
   HostAbortHandoffResultSchema,
   type HostBeginHandoffResult,
   HostBeginHandoffResultSchema,
+  type HostCloseResult,
+  HostCloseResultSchema,
   type HostCompleteHandoffResult,
   HostCompleteHandoffResultSchema,
   type HostHealthResult,
@@ -29,6 +31,8 @@ export type HostBeginHandoffOutcome =
 export type StationHostLifecycleSession = {
   health(): Promise<HostHealthResult>;
   recoveryInventory(): Promise<HostRecoveryInventoryResult>;
+  /** Close one exact PTY without reconnecting away from this lifecycle authority. */
+  close(ptyId: string): Promise<HostCloseResult>;
   stopIfIdle(requestingBuildVersion: string): Promise<HostStopIfIdleResult>;
   beginHandoff(
     requestingBuildVersion: string,
@@ -54,8 +58,9 @@ const requestFailure = (message: string) => stationHostSafeError("HOST_REQUEST_F
  * ADAPTER
  *
  * Opens one non-reconnecting lifecycle client whose requests share one absolute deadline and
- * physical NDJSON connection. Correlation failures poison it; malformed begin success permits
- * only a same-connection abort before disposal.
+ * physical NDJSON connection. Exact PTY close is available on that same connection;
+ * correlation failures poison it, and malformed begin success permits only a
+ * same-connection abort before disposal.
  */
 export async function openStationHostLifecycleSession(
   options: OpenStationHostLifecycleSessionOptions,
@@ -185,6 +190,7 @@ export async function openStationHostLifecycleSession(
     health: () => request("host.health", undefined, HostHealthResultSchema),
     recoveryInventory: () =>
       request("host.recoveryInventory", undefined, HostRecoveryInventoryResultSchema, true),
+    close: (ptyId) => request("host.close", { ptyId, confirm: true }, HostCloseResultSchema),
     stopIfIdle: (requestingBuildVersion) =>
       request("host.stopIfIdle", { requestingBuildVersion }, HostStopIfIdleResultSchema),
     beginHandoff: async (requestingBuildVersion, fidelity) => {

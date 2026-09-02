@@ -275,6 +275,8 @@ export class TmuxPlacementService implements TerminalPlacementPort {
     return this.#cleanup.release(request);
   }
 
+  async finalizePlacedTarget(_request: ReleasePlacedTerminalTargetRequest): Promise<void> {}
+
   /** Qualifies an ordinary provider result with the configured endpoint's generation. */
   qualifyTarget(paneId: string): Promise<TmuxMutableProof> {
     return this.#proofs.inspectMutablePane(paneId);

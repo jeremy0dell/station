@@ -68,6 +68,15 @@ with the same provider-native and Station identities before completing a follow-
 
 The popup navigation test is part of the local real E2E lane. It creates a real Worktrunk worktree, starts a real Codex agent in the tmux workbench, opens the station TUI in a real tmux popup over that agent pane, injects a numeric activation key through the popup TTY, and verifies tmux lands back on the same primary agent pane after the popup exits.
 
+`real-native-session-placement.test.ts` exercises the native placement boundary
+without a paid harness. It uses real process-start evidence and the renderer's
+real Unix socket to prove one source pane, then confirms the destination opens
+as an inactive root without changing focus:
+
+```bash
+bun run test:e2e:real:local tests/e2e/real/real-native-session-placement.test.ts
+```
+
 `real-tui-control.test.ts` uses the real scripted harness process rather than Codex. It retains the process's dead tmux pane, Groups the retained Station session, activates the row through the real TUI, confirms **Start fresh**, and verifies exactly one replacement launch under the same session and Group with one workbench window. It then removes that terminal entirely and proves `session.close({ mode: "all" })` remains durable across an Observer restart.
 
 `real-native-tui-mouse.test.ts` obtains its dormant Codex row through that shared recovery proof,

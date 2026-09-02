@@ -18,7 +18,7 @@ import {
   FakeHarnessProvider,
   FakeTerminalProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { CommandHandlerContext } from "../../src/commands/queue.js";
 import {
   closeTerminal,
@@ -354,6 +354,26 @@ describe("terminal operations", () => {
       ),
     ).rejects.toMatchObject({ code: "FAKE_LAUNCH_FAILED" });
     expect(terminal.snapshot().closed).toEqual(["term_fake"]);
+  });
+
+  it("finalizes exact placed-target cleanup authority after a successful launch", async () => {
+    const terminal = new RecordingTerminalProvider();
+    const finalize = vi.spyOn(terminal.placement, "finalizePlacedTarget");
+
+    const placement = await ensureAgentWorkspace(
+      ensureInput(terminal, new CapturingHarnessProvider(), {
+        placementPort: terminal.placement,
+        placement: { intent: "detached" },
+      }),
+    );
+
+    expect(finalize).toHaveBeenCalledWith({
+      targetId: "term_fake",
+      sessionId: "ses_web_feature",
+      generation: placement?.generation,
+      bindingToken: "fake-placement-binding-1",
+    });
+    expect(terminal.snapshot().closed).toEqual([]);
   });
 
   it("surfaces cleanup uncertainty instead of hiding a failed placed-target release", async () => {

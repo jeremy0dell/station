@@ -13,8 +13,8 @@ const currentExamples = ["stn session current"] as const;
 const currentNotes = [
   "Current validates the invoking terminal's live topology and returns a placement source as strict JSON.",
   "Normal execution loads configuration and may start or contact the Observer.",
-  "tmux is currently the only placement-capable terminal provider.",
-  "The returned source is short-lived, one-shot bearer input used by session create/fork --from-current or by raw sibling dispatch; do not persist or log it.",
+  "tmux and native Station panes can provide placement authority for session create/fork --from-current.",
+  "The returned source is short-lived, one-shot bearer input; do not persist or log it.",
   "Detached placement is source-free and does not use stn session current.",
 ] as const;
 

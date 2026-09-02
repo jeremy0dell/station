@@ -175,6 +175,19 @@ describe("createStationStore", () => {
     expect(state.input.focus).toEqual({ kind: "pane", paneId: "pane-second" });
   });
 
+  it("createPane can reserve an inactive root without changing focus", () => {
+    const store = createStationStore();
+
+    store.actions.createPane("pane-background", { activate: false });
+
+    expect(store.getState().workspace.panes).toEqual([
+      paneRecord(MAIN_PANE_ID),
+      paneRecord("pane-background"),
+    ]);
+    expect(store.getState().workspace.activePaneId).toBe(MAIN_PANE_ID);
+    expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: MAIN_PANE_ID });
+  });
+
   it("createPane roots each overlay-opened pane as its own session (no auto-tiling)", () => {
     const store = createStationStore();
     store.actions.createPane("pane-2");

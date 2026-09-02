@@ -172,8 +172,11 @@ adapter has not yet proved.
 
 For `stn session fork`, keep **code source** and **placement source** distinct.
 The exact source session selects the project, source worktree, and default
-harness. `--from-current` independently selects where the new tmux target is
-placed, so it may name another caller pane. `stn session create` starts
+harness. Placement independently selects where the new target is placed, so it
+may name another caller pane: tmux creates an unselected sibling window, while
+native Station creates an inactive root in the proven renderer. The first-class
+`--from-current` flag uses whichever provider supplied that fresh caller
+authority. `stn session create` starts
 Ungrouped unless an existing or inline-created root Group is requested. Fork
 inherits a grouped source's transaction-current Group by default, while
 `--ungrouped` explicitly opts out; `--inherit-group` requires the source to be

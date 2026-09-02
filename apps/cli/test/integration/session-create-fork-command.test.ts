@@ -597,8 +597,9 @@ describe("session create and fork commands", () => {
     }
   });
 
-  it("requires supported fresh current authority and never resolves it for detached placement", async () => {
+  it("routes fresh tmux or native current authority and never resolves it for detached placement", async () => {
     const fixture = await createTempState();
+    const commands: StationCommand[] = [];
     const dispatch = vi.fn(async () => rejectedReceipt("cmd_detached"));
     const detachedCurrent = vi.fn(async () => {
       throw new Error("detached placement must not inspect current context");
@@ -619,16 +620,40 @@ describe("session create and fork commands", () => {
         ...currentContext,
         source: { ...currentContext.source, provider: "native" },
       }));
+      const native = await runSessionCommand(
+        ["create", "web", "--branch", "feature/native", "--from-current"],
+        { config: fixture.config },
+        creationObserverDeps(fixture.socketPath, [creationSnapshot()], {
+          dispatch: async (command) => {
+            commands.push(command);
+            return rejectedReceipt("cmd_native");
+          },
+          getCurrentSessionContext: unsupportedCurrent,
+        }),
+      );
+      expect(native).toMatchObject({ action: "create", outcome: { status: "rejected" } });
+      expect(firstCommand(commands)).toMatchObject({
+        type: "session.create",
+        payload: {
+          terminal: { provider: "native" },
+          placement: { intent: "sibling", source: { provider: "native" } },
+        },
+      });
+
+      const unconfiguredCurrent = vi.fn(async () => ({
+        ...currentContext,
+        source: { ...currentContext.source, provider: "unconfigured" },
+      }));
       await expect(
         runSessionCommand(
-          ["create", "web", "--branch", "feature/unsupported", "--from-current"],
+          ["create", "web", "--branch", "feature/unconfigured", "--from-current"],
           { config: fixture.config },
           creationObserverDeps(fixture.socketPath, [creationSnapshot()], {
             dispatch,
-            getCurrentSessionContext: unsupportedCurrent,
+            getCurrentSessionContext: unconfiguredCurrent,
           }),
         ),
-      ).rejects.toMatchObject({ code: "SESSION_CURRENT_TERMINAL_UNSUPPORTED" });
+      ).rejects.toMatchObject({ code: "SESSION_CURRENT_TERMINAL_NOT_CONFIGURED" });
 
       const staleCurrent = vi.fn(async () => {
         throw {
@@ -1144,6 +1169,12 @@ function creationSnapshot(): StationSnapshot {
       },
       tmux: {
         provider: "tmux",
+        providerType: "terminal",
+        status: "healthy",
+        lastCheckedAt: now,
+      },
+      native: {
+        provider: "native",
         providerType: "terminal",
         status: "healthy",
         lastCheckedAt: now,

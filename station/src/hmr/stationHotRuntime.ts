@@ -1,5 +1,6 @@
 import type { UiRunId } from "@station/contracts";
 import type { WorkspaceConfig } from "../config/stationConfig.js";
+import type { StationNativePlacementEndpoint } from "../nativePlacementEndpoint.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import type { WorkspaceSlice } from "../state/types.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
@@ -20,7 +21,9 @@ import type { StationHotDisposalSlots } from "./hotDisposalBarrier.js";
 // could let old and replacement HMR compositions prepare the same pane concurrently.
 // v7: stores gained exact exit-report flights and registries gained awaited PTY
 // termination; a preserved v6 runtime cannot safely coordinate native removal.
-export const STATION_HOT_RUNTIME_VERSION = 7;
+// v8: registries gained placement generations and runtimes gained one renderer
+// placement endpoint; a preserved v7 runtime cannot prove exact pane authority.
+export const STATION_HOT_RUNTIME_VERSION = 8;
 
 export type StationHotRenderer = { destroy(): void };
 
@@ -28,6 +31,8 @@ export type StationHotRuntime = {
   version: number;
   store: StationStore;
   registry: PtyRegistry;
+  /** Renderer-owned placement socket reused only across compatible HMR generations. */
+  nativePlacementEndpoint?: StationNativePlacementEndpoint;
 };
 
 export type StationHotSlots = StationHotDisposalSlots & {
@@ -57,6 +62,7 @@ export function getOrCreateStationHotRuntime(
   // disposeAll tears down each entry's subscriptions before its terminal, so no
   // stale onExit fires during the reboot; the discarded registry needs no
   // further handler cleanup.
+  existing?.nativePlacementEndpoint?.abandon();
   existing?.registry.disposeAll();
 
   const storeOptions =

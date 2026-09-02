@@ -645,6 +645,7 @@ describe("createPtyRegistry", () => {
     expect(reset).toEqual({ kind: "reset", viewport: latest });
     expect(notifications).toBe(0);
     expect(scripted[0].helpers.isDisposed()).toBe(true);
+    expect(registry.get(PANE_A)?.generation).not.toBe(exitedEntry.generation);
     expect(registry.get(PANE_A)).toMatchObject({
       cwd: "/work/new",
       exited: false,

@@ -2771,7 +2771,7 @@
           "name": "ensureAgentWorkspace",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof."
+          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof after the final cancellation check discards adapter-retained rollback authority."
         },
         {
           "name": "focusTerminal",
@@ -4776,7 +4776,7 @@
           "name": "ensureAgentWorkspace",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof."
+          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof after the final cancellation check discards adapter-retained rollback authority."
         },
         {
           "name": "EventAndObservationIngressDedupeResult",
@@ -15644,7 +15644,7 @@
       "declaration": "createProviderRegistry",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Constructs concrete provider adapters, including the packaged Pi extension path plus canonical provider-hook launcher and artifact owner supplied by CLI composition, and assigns their Observer roles. Terminal placement authority remains in those adapters; Observer use cases receive only the driven port.",
+      "purpose": "Constructs concrete provider adapters, including the packaged Pi extension path plus canonical provider-hook launcher and artifact owner supplied by CLI composition, and assigns their Observer roles. Terminal placement authority remains in those adapters; native renderer placement is registered beside the configured terminal role, and Observer use cases receive only driven ports.",
       "dependencies": [
         {
           "path": "integrations/harness/claude/src/provider.ts",
@@ -16483,7 +16483,7 @@
       "declaration": "ensureAgentWorkspace",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof.",
+      "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof after the final cancellation check discards adapter-retained rollback authority.",
       "dependencies": [
         {
           "path": "apps/observer/src/stationLogger.ts",
@@ -18203,6 +18203,29 @@
       ]
     },
     {
+      "path": "integrations/terminal/station/src/host/closeExactStationHostPty.ts",
+      "declaration": "closeExactStationHostPty",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Closes one proven Host PTY on the same non-reconnecting connection used to revalidate its endpoint, build, and immutable lifetime before and after close.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/readStationHostEvidence.ts",
+          "declaration": "readStationHostEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/lifecycleSession.ts",
+          "declaration": "openStationHostLifecycleSession",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "integrations/terminal/station/src/host/convergeStationHost.ts",
       "declaration": "convergeStationHost",
       "kind": "function",
@@ -18528,12 +18551,65 @@
       "dependencies": []
     },
     {
+      "path": "integrations/terminal/station/src/placement/protocol.ts",
+      "declaration": "startNativePlacementProtocolServer",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Serves strict one-shot native placement requests on one renderer-owned socket.",
+      "dependencies": [
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "listenUnixSocket",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/placement/service.ts",
+      "declaration": "StationPlacementService",
+      "kind": "class",
+      "role": "ADAPTER",
+      "purpose": "Proves one native renderer/pane from exact socket and process ancestry, issues one-shot authority, and coordinates bounded generation-safe reserve/commit/finalize/release lifecycle.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/closeExactStationHostPty.ts",
+          "declaration": "closeExactStationHostPty",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/host/inspectStationHost.ts",
+          "declaration": "inspectStationHost",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "TerminalPlacementPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "integrations/terminal/station/src/provider.ts",
       "declaration": "StationTerminalProvider",
       "kind": "class",
       "role": "ADAPTER",
       "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle, opaque attachment identity, and reconciled tri-state attachment evidence. Native presentation remains locally owned by Station and is never externally focusable. Attachment evidence is false for UI-owned targets, true only when the latest Host listing applies, and absent for cached Host targets after an uncertain read. Reconcile-aware discovery declares cached fallback indeterminate so it cannot masquerade as current debug evidence. Deterministic targets are released only when their current Station session and, for managed launch attempts, opaque binding generation match.",
       "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/placement/service.ts",
+          "declaration": "StationPlacementService",
+          "kind": "class",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
         {
           "path": "packages/contracts/src/providers.ts",
           "declaration": "ManagedTerminalLifecycle",
@@ -18744,7 +18820,7 @@
       "declaration": "TerminalPlacementPort",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Resolves a caller claim into provider-private proof and a short-lived public authority. Claims are merely hints from process environment; adapters prove live topology and bounded process ancestry before minting authority. A presented placement is validated once before worktree mutation and again in `openPlacedWorkspace` immediately before terminal mutation. Implementations must reject expiry, generation change, topology mismatch, and unknown intent; they must never fall back to a current, recent, focused, or configured target.",
+      "purpose": "Resolves a caller claim into provider-private proof and a short-lived public authority. Claims are merely hints from process environment; adapters prove live topology and bounded process ancestry before minting authority. A presented placement is validated once before worktree mutation and again in `openPlacedWorkspace` immediately before terminal mutation. Implementations must reject expiry, generation change, topology mismatch, and unknown intent; they must never fall back to a current, recent, focused, or configured target. After launch cancellation can no longer roll back the target, the caller finalizes the exact binding so adapters can discard retained cleanup authority.",
       "dependencies": []
     },
     {
@@ -19097,7 +19173,7 @@
       "declaration": "openStationHostLifecycleSession",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Opens one non-reconnecting lifecycle client whose requests share one absolute deadline and physical NDJSON connection. Correlation failures poison it; malformed begin success permits only a same-connection abort before disposal.",
+      "purpose": "Opens one non-reconnecting lifecycle client whose requests share one absolute deadline and physical NDJSON connection. Exact PTY close is available on that same connection; correlation failures poison it, and malformed begin success permits only a same-connection abort before disposal.",
       "dependencies": [
         {
           "path": "packages/station-host/src/clientIdentity.ts",

@@ -24,6 +24,7 @@ import type {
 import { terminalTargetObservationFromBinding } from "@station/contracts";
 import {
   type HostListEntry,
+  type HostPtyAttachExpectation,
   type HostSpawnParamsInput,
   isStationHostCompatibilityError,
   stationHostSafeError,
@@ -36,12 +37,15 @@ import {
 } from "@station/runtime";
 import { STATION_TERMINAL_PROVIDER_ID, StationTerminalProviderError } from "./errors.js";
 import type { StationHostController } from "./host/hostController.js";
+import { StationPlacementService } from "./placement/service.js";
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 
 export type StationTerminalProviderOptions = {
   clock?: RuntimeClock;
+  /** Enables native caller proof and sibling placement through renderer-owned endpoints. */
+  placement?: { stateDir: string; hostSocketPath?: string };
   /**
    * When present (the `stationPersistentAgents` flag is on), Station Host supplies
    * spawn, list, close, and attachment lifecycle. Native Station still owns
@@ -77,6 +81,7 @@ type TerminalTargetListResult =
  */
 export class StationTerminalProvider implements ManagedTerminalLifecycle {
   readonly id: ProviderId = STATION_TERMINAL_PROVIDER_ID;
+  readonly placement: StationPlacementService | undefined;
 
   readonly #clock: RuntimeClock;
   readonly #host: StationHostController | undefined;
@@ -96,6 +101,20 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   constructor(options: StationTerminalProviderOptions = {}) {
     this.#clock = options.clock ?? systemClock;
     this.#host = options.host;
+    this.placement =
+      options.placement === undefined
+        ? undefined
+        : new StationPlacementService({
+            stateDir: options.placement.stateDir,
+            ...(options.placement.hostSocketPath === undefined
+              ? {}
+              : { hostSocketPath: options.placement.hostSocketPath }),
+            clock: this.#clock,
+            owner: {
+              openManagedWorkspace: (request) => this.openManagedWorkspace(request),
+              releaseTarget: (request) => this.releaseTarget(request),
+            },
+          });
   }
 
   capabilities(): TerminalCapabilities {
@@ -367,6 +386,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     try {
       return await this.launchManagedProcess(managedRequest);
     } catch (error) {
+      if (this.placement?.hasPendingBinding(bindingToken) === true) throw error;
       await this.#releaseLaunchTarget(managedRequest);
       throw error;
     }
@@ -381,6 +401,14 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     };
     this.#assertLaunchBindingCurrent(request);
     if (this.#host === undefined) {
+      if (
+        (await this.placement?.commitPlacedProcess(request, {
+          outputCompatibility: outputCompatibilityForLaunch(request),
+        })) === true
+      ) {
+        this.#commitLaunchBinding(request);
+        return startedLaunchResult(request);
+      }
       this.#commitLaunchBinding(request);
       return localLaunchResult(request);
     }
@@ -389,13 +417,46 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       if (isStationHostCompatibilityError(handle.error)) {
         throw handle.error;
       }
+      if (
+        (await this.placement?.commitPlacedProcess(request, {
+          outputCompatibility: outputCompatibilityForLaunch(request),
+        })) === true
+      ) {
+        this.#commitLaunchBinding(request);
+        return startedLaunchResult(request);
+      }
       this.#commitLaunchBinding(request);
       return localLaunchResult(request);
     }
-    await handle.client.spawn(buildSpawnParams(request));
+    const spawnParams = buildSpawnParams(request);
+    const spawned = await handle.client.spawn(spawnParams);
+    const ptyRef: HostPtyAttachExpectation = {
+      kind: "agent",
+      terminalTargetId: spawnParams.terminalTargetId,
+      worktreeId: spawnParams.worktreeId,
+      projectId: spawnParams.projectId,
+      sessionId: spawnParams.sessionId,
+      worktreePath: spawnParams.worktreePath,
+      harnessProvider: spawnParams.harnessProvider,
+      ptyId: spawned.ptyId,
+      ptyInstanceId: spawned.ptyInstanceId,
+    };
     if (this.#targetMatchesLaunch(request)) {
       this.#hostBackedTargets.add(request.terminalTarget.targetId);
       this.#targetRevision += 1;
+    }
+    if (
+      (await this.placement?.commitPlacedProcess(request, {
+        outputCompatibility: outputCompatibilityForLaunch(request),
+        host: {
+          socketPath: this.#host.socketPath,
+          ptyRef,
+          spawned,
+        },
+      })) === true
+    ) {
+      this.#commitLaunchBinding(request);
+      return startedLaunchResult(request);
     }
     this.#commitLaunchBinding(request);
     return {
@@ -651,6 +712,20 @@ function outputCompatibilityForLaunch(
   request: ManagedTerminalLaunchProcessRequest,
 ): TerminalOutputCompatibility | undefined {
   return harnessProviderForLaunch(request) === "codex" ? "top-region-scrollback" : undefined;
+}
+
+function startedLaunchResult(
+  request: ManagedTerminalLaunchProcessRequest,
+): ManagedTerminalLaunchProcessResult {
+  return {
+    terminalTargetId: request.terminalTarget.targetId,
+    agentEndpointId: request.agentEndpointId,
+    started: true,
+    attachment: {
+      kind: "managed-terminal",
+      terminalTargetId: request.terminalTarget.targetId,
+    },
+  };
 }
 
 function localLaunchResult(

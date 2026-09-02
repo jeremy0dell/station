@@ -243,6 +243,7 @@ export const HostCloseParamsSchema = z
   .object({ ptyId: idSchema, confirm: z.literal(true) })
   .strict();
 export const HostCloseResultSchema = z.object({ closed: z.boolean() }).strict();
+export type HostCloseResult = z.infer<typeof HostCloseResultSchema>;
 /** Raw health keeps integer protocol parsing so generic compatibility can refuse non-current Hosts. */
 export const HostHealthResultSchema = z
   .object({

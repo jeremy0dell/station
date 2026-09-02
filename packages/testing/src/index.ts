@@ -670,6 +670,8 @@ export class FakeTerminalPlacementPort implements TerminalPlacementPort {
     await this.#terminal.closeTarget(request.targetId);
     return { status: "released" };
   }
+
+  async finalizePlacedTarget(_request: ReleasePlacedTerminalTargetRequest): Promise<void> {}
 }
 
 export class FakeHarnessProvider implements HarnessProvider {
