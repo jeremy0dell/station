@@ -176,7 +176,7 @@ describe("StationTerminalProvider", () => {
       id: stationTargetId(worktree.id),
       provider: "native",
       state: "open",
-      focusable: false,
+      externallyFocusable: false,
       closeable: false,
       hasManagedAttachment: false,
       projectId: "web",
@@ -809,7 +809,7 @@ describe("StationTerminalProvider (host-backed)", () => {
     await expect(provider.listTargets()).resolves.toMatchObject([
       {
         id: stationTargetId(worktree.id),
-        focusable: false,
+        externallyFocusable: false,
         closeable: false,
         hasManagedAttachment: false,
       },
@@ -819,7 +819,7 @@ describe("StationTerminalProvider (host-backed)", () => {
     await expect(provider.listTargets()).resolves.toMatchObject([
       {
         id: stationTargetId(worktree.id),
-        focusable: false,
+        externallyFocusable: false,
         closeable: true,
         hasManagedAttachment: true,
       },
@@ -842,7 +842,7 @@ describe("StationTerminalProvider (host-backed)", () => {
     await expect(provider.listTargets()).resolves.toMatchObject([
       {
         id: opened.target.targetId,
-        focusable: false,
+        externallyFocusable: false,
         closeable: false,
         hasManagedAttachment: false,
       },
@@ -959,7 +959,7 @@ describe("StationTerminalProvider (host-backed)", () => {
       id: stationTargetId(worktree.id),
       provider: "native",
       state: "open",
-      focusable: false,
+      externallyFocusable: false,
       closeable: true,
       worktreeId: worktree.id,
       sessionId: "ses_web_feature",

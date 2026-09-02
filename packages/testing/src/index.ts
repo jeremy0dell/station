@@ -92,7 +92,7 @@ export type CreateFakeTerminalTargetInput = {
   harnessRunId?: string;
   cwd?: string;
   state?: TerminalState;
-  focusable?: boolean;
+  externallyFocusable?: boolean;
   closeable?: boolean;
   hasManagedAttachment?: boolean;
   confidence?: Confidence;
@@ -266,7 +266,9 @@ export function createFakeTerminalTarget(
     ...(input.harnessRunId === undefined ? {} : { harnessRunId: input.harnessRunId }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
     state,
-    ...(input.focusable === undefined ? {} : { focusable: input.focusable }),
+    ...(input.externallyFocusable === undefined
+      ? {}
+      : { externallyFocusable: input.externallyFocusable }),
     ...(input.closeable === undefined ? {} : { closeable: input.closeable }),
     ...(input.hasManagedAttachment === undefined
       ? {}

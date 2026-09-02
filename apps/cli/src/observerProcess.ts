@@ -565,7 +565,7 @@ export async function restartObserver(
     };
   }
   if (started.status === "running" && usePreviousLifecycleResult) {
-    return { ...started, restartResultSchema: "0.11.0" };
+    return { ...started, restartResultSchema: "0.12.0" };
   }
   return started;
 }

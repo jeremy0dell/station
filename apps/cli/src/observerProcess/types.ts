@@ -26,7 +26,7 @@ export type ObserverStatus =
       /** The incumbent answered with the previous lifecycle schema during restart. */
       previousLifecycleSchema?: true;
       /** Render the restart result for a predecessor that only understands the previous schema. */
-      restartResultSchema?: "0.11.0";
+      restartResultSchema?: "0.12.0";
     }
   | {
       status: "stopped" | "stale" | "unhealthy";

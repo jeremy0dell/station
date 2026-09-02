@@ -54,7 +54,8 @@ function snapshotTerminalTarget(
   if (target.worktreeId !== undefined) debug.worktreeId = target.worktreeId;
   if (target.sessionId !== undefined) debug.sessionId = target.sessionId;
   const control = terminalControlEvidence(target, health?.capabilities);
-  if (control.focusable !== undefined) debug.focusable = control.focusable;
+  if (control.externallyFocusable !== undefined)
+    debug.externallyFocusable = control.externallyFocusable;
   if (control.closeable !== undefined) debug.closeable = control.closeable;
   if (target.hasManagedAttachment !== undefined) {
     debug.hasManagedAttachment = target.hasManagedAttachment;

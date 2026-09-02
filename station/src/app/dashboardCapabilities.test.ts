@@ -18,7 +18,14 @@ function harness(
     sessions: baseSnapshot.sessions.map((session) =>
       session.terminal === undefined
         ? session
-        : { ...session, terminal: { ...session.terminal, provider: "native" as const } },
+        : {
+            ...session,
+            terminal: {
+              ...session.terminal,
+              provider: "native" as const,
+              externallyFocusable: false,
+            },
+          },
     ),
   };
   const source = new FakeStationSource(snapshot);
@@ -158,12 +165,12 @@ describe("native dashboard capabilities", () => {
       }),
     ).resolves.toMatchObject({
       kind: "failure",
-      error: { code: "CREATED_SESSION_FOCUS_UNCONFIRMED" },
+      error: { code: "CREATED_SESSION_ACTIVATION_UNCONFIRMED" },
     });
     expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
   });
 
-  it("rejects provider drift and non-focusable native post-create targets", async () => {
+  it("rejects provider drift but activates an externally unfocusable native target", async () => {
     const command = {
       type: "createdSession.applyUiPolicy" as const,
       target: {
@@ -175,32 +182,34 @@ describe("native dashboard capabilities", () => {
       },
       policy: { focusCreatedSession: true, dismissDashboard: true },
     };
-    const cases = [
-      { terminal: { provider: "tmux" as const, focusable: true }, code: "CREATED_SESSION_TARGET_MISMATCH" },
-      { terminal: { provider: "native" as const, focusable: false }, code: "CREATED_SESSION_NOT_FOCUSABLE" },
-    ];
+    const drifted = harness();
+    const driftedSnapshot = drifted.source.getState().snapshot;
+    if (driftedSnapshot === undefined) throw new Error("Native fixture snapshot is missing.");
+    drifted.source.setSnapshot({
+      ...driftedSnapshot,
+      sessions: driftedSnapshot.sessions.map((session) =>
+        session.id === command.target.sessionId && session.terminal !== undefined
+          ? { ...session, terminal: { ...session.terminal, provider: "tmux" } }
+          : session,
+      ),
+    });
+    drifted.store.actions.openOverlay(STATION_OVERLAY_ID);
 
-    for (const testCase of cases) {
-      const fixture = harness();
-      const snapshot = fixture.source.getState().snapshot;
-      if (snapshot === undefined) throw new Error("Native fixture snapshot is missing.");
-      fixture.source.setSnapshot({
-        ...snapshot,
-        sessions: snapshot.sessions.map((session) =>
-          session.id === command.target.sessionId && session.terminal !== undefined
-            ? { ...session, terminal: { ...session.terminal, ...testCase.terminal } }
-            : session,
-        ),
-      });
-      fixture.store.actions.openOverlay(STATION_OVERLAY_ID);
+    await expect(drifted.capabilities.createdSession.applyUiPolicy(command)).resolves.toMatchObject({
+      kind: "failure",
+      error: { code: "CREATED_SESSION_TARGET_MISMATCH" },
+    });
+    expect(drifted.activateRequests).toEqual([]);
+    expect(drifted.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
 
-      await expect(fixture.capabilities.createdSession.applyUiPolicy(command)).resolves.toMatchObject({
-        kind: "failure",
-        error: { code: testCase.code },
-      });
-      expect(fixture.activateRequests).toEqual([]);
-      expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
-    }
+    const native = harness();
+    native.store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    await expect(native.capabilities.createdSession.applyUiPolicy(command)).resolves.toEqual({
+      kind: "success",
+    });
+    expect(native.activateRequests).toHaveLength(1);
+    expect(native.store.getState().input.activeOverlay).toBeNull();
   });
 
   it("dismisses the overlay only after a managed activation lands", async () => {

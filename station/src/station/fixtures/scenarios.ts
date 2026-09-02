@@ -410,7 +410,7 @@ function scenarioRow(input: ScenarioRowInput): WorktreeRow {
     built.terminal = {
       provider: "tmux",
       state: "open",
-      focusable: true,
+      externallyFocusable: true,
       closeable: true,
       hasWorkspace: true,
       hasPrimaryAgentEndpoint: true,
@@ -560,7 +560,7 @@ function sessionForRow(candidate: WorktreeRow): SessionView {
     terminal: {
       provider: candidate.terminal.provider,
       state: candidate.terminal.state,
-      focusable: true,
+      externallyFocusable: true,
       closeable: true,
       hasWorkspace: true,
       hasPrimaryAgentEndpoint: true,

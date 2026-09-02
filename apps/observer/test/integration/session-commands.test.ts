@@ -1503,7 +1503,7 @@ describe("session command vertical slice", () => {
           worktreeId: worktree.id,
           sessionId: "ses_grouped_restart",
           closeable: true,
-          focusable: true,
+          externallyFocusable: true,
           state: "stale",
           now,
         }),

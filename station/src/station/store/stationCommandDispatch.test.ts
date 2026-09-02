@@ -134,7 +134,7 @@ describe("station command dispatch through the shared client", () => {
               terminal: {
                 provider: "tmux",
                 state: "open" as const,
-                focusable: true,
+                externallyFocusable: true,
                 closeable: true,
               },
             }

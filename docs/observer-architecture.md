@@ -170,8 +170,8 @@ must not compensate for it by selecting concrete adapters at runtime.
 
 The Station terminal adapter may use Station Host when CLI composition enables
 host-backed terminals. Host backing supplies process lifecycle, close, and opaque
-attachment identity, but not external presentation control: native targets remain
-non-focusable from dashboards. Observer application code knows only the injected
+attachment identity, but not external presentation control: native targets cannot
+be focused externally from dashboards. Observer application code knows only the injected
 `ManagedTerminalLifecycle`; Station resolves its attachment to host socket and PTY
 mechanics at its own boundary and selects or reveals the session locally.
 

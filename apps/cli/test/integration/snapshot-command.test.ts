@@ -130,7 +130,7 @@ function runningDeps(getSnapshot: () => Promise<StationSnapshot>) {
 
 function runningHealth(socketPath: string) {
   return {
-    schemaVersion: "0.12.0" as const,
+    schemaVersion: "0.13.0" as const,
     status: "healthy" as const,
     pid: 1234,
     startedAt: now,
@@ -141,7 +141,7 @@ function runningHealth(socketPath: string) {
 
 function snapshotFixture(options?: { includeDebug?: boolean }): StationSnapshot {
   return StationSnapshotSchema.parse({
-    schemaVersion: "0.12.0",
+    schemaVersion: "0.13.0",
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
     providerHealth: {},

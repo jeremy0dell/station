@@ -1,33 +1,35 @@
 import type { TerminalTargetObservation } from "@station/contracts";
 
 type TerminalControlCapabilities = {
+  /** Whether the provider can service `terminal.focus` for one of its targets. */
   canFocusTarget?: boolean;
   canCloseTarget?: boolean;
 };
 
 export type EffectiveTerminalControlEvidence = {
-  focusable?: boolean;
+  /** Effective external provider-focus evidence; renderer-local opening routes are separate. */
+  externallyFocusable?: boolean;
   closeable?: boolean;
 };
 
 /**
  * POLICY
  *
- * Projects target-specific and provider-wide terminal controls with the same optional semantics
- * for canonical attachments and diagnostic target evidence.
+ * Projects target-specific and provider-wide external focus and close controls with the same
+ * optional semantics for canonical attachments and diagnostic target evidence.
  */
 export function terminalControlEvidence(
-  target: Pick<TerminalTargetObservation, "state" | "focusable" | "closeable">,
+  target: Pick<TerminalTargetObservation, "state" | "externallyFocusable" | "closeable">,
   capabilities?: TerminalControlCapabilities,
 ): EffectiveTerminalControlEvidence {
   const evidence: EffectiveTerminalControlEvidence = {};
-  const focusable =
-    target.focusable ??
-    (capabilities?.canFocusTarget !== false && isFocusableTerminalState(target.state));
-  if (focusable) {
-    evidence.focusable = true;
-  } else if (target.focusable === false || capabilities?.canFocusTarget === false) {
-    evidence.focusable = false;
+  const externallyFocusable =
+    target.externallyFocusable ??
+    (capabilities?.canFocusTarget !== false && isExternallyFocusableTerminalState(target.state));
+  if (externallyFocusable) {
+    evidence.externallyFocusable = true;
+  } else if (target.externallyFocusable === false || capabilities?.canFocusTarget === false) {
+    evidence.externallyFocusable = false;
   }
 
   const closeable =
@@ -41,7 +43,7 @@ export function terminalControlEvidence(
   return evidence;
 }
 
-function isFocusableTerminalState(state: TerminalTargetObservation["state"]): boolean {
+function isExternallyFocusableTerminalState(state: TerminalTargetObservation["state"]): boolean {
   return state === "open" || state === "detached" || state === "unknown";
 }
 

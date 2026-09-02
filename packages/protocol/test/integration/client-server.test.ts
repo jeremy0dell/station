@@ -1009,7 +1009,7 @@ describe("protocol client/server", () => {
     };
     const previousLifecycleRequestSchema = z
       .object({
-        schemaVersion: z.literal("0.11.0"),
+        schemaVersion: z.literal("0.12.0"),
         jsonrpc: z.literal("2.0"),
         id: z.string().min(1),
         method: z.enum(["observer.health", "observer.stop"]),
@@ -1025,7 +1025,7 @@ describe("protocol client/server", () => {
         if (connectionCount === 1) {
           const currentRequest = ProtocolRequestSchema.parse(firstRequest);
           connection.send({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             jsonrpc: "2.0",
             id: currentRequest.id,
             error: {
@@ -1040,11 +1040,11 @@ describe("protocol client/server", () => {
         const healthRequest = previousLifecycleRequestSchema.parse(firstRequest);
         expect(healthRequest.method).toBe("observer.health");
         connection.send({
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           jsonrpc: "2.0",
           id: healthRequest.id,
           result: {
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             ...expectedObserverIdentity,
           },
@@ -1053,10 +1053,10 @@ describe("protocol client/server", () => {
         const stopRequest = previousLifecycleRequestSchema.parse((await iterator.next()).value);
         expect(stopRequest.method).toBe("observer.stop");
         connection.send({
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           jsonrpc: "2.0",
           id: stopRequest.id,
-          result: { schemaVersion: "0.11.0", stopped: true, at: protocolTestNow },
+          result: { schemaVersion: "0.12.0", stopped: true, at: protocolTestNow },
         });
       },
     });
@@ -1083,14 +1083,14 @@ describe("protocol client/server", () => {
     const { socketPath } = await createTempSocketPath();
     const previousRequestSchema = z
       .object({
-        schemaVersion: z.literal("0.11.0"),
+        schemaVersion: z.literal("0.12.0"),
         jsonrpc: z.literal("2.0"),
         id: z.string().min(1),
         method: z.enum(["observer.health", "session.recoveryReadiness", "observer.stop"]),
       })
       .strict();
     const legacyHealth = {
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       status: "healthy",
       pid: 42,
       startedAt: protocolTestNow,
@@ -1111,7 +1111,7 @@ describe("protocol client/server", () => {
       harnesses: [],
     } as const;
     const legacyStop = {
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       stopped: true,
       at: protocolTestNow,
     } as const;
@@ -1126,7 +1126,7 @@ describe("protocol client/server", () => {
         if (connectionCount % 2 === 1) {
           const currentRequest = ProtocolRequestSchema.parse(request);
           connection.send({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             jsonrpc: "2.0",
             id: currentRequest.id,
             error: {
@@ -1140,7 +1140,7 @@ describe("protocol client/server", () => {
 
         const previousRequest = previousRequestSchema.parse(request);
         connection.send({
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           jsonrpc: "2.0",
           id: previousRequest.id,
           result:
@@ -1582,7 +1582,10 @@ describe("protocol client/server", () => {
     }
   });
 
-  it("reports protocol schema mismatches before generic response validation", async () => {
+  it.each([
+    "0.11.0",
+    "9.9.9",
+  ])("reports protocol schema mismatch %s before generic response validation", async (schemaVersion) => {
     const { socketPath } = await createTempSocketPath();
     const server = await listenUnixSocket({
       socketPath,
@@ -1597,7 +1600,7 @@ describe("protocol client/server", () => {
             ? request.value.id
             : "unknown";
         connection.send({
-          schemaVersion: "9.9.9",
+          schemaVersion,
           jsonrpc: "2.0",
           id: requestId,
           result: {
@@ -1612,8 +1615,7 @@ describe("protocol client/server", () => {
       await expect(client.health()).rejects.toMatchObject({
         tag: "ProtocolError",
         code: "PROTOCOL_SCHEMA_MISMATCH",
-        message:
-          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.12.0.",
+        message: `Observer protocol schema mismatch: the observer responded with schema ${schemaVersion}, but this CLI expects schema 0.13.0.`,
         hint: expect.stringContaining("A different STATION checkout"),
       });
     } finally {

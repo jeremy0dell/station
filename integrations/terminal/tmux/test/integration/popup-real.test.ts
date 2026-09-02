@@ -3162,11 +3162,11 @@ function deterministicDashboardSnapshot(projectRoot: string): StationSnapshot {
     const terminal = {
       ...templateSession.terminal,
       provider,
-      focusable: index !== 1,
+      externallyFocusable: index !== 1,
       reason:
         index === 1
           ? "Station-hosted terminals are not externally focusable."
-          : "Private tmux target is focusable from the popup client.",
+          : "Private tmux target is externally focusable from the popup client.",
     };
     const worktree = {
       state: "exists" as const,

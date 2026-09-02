@@ -167,7 +167,8 @@ export function terminalAttachment(
     state: terminal.state,
   };
   const control = terminalControlEvidence(terminal, capabilities);
-  if (control.focusable !== undefined) attachment.focusable = control.focusable;
+  if (control.externallyFocusable !== undefined)
+    attachment.externallyFocusable = control.externallyFocusable;
   if (control.closeable !== undefined) attachment.closeable = control.closeable;
   if (terminal.worktreeId !== undefined) attachment.hasWorkspace = true;
   if (hasPrimaryAgentEndpoint(terminal, harnessRun)) {

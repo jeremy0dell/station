@@ -345,7 +345,7 @@ describe("TUI screen transitions", () => {
       terminal: {
         provider: "tmux",
         state: "open" as const,
-        focusable: true,
+        externallyFocusable: true,
         closeable: true,
       },
     };
@@ -375,7 +375,7 @@ describe("TUI screen transitions", () => {
     ]);
   });
 
-  it("delegates native non-focusable sessions to renderer activation", () => {
+  it("delegates native sessions without external focus to renderer activation", () => {
     const base = createCommandSnapshot("idle");
     const snapshot = {
       ...base,
@@ -384,7 +384,7 @@ describe("TUI screen transitions", () => {
           ? session
           : {
               ...session,
-              terminal: { ...session.terminal, provider: "native", focusable: false },
+              terminal: { ...session.terminal, provider: "native", externallyFocusable: false },
             },
       ),
     };

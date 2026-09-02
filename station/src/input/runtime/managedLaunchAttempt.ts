@@ -11,7 +11,7 @@ import type {
   SafeError,
   SessionId,
 } from "@station/contracts";
-import { StationHostProviderError } from "@station/host";
+import { STATION_HOST_PROVIDER_ID, StationHostProviderError } from "@station/host";
 import { paneTreeIds } from "../../state/paneTree.js";
 import { selectPaneRecord } from "../../state/selectors.js";
 import type { StationStore } from "../../state/store.js";
@@ -23,8 +23,7 @@ import type {
 import type { PtyRegistry, PtyRegistryEntry } from "../../terminal/registry/ptyRegistry.js";
 import type { StationTerminalSize, StationTerminalSpawnOptions } from "../../terminal/types.js";
 import {
-  externalTerminalProviderForWorktree,
-  nonFocusableStationTerminalForWorktree,
+  findWorktreeRowById,
   readinessForWorktree,
   unreachableTerminalRow,
 } from "./stationRows.js";
@@ -233,29 +232,23 @@ function resolveExistingSession(
   prepared: Extract<PreparedLaunch, { kind: "existing-session" }>,
   target: ManagedLaunchTarget,
 ): ManagedLaunchAction {
-  const nonFocusableStation = nonFocusableStationTerminalForWorktree(
-    runtime.clientState,
-    target.worktreeId,
-  );
-  if (nonFocusableStation !== undefined) {
+  const row = findWorktreeRowById(runtime.clientState, target.worktreeId);
+  if (row?.terminal?.provider === STATION_HOST_PROVIDER_ID) {
     return {
       kind: "notice",
       notice: {
         kind: "info",
-        message: `${nonFocusableStation.label}: Station has no attachable host PTY for this existing agent.`,
+        message: `${row.branch}: Station has no attachable host PTY for this existing agent.`,
       },
     };
   }
-  const externalProvider = externalTerminalProviderForWorktree(
-    runtime.clientState,
-    target.worktreeId,
-  );
-  if (externalProvider !== undefined) {
+  const provider = row?.terminal?.provider;
+  if (provider !== undefined) {
     return {
       kind: "notice",
       notice: {
         kind: "info",
-        message: `This agent runs in the "${externalProvider}" terminal, which Station can't display. Attach to it from a ${externalProvider} client.`,
+        message: `This agent runs in the "${provider}" terminal, which Station can't display. Attach to it from a ${provider} client.`,
       },
     };
   }

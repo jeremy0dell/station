@@ -233,7 +233,7 @@ export type ObserverHealth = z.infer<typeof ObserverHealthSchema>;
 const PreviousObserverHealthSchema = ObserverHealthSchema.omit({
   schemaVersion: true,
   providerHealth: true,
-}).extend({ schemaVersion: z.literal("0.11.0") });
+}).extend({ schemaVersion: z.literal("0.12.0") });
 
 /** Concrete local paths emitted with a non-running Observer command result. */
 export const ObserverCommandPathsSchema = z

@@ -13,11 +13,11 @@ const expectedObserverIdentity = {
 };
 
 const receipt: ReconcileReceipt = {
-  schemaVersion: "0.12.0",
+  schemaVersion: "0.13.0",
   reason: "manual",
   reconciledAt: "2026-08-24T12:01:00.000Z",
   snapshot: {
-    schemaVersion: "0.12.0",
+    schemaVersion: "0.13.0",
     generatedAt: "2026-08-24T12:01:00.000Z",
     projects: [],
     worktrees: [],

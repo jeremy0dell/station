@@ -32,7 +32,7 @@ describe("row-level provider diagnostics from debug bundles", () => {
               terminal: {
                 provider: "tmux",
                 state: "open",
-                focusable: true,
+                externallyFocusable: true,
                 closeable: true,
                 hasWorkspace: true,
                 hasPrimaryAgentEndpoint: true,

@@ -76,7 +76,7 @@ describe("diagnostic evidence index", () => {
     const index = buildDiagnosticEvidenceIndex(
       baseDiagnosticSnapshot({
         observerHealth: {
-          schemaVersion: "0.12.0",
+          schemaVersion: "0.13.0",
           status: "degraded",
           pid: 1234,
           startedAt: diagnosticNow,

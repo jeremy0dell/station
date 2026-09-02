@@ -81,7 +81,7 @@ async function applyObserverCreatedSessionPolicy(
     return { kind: "success" };
   }
 
-  const targetError = validateExactFocusableTarget(options.source, command);
+  const targetError = validateExactExternallyFocusableTarget(options.source, command);
   if (targetError !== undefined) {
     return failure(targetError);
   }
@@ -113,7 +113,7 @@ async function applyObserverCreatedSessionPolicy(
   }
 }
 
-function validateExactFocusableTarget(
+function validateExactExternallyFocusableTarget(
   source: StationClientStateSource,
   command: CreatedSessionUiCommand,
 ): SafeError | undefined {
@@ -140,10 +140,10 @@ function validateExactFocusableTarget(
       "The created session no longer matches its canonical terminal target.",
     );
   }
-  if (session.terminal.focusable !== true) {
+  if (session.terminal.externallyFocusable !== true) {
     return createdSessionError(
-      "CREATED_SESSION_NOT_FOCUSABLE",
-      `The created session cannot be focused from the dashboard's "${command.target.terminalProvider}" terminal context.`,
+      "CREATED_SESSION_NOT_EXTERNALLY_FOCUSABLE",
+      `The created session's "${command.target.terminalProvider}" terminal provider can't be focused from this dashboard.`,
     );
   }
   return undefined;

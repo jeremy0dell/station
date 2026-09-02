@@ -15,7 +15,7 @@ const harnessCapabilities = {
 };
 
 export const mockObserverSnapshot = {
-  schemaVersion: "0.12.0",
+  schemaVersion: "0.13.0",
   generatedAt: fixtureNow,
   observer: {
     pid: 4242,
@@ -106,7 +106,7 @@ export const mockObserverSnapshot = {
       terminal: {
         provider: "tmux",
         state: "open",
-        focusable: true,
+        externallyFocusable: true,
         closeable: true,
         hasWorkspace: true,
         hasPrimaryAgentEndpoint: true,
@@ -145,7 +145,7 @@ export const mockObserverSnapshot = {
       terminal: {
         provider: "tmux",
         state: "open",
-        focusable: true,
+        externallyFocusable: true,
         closeable: true,
         hasWorkspace: true,
         hasPrimaryAgentEndpoint: true,
@@ -204,7 +204,7 @@ export const mockObserverSnapshot = {
       terminal: {
         provider: "tmux",
         state: "open",
-        focusable: true,
+        externallyFocusable: true,
         closeable: true,
         hasWorkspace: true,
         hasPrimaryAgentEndpoint: true,
@@ -238,7 +238,7 @@ export const mockObserverSnapshot = {
       terminal: {
         provider: "tmux",
         state: "open",
-        focusable: true,
+        externallyFocusable: true,
         closeable: true,
         hasWorkspace: true,
         hasPrimaryAgentEndpoint: true,

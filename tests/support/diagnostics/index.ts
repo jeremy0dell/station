@@ -44,10 +44,10 @@ export function baseDiagnosticSnapshot(
   overrides: Partial<DiagnosticSnapshot> = {},
 ): DiagnosticSnapshot {
   const snapshot: DiagnosticSnapshot = {
-    schemaVersion: "0.12.0",
+    schemaVersion: "0.13.0",
     collectedAt: diagnosticNow,
     observerHealth: {
-      schemaVersion: "0.12.0",
+      schemaVersion: "0.13.0",
       status: "healthy",
       pid: 1234,
       startedAt: diagnosticNow,
@@ -65,7 +65,7 @@ export function baseDiagnosticSnapshot(
 
 export function baseStationSnapshot(overrides: Partial<StationSnapshot> = {}): StationSnapshot {
   const snapshot: StationSnapshot = {
-    schemaVersion: "0.12.0",
+    schemaVersion: "0.13.0",
     generatedAt: diagnosticNow,
     observer: {
       pid: 1234,

@@ -773,7 +773,7 @@ describe("observer graph derivation", () => {
 
   it("honors target-level focus and close overrides", () => {
     const target = terminal("term_idle", "wt_web_idle", "run_idle");
-    target.focusable = false;
+    target.externallyFocusable = false;
     target.closeable = false;
     target.hasManagedAttachment = true;
 
@@ -785,7 +785,7 @@ describe("observer graph derivation", () => {
 
     const terminalAttachment = snapshot.rows.find((row) => row.id === "wt_web_idle")?.terminal;
     expect(terminalAttachment?.provider).toBe("fake-terminal");
-    expect(terminalAttachment?.focusable).toBe(false);
+    expect(terminalAttachment?.externallyFocusable).toBe(false);
     expect(terminalAttachment?.closeable).toBe(false);
     expect(terminalAttachment).not.toHaveProperty("hasManagedAttachment");
     expect(StationSnapshotSchema.parse(snapshot)).toEqual(snapshot);

@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { StationEventSchema, TerminalTargetObservationSchema } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -209,7 +210,7 @@ describe("SQLite-only Observer persistence behavior", () => {
     const upgraded = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
     try {
       expect(upgraded.health()).toMatchObject({
-        schemaVersion: 19,
+        schemaVersion: latestSchemaVersion,
         migrations: expect.arrayContaining([
           expect.objectContaining({
             version: 19,
@@ -222,6 +223,197 @@ describe("SQLite-only Observer persistence behavior", () => {
           .prepare("SELECT entity_kind FROM provider_observations ORDER BY entity_kind")
           .all(),
       ).toEqual([{ entity_kind: "worktree" }]);
+    } finally {
+      upgraded.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("renames persisted terminal focus evidence when upgrading a version-19 database", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-terminal-focus-v19-"));
+    const path = join(directory, "observer.sqlite");
+    const legacyDatabase = openSqlDatabase(path);
+    const legacyTerminal = (focusable?: boolean) => ({
+      provider: "tmux",
+      state: "open",
+      ...(focusable === undefined ? {} : { focusable }),
+    });
+    const legacyRow = (focusable: boolean) => ({
+      id: "wt_legacy",
+      projectId: "web",
+      projectLabel: "Web",
+      title: "Legacy",
+      branch: "legacy",
+      path: "/tmp/legacy",
+      worktree: { state: "exists", source: "worktrunk" },
+      terminal: legacyTerminal(focusable),
+      display: { statusLabel: "idle", sortPriority: 40, alert: false },
+    });
+    const legacySession = (focusable: boolean) => ({
+      id: "ses_legacy",
+      origin: "external",
+      projectId: "web",
+      worktreeId: "wt_legacy",
+      createdAt: now,
+      updatedAt: now,
+      harness: {
+        provider: "codex",
+        mode: "interactive",
+        capabilities: {
+          canLaunch: false,
+          canDiscoverRuns: false,
+          canEmitEvents: false,
+          canReceivePrompt: false,
+          canResume: false,
+          canStop: false,
+          canRunNonInteractive: false,
+          canExposeApprovalState: false,
+          supportsModifiedEnterSoftNewline: false,
+        },
+      },
+      terminal: legacyTerminal(focusable),
+      status: {
+        value: "idle",
+        confidence: "high",
+        reason: "Legacy persisted session.",
+        source: "harness_process",
+        updatedAt: now,
+      },
+      title: "Legacy",
+      tags: [],
+    });
+    try {
+      for (const migration of migrations.filter(({ version }) => version <= 19)) {
+        legacyDatabase.exec(migration.sql);
+        legacyDatabase
+          .prepare("INSERT INTO observer_migrations (version, name, applied_at) VALUES (?, ?, ?)")
+          .run(migration.version, migration.name, now);
+      }
+      const insertObservation = legacyDatabase.prepare(`
+        INSERT INTO provider_observations
+          (id, provider, provider_type, entity_kind, entity_key, payload_json, observed_at)
+        VALUES (?, 'tmux', 'terminal', 'terminal_target', ?, ?, ?)
+      `);
+      for (const [suffix, focusable] of [
+        ["true", true],
+        ["false", false],
+        ["absent", undefined],
+      ] as const) {
+        insertObservation.run(
+          `obs_${suffix}`,
+          `term_${suffix}`,
+          JSON.stringify({
+            id: `term_${suffix}`,
+            ...legacyTerminal(focusable),
+            confidence: "high",
+            reason: "Legacy terminal observation.",
+            observedAt: now,
+          }),
+          now,
+        );
+      }
+      const insertEvent = legacyDatabase.prepare(`
+        INSERT INTO events (id, type, source, payload_json, created_at)
+        VALUES (?, ?, 'test', ?, ?)
+      `);
+      const events = [
+        ["evt_worktree_added", "worktree.added", { type: "worktree.added", row: legacyRow(true) }],
+        [
+          "evt_worktree_updated",
+          "worktree.updated",
+          {
+            type: "worktree.updated",
+            worktreeId: "wt_legacy",
+            patch: { terminal: legacyTerminal(false) },
+          },
+        ],
+        [
+          "evt_session_created",
+          "session.created",
+          { type: "session.created", session: legacySession(true) },
+        ],
+        [
+          "evt_session_updated",
+          "session.updated",
+          {
+            type: "session.updated",
+            sessionId: "ses_legacy",
+            patch: { terminal: legacyTerminal(false) },
+          },
+        ],
+      ] as const;
+      for (const [id, type, event] of events) {
+        insertEvent.run(id, type, JSON.stringify(event), now);
+      }
+      legacyDatabase
+        .prepare(
+          "INSERT OR REPLACE INTO observer_meta (key, value) VALUES ('schema_version', '19')",
+        )
+        .run();
+    } finally {
+      legacyDatabase.close();
+    }
+
+    const upgraded = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
+    try {
+      expect(upgraded.health()).toMatchObject({
+        schemaVersion: 20,
+        migrations: expect.arrayContaining([
+          expect.objectContaining({ version: 20, name: "rename_terminal_external_focus" }),
+        ]),
+      });
+      const observations = upgraded.database
+        .prepare("SELECT payload_json FROM provider_observations ORDER BY id")
+        .all() as Array<{ payload_json: string }>;
+      const parsedObservations = observations.map(({ payload_json }) => {
+        const raw = JSON.parse(payload_json) as Record<string, unknown>;
+        expect(raw).not.toHaveProperty("focusable");
+        return TerminalTargetObservationSchema.parse(raw);
+      });
+      expect(parsedObservations.map(({ externallyFocusable }) => externallyFocusable)).toEqual([
+        undefined,
+        false,
+        true,
+      ]);
+
+      const persistedEvents = upgraded.database
+        .prepare("SELECT payload_json FROM events ORDER BY id")
+        .all() as Array<{ payload_json: string }>;
+      const parsedEvents = persistedEvents.map(({ payload_json }) =>
+        StationEventSchema.parse(JSON.parse(payload_json)),
+      );
+      expect(parsedEvents).toHaveLength(4);
+      expect(
+        persistedEvents.every(({ payload_json }) => !payload_json.includes('"focusable"')),
+      ).toBe(true);
+      expect(persistedEvents.map(({ payload_json }) => JSON.parse(payload_json))).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "worktree.updated",
+            patch: expect.objectContaining({
+              terminal: expect.objectContaining({ externallyFocusable: false }),
+            }),
+          }),
+          expect.objectContaining({
+            type: "worktree.added",
+            row: expect.objectContaining({
+              terminal: expect.objectContaining({ externallyFocusable: true }),
+            }),
+          }),
+          expect.objectContaining({
+            type: "session.created",
+            session: expect.objectContaining({
+              terminal: expect.objectContaining({ externallyFocusable: true }),
+            }),
+          }),
+          expect.objectContaining({
+            type: "session.updated",
+            patch: expect.objectContaining({
+              terminal: expect.objectContaining({ externallyFocusable: false }),
+            }),
+          }),
+        ]),
+      );
     } finally {
       upgraded.close();
       await rm(directory, { recursive: true, force: true });
@@ -681,6 +873,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         [17, "session_groups"],
         [18, "command_results"],
         [19, "drop_legacy_provider_health_observations"],
+        [20, "rename_terminal_external_focus"],
       ]);
       await expect(persistence.listSessions()).resolves.toEqual([
         expect.objectContaining({

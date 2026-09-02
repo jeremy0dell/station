@@ -194,7 +194,7 @@ export const TerminalTargetObservationSchema = z
     harnessRunId: HarnessRunIdSchema.optional(),
     state: TerminalStateSchema,
     /** External provider-focus evidence; renderer-local opening routes are separate. */
-    focusable: z.boolean().optional(),
+    externallyFocusable: z.boolean().optional(),
     closeable: z.boolean().optional(),
     /**
      * Managed attachment: true currently issuable, false definitively absent;

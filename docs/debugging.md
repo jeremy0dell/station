@@ -102,7 +102,7 @@ graph and this envelope.
 `hasManagedAttachment` is optional tri-state debug evidence on a target: `true` means the provider
 could issue an opaque managed attachment at observation time, `false` means it definitively
 reported none, and absence means unknown or inapplicable. It is not part of canonical session or
-row terminal attachments. `focusable` concerns external
+row terminal attachments. `externallyFocusable` concerns external
 provider focus. Neither field proves that the current renderer can open or reveal the target,
 and this envelope must not be used as terminal-mutation authority. Activation resolves any
 managed attachment afresh.

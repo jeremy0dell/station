@@ -80,7 +80,7 @@ function stationHostedSnapshot(): StationSnapshot {
       if (row.id !== WORKTREE_ID || row.terminal === undefined) {
         return row;
       }
-      return { ...row, terminal: { ...row.terminal, provider: "native", focusable: false } };
+      return { ...row, terminal: { ...row.terminal, provider: "native", externallyFocusable: false } };
     }),
     sessions: snapshot.sessions.map((session) => {
       if (session.id !== ROW_ID || session.terminal === undefined) {
@@ -88,7 +88,7 @@ function stationHostedSnapshot(): StationSnapshot {
       }
       return {
         ...session,
-        terminal: { ...session.terminal, provider: "native", focusable: false },
+        terminal: { ...session.terminal, provider: "native", externallyFocusable: false },
       };
     }),
   };
@@ -762,6 +762,36 @@ describe("createManagedLaunchAttempt", () => {
     expect(harness.terminalFactories).toEqual([factory]);
     expect(selectPaneRecord(harness.store.getState(), PANE_ID)?.agentIdentity).toMatchObject({
       terminalBindingToken: TERMINAL_BINDING_TOKEN,
+      processOwner: "host",
+    });
+  });
+
+  it("opens an existing native attachment without requiring external focus", async () => {
+    const attachment = {
+      kind: "managed-terminal",
+      terminalTargetId: `${TERMINAL_TARGET_ID}-existing-host`,
+    } as const;
+    const scripted = createScriptedTerminal();
+    const factory: ManagedTerminalFactory = () => scripted.terminal;
+    const harness = attemptHarness({
+      snapshot: stationHostedSnapshot(),
+      prepared: {
+        kind: "existing-session",
+        sessionId: ROW_ID,
+        harnessProvider: "codex",
+        attachment,
+      },
+      attacher: { resolve: async () => factory },
+    });
+
+    const result = await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+
+    expect(result).toEqual({ kind: "success", landed: true });
+    expect(harness.terminalFactories).toEqual([factory]);
+    expect(harness.observerService.dispatched).toEqual([]);
+    expect(selectPaneRecord(harness.store.getState(), PANE_ID)?.agentIdentity).toMatchObject({
+      sessionId: ROW_ID,
+      terminalTargetId: attachment.terminalTargetId,
       processOwner: "host",
     });
   });

@@ -732,7 +732,7 @@ function snapshotObserverDeps(
     clientFactory: (requestedSocketPath: string) =>
       ({
         health: async () => ({
-          schemaVersion: "0.12.0",
+          schemaVersion: "0.13.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,
@@ -890,7 +890,7 @@ function snapshotWithGroups(): StationSnapshot {
     display: { statusLabel: "idle" as const, sortPriority: 10, alert: false },
   }));
   return StationSnapshotSchema.parse({
-    schemaVersion: "0.12.0",
+    schemaVersion: "0.13.0",
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
     providerHealth: {},

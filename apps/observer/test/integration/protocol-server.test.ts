@@ -215,7 +215,7 @@ describe("observer protocol server", () => {
       incumbentListening = false;
       await server.close();
       return {
-        schemaVersion: "0.12.0" as const,
+        schemaVersion: "0.13.0" as const,
         stopped: true,
         at: now,
       };
@@ -334,7 +334,7 @@ describe("observer protocol server", () => {
       incumbentListening = false;
       await server.close();
       return {
-        schemaVersion: "0.12.0" as const,
+        schemaVersion: "0.13.0" as const,
         stopped: true,
         at: now,
       };

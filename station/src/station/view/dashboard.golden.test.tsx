@@ -1146,7 +1146,7 @@ describe("dashboard golden frames", () => {
     });
     const frame = setup.captureCharFrame();
     expect(frame).toContain("[1]");
-    // The starting row gets a slot too (it has a focusable terminal), but the
+    // The starting row gets a slot too (it has an externally focusable terminal), but the
     // empty project renders its calm empty-state line (with a click-to-add
     // button) and no slot cell.
     expect(frame).toContain("no sessions yet · ");

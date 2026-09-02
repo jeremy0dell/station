@@ -92,6 +92,48 @@ describe("observer activation capability", () => {
     expect(service.dispatched).toEqual([]);
   });
 
+  it.each([
+    false,
+    undefined,
+  ] as const)("does not dispatch provider focus when external focus evidence is %s", async (externallyFocusable) => {
+    const base = createCommandSnapshot("idle");
+    const snapshot = {
+      ...base,
+      sessions: base.sessions.map((session) => {
+        if (session.id !== "ses_wt_web_idle" || session.terminal === undefined) return session;
+        const terminal = { ...session.terminal };
+        if (externallyFocusable === undefined) {
+          delete terminal.externallyFocusable;
+        } else {
+          terminal.externallyFocusable = externallyFocusable;
+        }
+        return { ...session, terminal };
+      }),
+    };
+    const service = new FakeTuiObserverService(snapshot);
+    const capability = createObserverActivationCapabilities({
+      source: new FakeClientStateSource(snapshot),
+      service,
+    });
+
+    const handle = capability.activate({
+      sessionId: "ses_wt_web_idle",
+      projectId: "web",
+      worktreeId: "wt_web_idle",
+      branch: "fix-nav-mobile",
+      preferredObserverAction: "focus",
+    });
+
+    expect(await handle.completion).toEqual({
+      kind: "notice",
+      notice: {
+        kind: "info",
+        message: `The "tmux" terminal provider can't be focused from this dashboard.`,
+      },
+    });
+    expect(service.dispatched).toEqual([]);
+  });
+
   it("starts fresh under the exact retained session without closing it", async () => {
     const snapshot = createCommandSnapshot("none");
     const service = new FakeTuiObserverService(snapshot);

@@ -341,7 +341,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       worktree: request.worktree,
       observedAt: toIsoTimestamp(this.#clock.now()),
     });
-    observation.focusable = false;
+    observation.externallyFocusable = false;
     observation.closeable = false;
     const previous = this.#targets.get(targetId);
     if (previous !== undefined) {
@@ -627,7 +627,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       id: entry.terminalTargetId as TerminalTargetId,
       provider: this.id,
       state: "open",
-      focusable: false,
+      externallyFocusable: false,
       closeable: true,
       confidence: "high",
       reason: "Rehydrated from station-host liveness after reconnect.",
