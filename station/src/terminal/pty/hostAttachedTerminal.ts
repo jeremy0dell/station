@@ -765,6 +765,9 @@ export function createHostAttachedTerminal(
     get pid() {
       return pid;
     },
+    get hostPtyRef() {
+      return resolvedPtyExpectation;
+    },
     get size() {
       return size;
     },

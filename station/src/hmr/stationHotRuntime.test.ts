@@ -42,7 +42,7 @@ function createSlots(): StationHotSlots {
 }
 
 describe("station hot runtime", () => {
-  it("reuses a compatible v7 runtime so its live PTYs survive a reload", () => {
+  it("reuses a compatible v8 runtime so its live PTYs survive a reload", () => {
     const slots = createSlots();
     const first = getOrCreateStationHotRuntime(slots, FREEZE_CONFIG);
     first.store.actions.createPane("pane-second");
@@ -107,7 +107,7 @@ describe("station hot runtime", () => {
     expect(reported).toHaveLength(1);
   });
 
-  it("reboots a pre-removal-coordination v6 runtime and disposes its old PTYs", () => {
+  it("reboots a pre-placement v7 runtime and disposes its old PTYs", () => {
     const slots = createSlots();
     const oldStore = createStationStore();
     const paneId = agentWorktreePaneId("wt_station_idle");
@@ -116,7 +116,7 @@ describe("station hot runtime", () => {
     const oldRegistry = createPtyRegistry({ createTerminal: () => scripted.terminal });
     oldRegistry.resize(paneId, { cols: 80, rows: 24 });
     const oldRuntime: StationHotRuntime = {
-      version: 6,
+      version: 7,
       store: oldStore,
       registry: oldRegistry,
     };

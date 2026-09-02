@@ -264,8 +264,17 @@ diagnostics/*/errors.jsonl
 diagnostics/*/logs/observer.jsonl
 diagnostics/panes/
 spool/hooks/
+run/np/<renderer-hash>.sock
 run/runtime-owners/v1/
 ```
+
+`run/np/` contains one short, opaque private socket per live native renderer.
+The endpoint exposes only strict placement proof and reserve/commit/finalize/release
+messages. Compatible HMR retains the socket but changes its handler generation,
+so authority from the prior generation is rejected instead of retargeted. A
+socket pathname with no process holder is an abandoned remnant and is skipped
+before connection; a live holder with unavailable, ambiguous, or inconsistent
+evidence blocks caller placement instead of being ignored.
 
 `run/runtime-owners/v1` contains private (`0700` directory, `0600` files) disposable-runtime records for native development HMR and the supervised setup guided E2E lane. Binary smoke uses the same relative record path beneath private checkout-and-mode-keyed state in the OS temporary directory so an ordinary next start can find a prior random smoke root. A matching next start may recover only a dead owner's exact registered process group after PID, PGID, OS start, launch-token, script, and executable evidence agree. Device-and-inode-pinned cleanup roots remain on the next record until exact deletion succeeds. A malformed, insecure, replaced, reused, or unavailable identity blocks cleanup and preserves the record for diagnosis. These records classify socket and persistence roots but never authorize signals to persistent Observer, Station Host, or Host-owned PTYs.
 
@@ -276,8 +285,13 @@ session fork ... --from-current` obtain fresh authority from the caller terminal
 and submit it only in that recorded sibling command. Explicit `--terminal tmux`
 is detached, has no source, and never consults current or focused state. Raw
 callers may instead run `stn session current` and reuse only its unexpired
-`source` in one sibling request. On rejection, failure, or timeout, use the
-returned `commandId` with `stn command get` or `stn debug trace`; a successful
+`source` in one sibling request. A native caller produces first-class sibling
+authority when Station proves exactly one renderer, pane/PTY generation, and
+process ancestry; Host-backed panes also require exact Host lifetime evidence.
+Native placement reserves an inactive root and does not change renderer focus.
+Evidence timeout or inspection failure is reported separately from a changed
+renderer or pane generation. On rejection, failure, or timeout, use the returned `commandId` with `stn command get` or
+`stn debug trace`; a successful
 durable result, including its resolved Group ID when grouped, remains authoritative
 when the CLI reports a later convergence warning. Debug export redacts `authorityId`
 and all prompt-keyed fields and does not include prompt content,

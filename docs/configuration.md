@@ -137,8 +137,11 @@ unexpired source from `stn session current` for sibling placement, while the
 latter is source-free and creates an unselected tmux window in the configured
 workbench. The CLI never infers a terminal from project defaults. Omitted
 harness uses the project default for create or the source session's provider for
-fork; omitted layout uses the exact project default. Native Station does not support raw
-placement; its renderer-managed launch path is separate.
+fork; omitted layout uses the exact project default. `--from-current` uses the
+provider carried by the freshly proved source, so callers inside tmux create a
+tmux sibling and callers inside a native Station pane create an inactive native
+root. Native placement has no configuration key, and its ordinary
+renderer-managed launch path remains separate.
 
 | Key | Type | Notes |
 | --- | --- | --- |

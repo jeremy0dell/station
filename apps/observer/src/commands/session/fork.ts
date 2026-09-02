@@ -216,7 +216,6 @@ export function createSessionForkHandler(
           logger: options.logger,
         });
         placementResult = commandPlacementResult(payload.placement, resolvedPlacement);
-        throwIfAborted(context.signal);
       } catch (error) {
         if (isTerminalCleanupUncertain(error)) {
           try {

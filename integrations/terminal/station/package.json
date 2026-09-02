@@ -17,6 +17,7 @@
     "@station/contracts": "workspace:*",
     "@station/protocol": "workspace:*",
     "@station/runtime": "workspace:*",
-    "@station/host": "workspace:*"
+    "@station/host": "workspace:*",
+    "zod": "^4.1.12"
   }
 }

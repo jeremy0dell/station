@@ -206,7 +206,7 @@ ownership even where current ownership is still a deviation.
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
 | Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Fresh list evidence and mutations only; Observer snapshots own current session selection, callers supply project context for mutation, and adapters retain no second worktree inventory. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | Ordinary topology and lifecycle are provider-owned; implementing this port does not advertise placement support. Optional reconcile-aware discovery refuses retained adapter hints as indeterminate, while ordinary callers may still inspect them; Observer admits targets into the current graph and debug evidence only from a complete result. |
-| Terminal placement | Driven | `TerminalPlacementPort` | tmux and test adapters | Explicit companion role registered only beside the same ordinary terminal id. Caller fields are untrusted claims; tmux proves one configured endpoint, socket/server/pane/process identity, and bounded ancestry, mints a ten-minute one-shot authority, and revalidates immediately before mutation. The tmux adapter serializes detached opens through its workbench existence decision and mutation so cold creation is single-flight. Sibling and detached never fall back to a current, recent, focused, or alternate-server target. Station registers no placement role. |
+| Terminal placement | Driven | `TerminalPlacementPort` | tmux, native Station, and test adapters | Explicit companion role registered beside the same ordinary terminal id. Caller fields are untrusted claims. Tmux proves one configured endpoint, while native proves one renderer socket, HMR generation, pane/PTY generation, bounded process ancestry, and exact Host lifetime when applicable. A native socket path with no holder is ignored before IPC; live, ambiguous, or inconsistent ownership fails closed. Both providers use the shared bounded one-shot authority mechanic and revalidate immediately before mutation. Native supports sibling only and creates an inactive renderer root; tmux also serializes source-free detached opens through its workbench decision. Neither falls back to a current, recent, focused, or alternate target. After the final cancellation check, successful launch finalization discards adapter-retained rollback authority. |
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. Complete target observations may contribute debug-only `hasManagedAttachment` as true, false, or absent for currently issuable, definitively absent, or unknown/inapplicable attachment evidence; activation still resolves the opaque attachment afresh. |
 | Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports: discovery returns provider-normalized current run status; `hookHealth()` returns strict read-only hook evidence; `reconcileHooks()` delegates mutation and post-write verification to the integration; separate hook adapters own event parsing; and harness providers retain compatibility admission and exact recovery-artifact location. Unsupported capabilities remain explicit provider-neutral outcomes. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
@@ -507,6 +507,7 @@ queued and active transactions, including rollback, have all completed.
 Distinct session branches may therefore reach terminal placement concurrently;
 the tmux adapter independently serializes detached opens through the workbench
 existence decision and mutation without widening provider-create ownership.
+Native sibling opens remain independent per proven renderer and binding token.
 
 Successful `worktree.create`, `worktree.fork`, `session.create`, `session.fork`,
 and `sessionGroup.create` handlers return strict application identities. Session
@@ -522,12 +523,13 @@ records never carry a result.
 The first-class CLI create/fork adapter loads one initial snapshot, resolves
 exact project, source-session, provider, and Group facts, and dispatches these
 same recorded `session.create` or `session.fork` commands. `--from-current`
-obtains a fresh public tmux placement source; explicit `--terminal tmux` is
+obtains a fresh caller-relative tmux or native placement source; explicit `--terminal tmux` is
 source-free detached placement and never inspects current or focused state. A
 fork's code source remains the selected source session even when placement comes
 from another caller pane. The CLI accepts only a command-correlated durable
 result, then performs one best-effort refresh whose failure cannot rewrite a
-succeeded command.
+succeeded command. The source provider becomes the recorded terminal provider;
+the CLI does not infer it from project defaults.
 
 Terminal target resolution follows operation intent. Focus accepts only live
 provider targets, while close may select a provider-reported stale target so
@@ -845,10 +847,12 @@ intent execution repeats it immediately before opening the workspace to close
 the final race.
 
 A late classic failure uses the command's identity-bound cleanup for resources
-that command owns. A native Station create or fork never creates a replacement:
-the already-created worktree remains, no title, target, or process is added, and
-Station presents the attempt as a bounded failed optimistic row. Existing-live
-focus returns before any health or hook probe.
+that command owns. Native placed create/fork reserves an inactive renderer root,
+commits the exact local or Host-backed process, and removes only that binding on
+proven rollback; uncertain cleanup retains the session and worktree for
+reconciliation. The separate renderer-managed external-launch path keeps its
+existing optimistic-row behavior. Existing-live focus returns before any health
+or hook probe.
 
 ### External Launch
 

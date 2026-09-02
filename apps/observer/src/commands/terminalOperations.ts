@@ -75,7 +75,8 @@ type EnsureAgentWorkspaceInput = {
  * adapter alone revalidates the authority immediately before target mutation;
  * failures close only the target opened by this invocation and never fall back
  * to a current, recent, or focused terminal. Successful explicit placement
- * returns the provider's resolved destination proof.
+ * returns the provider's resolved destination proof after the final cancellation
+ * check discards adapter-retained rollback authority.
  */
 export function ensureAgentWorkspace(
   input: EnsureAgentWorkspaceInput & {
@@ -178,6 +179,9 @@ export async function ensureAgentWorkspace(
         targetId: opened.target.targetId,
       });
     }
+    if (placedOpened !== undefined && input.placementPort !== undefined) {
+      throwIfAborted(input.context.signal);
+    }
   } catch (error) {
     if (placedOpened !== undefined && input.placementPort !== undefined) {
       await releasePlacedTargetOrThrow({
@@ -200,6 +204,13 @@ export async function ensureAgentWorkspace(
       },
       { commandId: input.context.commandId },
     );
+  }
+  if (placedOpened !== undefined && input.placementPort !== undefined) {
+    await finalizePlacedTargetOrThrow({
+      ...input,
+      placementPort: input.placementPort,
+      opened: placedOpened,
+    });
   }
   return placedOpened?.placement;
 }
@@ -258,13 +269,7 @@ async function releasePlacedTargetOrThrow(
           provider: input.placementPort.id,
         },
       },
-      () =>
-        input.placementPort.releasePlacedTarget({
-          targetId: input.opened.target.targetId,
-          sessionId: input.sessionId,
-          generation: input.opened.placement.generation,
-          bindingToken: input.opened.bindingToken,
-        }),
+      () => input.placementPort.releasePlacedTarget(placedTargetRequest(input, input.opened)),
     );
   } catch (error) {
     const normalized = safeErrorFromUnknown(error, {
@@ -287,6 +292,63 @@ async function releasePlacedTargetOrThrow(
       provider: input.placementPort.id,
     } satisfies SafeError;
   }
+}
+
+async function finalizePlacedTargetOrThrow(
+  input: {
+    placementPort: TerminalPlacementPort;
+    opened: OpenPlacedWorkspaceResult;
+    sessionId: string;
+  } & TerminalOperationRuntime,
+): Promise<void> {
+  try {
+    await runProviderMutation(
+      {
+        operation: `provider.${input.placementPort.id}.finalizePlacedTarget`,
+        clock: input.clock,
+        trace: input.context.trace,
+        fallback: {
+          tag: "TerminalProviderError",
+          code: "TERMINAL_CLEANUP_UNCERTAIN",
+          message: "The terminal provider could not confirm placement finalization.",
+          provider: input.placementPort.id,
+        },
+      },
+      () => input.placementPort.finalizePlacedTarget(placedTargetRequest(input, input.opened)),
+    );
+  } catch (error) {
+    const normalized = safeErrorFromUnknown(error, {
+      tag: "TerminalProviderError",
+      code: "TERMINAL_CLEANUP_UNCERTAIN",
+      message: "The terminal provider could not confirm placement finalization.",
+      provider: input.placementPort.id,
+    });
+    await input.logger?.warn(
+      "Placed terminal finalization is uncertain; session state was retained.",
+      {
+        targetId: input.opened.target.targetId,
+        terminalProvider: input.placementPort.id,
+        traceId: input.context.trace.traceId,
+        error: normalized,
+      },
+    );
+    throw {
+      ...normalized,
+      tag: "TerminalProviderError",
+      code: "TERMINAL_CLEANUP_UNCERTAIN",
+      message: "The terminal provider could not confirm placement finalization.",
+      provider: input.placementPort.id,
+    } satisfies SafeError;
+  }
+}
+
+function placedTargetRequest(input: { sessionId: string }, opened: OpenPlacedWorkspaceResult) {
+  return {
+    targetId: opened.target.targetId,
+    sessionId: input.sessionId,
+    generation: opened.placement.generation,
+    bindingToken: opened.bindingToken,
+  };
 }
 
 /** Resolves and focuses one provider-owned target from product session/worktree identity. */

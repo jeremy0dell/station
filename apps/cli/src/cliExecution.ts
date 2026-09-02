@@ -2,6 +2,7 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type LoadedStationConfig, loadConfig } from "@station/config";
 import { stationBuildInfo } from "@station/runtime";
+import { captureNativeCallerClaims } from "@station/terminal";
 import { captureTmuxCallerClaims } from "@station/tmux";
 import { CliInputError, parseRequiredOptionValue } from "./args.js";
 import type { CliRunOptions, CliRunResult } from "./cliTypes.js";
@@ -152,7 +153,10 @@ function withCliComposition(options: CliRunOptions): CliRunOptions {
         ? {}
         : { artifactOwner: options.providerHookArtifactOwner }),
     });
-  sessionDeps.captureCallerClaims ??= captureTmuxCallerClaims;
+  sessionDeps.captureCallerClaims ??= (environment) => ({
+    ...captureTmuxCallerClaims(environment),
+    ...captureNativeCallerClaims(environment),
+  });
   return {
     ...options,
     sessionDeps,

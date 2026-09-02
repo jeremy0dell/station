@@ -76,8 +76,13 @@ export async function runCreateOrForkSessionCommand(
           snapshot,
           findSessionSummary(snapshot, parsed.sourceSessionId).projectId,
         );
-  const terminalProvider = validateTmuxProvider(snapshot);
-  const placement = await resolvePlacement(parsed, timeoutMs, options, deps);
+  const { terminalProvider, placement } = await resolvePlacement(
+    parsed,
+    snapshot,
+    timeoutMs,
+    options,
+    deps,
+  );
 
   if (parsed.action === "create") {
     return runCreateSession(
@@ -256,21 +261,24 @@ function forkCommand(
 
 async function resolvePlacement(
   parsed: ParsedCreateOrForkSessionArgs,
+  snapshot: StationSnapshot,
   timeoutMs: number,
   options: SessionCommandOptions,
   deps: ObserverProcessDeps,
-): Promise<TerminalPlacementRequest> {
-  if (parsed.placement.kind === "terminal") return { intent: "detached" };
+): Promise<{ terminalProvider: ProviderId; placement: TerminalPlacementRequest }> {
+  if (parsed.placement.kind === "terminal") {
+    return {
+      terminalProvider: validateTmuxProvider(snapshot),
+      placement: { intent: "detached" },
+    };
+  }
   const currentOptions = sessionOptionsWithTimeout(options, timeoutMs);
   const current = await runCurrentSessionCommand(currentOptions, deps);
-  if (current.source.provider !== "tmux") {
-    throw sessionCliError(
-      "SESSION_CURRENT_TERMINAL_UNSUPPORTED",
-      "--from-current requires current placement authority from tmux.",
-      { provider: current.source.provider },
-    );
-  }
-  return { intent: "sibling", source: current.source };
+  const terminalProvider = validateCurrentTerminalProvider(snapshot, current.source.provider);
+  return {
+    terminalProvider,
+    placement: { intent: "sibling", source: current.source },
+  };
 }
 
 function resolveCreateGroup(
@@ -366,6 +374,22 @@ function validateTmuxProvider(snapshot: StationSnapshot): ProviderId {
     throw sessionCliError(
       "SESSION_TMUX_NOT_CONFIGURED",
       "The tmux terminal provider is not available in the current snapshot.",
+      { provider },
+    );
+  }
+  validateProviderHealth(health, provider, "terminal");
+  return provider;
+}
+
+function validateCurrentTerminalProvider(
+  snapshot: StationSnapshot,
+  provider: ProviderId,
+): ProviderId {
+  const health = snapshot.providerHealth[provider];
+  if (health === undefined) {
+    throw sessionCliError(
+      "SESSION_CURRENT_TERMINAL_NOT_CONFIGURED",
+      "The current terminal placement provider is not configured.",
       { provider },
     );
   }

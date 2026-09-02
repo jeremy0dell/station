@@ -137,7 +137,8 @@ export async function probeHarnessHooksStatus(
  * Constructs concrete provider adapters, including the packaged Pi extension
  * path plus canonical provider-hook launcher and artifact owner supplied by CLI
  * composition, and assigns their Observer roles. Terminal placement authority
- * remains in those adapters; Observer use cases receive only the driven port.
+ * remains in those adapters; native renderer placement is registered beside
+ * the configured terminal role, and Observer use cases receive only driven ports.
  *
  * Observer application use cases are composed by the Observer runtime, not
  * stored in the provider registry.
@@ -154,21 +155,28 @@ export function createProviderRegistry(
   // targets; the default terminal provider stays the project default (e.g. tmux).
   // Behind stationPersistentAgents it is host-backed (spawns into / drives the
   // standalone station-station-host); otherwise the Station UI owns the PTYs.
-  const station = config.featureFlags?.stationPersistentAgents
-    ? new StationTerminalProvider({
-        host: createStationHostController({
-          socketPath: stationHostSocketPath(config),
-          stateDir: resolveObserverPaths(config).stateDir,
-          hostCommand: resolveStationHostCommand(),
-        }),
-      })
-    : new StationTerminalProvider();
+  const observerPaths = resolveObserverPaths(config);
+  const hostSocketPath = stationHostSocketPath(config);
+  const station = new StationTerminalProvider({
+    placement: { stateDir: observerPaths.stateDir, hostSocketPath },
+    ...(config.featureFlags?.stationPersistentAgents === true
+      ? {
+          host: createStationHostController({
+            socketPath: hostSocketPath,
+            stateDir: observerPaths.stateDir,
+            hostCommand: resolveStationHostCommand(),
+          }),
+        }
+      : {}),
+  });
+  const terminalPlacements = [
+    ...(terminalRoles.placement === undefined ? [] : [terminalRoles.placement]),
+    ...(station.placement === undefined ? [] : [station.placement]),
+  ];
   return new ProviderRegistry({
     worktree,
     terminal: terminalRoles.terminal,
-    ...(terminalRoles.placement === undefined
-      ? {}
-      : { terminalPlacements: [terminalRoles.placement] }),
+    terminalPlacements,
     managedTerminal: station,
     harnesses,
     repositories,

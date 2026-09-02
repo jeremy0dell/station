@@ -9,5 +9,6 @@ export * from "./gitEnvironment.js";
 export * from "./hookSetup.js";
 export * from "./names.js";
 export * from "./objects.js";
+export * from "./oneShotAuthorityStore.js";
 export * from "./paths.js";
 export * from "./processEvidence.js";

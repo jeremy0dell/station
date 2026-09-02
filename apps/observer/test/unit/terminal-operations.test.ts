@@ -18,7 +18,7 @@ import {
   FakeHarnessProvider,
   FakeTerminalProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { CommandHandlerContext } from "../../src/commands/queue.js";
 import {
   closeTerminal,
@@ -356,6 +356,57 @@ describe("terminal operations", () => {
     expect(terminal.snapshot().closed).toEqual(["term_fake"]);
   });
 
+  it("finalizes exact placed-target cleanup authority after a successful launch", async () => {
+    const terminal = new RecordingTerminalProvider();
+    const finalize = vi.spyOn(terminal.placement, "finalizePlacedTarget");
+
+    const placement = await ensureAgentWorkspace(
+      ensureInput(terminal, new CapturingHarnessProvider(), {
+        placementPort: terminal.placement,
+        placement: { intent: "detached" },
+      }),
+    );
+
+    expect(finalize).toHaveBeenCalledWith({
+      targetId: "term_fake",
+      sessionId: "ses_web_feature",
+      generation: placement?.generation,
+      bindingToken: "fake-placement-binding-1",
+    });
+    expect(terminal.snapshot().closed).toEqual([]);
+  });
+
+  it("retains the placed target when finalization acknowledgement is uncertain", async () => {
+    const terminal = new RecordingTerminalProvider();
+    const finalize = vi.spyOn(terminal.placement, "finalizePlacedTarget").mockRejectedValue({
+      tag: "TerminalProviderError",
+      code: "FAKE_FINALIZE_FAILED",
+      message: "The renderer acknowledgement was lost.",
+      provider: terminal.id,
+    });
+    const release = vi.spyOn(terminal.placement, "releasePlacedTarget");
+    const logger = new CapturingLogger();
+
+    await expect(
+      ensureAgentWorkspace(
+        ensureInput(terminal, new CapturingHarnessProvider(), {
+          placementPort: terminal.placement,
+          placement: { intent: "detached" },
+          logger,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "TERMINAL_CLEANUP_UNCERTAIN" });
+    expect(finalize).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
+    expect(terminal.snapshot().closed).toEqual([]);
+    expect(logger.records).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: "Placed terminal finalization is uncertain; session state was retained.",
+      }),
+    );
+  });
+
   it("surfaces cleanup uncertainty instead of hiding a failed placed-target release", async () => {
     const terminal = new RecordingTerminalProvider({
       failures: {
@@ -425,6 +476,39 @@ describe("terminal operations", () => {
       ),
     ).rejects.toMatchObject({ tag: "CancellationError", code: "COMMAND_CANCELLED" });
     expect(terminal.snapshot().launches).toEqual([]);
+  });
+
+  it("releases a committed placed target when cancellation wins before finalization", async () => {
+    const controller = new AbortController();
+    const terminal = new RecordingTerminalProvider({
+      onLaunch: async () => {
+        controller.abort({
+          tag: "CancellationError",
+          code: "COMMAND_CANCELLED",
+          message: "Observer command was cancelled.",
+        });
+      },
+    });
+    const release = vi.spyOn(terminal.placement, "releasePlacedTarget");
+    const finalize = vi.spyOn(terminal.placement, "finalizePlacedTarget");
+
+    await expect(
+      ensureAgentWorkspace(
+        ensureInput(terminal, new CapturingHarnessProvider(), {
+          placementPort: terminal.placement,
+          placement: { intent: "detached" },
+          context: commandContext("cmd_cancel_after_commit", controller.signal),
+        }),
+      ),
+    ).rejects.toMatchObject({ tag: "CancellationError", code: "COMMAND_CANCELLED" });
+    expect(release).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "ses_web_feature",
+        bindingToken: "fake-placement-binding-1",
+      }),
+    );
+    expect(finalize).not.toHaveBeenCalled();
+    expect(terminal.snapshot().closed).toEqual(["term_fake"]);
   });
 
   it("executes independent operations without retaining command receipts", async () => {

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
 import type { PaneId } from "../../state/types.js";
 import type { StationTerminalTheme } from "../../theme/index.js";
@@ -30,6 +31,8 @@ const GEOMETRY_SETTLE_MS = 2_000;
  */
 export type PtyRegistryEntry = {
   readonly paneId: PaneId;
+  /** Opaque lifetime identity; changes whenever this pane's registry entry is replaced. */
+  readonly generation: string;
   readonly screen: StationVtScreen | null;
   readonly terminal: StationTerminalProcess | null;
   /** Proven process exit; the only local state that authorizes managed-pane recycling. */
@@ -47,6 +50,10 @@ export type PtyRegistryEntry = {
 export type PtyRegistryResetExitedResult =
   | { kind: "reset"; viewport: StationTerminalSize }
   | { kind: "refused"; reason: "missing" | "superseded" | "not-exited" };
+
+export type PtyRegistryResetUnstartedResult =
+  | { kind: "reset"; entry: PtyRegistryEntry }
+  | { kind: "refused"; reason: "missing" | "superseded" | "started" };
 
 export type PtyRegistry = {
   /**
@@ -73,6 +80,12 @@ export type PtyRegistry = {
     spawnOptions: StationTerminalSpawnOptions,
     createTerminalOverride?: (options: StationTerminalSpawnOptions) => StationTerminalProcess,
   ): PtyRegistryResetExitedResult;
+  /** Replace only the exact dormant entry with one carrying explicit launch ownership. */
+  resetUnstarted(
+    expectedEntry: PtyRegistryEntry,
+    spawnOptions: StationTerminalSpawnOptions,
+    createTerminalOverride?: (options: StationTerminalSpawnOptions) => StationTerminalProcess,
+  ): PtyRegistryResetUnstartedResult;
   get(paneId: PaneId): PtyRegistryEntry | undefined;
   has(paneId: PaneId): boolean;
   entries(): readonly PtyRegistryEntry[];
@@ -144,6 +157,7 @@ export type PtyRegistryOptions = {
 
 type InternalEntry = {
   paneId: PaneId;
+  generation: string;
   screen: StationVtScreen | null;
   terminal: StationTerminalProcess | null;
   exited: boolean;
@@ -200,6 +214,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     }
     const entry: InternalEntry = {
       paneId,
+      generation: `ptyg_${randomUUID()}`,
       screen: null,
       terminal: null,
       exited: false,
@@ -576,6 +591,23 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       disposeEntry(current);
       ensureEntry(current.paneId, spawnOptions, createTerminalOverride);
       return { kind: "reset", viewport };
+    },
+    resetUnstarted: (expectedEntry, spawnOptions, createTerminalOverride) => {
+      const current = entries.get(expectedEntry.paneId);
+      if (current === undefined) {
+        return { kind: "refused", reason: "missing" };
+      }
+      if (current !== expectedEntry) {
+        return { kind: "refused", reason: "superseded" };
+      }
+      if (current.screen !== null || current.terminal !== null || current.exited) {
+        return { kind: "refused", reason: "started" };
+      }
+      disposeEntry(current);
+      return {
+        kind: "reset",
+        entry: ensureEntry(current.paneId, spawnOptions, createTerminalOverride),
+      };
     },
     get: (paneId) => entries.get(paneId),
     has: (paneId) => entries.has(paneId),
