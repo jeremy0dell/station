@@ -189,7 +189,10 @@ function parseCreationOptions(args: string[], action: "create" | "fork"): Parsed
       if (placement !== undefined) throw creationInputError(action, "Placement options conflict.");
       const provider = parseSessionOptionValue(args[index + 1], option);
       if (provider !== "tmux") {
-        throw creationInputError(action, "--terminal must be tmux for session create or fork.");
+        throw creationInputError(
+          action,
+          "--terminal supports only tmux; use --from-current from a native Station pane for native placement.",
+        );
       }
       placement = { kind: "terminal", provider };
       index += 1;

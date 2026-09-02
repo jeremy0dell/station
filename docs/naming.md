@@ -168,7 +168,10 @@ provider-private proof. A **placement request** is exactly `sibling` or
 `detached`. Sibling requires a source; detached is source-free and means an
 unselected terminal target, not the absence of a terminal. Use *source* for
 validated authority and *claim* only for raw environment/process hints that an
-adapter has not yet proved.
+adapter has not yet proved. A **placement provider ID** names a registered
+capability, not a physical provider instance. Clients do not name endpoints,
+workbench sessions, renderer IDs, or socket paths; Observer composition and the
+adapter's fresh validation resolve those private facts.
 
 For `stn session fork`, keep **code source** and **placement source** distinct.
 The exact source session selects the project, source worktree, and default
@@ -181,6 +184,12 @@ Ungrouped unless an existing or inline-created root Group is requested. Fork
 inherits a grouped source's transaction-current Group by default, while
 `--ungrouped` explicitly opts out; `--inherit-group` requires the source to be
 grouped at initial resolution.
+
+Tmux is the only source-free placement capability: detached placement resolves
+the configured server endpoint and creates a window in its configured workbench
+session. Native Station is sibling-only. One renderer lifetime is its
+presentation instance, selected only by caller-derived authority; Station Host
+ownership does not select it.
 
 Three lifecycle units are easy to conflate. Keep them distinct in names, commands, and UX: a session runs inside a worktree, and a pane tree is how one worktree row is drawn in the TUI.
 
