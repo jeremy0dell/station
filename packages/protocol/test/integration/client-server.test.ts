@@ -1079,7 +1079,7 @@ describe("protocol client/server", () => {
     }
   });
 
-  it("normalizes previous health provider IDs and readiness responses", async () => {
+  it("accepts previous health and readiness responses", async () => {
     const { socketPath } = await createTempSocketPath();
     const previousRequestSchema = z
       .object({
@@ -1089,7 +1089,7 @@ describe("protocol client/server", () => {
         method: z.enum(["observer.health", "session.recoveryReadiness", "observer.stop"]),
       })
       .strict();
-    const legacyHealth = {
+    const previousHealth = {
       schemaVersion: "0.12.0",
       status: "healthy",
       pid: 42,
@@ -1097,10 +1097,11 @@ describe("protocol client/server", () => {
       version: "0.0.0",
       providerHealth: {
         tmux: {
-          providerId: "tmux",
+          provider: "tmux",
           providerType: "terminal",
           status: "healthy",
           lastCheckedAt: protocolTestNow,
+          capabilities: { canFocusTarget: true },
         },
       },
     } as const;
@@ -1145,7 +1146,7 @@ describe("protocol client/server", () => {
           id: previousRequest.id,
           result:
             previousRequest.method === "observer.health"
-              ? legacyHealth
+              ? previousHealth
               : previousRequest.method === "observer.stop"
                 ? legacyStop
                 : readiness,
@@ -1162,16 +1163,8 @@ describe("protocol client/server", () => {
 
     try {
       await expect(client.health()).resolves.toEqual({
-        ...legacyHealth,
+        ...previousHealth,
         schemaVersion: STATION_SCHEMA_VERSION,
-        providerHealth: {
-          tmux: {
-            provider: "tmux",
-            providerType: "terminal",
-            status: "healthy",
-            lastCheckedAt: protocolTestNow,
-          },
-        },
       });
       await expect(client.getSessionRecoveryReadiness()).resolves.toEqual(readiness);
       await expect(client.stop()).resolves.toEqual({
