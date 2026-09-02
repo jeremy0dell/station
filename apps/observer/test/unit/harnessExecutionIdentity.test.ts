@@ -44,7 +44,7 @@ describe("session harness execution identity", () => {
     expect(staleA).toEqual({ mayDeriveState: false });
   });
 
-  it("allows a new native execution only after explicit idle or exited evidence", () => {
+  it("allows ordinary native replacement after explicit idle or exited evidence", () => {
     const activeA = binding(decide(undefined, evidence("native_a", status("working", t1))));
 
     for (const replaceableState of ["idle", "exited"] as const) {
@@ -59,11 +59,33 @@ describe("session harness execution identity", () => {
     }
   });
 
+  it("promotes corroborated activity over a different provisional startup", () => {
+    const provisionalA = binding(decide(undefined, evidence("native_a", status("starting", t1))));
+
+    for (const insufficientState of ["starting", "idle", "exited"] as const) {
+      expect(decide(provisionalA, evidence("native_b", status(insufficientState, t2)))).toEqual({
+        mayDeriveState: false,
+      });
+    }
+    expect(
+      decide(provisionalA, evidence("native_b", status("working", "2026-05-21T12:00:00.000Z"))),
+    ).toEqual({ mayDeriveState: false });
+
+    for (const corroboratedState of ["working", "needs_attention"] as const) {
+      expect(
+        decide(provisionalA, evidence("native_b", status(corroboratedState, t2))),
+      ).toMatchObject({
+        mayDeriveState: true,
+        binding: { nativeSessionId: "native_b", state: corroboratedState },
+      });
+    }
+  });
+
   it("rejects mismatched activity while the owner is active, stuck, unknown, or newer", () => {
     const activeA = binding(decide(undefined, evidence("native_a", status("working", t1))));
     const idleA = binding(decide(activeA, evidence("native_a", status("idle", t2))));
 
-    for (const state of ["starting", "working", "needs_attention", "stuck", "unknown"] as const) {
+    for (const state of ["working", "needs_attention", "stuck", "unknown"] as const) {
       const blocked = decide({ ...idleA, state }, evidence("native_b", status("working", t3)));
       expect(blocked).toEqual({ mayDeriveState: false });
     }

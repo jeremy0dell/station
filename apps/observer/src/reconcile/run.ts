@@ -24,7 +24,7 @@ import type {
 import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { buildStationSnapshot } from "./graph/build.js";
-import { repairPersistedHarnessEventCompatibility } from "./harnessEventRepair.js";
+import { repairPersistedHarnessDerivedState } from "./harnessEventRepair.js";
 import type { ProviderReadOptions } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import {
@@ -78,9 +78,9 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     input.providerObservationRetentionDays ?? providerObservationRetentionDays();
   await input.read.logger?.info("Reconcile started.", { reason: input.reason });
 
-  // Compatibility repair must precede current provider state assembly.
+  // Durable harness repair must precede current provider state assembly.
   if (input.persistence !== undefined) {
-    await repairPersistedHarnessEventCompatibility({
+    await repairPersistedHarnessDerivedState({
       persistence: input.persistence,
       providers: input.providers,
       now: started,
