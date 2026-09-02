@@ -1,9 +1,8 @@
-import { shellQuote } from "../shell.js";
+import { safeShellTokenPattern, shellQuote } from "../shell.js";
 import { resolveTmuxWorkbenchConfig } from "../topology.js";
 import { defaultPersistentPopupSessionName } from "./constants.js";
 import type { BuildTmuxPopupArgsOptions, TmuxPopupState } from "./types.js";
 
-const safeShellTokenPattern = /^[A-Za-z0-9_@%+=,./:-]+$/;
 const persistentPopupAttachFeatures = "hyperlinks";
 
 function buildPopupTuiCommand(options: { focusClientId?: string; tuiCommand: string }): string {

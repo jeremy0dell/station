@@ -5,11 +5,7 @@ import { isAbsolute, join } from "node:path";
 import { resolveObserverPaths } from "@station/config";
 import { unixSocketHolderEvidencePath } from "@station/protocol";
 import { type ExternalCommandRunner, isCompiledBinary } from "@station/runtime";
-import {
-  buildManagedFastPopupRunShellCommand,
-  defaultTmuxWorkbenchConfig,
-  resolveTmuxWorkbenchConfig,
-} from "@station/tmux";
+import { buildManagedFastPopupRunShellCommand, resolveTmuxWorkbenchConfig } from "@station/tmux";
 import type { CliEnv } from "../../../env.js";
 import { isStationUiInstalled } from "../../../stationWorkspace.js";
 import type {
@@ -235,15 +231,22 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   };
   const resolvedTmuxCommand =
     tmux.resolvedPath ?? (isAbsolute(tmux.command) ? tmux.command : undefined);
-  const managedFastPopup = usesManagedFastPopupDefaults(config);
+  const managedFastPopup = supportsManagedFastPopup(config);
   const configAwarePopup = options.configPath !== undefined || !managedFastPopup;
   if (options.tmuxPopupOwnerRoot !== undefined && configAwarePopup) {
     tmuxBindingOptions.runShellCommand = tmuxPopupRunShellCommand(launcherCommand, config.path);
   } else if (options.tmuxPopupOwnerRoot !== undefined && resolvedTmuxCommand !== undefined) {
+    const resolvedTmux = resolveTmuxWorkbenchConfig(
+      config.status === "valid" ? config.tmux : undefined,
+    );
     const fastBindingOptions: Parameters<typeof buildManagedFastPopupRunShellCommand>[0] = {
       installedRoot: options.tmuxPopupOwnerRoot,
       fallbackAlias: launcherCommand,
       tmuxCommand: resolvedTmuxCommand,
+      popupWidth: resolvedTmux.popupWidth,
+      popupHeight: resolvedTmux.popupHeight,
+      popupPosition: resolvedTmux.popupPosition,
+      popupStatusBar: resolvedTmux.popupStatusBar,
     };
     if (config.status === "valid") {
       fastBindingOptions.configPath = config.path;
@@ -328,17 +331,10 @@ async function resolveTmuxLauncherCommand(input: ResolveTmuxLauncherCommandInput
     : setupLauncherExecutable(input.launchers.tmuxPopup);
 }
 
-function usesManagedFastPopupDefaults(config: SetupConfigFact): boolean {
+function supportsManagedFastPopup(config: SetupConfigFact): boolean {
   if (config.status === "missing") return true;
   if (config.status !== "valid") return false;
-  const tmux = resolveTmuxWorkbenchConfig(config.tmux);
-  return (
-    tmux.popupScope === "server" &&
-    tmux.popupWidth === defaultTmuxWorkbenchConfig.popupWidth &&
-    tmux.popupHeight === defaultTmuxWorkbenchConfig.popupHeight &&
-    tmux.popupPosition === defaultTmuxWorkbenchConfig.popupPosition &&
-    tmux.popupStatusBar === defaultTmuxWorkbenchConfig.popupStatusBar
-  );
+  return resolveTmuxWorkbenchConfig(config.tmux).popupScope === "server";
 }
 
 async function canExecute(

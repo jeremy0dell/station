@@ -149,9 +149,9 @@ placement; its renderer-managed launch path is separate.
 | `workbench_socket_path` | string | Optional fixed tmux socket endpoint. `~` and relative paths resolve against the directory containing the global `config.toml`. When set, all tmux terminal operations use `tmux -S`; caller `TMUX` values remain evidence only. Popup ownership stays on the invoking tmux server and ignores this setting. |
 | `window_naming` | `project-branch` | Single-value enum. |
 | `primary_agent_pane` | bool | |
-| `popup_width` / `popup_height` / `popup_position` | string | Free-form, e.g. `"50%"`, `"C"`. |
-| `popup_status_bar` | bool | Show the persistent popup's nested tmux status bar. Defaults to `false`; this never changes the invoking tmux session's status bar. Rerun `stn setup` after changing it so an installed popup binding uses the config-aware launch path when needed. |
-| `popup_scope` | `server` \| `client` | Popup ownership scope. Defaults to `server`, preserving one popup and warm renderer per tmux server and transferring it between clients. `client` creates an independent popup and warm renderer for each tmux client. Close existing popups before changing this value, then rerun `stn setup` to refresh an installed popup binding; an open renderer retains the scope it started with until dismissed. |
+| `popup_width` / `popup_height` / `popup_position` | string | Free-form, e.g. `"50%"`, `"C"`. Baked into the fast popup binding; rerun `stn setup` after changing them so the regenerated binding carries the new geometry. |
+| `popup_status_bar` | bool | Show the persistent popup's nested tmux status bar. Defaults to `false`; this never changes the invoking tmux session's status bar. Baked into the fast popup binding; rerun `stn setup` after changing it so the regenerated binding carries the new value. |
+| `popup_scope` | `server` \| `client` | Popup ownership scope. Defaults to `server`, preserving one popup and warm renderer per tmux server and transferring it between clients. `client` creates an independent popup and warm renderer for each tmux client, and is the only popup setting that keeps the config-aware (non-fast) launch path, because its ownership names are per-client runtime hashes. Close existing popups before changing this value, then rerun `stn setup` to refresh an installed popup binding; an open renderer retains the scope it started with until dismissed. |
 
 ### `[harness.<id>]` — agent harnesses (optional)
 

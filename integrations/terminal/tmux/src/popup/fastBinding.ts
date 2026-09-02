@@ -1,5 +1,6 @@
 import { isAbsolute, join } from "node:path";
-import { shellQuote } from "../shell.js";
+import { safeShellTokenPattern, shellQuote } from "../shell.js";
+import { defaultTmuxWorkbenchConfig } from "../topology.js";
 import {
   activePopupClaimOption,
   activePopupClientOption,
@@ -24,6 +25,10 @@ export type BuildManagedFastPopupRunShellCommandOptions = {
   fallbackAlias: string;
   installedRoot: string;
   tmuxCommand: string;
+  popupWidth?: string;
+  popupHeight?: string;
+  popupPosition?: string;
+  popupStatusBar?: boolean;
 };
 
 function containsUnsafeShellValue(value: string): boolean {
@@ -54,6 +59,11 @@ function validateManagedBindingOptions(options: BuildManagedFastPopupRunShellCom
     (!isAbsolute(options.configPath) || containsUnsafeShellValue(options.configPath))
   ) {
     throw new Error("Station popup binding requires a safe absolute config path.");
+  }
+  for (const geometry of [options.popupWidth, options.popupHeight, options.popupPosition]) {
+    if (geometry !== undefined && !safeShellTokenPattern.test(geometry)) {
+      throw new Error("Station popup binding requires safe popup geometry tokens.");
+    }
   }
 }
 
@@ -104,6 +114,8 @@ function expectedPersistentPopupSignature(options: {
  *
  * Translates the server-scoped installed popup owner into a silent tmux warm-path command that
  * falls back to the exact compiled alias whenever its versioned route cannot be acted on safely.
+ * Configured popup geometry and status bar are baked into the warm-path `display-popup`, defaulting
+ * to `defaultTmuxWorkbenchConfig`; only `popup_scope = "client"` needs the runtime config-aware path.
  */
 export function buildManagedFastPopupRunShellCommand(
   options: BuildManagedFastPopupRunShellCommandOptions,
@@ -119,6 +131,16 @@ export function buildManagedFastPopupRunShellCommand(
   const configPath = escapeTmuxFormat(options.configPath ?? "");
   const tmuxCommand = escapeTmuxFormat(options.tmuxCommand);
   const nestedTmuxCommand = escapeTmuxFormat(tmuxCommand);
+  const popupWidth = escapeTmuxFormat(options.popupWidth ?? defaultTmuxWorkbenchConfig.popupWidth);
+  const popupHeight = escapeTmuxFormat(
+    options.popupHeight ?? defaultTmuxWorkbenchConfig.popupHeight,
+  );
+  const popupPosition = escapeTmuxFormat(
+    options.popupPosition ?? defaultTmuxWorkbenchConfig.popupPosition,
+  );
+  const popupStatus =
+    (options.popupStatusBar ?? defaultTmuxWorkbenchConfig.popupStatusBar) ? "on" : "off";
+  const includePosition = popupPosition.length > 0 && popupPosition !== "C";
   const attachCommand = [
     "env -u TMUX",
     shellQuote(nestedTmuxCommand),
@@ -141,6 +163,9 @@ expected_root_sha=${shellQuote(expectedRootSha256)}
 expected_session_sha=${shellQuote(expectedSessionSha256)}
 expected_signature_sha=${shellQuote(expectedSignatureSha256)}
 attach_arg=${shellQuote(shellQuote(attachCommand))}
+popup_width=${shellQuote(popupWidth)}
+popup_height=${shellQuote(popupHeight)}
+popup_status=${shellQuote(popupStatus)}${includePosition ? `\npopup_position=${shellQuote(popupPosition)}` : ""}
 fmt='#'
 sep=$(printf '\\037')
 trap 'exit 0' HUP INT TERM
@@ -275,10 +300,10 @@ run_action() {
   prefix="set-option -gq ${activePopupClaimOption} $new_claim ; set-option -gq ${activePopupClientOption} $claim_target_client ; set-option -gq ${focusPopupClientOption} $claim_target_client"
   case "$action_kind" in
     open)
-      action="$prefix ; set-option -t $session_name mouse on ; set-option -t $session_name status off ; display-popup -c $client_name -w 50% -h 50% -E $attach_arg ; $finish"
+      action="$prefix ; set-option -t $session_name mouse on ; set-option -t $session_name status $popup_status ; display-popup -c $client_name -w $popup_width -h $popup_height${includePosition ? " -x $popup_position" : ""} -E $attach_arg ; $finish"
       ;;
     replace)
-      action="$prefix ; display-popup -c $previous_client -C ; set-option -t $session_name mouse on ; set-option -t $session_name status off ; display-popup -c $client_name -w 50% -h 50% -E $attach_arg ; $finish"
+      action="$prefix ; display-popup -c $previous_client -C ; set-option -t $session_name mouse on ; set-option -t $session_name status $popup_status ; display-popup -c $client_name -w $popup_width -h $popup_height${includePosition ? " -x $popup_position" : ""} -E $attach_arg ; $finish"
       ;;
     close)
       action="$prefix ; display-popup -c $previous_client -C ; $finish"
