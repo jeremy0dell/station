@@ -22,10 +22,12 @@ import { FakeDiagnosticEvidenceSource } from "../../../apps/observer/test/suppor
 import { createUnexpectedProjectConfigWriter } from "../../../apps/observer/test/support/projectConfigWriter.js";
 import { createStationNativePlacementEndpoint } from "../../../station/src/nativePlacementEndpoint.js";
 import { createStationStore } from "../../../station/src/state/store.js";
-import { MAIN_PANE_ID } from "../../../station/src/state/types.js";
-import { createPtyRegistry } from "../../../station/src/terminal/registry/ptyRegistry.js";
-import { createScriptedTerminal } from "../../../station/src/terminal/testing/scriptedTerminal.js";
-import type { StationTerminalSpawnOptions } from "../../../station/src/terminal/types.js";
+import { MAIN_PANE_ID, type PaneId } from "../../../station/src/state/types.js";
+import type {
+  StationTerminalProcess,
+  StationTerminalSize,
+  StationTerminalSpawnOptions,
+} from "../../../station/src/terminal/types.js";
 
 const now = "2026-09-01T12:00:00.000Z";
 
@@ -204,13 +206,13 @@ async function createNativeFixture(options: { mode: "success" | "build-failure" 
     createPath: () => worktreePath,
   });
 
-  const source = createScriptedTerminal({ cols: 93, rows: 31 });
-  Object.assign(source.terminal, { pid: process.pid });
-  const destination = createScriptedTerminal();
-  const terminals = [source.terminal, destination.terminal];
+  const terminals = [
+    createTestTerminal(process.pid, { cols: 93, rows: 31 }),
+    createTestTerminal(process.pid + 1),
+  ];
   const spawnOptions: StationTerminalSpawnOptions[] = [];
   const store = createStationStore();
-  const registry = createPtyRegistry({
+  const registry = createTestPtyRegistry({
     createTerminal: (spawnOption) => {
       spawnOptions.push(spawnOption);
       const terminal = terminals.shift();
@@ -432,5 +434,112 @@ function observerIds() {
     errorId: () => `err_native_${++error}`,
     observationId: () => `obs_native_${++observation}`,
     breadcrumbId: () => `crumb_native_${++breadcrumb}`,
+  };
+}
+
+type TestPtyRegistryEntry = {
+  paneId: PaneId;
+  generation: string;
+  terminal: StationTerminalProcess | null;
+  exited: boolean;
+};
+
+type NativeTestRegistry = {
+  ensure(
+    paneId: PaneId,
+    spawnOptions?: StationTerminalSpawnOptions,
+    createTerminal?: (spawnOptions: StationTerminalSpawnOptions) => StationTerminalProcess,
+  ): TestPtyRegistryEntry;
+  get(paneId: PaneId): TestPtyRegistryEntry | undefined;
+  entries(): readonly TestPtyRegistryEntry[];
+  resize(paneId: PaneId, size: StationTerminalSize): void;
+  terminate(paneId: PaneId): Promise<void>;
+  dispose(paneId: PaneId): void;
+  disposeAll(): void;
+};
+
+function createTestPtyRegistry(options: {
+  createTerminal(spawnOptions: StationTerminalSpawnOptions): StationTerminalProcess;
+}): NativeTestRegistry {
+  type Record = {
+    entry: TestPtyRegistryEntry;
+    spawnOptions: StationTerminalSpawnOptions | undefined;
+    createTerminal:
+      | ((spawnOptions: StationTerminalSpawnOptions) => StationTerminalProcess)
+      | undefined;
+  };
+  const records = new Map<PaneId, Record>();
+  let generation = 0;
+  const ensure = (
+    paneId: PaneId,
+    spawnOptions?: StationTerminalSpawnOptions,
+    createTerminal?: (spawnOptions: StationTerminalSpawnOptions) => StationTerminalProcess,
+  ): TestPtyRegistryEntry => {
+    const existing = records.get(paneId);
+    if (existing !== undefined) return existing.entry;
+    const entry: TestPtyRegistryEntry = {
+      paneId,
+      generation: `test-pty-${++generation}`,
+      terminal: null,
+      exited: false,
+    };
+    records.set(paneId, { entry, spawnOptions, createTerminal });
+    return entry;
+  };
+  const dispose = (paneId: PaneId): void => {
+    const record = records.get(paneId);
+    if (record === undefined) return;
+    records.delete(paneId);
+    record.entry.terminal?.dispose();
+  };
+
+  return {
+    ensure,
+    get: (paneId) => records.get(paneId)?.entry,
+    entries: () => [...records.values()].map(({ entry }) => entry),
+    resize: (paneId, size) => {
+      const entry = ensure(paneId);
+      const record = records.get(paneId);
+      if (record === undefined) throw new Error("native E2E registry entry was not retained");
+      if (entry.terminal === null) {
+        entry.terminal = (record.createTerminal ?? options.createTerminal)({
+          ...record.spawnOptions,
+          size,
+        });
+      }
+      entry.terminal.resize(size);
+    },
+    terminate: async (paneId) => {
+      records.get(paneId)?.entry.terminal?.kill();
+    },
+    dispose,
+    disposeAll: () => {
+      for (const paneId of [...records.keys()]) dispose(paneId);
+    },
+  };
+}
+
+function createTestTerminal(
+  pid: number,
+  initialSize: StationTerminalSize = { cols: 36, rows: 8 },
+): StationTerminalProcess {
+  let size = initialSize;
+  const disposable = { dispose: () => {} };
+  return {
+    id: `native-e2e-terminal-${pid}`,
+    command: "/bin/native-e2e-terminal",
+    pid,
+    get size() {
+      return size;
+    },
+    onData: () => disposable,
+    onExit: () => disposable,
+    onDiagnostic: () => disposable,
+    write: () => {},
+    resize: (next) => {
+      size = next;
+    },
+    kill: () => {},
+    dispose: () => {},
   };
 }

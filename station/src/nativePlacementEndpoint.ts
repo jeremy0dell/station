@@ -18,10 +18,24 @@ import type { HostAttachedTerminalOptions } from "./terminal/pty/hostAttachedTer
 import type { PtyRegistry, PtyRegistryEntry } from "./terminal/registry/ptyRegistry.js";
 import type { StationTerminalProcess } from "./terminal/types.js";
 
+type NativePlacementRegistry = Pick<
+  PtyRegistry,
+  "dispose" | "resize" | "terminate"
+> & {
+  ensure(...args: Parameters<PtyRegistry["ensure"]>): NativePlacementRegistryEntry;
+  get(paneId: PaneId): NativePlacementRegistryEntry | undefined;
+  entries(): readonly NativePlacementRegistryEntry[];
+};
+
+type NativePlacementRegistryEntry = Pick<
+  PtyRegistryEntry,
+  "exited" | "generation" | "paneId" | "terminal"
+>;
+
 type NativePlacementHandler = {
   generation: string;
   store: StationStore;
-  registry: PtyRegistry;
+  registry: NativePlacementRegistry;
   createHostTerminal(options: HostAttachedTerminalOptions): StationTerminalProcess;
 };
 
@@ -30,7 +44,7 @@ type NativeReservation = {
   paneId: PaneId;
   identity: AgentIdentity;
   sourceViewport: { cols: number; rows: number };
-  entry?: PtyRegistryEntry;
+  entry?: NativePlacementRegistryEntry;
   hostBacked?: boolean;
 };
 
