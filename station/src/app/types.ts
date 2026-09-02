@@ -1,5 +1,6 @@
 import type { StationClientStateSource } from "@station/client";
 import type {
+  CreatedSessionUiPolicy,
   DashboardActions,
   DashboardRuntime,
   DashboardStateSource,
@@ -71,6 +72,8 @@ export type CreateStationOptions = {
   openExternalUrl?: (url: string) => void;
   tuiConfig?: TuiConfig;
   tuiConfigPath?: string;
+  /** Resolved native post-create policy; raw config never reaches capabilities. */
+  createdSessionPolicy?: CreatedSessionUiPolicy;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
   /** Existing registry to reuse across Bun HMR without killing live PTYs. */
   registry?: PtyRegistry;

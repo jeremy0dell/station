@@ -26,6 +26,10 @@ describe("standalone dashboard capabilities", () => {
         exitOnFocusSuccess: true,
         dispose: () => {},
       },
+      sessionCreatePolicies: {
+        global: { focusCreatedSession: true, dismissDashboard: true },
+        terminals: {},
+      },
       exitRenderer: () => {
         dismissCount += 1;
       },
@@ -73,6 +77,10 @@ describe("standalone dashboard capabilities", () => {
         },
         dispose: () => {},
       },
+      sessionCreatePolicies: {
+        global: { focusCreatedSession: true, dismissDashboard: true },
+        terminals: {},
+      },
       exitRenderer: () => {},
     });
 
@@ -88,5 +96,65 @@ describe("standalone dashboard capabilities", () => {
       await capabilities.dismissal.exitRenderer({ exitCode: 0 }).completion,
     ).toEqual({ kind: "success" });
     expect(dismissCount).toBe(2);
+  });
+
+  it("selects the resolved policy from the durable create provider", async () => {
+    const snapshot = manyProjectsSnapshot();
+    const source = new FakeStationSource(snapshot);
+    const service = new FakeTuiObserverService(snapshot);
+    service.nextCompletion = {
+      status: "succeeded",
+      commandId: "cmd_tui_1",
+      result: {
+        type: "session.create",
+        projectId: "station",
+        worktreeId: "wt_station_idle",
+        sessionId: "ses_wt_station_idle",
+        requestedPlacement: "detached",
+        resolvedPlacement: {
+          provider: "tmux",
+          targetId: "tmux:station:pty-buffer",
+          generation: "1",
+          presentation: "detached",
+        },
+      },
+    };
+    const capabilities = createDashboardCapabilities({
+      clientState: source,
+      observerService: service,
+      popupRuntime: {
+        persistentPopup: false,
+        exitOnFocusSuccess: false,
+        dispose: () => {},
+      },
+      sessionCreatePolicies: {
+        global: { focusCreatedSession: true, dismissDashboard: true },
+        terminals: {
+          tmux: { focusCreatedSession: false, dismissDashboard: false },
+        },
+      },
+      exitRenderer: () => {},
+    });
+    const project = snapshot.projects.find((candidate) => candidate.id === "station");
+    if (project === undefined) throw new Error("station project fixture missing");
+
+    await expect(
+      capabilities.managedSessions.quickCreate({
+        project,
+        title: "Quick session",
+        hiddenBranch: "pty-buffer",
+        harness: "codex",
+      }).completion,
+    ).resolves.toMatchObject({
+      kind: "success",
+      createdSessionCommand: {
+        target: {
+          sessionId: "ses_wt_station_idle",
+          worktreeId: "wt_station_idle",
+          terminalProvider: "tmux",
+        },
+        policy: { focusCreatedSession: false, dismissDashboard: false },
+      },
+    });
   });
 });

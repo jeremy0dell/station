@@ -1,6 +1,7 @@
 import type { SafeError } from "@station/contracts";
 import type { ClientNotice } from "../../services/types.js";
 import type { SessionActivationCapabilities } from "./activation.js";
+import type { CreatedSessionCapabilities, CreatedSessionUiCommand } from "./createdSession.js";
 import type { DashboardDismissalCapabilities } from "./dismissal.js";
 import type { ManagedSessionCapabilities } from "./managedSessions.js";
 import type { DashboardShellCapabilities } from "./shell.js";
@@ -9,6 +10,7 @@ import type { WorktreeRemovalCapabilities } from "./worktreeRemoval.js";
 /** The renderer-selected capability groups required by every dashboard runtime. */
 export type DashboardCapabilities = {
   activation: SessionActivationCapabilities;
+  createdSession: CreatedSessionCapabilities;
   managedSessions: ManagedSessionCapabilities;
   worktreeRemoval: WorktreeRemovalCapabilities;
   shell: DashboardShellCapabilities;
@@ -26,7 +28,12 @@ export type DashboardExecutionFailureDisposition = "remove-immediately" | "retai
 
 /** Typed completion; successful work may carry a non-retryable warning for partial visibility. */
 export type DashboardExecutionResult =
-  | { kind: "success"; notice?: ClientNotice }
+  | {
+      kind: "success";
+      notice?: ClientNotice;
+      /** UI-only post-create effect; never part of Observer or durable command results. */
+      createdSessionCommand?: CreatedSessionUiCommand;
+    }
   | { kind: "notice"; notice: ClientNotice }
   | {
       kind: "failure";

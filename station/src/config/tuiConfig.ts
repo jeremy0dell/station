@@ -6,8 +6,13 @@ import {
   loadConfig,
   setTuiWidgetsInConfig,
   type TuiConfig,
+  type TuiSessionCreateConfig,
 } from "@station/config";
-import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
+import type {
+  CreatedSessionUiPolicy,
+  DashboardActions,
+  DashboardStateSource,
+} from "@station/dashboard-core/runtime";
 import type { DashboardStateView } from "@station/dashboard-core/state";
 import { safeErrorFromUnknown } from "@station/runtime";
 
@@ -16,6 +21,54 @@ export type StationTuiConfigLoadResult = {
   configPath?: string;
   warning?: string;
 };
+
+/** Renderer-ready policy table with global defaults already inherited into every override. */
+export type ResolvedSessionCreatePolicies = {
+  global: CreatedSessionUiPolicy;
+  terminals: Readonly<Record<string, CreatedSessionUiPolicy>>;
+};
+
+const DEFAULT_CREATED_SESSION_UI_POLICY: CreatedSessionUiPolicy = {
+  focusCreatedSession: true,
+  dismissDashboard: true,
+};
+
+/** Resolve raw `[tui.session_create]` once, before dashboard capability composition. */
+export function resolveSessionCreatePolicies(
+  config: TuiSessionCreateConfig | undefined,
+): ResolvedSessionCreatePolicies {
+  const global = resolveSessionCreatePolicy(DEFAULT_CREATED_SESSION_UI_POLICY, config);
+  const terminals = Object.fromEntries(
+    Object.entries(config?.terminals ?? {}).map(([provider, override]) => [
+      provider,
+      resolveSessionCreatePolicy(global, override),
+    ]),
+  );
+  return { global, terminals };
+}
+
+export function sessionCreatePolicyForTerminal(
+  policies: ResolvedSessionCreatePolicies,
+  provider: string,
+): CreatedSessionUiPolicy {
+  const terminalPolicy = Object.hasOwn(policies.terminals, provider)
+    ? policies.terminals[provider]
+    : undefined;
+  return terminalPolicy ?? policies.global;
+}
+
+function resolveSessionCreatePolicy(
+  fallback: CreatedSessionUiPolicy,
+  config: Pick<
+    TuiSessionCreateConfig,
+    "focusCreatedSession" | "dismissDashboard"
+  > | undefined,
+): CreatedSessionUiPolicy {
+  return {
+    focusCreatedSession: config?.focusCreatedSession ?? fallback.focusCreatedSession,
+    dismissDashboard: config?.dismissDashboard ?? fallback.dismissDashboard,
+  };
+}
 
 export async function loadStationTuiConfig(options?: {
   env?: Record<string, string | undefined>;

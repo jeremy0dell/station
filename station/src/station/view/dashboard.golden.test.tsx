@@ -100,6 +100,7 @@ function pendingDashboardCapabilities(): DashboardCapabilities {
   };
   return {
     activation: { activate: () => execution },
+    createdSession: { applyUiPolicy: async () => ({ kind: "success" }) },
     managedSessions: {
       create: () => execution,
       fork: () => execution,

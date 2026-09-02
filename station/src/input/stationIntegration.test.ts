@@ -48,6 +48,9 @@ function makeViewStore(
               return dashboardExecution({ kind: "success" });
             },
           },
+          createdSession: {
+            applyUiPolicy: async () => ({ kind: "success" }),
+          },
           managedSessions: {
             create: () => dashboardExecution({ kind: "success" }),
             quickCreate: () => dashboardExecution({ kind: "success" }),

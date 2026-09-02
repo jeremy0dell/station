@@ -199,6 +199,8 @@ export const HooksConfigSchema = z
 export type {
   TuiConfig,
   TuiIslandConfig,
+  TuiSessionCreateConfig,
+  TuiSessionCreatePolicyConfig,
   TuiTimezoneZone,
   TuiWidgetConfig,
 } from "@station/contracts";

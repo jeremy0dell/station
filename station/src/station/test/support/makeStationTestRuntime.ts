@@ -122,15 +122,17 @@ function createStationTestCapabilities(options: {
   }
   if (options.onFocusSuccess !== undefined) activationOptions.onFocusSuccess = options.onFocusSuccess;
   const managedOptions: Parameters<typeof createObserverManagedSessionCapabilities>[0] = {
+    source: options.clientState,
     service: options.service,
     clientLabel: "Station test",
+    policyForTerminalProvider: () => ({
+      focusCreatedSession: true,
+      dismissDashboard: true,
+    }),
   };
-  if (options.focusOrigin !== undefined) managedOptions.focusOrigin = options.focusOrigin;
-  if (options.resolveFocusTarget !== undefined) {
-    managedOptions.resolveFocusTarget = options.resolveFocusTarget;
-  }
   return {
     activation: createObserverActivationCapabilities(activationOptions),
+    createdSession: { applyUiPolicy: async () => ({ kind: "success" }) },
     managedSessions: createObserverManagedSessionCapabilities(managedOptions),
     worktreeRemoval: createObserverWorktreeRemovalCapabilities({
       service: options.service,

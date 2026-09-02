@@ -1,12 +1,29 @@
 import { z } from "zod";
+import { ProviderIdSchema } from "./ids.js";
 import { nonEmptyStringSchema } from "./shared.js";
 
 /**
  * Shared `[tui]` configuration shapes. `@station/config` owns loading and
  * persisting config.toml and re-exports these schemas; dashboard-core depends
  * on the shapes only, through contracts, so its emitted declarations never
- * reference a package it does not declare.
+ * reference a package it does not declare. Session-create terminal entries are
+ * partial overrides whose omitted values inherit the resolved global policy.
  */
+
+export const TuiSessionCreatePolicyConfigSchema = z
+  .object({
+    focusCreatedSession: z.boolean().optional(),
+    dismissDashboard: z.boolean().optional(),
+  })
+  .strict();
+
+export type TuiSessionCreatePolicyConfig = z.infer<typeof TuiSessionCreatePolicyConfigSchema>;
+
+export const TuiSessionCreateConfigSchema = TuiSessionCreatePolicyConfigSchema.extend({
+  terminals: z.record(ProviderIdSchema, TuiSessionCreatePolicyConfigSchema).optional(),
+}).strict();
+
+export type TuiSessionCreateConfig = z.infer<typeof TuiSessionCreateConfigSchema>;
 
 export const TuiTimeWidgetConfigSchema = z
   .object({
@@ -101,6 +118,7 @@ export const TuiConfigSchema = z
   .object({
     widgets: z.array(TuiWidgetConfigSchema).optional(),
     island: TuiIslandConfigSchema.optional(),
+    sessionCreate: TuiSessionCreateConfigSchema.optional(),
   })
   .strict();
 

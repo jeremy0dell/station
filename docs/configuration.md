@@ -363,11 +363,40 @@ with:
 command = 'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; hunk diff "$base" --watch --no-exclude-untracked'
 ```
 
-### `[tui]` — runtime TUI widgets (optional, best-effort)
+### `[tui]` — shared dashboard behavior and widgets (optional, best-effort)
 
-> **Decorative widgets only** — not the same as `[workspace]`. `[tui]` is the
-> clock/weather strip; `[workspace]` is interaction behavior (scroll, welcome,
-> automations). They never overlap.
+`[tui]` applies to both the native Station overlay and standalone/fullscreen/tmux
+dashboards. `[workspace]` remains native-only pane and overlay behavior.
+
+`[tui.session_create]` controls what the renderer does after any dashboard-driven
+New Session, Quick Session, or Quick Group creation succeeds. Both global values
+default to `true`. A terminal table inherits any omitted value from the resolved
+global policy:
+
+```toml
+[tui.session_create]
+focus_created_session = true
+dismiss_dashboard = true
+
+[tui.session_create.terminals.tmux]
+dismiss_dashboard = false
+
+[tui.session_create.terminals.native]
+focus_created_session = true
+dismiss_dashboard = true
+```
+
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `focus_created_session` | bool | `true` | Focus the exact canonical session created by the completed dashboard operation. |
+| `dismiss_dashboard` | bool | `true` | Dismiss only after focus succeeds when focus is enabled; otherwise dismiss immediately after creation settles. |
+
+Terminal keys are Station terminal provider IDs such as `tmux` and `native`, not
+terminal-emulator brands. Unknown provider IDs are accepted for future adapters.
+The config is resolved once when a renderer starts; an open renderer does not
+live-reload policy changes. As with the rest of `[tui]`, an unknown field or
+non-boolean policy value invalidates the complete best-effort section, emits the
+`[tui]` warning, and uses the default `true`/`true` policy.
 
 `[tui].widgets` configures the shared title strip in both the native Station
 overlay and the standalone dashboard used by fullscreen and tmux popup launches.
@@ -665,6 +694,7 @@ right observer/session. `STATION_STATE_DIR` is a hook-script fallback for
 | Tune the observer daemon | `config.toml` | `[observer]` |
 | React to observer events with a command | `config.toml` | `[[hooks.event]]` |
 | Change scrollback depth, scroll behavior, the welcome screen, or pane automations | `config.toml` | `[workspace]` |
+| Configure dashboard post-create focus/dismissal | `config.toml` | `[tui.session_create]` |
 | Add a clock/weather widget | `config.toml` | `[tui].widgets` |
 | Set log/DB retention caps | `config.toml` | `[observability.retention]` |
 | Toggle a feature flag | `config.toml` | `[feature_flags]` |
@@ -680,10 +710,11 @@ section hard-fails validation, the TUI keeps running with workspace defaults and
 a warning before rendering. Fix the core config error to restore custom scroll,
 welcome, and automation settings.
 
-**`[tui]` vs `[workspace]`?** `[tui]` is decorative title widgets shared by the
-native overlay and standalone/fullscreen/tmux dashboards; `[workspace]` is
-native-UI-only interaction behavior (scroll/welcome/automations). Both live in
-`config.toml`; only the TUI consumes their display and interaction behavior.
+**`[tui]` vs `[workspace]`?** `[tui]` owns dashboard behavior shared by the
+native overlay and standalone/fullscreen/tmux dashboards, including post-create
+policy and title widgets. `[workspace]` is native-UI-only interaction behavior
+(scroll/welcome/automations). Both live in `config.toml`; only the TUI consumes
+their display and interaction behavior.
 
 **Why is `permission_mode = "auto"` rejected?** `auto` is Claude-only — valid only
 under `[harness.claude]`, never as a global default or for other harnesses.

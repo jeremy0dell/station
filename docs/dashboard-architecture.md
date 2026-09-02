@@ -68,7 +68,7 @@ client-owned source; dashboard queries are reserved for reads where local
 filter, focus, screen, or optimistic state participates.
 
 Semantic execution enters through capabilities selected at composition
-(activation, managed sessions, worktree removal, dismissal, shell), never through state
+(activation, managed sessions, created-session UI policy, worktree removal, dismissal, shell), never through state
 replacement or synthetic key replay. Observer-backed worktree removal first
 obtains authoritative validation and an opaque worktree reservation, then invokes
 optional renderer PTY settlement, dispatches the reservation-qualified command,
@@ -84,13 +84,28 @@ Its Group field selects Ungrouped, a current same-project root Group
 by stable ID, or a trimmed inline-create draft. Snapshot replacement preserves
 the stable selection through rename and resets missing, cross-project, or newly
 nested Groups to Ungrouped. Submission retains and disables the sheet until the
-single operation settles; success follows the composition's existing open/focus
-path, while failure restores Group or Create focus and reports one bounded toast.
+single operation settles; success closes the sheet before applying the renderer-resolved
+post-create focus/dismiss policy, while failure restores Group or Create focus and reports one bounded toast.
 Native deliberate creation waits for the first canonical snapshot carrying the
 requested Group relationship and performs one explicit load after timeout. If
 launch succeeded but visibility remains uncertain—or safe cleanup retained the
 fresh worktree—the operation closes with a warning instead of permitting a
 duplicate branch submission.
+
+Successful managed creation may return one dashboard-local
+`createdSession.applyUiPolicy` command containing exact canonical Project,
+worktree, session, branch, and terminal-provider identity plus resolved booleans.
+It is data-only UI state, never a protocol command or durable result. The central
+operation runner settles the sheet or optimistic row before invoking one
+renderer capability. Focus precedes dismissal when both are enabled; disposal
+discards a late command. A focus or dismissal failure reports one error without
+turning the successful create into a retryable operation.
+
+Quick Session in Group defers that exact command through its version-checked
+membership update. It removes the targeted row and selects the canonical member
+before applying UI policy. Correlation, Group disappearance, membership, or
+final-convergence failure preserves surviving canonical data and discards the
+UI command; post-create UI failure never rolls back creation or membership.
 
 Group Settings is one stable-ID screen per canonical Group, with General,
 Sessions, and Remove Group sections. Activating the Group `[▾]` control opens a

@@ -9,8 +9,18 @@ import { FakeStationSource } from "../station/test/support/fakeStationSource.js"
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
 import { createDashboardCapabilities } from "./dashboardCapabilities.js";
 
-function harness() {
-  const snapshot = manyProjectsSnapshot();
+function harness(
+  createdSessionPolicy = { focusCreatedSession: true, dismissDashboard: true },
+) {
+  const baseSnapshot = manyProjectsSnapshot();
+  const snapshot = {
+    ...baseSnapshot,
+    sessions: baseSnapshot.sessions.map((session) =>
+      session.terminal === undefined
+        ? session
+        : { ...session, terminal: { ...session.terminal, provider: "native" as const } },
+    ),
+  };
   const source = new FakeStationSource(snapshot);
   const service = new FakeTuiObserverService(snapshot);
   const store = createStationStore();
@@ -50,6 +60,7 @@ function harness() {
     paneEffects,
     registry: {} as PtyRegistry,
     managedLaunch,
+    createdSessionPolicy,
   });
   return {
     capabilities,
@@ -88,6 +99,110 @@ const FAILURE = {
 };
 
 describe("native dashboard capabilities", () => {
+  it("applies all native post-create focus and dismissal policy combinations", async () => {
+    const command = {
+      type: "createdSession.applyUiPolicy" as const,
+      target: {
+        sessionId: "ses_wt_station_idle",
+        projectId: "station",
+        worktreeId: "wt_station_idle",
+        branch: "pty-buffer",
+        terminalProvider: "native",
+      },
+      policy: { focusCreatedSession: false, dismissDashboard: false },
+    };
+    const fixture = harness();
+    fixture.store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    await fixture.capabilities.createdSession.applyUiPolicy(command);
+    expect(fixture.activateRequests).toEqual([]);
+    expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+
+    await fixture.capabilities.createdSession.applyUiPolicy({
+      ...command,
+      policy: { focusCreatedSession: false, dismissDashboard: true },
+    });
+    expect(fixture.store.getState().input.activeOverlay).toBeNull();
+
+    fixture.store.actions.openOverlay(STATION_OVERLAY_ID);
+    await fixture.capabilities.createdSession.applyUiPolicy({
+      ...command,
+      policy: { focusCreatedSession: true, dismissDashboard: false },
+    });
+    expect(fixture.activateRequests).toHaveLength(1);
+    expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+
+    await fixture.capabilities.createdSession.applyUiPolicy({
+      ...command,
+      policy: { focusCreatedSession: true, dismissDashboard: true },
+    });
+    expect(fixture.store.getState().input.activeOverlay).toBeNull();
+  });
+
+  it("retains the native dashboard when created-session focus does not land", async () => {
+    const fixture = harness();
+    fixture.store.actions.openOverlay(STATION_OVERLAY_ID);
+    fixture.setActivationResult({ kind: "success", landed: false });
+
+    await expect(
+      fixture.capabilities.createdSession.applyUiPolicy({
+        type: "createdSession.applyUiPolicy",
+        target: {
+          sessionId: "ses_wt_station_idle",
+          projectId: "station",
+          worktreeId: "wt_station_idle",
+          branch: "pty-buffer",
+          terminalProvider: "native",
+        },
+        policy: { focusCreatedSession: true, dismissDashboard: true },
+      }),
+    ).resolves.toMatchObject({
+      kind: "failure",
+      error: { code: "CREATED_SESSION_FOCUS_UNCONFIRMED" },
+    });
+    expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+  });
+
+  it("rejects provider drift and non-focusable native post-create targets", async () => {
+    const command = {
+      type: "createdSession.applyUiPolicy" as const,
+      target: {
+        sessionId: "ses_wt_station_idle",
+        projectId: "station",
+        worktreeId: "wt_station_idle",
+        branch: "pty-buffer",
+        terminalProvider: "native",
+      },
+      policy: { focusCreatedSession: true, dismissDashboard: true },
+    };
+    const cases = [
+      { terminal: { provider: "tmux" as const, focusable: true }, code: "CREATED_SESSION_TARGET_MISMATCH" },
+      { terminal: { provider: "native" as const, focusable: false }, code: "CREATED_SESSION_NOT_FOCUSABLE" },
+    ];
+
+    for (const testCase of cases) {
+      const fixture = harness();
+      const snapshot = fixture.source.getState().snapshot;
+      if (snapshot === undefined) throw new Error("Native fixture snapshot is missing.");
+      fixture.source.setSnapshot({
+        ...snapshot,
+        sessions: snapshot.sessions.map((session) =>
+          session.id === command.target.sessionId && session.terminal !== undefined
+            ? { ...session, terminal: { ...session.terminal, ...testCase.terminal } }
+            : session,
+        ),
+      });
+      fixture.store.actions.openOverlay(STATION_OVERLAY_ID);
+
+      await expect(fixture.capabilities.createdSession.applyUiPolicy(command)).resolves.toMatchObject({
+        kind: "failure",
+        error: { code: testCase.code },
+      });
+      expect(fixture.activateRequests).toEqual([]);
+      expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+    }
+  });
+
   it("dismisses the overlay only after a managed activation lands", async () => {
     const fixture = harness();
     fixture.store.actions.openOverlay(STATION_OVERLAY_ID);
@@ -360,7 +475,12 @@ describe("native dashboard capabilities", () => {
         },
       ],
     });
-    expect(await completion).toEqual({ kind: "success" });
+    expect(await completion).toMatchObject({
+      kind: "success",
+      createdSessionCommand: {
+        target: { sessionId: session.id, branch, terminalProvider: "native" },
+      },
+    });
   });
 
   it("matches deliberate inline-Group placement by canonical membership and name", async () => {
@@ -395,7 +515,12 @@ describe("native dashboard capabilities", () => {
         },
       ],
     });
-    expect(await completion).toEqual({ kind: "success" });
+    expect(await completion).toMatchObject({
+      kind: "success",
+      createdSessionCommand: {
+        target: { sessionId: session.id, branch, terminalProvider: "native" },
+      },
+    });
   });
 
   it("refreshes once after placement timeout and warns without enabling duplicate retry", async () => {
@@ -434,7 +559,12 @@ describe("native dashboard capabilities", () => {
       const refreshedCompletion = refreshed.capabilities.managedSessions.create(request).completion;
       await new Promise((resolve) => realSetTimeout(resolve, 0));
       longTimers.shift()?.();
-      expect(await refreshedCompletion).toEqual({ kind: "success" });
+      expect(await refreshedCompletion).toMatchObject({
+        kind: "success",
+        createdSessionCommand: {
+          target: { sessionId: session.id, branch: request.hiddenBranch },
+        },
+      });
       expect(refreshed.service.loadCount).toBe(1);
 
       const unconfirmed = harness();
@@ -509,6 +639,11 @@ describe("native dashboard capabilities", () => {
         row.id === session.worktreeId ? { ...row, branch } : row,
       ),
     });
-    expect(await completion).toEqual({ kind: "success" });
+    expect(await completion).toMatchObject({
+      kind: "success",
+      createdSessionCommand: {
+        target: { sessionId: session.id, branch, terminalProvider: "native" },
+      },
+    });
   });
 });

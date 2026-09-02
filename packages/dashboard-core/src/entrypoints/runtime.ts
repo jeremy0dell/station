@@ -19,6 +19,13 @@ export type { DashboardActions } from "../state/actions.js";
 export type { DashboardFocusTarget } from "../state/capabilities/activation.js";
 export { createObserverActivationCapabilities } from "../state/capabilities/activation.js";
 export type {
+  CreatedSessionCapabilities,
+  CreatedSessionUiCommand,
+  CreatedSessionUiPolicy,
+  ObserverCreatedSessionCapabilitiesOptions,
+} from "../state/capabilities/createdSession.js";
+export { createObserverCreatedSessionCapabilities } from "../state/capabilities/createdSession.js";
+export type {
   DashboardCapabilities,
   DashboardExecutionHandle,
   DashboardExecutionResult,

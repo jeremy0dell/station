@@ -2,6 +2,7 @@ import type { SafeError, SessionId, StationSnapshot } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { safeErrorToToast, toSafeError } from "../../services/errors/errors.js";
 import type { ObserverService } from "../../services/types.js";
+import type { CreatedSessionUiCommand } from "../capabilities/createdSession.js";
 import { buildUpdateSessionGroupMembershipCommand } from "../commandBuilders.js";
 import { focusDashboardGroup, focusDashboardSession } from "../dashboardFocus.js";
 import { removeCreateSessionLocalRow } from "../localRows.js";
@@ -14,8 +15,9 @@ import { executeDashboardCommandError } from "./commandExecutionError.js";
 import type { CreateQuickSessionInGroupOperation } from "./types.js";
 
 /**
- * Launches one ordinary Quick Session, then records one latest-version Group membership update;
- * post-launch failures preserve the created session and never retry the launch.
+ * Launches one ordinary Quick Session, then records one latest-version Group membership update.
+ * The exact created-session UI command remains deferred until canonical membership and local row
+ * settlement complete; post-launch failures preserve the created session and never retry it.
  */
 export async function runQuickSessionInGroupOperation(input: {
   store: StoreApi<DashboardState>;
@@ -53,6 +55,14 @@ export async function runQuickSessionInGroupOperation(input: {
     scope.commit(() => focusGroup(store, operation));
     return;
   }
+  const createdSessionCommand = capabilityResult.createdSessionCommand;
+  if (createdSessionCommand === undefined) {
+    scope.commit(() => {
+      removeTargetedRow(store, operation.localId);
+      focusGroup(store, operation);
+    });
+    return;
+  }
 
   let launchedSnapshot: StationSnapshot;
   try {
@@ -67,11 +77,7 @@ export async function runQuickSessionInGroupOperation(input: {
   }
   if (!scope.isOpen()) return;
   scope.commit(() => store.setState(replaceSnapshot(store.getState(), launchedSnapshot)));
-  const sessionResolution = resolveLaunchedSession(
-    launchedSnapshot,
-    operation.project.id,
-    operation.hiddenBranch,
-  );
+  const sessionResolution = resolveLaunchedSession(launchedSnapshot, createdSessionCommand);
   if (sessionResolution.kind === "failure") {
     scope.commit(() => {
       removeTargetedRow(store, operation.localId);
@@ -121,31 +127,44 @@ export async function runQuickSessionInGroupOperation(input: {
   const convergedGroup = store
     .getState()
     .snapshot?.sessionGroups.find((group) => group.id === operation.groupId);
+  if (convergedGroup?.sessionIds.includes(sessionResolution.sessionId) !== true) {
+    scope.commit(() => {
+      removeTargetedRow(store, operation.localId);
+      focusCanonicalSessionOrGroup(store, sessionResolution.sessionId, operation);
+      addErrorToast(store, convergenceError("The new session did not converge into its Group."));
+    });
+    return;
+  }
   scope.commit(() => {
     removeTargetedRow(store, operation.localId);
     focusCanonicalSessionOrGroup(store, sessionResolution.sessionId, operation);
-    if (convergedGroup?.sessionIds.includes(sessionResolution.sessionId) !== true) {
-      addErrorToast(store, convergenceError("The new session did not converge into its Group."));
-    }
   });
+  if (!scope.isOpen()) return;
+  await capabilities.executeCreatedSession(createdSessionCommand);
 }
 
 function resolveLaunchedSession(
   snapshot: StationSnapshot,
-  projectId: string,
-  branch: string,
+  command: CreatedSessionUiCommand,
 ): { kind: "success"; sessionId: SessionId } | { kind: "failure"; error: SafeError } {
-  const rowsById = new Map(snapshot.rows.map((row) => [row.id, row]));
-  const candidates = snapshot.sessions.filter((session) => {
-    const row = rowsById.get(session.worktreeId);
-    return session.projectId === projectId && row?.branch === branch;
-  });
-  const candidate = candidates[0];
-  return candidates.length === 1 && candidate !== undefined
-    ? { kind: "success", sessionId: candidate.id }
+  const session = snapshot.sessions.find(
+    (candidate) =>
+      candidate.id === command.target.sessionId &&
+      candidate.projectId === command.target.projectId &&
+      candidate.worktreeId === command.target.worktreeId &&
+      candidate.terminal?.provider === command.target.terminalProvider,
+  );
+  const row = snapshot.rows.find(
+    (candidate) =>
+      candidate.id === command.target.worktreeId &&
+      candidate.projectId === command.target.projectId &&
+      candidate.branch === command.target.branch,
+  );
+  return session !== undefined && row !== undefined
+    ? { kind: "success", sessionId: session.id }
     : {
         kind: "failure",
-        error: convergenceError("The new session could not be identified uniquely."),
+        error: convergenceError("The new session's exact canonical identity did not converge."),
       };
 }
 

@@ -541,6 +541,12 @@ city = "New York, NY"
 
 [tui.island]
 rest_counts = true
+
+[tui.session_create]
+focus_created_session = false
+
+[tui.session_create.terminals.tmux]
+dismiss_dashboard = false
 `,
       "utf8",
     );
@@ -555,9 +561,18 @@ rest_counts = true
     expect(source).not.toContain("[[tui.widgets]]");
     expect(source).toContain("widgets = []");
     expect(source).toContain("[tui.island]\nrest_counts = true");
+    expect(source).toContain("[tui.session_create]\nfocus_created_session = false");
+    expect(source).toContain("[tui.session_create.terminals.tmux]\ndismiss_dashboard = false");
 
     const loaded = await loadConfig({ configPath, homeDir: tempDir });
-    expect(loaded.config.tui).toEqual({ widgets: [], island: { restCounts: true } });
+    expect(loaded.config.tui).toEqual({
+      widgets: [],
+      island: { restCounts: true },
+      sessionCreate: {
+        focusCreatedSession: false,
+        terminals: { tmux: { dismissDashboard: false } },
+      },
+    });
   });
 
   it("replaces a multi-line inline widgets array with nested brackets", async () => {

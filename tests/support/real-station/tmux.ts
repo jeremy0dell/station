@@ -301,6 +301,11 @@ export async function startStationTuiInTmux(input: {
   await runTmuxCommand(input.endpoint, ["new-session", "-d", "-s", input.sessionName, command]);
 }
 
+/**
+ * Own one real popup invocation through start, input, renderer exit, and explicit
+ * release. Failed proofs close only that exact client popup; successful
+ * focus proofs may provide the exact post-focus tmux view expected before cleanup.
+ */
 export async function displayStationPopupAndSendKey(input: {
   env: RealE2eEnvironment;
   endpoint: RealTmuxEndpoint;
@@ -312,7 +317,12 @@ export async function displayStationPopupAndSendKey(input: {
   key: string;
   markerPath: string;
   delaySeconds?: number;
-}): Promise<{ release(causalSuccess: boolean): Promise<void> }> {
+}): Promise<{
+  release(
+    causalSuccess: boolean,
+    finalView?: { windowName: string; paneId: string },
+  ): Promise<void>;
+}> {
   const { client, endpoint } = input;
   const invocationNonce = randomUUID();
   const releasePath = `${input.markerPath}.${invocationNonce}.release`;
@@ -321,12 +331,15 @@ export async function displayStationPopupAndSendKey(input: {
       `popup client ${client.clientName}/${client.clientPid}/${client.sessionName} is not in target ${input.target} on ${endpoint.socketPath}${client.outputTail()}`,
     );
   }
-  const expectedView = `${client.clientName}\t${client.clientPid}\t${client.sessionName}\t${input.expectedWindowName}\t${input.expectedPaneId}`;
-  const checkView = async (phase: string): Promise<void> => {
+  const checkView = async (
+    phase: string,
+    view = { windowName: input.expectedWindowName, paneId: input.expectedPaneId },
+  ): Promise<void> => {
     const actual = await inspectTmuxClient(endpoint, client.clientName);
-    if (actual !== expectedView) {
+    const expected = `${client.clientName}\t${client.clientPid}\t${client.sessionName}\t${view.windowName}\t${view.paneId}`;
+    if (actual !== expected) {
       throw new Error(
-        `popup client changed ${phase} endpoint=${endpoint.socketPath} expected=${JSON.stringify(expectedView)} actual=${JSON.stringify(actual)}${client.outputTail()}`,
+        `popup client changed ${phase} endpoint=${endpoint.socketPath} expected=${JSON.stringify(expected)} actual=${JSON.stringify(actual)}${client.outputTail()}`,
       );
     }
   };
@@ -378,7 +391,10 @@ export async function displayStationPopupAndSendKey(input: {
   let markerEvidence = "<unread>";
   let releaseEvidence = "release=not-attempted";
   let releasePromise: Promise<void> | undefined;
-  const release = (causalSuccess: boolean): Promise<void> => {
+  const release = (
+    causalSuccess: boolean,
+    finalView?: { windowName: string; paneId: string },
+  ): Promise<void> => {
     releasePromise ??= (async () => {
       const failures: unknown[] = [];
       let closeState = "not-attempted";
@@ -415,7 +431,7 @@ export async function displayStationPopupAndSendKey(input: {
       }
       let viewExact = false;
       try {
-        await checkView("after release");
+        await checkView("after release", finalView);
         viewExact = true;
       } catch (error) {
         failures.push(error);

@@ -5,8 +5,10 @@ Status: current contributor reference for the OpenTUI Station terminal UI in `st
 Station is the terminal UI client. It renders observer snapshots and events, owns local interaction state, and dispatches typed observer commands. It does not derive runtime truth from providers. The classic Ink TUI (`apps/tui`) was retired; Station is now the sole terminal UI.
 
 Observer-backed dashboard Create and Fork commands explicitly request detached
-placement. They do not infer a terminal origin, change focus, or dispatch a
-follow-up `terminal.focus`; terminal focus remains a separate user action.
+placement. Fork remains detached and does not change focus. Successful UI-driven
+Create follows the renderer-resolved `[tui.session_create]` policy through a
+separate exact-target UI command; that policy never enters the Observer create
+payload or durable command result.
 
 ## Renderer And Entry Points
 
@@ -18,9 +20,10 @@ the Bun-executed `@station/workspace` package in the root workspace (see
 - `station/src/dashboardRenderer/main.tsx` — the standalone observer-backed dashboard (live
   observer data and commands, no panes).
 
-Both entry points load `[tui].widgets` from the runtime config and render the same
-configured-widget title strip; widget settings update that shared config when a
-config path is available.
+Both entry points load `[tui]` once at renderer start. They render the same
+configured-widget title strip and resolve the same post-create policy; widget
+settings update the shared config when a config path is available, while an open
+renderer does not live-reload post-create policy.
 
 Launch is driven by `apps/cli/src/commands/tui.ts`. The launcher mints one
 `uiRunId` per renderer child, records exact spawn/exit code/signal evidence in
@@ -401,7 +404,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the dashboard runtime, not presentation components.
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.
 - Dashboard key/behavior is shared, not feature-gated: reducers and render/input leaves never select filter behavior or inspect feature flags; session and optimistic-row matching remains centralized in the pure persistent-filter projection.
-- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is asynchronous and repeat-safe. Disposal closes actions and effect admission immediately, detaches canonical-source and directory-polling subscriptions once, clears owned timers, blocks late async state writes, and returns one promise that drains all already-started bounded work with settled outcomes. Construction requires the composition's `StationClientStateSource`, convergence-safe `ObserverService`, renderer-supplied `TuiFolderService`, and every `DashboardCapabilities` group: session activation, managed session execution, worktree removal, shell opening, and dashboard dismissal. Dashboard-core never creates fallback capabilities, a filesystem adapter, a fallback client runtime, or an independent runtime snapshot. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
+- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is asynchronous and repeat-safe. Disposal closes actions and effect admission immediately, detaches canonical-source and directory-polling subscriptions once, clears owned timers, blocks late async state writes, and returns one promise that drains all already-started bounded work with settled outcomes. Construction requires the composition's `StationClientStateSource`, convergence-safe `ObserverService`, renderer-supplied `TuiFolderService`, and every `DashboardCapabilities` group: session activation, managed session execution, created-session UI policy, worktree removal, shell opening, and dashboard dismissal. Dashboard-core never creates fallback capabilities, a filesystem adapter, a fallback client runtime, or an independent runtime snapshot. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
 - `@station/client` owns canonical in-process snapshot and connection truth. Its runtime-backed service commits snapshot loads and reconcile results to that same state source before resolving. Snapshot-only native and standalone consumers read `StationClientStateSource`; dashboard-core mirrors the exact snapshot identity only to combine it with screens, filter, focus, collapse, semantic visibility, widgets, optimistic rows, and toasts. Station alone owns scroll coordinates.
 - `DashboardStateSource` returns `DashboardStateView`, a recursively readonly type projection that includes snapshots, screens, local rows, widgets, arrays, maps, and sets. The projection preserves the store's exact object and notification identities: it performs no runtime copying, freezing, or proxying. Dashboard readers and Station consumers must accept the exported readonly view types rather than importing private mutable state models.
 - Presentation receives the readonly `DashboardStateSource` for dashboard projection and the canonical client source where snapshot-only rendering requires it. Input adapters receive only their explicit dashboard state and action capabilities, while native and standalone composition roots alone own full runtime lifecycle and inject terminal-specific implementations of the semantic capability groups. Config persistence receives only the dashboard subscription and `pushToast` capability it needs.
@@ -623,10 +626,13 @@ and resize preserve semantic focus while Station follows the focused measured bo
 
 Activating a Group's responsive `[qs]`/`[quick session]` action launches an ordinary Quick Session without embedding Group placement in
 the create request. While pending, its targeted local row is rendered inside the expanded Group. On
-successful launch, dashboard-core reloads canonical truth, correlates the new session by Project and
-generated branch, reads the latest Group version, and records one expected membership addition. It
-never retries a successful launch: load, correlation, conflict, or convergence failure preserves the
-created session, removes stale targeted presentation, focuses canonical truth, and reports the error.
+successful launch, dashboard-core uses the create result's exact canonical session, Project,
+worktree, branch, and terminal-provider identity, reads the latest Group version, and records one
+expected membership addition. Its created-session UI command remains deferred until canonical
+membership has converged and the optimistic row is removed. It never retries a successful launch:
+load, identity, conflict, or convergence failure preserves the created session, removes stale
+targeted presentation, focuses canonical truth, reports the error, and discards the deferred UI
+command.
 
 Activating a Project's `[▾]` opens a right-edge anchored menu with Quick Group, New Group…, Set
 default agent, and Project settings… in that order. Up/Down wraps, Enter activates, `G` selects Quick
@@ -706,12 +712,14 @@ header `menu` cell when opened from native context.
 
 Quick Group creates a durable `Quick Group <six-hex-token>` first, then invokes the ordinary Quick
 Session capability with the Project defaults. After the client has loaded canonical launch truth,
-dashboard-core correlates the issued Project and hidden branch and records one expected Group
+dashboard-core validates the exact durable create identity and records one expected Group
 membership update. A targeted pending row bridges the launch under the new Group without changing
 canonical counts or showing a duplicate project-root row. Launch failure leaves the valid empty
-Group and ordinary failed-row/toast feedback; correlation or membership failure never retries or
-rolls back the Group or session and focuses their canonical surviving destination. Successful
-membership removes the transient row and focuses the canonical session without activating it again.
+Group and ordinary failed-row/toast feedback; identity or membership failure never retries or rolls
+back the Group or session and focuses their canonical surviving destination. Successful membership
+removes the transient row, selects the canonical session, and only then applies the unchanged
+renderer-resolved focus/dismiss policy. Named New Group with Quick session enabled uses the same
+ordering.
 
 The zero-project dashboard renders **Add your first project** as a pointer
 target that dispatches `dashboard.addProject`, producing the same Add Project

@@ -238,6 +238,36 @@ describe("config schemas", () => {
     ).toEqual({ widgets: [] });
   });
 
+  it("validates strict session-create policy and arbitrary terminal provider ids", async () => {
+    expect(
+      TuiConfigSchema.parse({
+        sessionCreate: {
+          focusCreatedSession: false,
+          terminals: {
+            tmux: { dismissDashboard: false },
+            future: { focusCreatedSession: true },
+          },
+        },
+      }).sessionCreate,
+    ).toEqual({
+      focusCreatedSession: false,
+      terminals: {
+        tmux: { dismissDashboard: false },
+        future: { focusCreatedSession: true },
+      },
+    });
+    expect(
+      TuiConfigSchema.safeParse({
+        sessionCreate: { focusCreatedSession: "yes" },
+      }).success,
+    ).toBe(false);
+    expect(
+      TuiConfigSchema.safeParse({
+        sessionCreate: { terminals: { tmux: { dismissDashboard: true, extra: true } } },
+      }).success,
+    ).toBe(false);
+  });
+
   it("validates explicit project recovery breadcrumb opt-in", () => {
     const project = ProjectConfigSchema.parse({
       id: "web",

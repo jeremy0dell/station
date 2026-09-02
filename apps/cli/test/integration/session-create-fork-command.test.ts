@@ -1,3 +1,4 @@
+import { appendFile } from "node:fs/promises";
 import type {
   CommandReceipt,
   CommandRecord,
@@ -48,6 +49,11 @@ describe("session create and fork commands", () => {
   it("creates detached with exact options, safe output, durable identities, and no focus", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
+    await appendFile(
+      configPath,
+      "\n[tui.session_create]\nfocus_created_session = true\ndismiss_dashboard = true\n",
+      "utf8",
+    );
     const initial = creationSnapshot();
     const commands: StationCommand[] = [];
     const result = detachedCreateResult("group_root");
@@ -107,6 +113,7 @@ describe("session create and fork commands", () => {
         },
       ]);
       expect("focus" in firstCommand(commands).payload.terminal).toBe(false);
+      expect(commands.some((command) => command.type === "terminal.focus")).toBe(false);
       expect(cliResult).toMatchObject({
         code: 0,
         correlation: { status: "succeeded", commandId: "cmd_create", traceId: "trc_creation" },
@@ -135,6 +142,9 @@ describe("session create and fork commands", () => {
 
   it("forks beside fresh caller authority while keeping code source, harness, and Group exact", async () => {
     const fixture = await createTempState();
+    fixture.config.tui = {
+      sessionCreate: { focusCreatedSession: true, dismissDashboard: true },
+    };
     const initial = creationSnapshot();
     const commands: StationCommand[] = [];
     const result = siblingForkResult();
@@ -184,6 +194,7 @@ describe("session create and fork commands", () => {
           },
         },
       ]);
+      expect(commands.some((command) => command.type === "terminal.focus")).toBe(false);
       const command = firstCommand(commands);
       expect(command.type).toBe("session.fork");
       if (command.type !== "session.fork") throw new Error("Expected session.fork.");
