@@ -19,6 +19,7 @@ const PRIVATE_MODELS = [
 const RUNTIME_VALUES = [
   "createDashboardRuntime",
   "createObserverActivationCapabilities",
+  "createObserverCreatedSessionCapabilities",
   "createObserverManagedSessionCapabilities",
   "dashboardExecution",
 ];

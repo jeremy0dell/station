@@ -12,7 +12,15 @@ import { createDashboardCapabilities } from "./dashboardCapabilities.js";
 function harness(
   createdSessionPolicy = { focusCreatedSession: true, dismissDashboard: true },
 ) {
-  const snapshot = manyProjectsSnapshot();
+  const baseSnapshot = manyProjectsSnapshot();
+  const snapshot = {
+    ...baseSnapshot,
+    sessions: baseSnapshot.sessions.map((session) =>
+      session.terminal === undefined
+        ? session
+        : { ...session, terminal: { ...session.terminal, provider: "native" as const } },
+    ),
+  };
   const source = new FakeStationSource(snapshot);
   const service = new FakeTuiObserverService(snapshot);
   const store = createStationStore();
@@ -153,6 +161,46 @@ describe("native dashboard capabilities", () => {
       error: { code: "CREATED_SESSION_FOCUS_UNCONFIRMED" },
     });
     expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+  });
+
+  it("rejects provider drift and non-focusable native post-create targets", async () => {
+    const command = {
+      type: "createdSession.applyUiPolicy" as const,
+      target: {
+        sessionId: "ses_wt_station_idle",
+        projectId: "station",
+        worktreeId: "wt_station_idle",
+        branch: "pty-buffer",
+        terminalProvider: "native",
+      },
+      policy: { focusCreatedSession: true, dismissDashboard: true },
+    };
+    const cases = [
+      { terminal: { provider: "tmux" as const, focusable: true }, code: "CREATED_SESSION_TARGET_MISMATCH" },
+      { terminal: { provider: "native" as const, focusable: false }, code: "CREATED_SESSION_NOT_FOCUSABLE" },
+    ];
+
+    for (const testCase of cases) {
+      const fixture = harness();
+      const snapshot = fixture.source.getState().snapshot;
+      if (snapshot === undefined) throw new Error("Native fixture snapshot is missing.");
+      fixture.source.setSnapshot({
+        ...snapshot,
+        sessions: snapshot.sessions.map((session) =>
+          session.id === command.target.sessionId && session.terminal !== undefined
+            ? { ...session, terminal: { ...session.terminal, ...testCase.terminal } }
+            : session,
+        ),
+      });
+      fixture.store.actions.openOverlay(STATION_OVERLAY_ID);
+
+      await expect(fixture.capabilities.createdSession.applyUiPolicy(command)).resolves.toMatchObject({
+        kind: "failure",
+        error: { code: testCase.code },
+      });
+      expect(fixture.activateRequests).toEqual([]);
+      expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+    }
   });
 
   it("dismisses the overlay only after a managed activation lands", async () => {

@@ -313,10 +313,21 @@ async function applyNativeCreatedSessionPolicy(
       candidate.projectId === command.target.projectId &&
       candidate.branch === command.target.branch,
   );
-  if (command.target.terminalProvider !== "native" || session === undefined || row === undefined) {
+  if (
+    command.target.terminalProvider !== "native" ||
+    session === undefined ||
+    session.terminal?.provider !== "native" ||
+    row === undefined
+  ) {
     return createdSessionFailure(
       "CREATED_SESSION_TARGET_MISMATCH",
       "The created session no longer matches its canonical native pane.",
+    );
+  }
+  if (session.terminal.focusable !== true) {
+    return createdSessionFailure(
+      "CREATED_SESSION_NOT_FOCUSABLE",
+      "The created session cannot be focused from the native dashboard.",
     );
   }
 

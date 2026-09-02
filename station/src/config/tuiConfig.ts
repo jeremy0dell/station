@@ -51,7 +51,10 @@ export function sessionCreatePolicyForTerminal(
   policies: ResolvedSessionCreatePolicies,
   provider: string,
 ): CreatedSessionUiPolicy {
-  return policies.terminals[provider] ?? policies.global;
+  const terminalPolicy = Object.hasOwn(policies.terminals, provider)
+    ? policies.terminals[provider]
+    : undefined;
+  return terminalPolicy ?? policies.global;
 }
 
 function resolveSessionCreatePolicy(

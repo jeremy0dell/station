@@ -334,6 +334,10 @@ describe("session-create policy resolution", () => {
       focusCreatedSession: false,
       dismissDashboard: true,
     });
+    expect(sessionCreatePolicyForTerminal(resolved, "constructor")).toEqual({
+      focusCreatedSession: false,
+      dismissDashboard: true,
+    });
   });
 });
 
