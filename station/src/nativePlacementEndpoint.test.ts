@@ -149,4 +149,72 @@ describe("native placement endpoint", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("releases the reserved pane when PTY creation fails during commit", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-native-placement-commit-failure-"));
+    const source = createScriptedTerminal();
+    const store = createStationStore();
+    let createCount = 0;
+    const registry = createPtyRegistry({
+      createTerminal: () => {
+        createCount += 1;
+        if (createCount === 1) return source.terminal;
+        throw new Error("destination PTY failed");
+      },
+    });
+    registry.resize(MAIN_PANE_ID, { cols: 80, rows: 24 });
+    const endpoint = await createStationNativePlacementEndpoint({
+      stateDir: root,
+      uiRunId: "ui-commit-failure",
+    });
+    try {
+      const handlerGeneration = endpoint.attach({
+        store,
+        registry,
+        createHostTerminal: () => {
+          throw new Error("host terminal was not expected");
+        },
+      });
+      const sourceEntry = registry.get(MAIN_PANE_ID);
+      if (sourceEntry === undefined) throw new Error("missing source entry");
+      await requestNativePlacement(endpoint.socketPath, {
+        type: "reserve",
+        source: {
+          handlerGeneration,
+          paneId: MAIN_PANE_ID,
+          entryGeneration: sourceEntry.generation,
+          terminalPid: source.terminal.pid,
+        },
+        bindingToken: "binding-failed-commit",
+        target: {
+          terminalTargetId: "native:wt-failed-commit",
+          sessionId: "session-failed-commit",
+          worktreeId: "wt-failed-commit",
+          harnessProvider: "codex",
+        },
+      });
+
+      await expect(
+        requestNativePlacement(endpoint.socketPath, {
+          type: "commit",
+          bindingToken: "binding-failed-commit",
+          launch: { provider: "codex", command: "codex", args: [] },
+        }),
+      ).rejects.toMatchObject({ code: "TERMINAL_CLEANUP_UNCERTAIN" });
+      expect(registry.has("pane-agent-wt-wt-failed-commit")).toBe(true);
+
+      await expect(
+        requestNativePlacement(endpoint.socketPath, {
+          type: "release",
+          bindingToken: "binding-failed-commit",
+        }),
+      ).resolves.toEqual({ type: "released", status: "released" });
+      expect(registry.has("pane-agent-wt-wt-failed-commit")).toBe(false);
+      expect(store.getState().workspace.panes.map((pane) => pane.id)).toEqual([MAIN_PANE_ID]);
+    } finally {
+      await endpoint.close();
+      registry.disposeAll();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -76,6 +76,42 @@ describe("closeExactStationHostPty", () => {
     ).rejects.toMatchObject({ code: "TERMINAL_CLEANUP_UNCERTAIN" });
     expect(session.close).not.toHaveBeenCalled();
   });
+
+  it("reports uncertainty when the Host refuses the exact close", async () => {
+    const session = fakeSession({
+      inventory: async () => ({ buildIdentity: evidence.buildIdentity, ptys: [terminal] }),
+      close: async () => ({ closed: false }),
+    });
+
+    await expect(
+      closeExactStationHostPty(
+        { expectedHost: evidence, expectedPty: terminal },
+        {
+          openSession: async () => session,
+          probeEndpoint: async () => ({ status: "listening", endpoint: evidence.endpoint }),
+        },
+      ),
+    ).rejects.toMatchObject({ code: "TERMINAL_CLEANUP_UNCERTAIN" });
+    expect(session.close).toHaveBeenCalledWith("pty-1");
+  });
+
+  it("reports uncertainty when the exact PTY remains after close", async () => {
+    const session = fakeSession({
+      inventory: async () => ({ buildIdentity: evidence.buildIdentity, ptys: [terminal] }),
+      close: async () => ({ closed: true }),
+    });
+
+    await expect(
+      closeExactStationHostPty(
+        { expectedHost: evidence, expectedPty: terminal },
+        {
+          openSession: async () => session,
+          probeEndpoint: async () => ({ status: "listening", endpoint: evidence.endpoint }),
+        },
+      ),
+    ).rejects.toMatchObject({ code: "TERMINAL_CLEANUP_UNCERTAIN" });
+    expect(session.recoveryInventory).toHaveBeenCalledTimes(2);
+  });
 });
 
 function fakeSession(input: {

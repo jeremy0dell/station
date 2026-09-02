@@ -447,6 +447,39 @@ describe("terminal operations", () => {
     expect(terminal.snapshot().launches).toEqual([]);
   });
 
+  it("releases a committed placed target when cancellation wins before finalization", async () => {
+    const controller = new AbortController();
+    const terminal = new RecordingTerminalProvider({
+      onLaunch: async () => {
+        controller.abort({
+          tag: "CancellationError",
+          code: "COMMAND_CANCELLED",
+          message: "Observer command was cancelled.",
+        });
+      },
+    });
+    const release = vi.spyOn(terminal.placement, "releasePlacedTarget");
+    const finalize = vi.spyOn(terminal.placement, "finalizePlacedTarget");
+
+    await expect(
+      ensureAgentWorkspace(
+        ensureInput(terminal, new CapturingHarnessProvider(), {
+          placementPort: terminal.placement,
+          placement: { intent: "detached" },
+          context: commandContext("cmd_cancel_after_commit", controller.signal),
+        }),
+      ),
+    ).rejects.toMatchObject({ tag: "CancellationError", code: "COMMAND_CANCELLED" });
+    expect(release).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "ses_web_feature",
+        bindingToken: "fake-placement-binding-1",
+      }),
+    );
+    expect(finalize).not.toHaveBeenCalled();
+    expect(terminal.snapshot().closed).toEqual(["term_fake"]);
+  });
+
   it("executes independent operations without retaining command receipts", async () => {
     const terminal = new RecordingTerminalProvider();
     const harness = new CapturingHarnessProvider();

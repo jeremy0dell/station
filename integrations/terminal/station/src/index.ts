@@ -6,7 +6,6 @@ export * from "./host/hostController.js";
 export * from "./host/inspectStationHost.js";
 export * from "./host/preflightParkedOrphanRecovery.js";
 export * from "./host/recoverExactStationHostOrphans.js";
-export * from "./placement/authority.js";
 export * from "./placement/claims.js";
 export * from "./placement/proof.js";
 export * from "./placement/protocol.js";

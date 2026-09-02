@@ -18551,6 +18551,29 @@
       "dependencies": []
     },
     {
+      "path": "integrations/terminal/station/src/placement/proof.ts",
+      "declaration": "NativePlacementProofResolver",
+      "kind": "class",
+      "role": "ADAPTER",
+      "purpose": "Resolves caller-relative renderer and Host evidence within one bounded proof deadline. Abandoned no-holder sockets are ignored; live ambiguity fails closed.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/station/src/host/inspectStationHost.ts",
+          "declaration": "inspectStationHost",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "readUnixSocketHolderPidsAsync",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "integrations/terminal/station/src/placement/protocol.ts",
       "declaration": "startNativePlacementProtocolServer",
       "kind": "function",
@@ -18584,6 +18607,13 @@
           "path": "integrations/terminal/station/src/host/inspectStationHost.ts",
           "declaration": "inspectStationHost",
           "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/station/src/placement/proof.ts",
+          "declaration": "NativePlacementProofResolver",
+          "kind": "class",
           "role": "ADAPTER",
           "edgeKind": "runtime"
         },

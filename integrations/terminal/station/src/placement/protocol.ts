@@ -18,7 +18,6 @@ import { z } from "zod";
 
 const IdSchema = z.string().min(1);
 const PositiveIntegerSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
-const SizeSchema = z.object({ cols: PositiveIntegerSchema, rows: PositiveIntegerSchema }).strict();
 const HostPtyAttachExpectationSchema = HostPtyIdentitySchema.merge(HostPtyRefSchema);
 
 export const NativePlacementPaneProofSchema = z
@@ -26,11 +25,7 @@ export const NativePlacementPaneProofSchema = z
     paneId: IdSchema,
     entryGeneration: IdSchema,
     terminalPid: PositiveIntegerSchema,
-    viewport: SizeSchema,
     terminalTargetId: TerminalTargetIdSchema.optional(),
-    sessionId: IdSchema.optional(),
-    worktreeId: IdSchema.optional(),
-    bindingToken: IdSchema.optional(),
     hostPtyRef: HostPtyAttachExpectationSchema.optional(),
   })
   .strict();

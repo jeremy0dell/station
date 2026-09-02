@@ -14,6 +14,7 @@ import type {
 import {
   createLocalProcessEvidence,
   type ExternalCommandRunner,
+  OneShotAuthorityStore,
   type ProcessEvidence,
   type RuntimeClock,
   systemClock,
@@ -36,7 +37,6 @@ import {
   resolveTmuxWorkbenchConfig,
   tmuxWindowTarget,
 } from "../topology.js";
-import { TmuxPlacementAuthorityStore } from "./authority.js";
 import { TmuxPlacementCleanup } from "./cleanup.js";
 import { cleanupUncertain, placementRejected } from "./errors.js";
 import { buildPlacedWorkspaceMutationArgs } from "./mutation.js";
@@ -55,7 +55,7 @@ export type TmuxPlacementServiceOptions = {
   clock?: RuntimeClock;
   processEvidence?: ProcessEvidence;
   socketEvidence?: (path: string) => SocketEvidence;
-  authorityStore?: TmuxPlacementAuthorityStore;
+  authorityStore?: OneShotAuthorityStore<TmuxPrivateProof>;
   newBindingToken?: () => string;
 };
 
@@ -76,7 +76,7 @@ export class TmuxPlacementService implements TerminalPlacementPort {
   readonly #run: ReturnType<typeof createPlacementCommandRunner>;
   readonly #proofs: TmuxPlacementProofReader;
   readonly #cleanup: TmuxPlacementCleanup;
-  readonly #authorities: TmuxPlacementAuthorityStore;
+  readonly #authorities: OneShotAuthorityStore<TmuxPrivateProof>;
   readonly #newBindingToken: () => string;
   #detachedOpenTail: Promise<void> = Promise.resolve();
 
@@ -99,7 +99,7 @@ export class TmuxPlacementService implements TerminalPlacementPort {
     this.#cleanup = new TmuxPlacementCleanup({ run: this.#run, proofs: this.#proofs });
     this.#authorities =
       options.authorityStore ??
-      new TmuxPlacementAuthorityStore({
+      new OneShotAuthorityStore<TmuxPrivateProof>({
         now: () => this.#clock.now(),
         capacity: TMUX_PLACEMENT_AUTHORITY_CAPACITY,
       });

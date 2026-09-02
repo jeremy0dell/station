@@ -271,7 +271,10 @@ run/runtime-owners/v1/
 `run/np/` contains one short, opaque private socket per live native renderer.
 The endpoint exposes only strict placement proof and reserve/commit/release
 messages. Compatible HMR retains the socket but changes its handler generation,
-so authority from the prior generation is rejected instead of retargeted.
+so authority from the prior generation is rejected instead of retargeted. A
+socket pathname with no process holder is an abandoned remnant and is skipped
+before connection; a live holder with unavailable, ambiguous, or inconsistent
+evidence blocks caller placement instead of being ignored.
 
 `run/runtime-owners/v1` contains private (`0700` directory, `0600` files) disposable-runtime records for native development HMR and the supervised setup guided E2E lane. Binary smoke uses the same relative record path beneath private checkout-and-mode-keyed state in the OS temporary directory so an ordinary next start can find a prior random smoke root. A matching next start may recover only a dead owner's exact registered process group after PID, PGID, OS start, launch-token, script, and executable evidence agree. Device-and-inode-pinned cleanup roots remain on the next record until exact deletion succeeds. A malformed, insecure, replaced, reused, or unavailable identity blocks cleanup and preserves the record for diagnosis. These records classify socket and persistence roots but never authorize signals to persistent Observer, Station Host, or Host-owned PTYs.
 

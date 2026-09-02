@@ -23,6 +23,10 @@ import {
 import { StationTerminalProviderError } from "../errors.js";
 import { inspectStationHost } from "../host/inspectStationHost.js";
 import {
+  stationHostEndpointsMatch,
+  stationHostHealthMatches,
+} from "../host/readStationHostEvidence.js";
+import {
   type NativePlacementPaneProof,
   type NativePlacementSourceProof,
   nativePlacementSocketDirectory,
@@ -30,6 +34,11 @@ import {
 } from "./protocol.js";
 
 export const NATIVE_PLACEMENT_EVIDENCE_TIMEOUT_MS = 5_000;
+
+type NativeHostLifetimeEvidence = Pick<
+  StationHostExactEvidence,
+  "endpoint" | "health" | "buildIdentity"
+>;
 
 export type NativePrivateProof = {
   socketPath: string;
@@ -40,7 +49,7 @@ export type NativePrivateProof = {
   rendererProcess: ProcessIdentity;
   terminalProcess: ProcessIdentity;
   host?: {
-    evidence: StationHostExactEvidence;
+    evidence: NativeHostLifetimeEvidence;
     terminal: StationHostTerminalLifetime;
   };
 };
@@ -54,6 +63,12 @@ export type NativePlacementProofResolverOptions = {
   socketHolders?: (socketPath: string, deadlineMs: number) => Promise<readonly number[]>;
 };
 
+/**
+ * ADAPTER
+ *
+ * Resolves caller-relative renderer and Host evidence within one bounded proof
+ * deadline. Abandoned no-holder sockets are ignored; live ambiguity fails closed.
+ */
 export class NativePlacementProofResolver {
   readonly #stateDir: string;
   readonly #hostSocketPath: string | undefined;
@@ -90,14 +105,16 @@ export class NativePlacementProofResolver {
     const deadlineMs = Date.now() + NATIVE_PLACEMENT_EVIDENCE_TIMEOUT_MS;
     let value: Awaited<ReturnType<typeof requestNativePlacement>>;
     try {
-      value = await this.#request(proof.socketPath, { type: "snapshot" }, remainingMs(deadlineMs));
       const holders = await this.#socketHolders(proof.socketPath, deadlineMs);
+      if (holders.length !== 1 || holders[0] !== proof.rendererProcess.pid) {
+        throw placementRejected("Native renderer ownership changed before placement.");
+      }
+      value = await this.#request(proof.socketPath, { type: "snapshot" }, remainingMs(deadlineMs));
       if (
         value.type !== "snapshot" ||
         value.snapshot.uiRunId !== proof.uiRunId ||
         value.snapshot.handlerGeneration !== proof.source.handlerGeneration ||
-        holders.length !== 1 ||
-        holders[0] !== proof.rendererProcess.pid ||
+        value.snapshot.rendererPid !== proof.rendererProcess.pid ||
         !processIdentityMatches(
           this.#processEvidence.read(proof.rendererProcess.pid),
           proof.rendererProcess,
@@ -116,7 +133,9 @@ export class NativePlacementProofResolver {
       const hostMatches =
         proof.host === undefined
           ? host === undefined
-          : host !== undefined && sameHostPty(host.terminal, proof.host.terminal);
+          : host !== undefined &&
+            sameHostLifetimeEvidence(host.evidence, proof.host.evidence) &&
+            sameHostPty(host.terminal, proof.host.terminal);
       if (!hostMatches) {
         throw placementRejected("Native renderer or pane generation changed before placement.");
       }
@@ -132,15 +151,23 @@ export class NativePlacementProofResolver {
   ): Promise<NativePrivateProof | undefined> {
     const deadlineMs = Date.now() + NATIVE_PLACEMENT_EVIDENCE_TIMEOUT_MS;
     try {
+      const holders = await this.#socketHolders(socketPath, deadlineMs);
+      if (holders.length === 0) return undefined;
+      if (holders.length !== 1) {
+        throw evidenceUnavailable("Native renderer socket ownership is ambiguous.");
+      }
       const value = await this.#request(socketPath, { type: "snapshot" }, remainingMs(deadlineMs));
       if (value.type !== "snapshot") {
         throw evidenceUnavailable("Native renderer returned the wrong placement evidence.");
       }
       const snapshot = value.snapshot;
-      const holders = await this.#socketHolders(socketPath, deadlineMs);
-      if (holders.length !== 1 || holders[0] !== snapshot.rendererPid) return undefined;
+      if (holders[0] !== snapshot.rendererPid) {
+        throw evidenceUnavailable("Native renderer socket ownership did not match its snapshot.");
+      }
       const renderer = this.#processEvidence.read(snapshot.rendererPid);
-      if (renderer === undefined) return undefined;
+      if (renderer === undefined) {
+        throw evidenceUnavailable("Native renderer process identity is unavailable.");
+      }
       const panes = snapshot.panes.filter((pane) =>
         processDescendsFrom(this.#processEvidence, caller.process, pane.terminalPid),
       );
@@ -150,7 +177,9 @@ export class NativePlacementProofResolver {
       const pane = panes[0];
       if (pane === undefined) return undefined;
       const terminal = this.#processEvidence.read(pane.terminalPid);
-      if (terminal === undefined) return undefined;
+      if (terminal === undefined) {
+        throw evidenceUnavailable("Native source terminal process identity is unavailable.");
+      }
       const host = await this.#hostProof(pane);
       if (pane.hostPtyRef !== undefined && host === undefined) return undefined;
       const targetId = (pane.terminalTargetId ??
@@ -203,8 +232,17 @@ export class NativePlacementProofResolver {
     const terminal = inspected.evidence.terminals.find((candidate) =>
       sameHostPty(candidate, hostPtyRef),
     );
-    if (terminal === undefined || terminal.pid !== pane.terminalPid) return undefined;
-    return { evidence: inspected.evidence, terminal };
+    if (terminal === undefined || terminal.pid !== pane.terminalPid) {
+      throw evidenceUnavailable("Native source PTY did not match the exact Station Host lifetime.");
+    }
+    return {
+      evidence: {
+        endpoint: inspected.evidence.endpoint,
+        health: inspected.evidence.health,
+        buildIdentity: inspected.evidence.buildIdentity,
+      },
+      terminal,
+    };
   }
 
   async #socketPaths(): Promise<string[]> {
@@ -236,6 +274,17 @@ export function sameHostPty(
   return isSameHostPtyIdentity(left, right) && isSameHostPtyRef(left, right);
 }
 
+function sameHostLifetimeEvidence(
+  left: NativeHostLifetimeEvidence,
+  right: NativeHostLifetimeEvidence,
+): boolean {
+  return (
+    stationHostEndpointsMatch(left.endpoint, right.endpoint) &&
+    stationHostHealthMatches(left.health, right.health) &&
+    left.buildIdentity === right.buildIdentity
+  );
+}
+
 function sameSource(pane: NativePlacementPaneProof, source: NativePlacementSourceProof): boolean {
   return (
     pane.paneId === source.paneId &&
@@ -262,6 +311,12 @@ function proofGeneration(input: {
     String(input.rendererProcess.pid),
     input.rendererProcess.startToken,
     input.terminalProcess.startToken,
+    input.host?.evidence.endpoint.socketPath ?? "local",
+    input.host?.evidence.endpoint.ino.toString() ?? "local",
+    input.host?.evidence.endpoint.birthtimeNs.toString() ?? "local",
+    String(input.host?.evidence.health.protocolVersion ?? "local"),
+    input.host?.evidence.health.buildVersion ?? "local",
+    input.host?.evidence.buildIdentity ?? "local",
     input.host?.terminal.ptyId ?? "local",
     input.host?.terminal.ptyInstanceId ?? "local",
   ]);

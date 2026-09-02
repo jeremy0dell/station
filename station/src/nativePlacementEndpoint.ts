@@ -27,7 +27,6 @@ type NativePlacementHandler = {
 
 type NativeReservation = {
   handlerGeneration: string;
-  bindingToken: string;
   paneId: PaneId;
   identity: AgentIdentity;
   sourceViewport: { cols: number; rows: number };
@@ -88,15 +87,9 @@ export async function createStationNativePlacementEndpoint(options: {
             paneId: entry.paneId,
             entryGeneration: entry.generation,
             terminalPid: terminal.pid,
-            viewport: { cols: terminal.size.cols, rows: terminal.size.rows },
           };
-          if (pane.worktreeId !== undefined) proof.worktreeId = pane.worktreeId;
           if (pane.agentIdentity !== undefined) {
             proof.terminalTargetId = pane.agentIdentity.terminalTargetId as TerminalTargetId;
-            proof.sessionId = pane.agentIdentity.sessionId;
-            if (pane.agentIdentity.terminalBindingToken !== undefined) {
-              proof.bindingToken = pane.agentIdentity.terminalBindingToken;
-            }
           }
           if (terminal.hostPtyRef !== undefined) proof.hostPtyRef = terminal.hostPtyRef;
           return [proof];
@@ -135,7 +128,7 @@ export async function createStationNativePlacementEndpoint(options: {
     if (active.store.getState().workspace.panes.some((pane) => pane.id === paneId)) {
       throw placementRejected("The native destination pane already exists.");
     }
-    const source = currentPaneProof(active, request.source);
+    const sourceViewport = currentSourceViewport(active, request.source);
     const identity: AgentIdentity = {
       sessionId: request.target.sessionId,
       terminalTargetId: request.target.terminalTargetId,
@@ -153,10 +146,9 @@ export async function createStationNativePlacementEndpoint(options: {
     }
     reservations.set(request.bindingToken, {
       handlerGeneration: active.generation,
-      bindingToken: request.bindingToken,
       paneId,
       identity,
-      sourceViewport: source.viewport,
+      sourceViewport,
     });
     return { type: "reserved", paneId };
   };
@@ -280,13 +272,13 @@ function assertSourceCurrent(
   if (handler.generation !== source.handlerGeneration) {
     throw placementRejected("Native renderer generation changed before reservation.");
   }
-  currentPaneProof(handler, source);
+  currentSourceViewport(handler, source);
 }
 
-function currentPaneProof(
+function currentSourceViewport(
   handler: NativePlacementHandler,
   source: NativePlacementSourceProof,
-): NativePlacementPaneProof {
+): { cols: number; rows: number } {
   const value = handler.registry.get(source.paneId);
   const terminal = value?.terminal;
   if (
@@ -299,12 +291,7 @@ function currentPaneProof(
   ) {
     throw placementRejected("Native source pane changed before reservation.");
   }
-  return {
-    paneId: value.paneId,
-    entryGeneration: value.generation,
-    terminalPid: terminal.pid,
-    viewport: { cols: terminal.size.cols, rows: terminal.size.rows },
-  };
+  return { cols: terminal.size.cols, rows: terminal.size.rows };
 }
 
 function requireReservation(

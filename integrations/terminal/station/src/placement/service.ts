@@ -18,11 +18,15 @@ import type {
   TerminalTargetId,
 } from "@station/contracts";
 import type { HostPtyAttachExpectation, HostSpawnResult } from "@station/host";
-import { isSafeError, type RuntimeClock, systemClock } from "@station/runtime";
+import {
+  isSafeError,
+  OneShotAuthorityStore,
+  type RuntimeClock,
+  systemClock,
+} from "@station/runtime";
 import { STATION_TERMINAL_PROVIDER_ID, StationTerminalProviderError } from "../errors.js";
 import { closeExactStationHostPty } from "../host/closeExactStationHostPty.js";
 import { inspectStationHost } from "../host/inspectStationHost.js";
-import { NATIVE_PLACEMENT_AUTHORITY_TTL_MS, NativePlacementAuthorityStore } from "./authority.js";
 import type { NativePlacementProofResolverOptions, NativePrivateProof } from "./proof.js";
 import {
   NativePlacementProofResolver,
@@ -32,6 +36,8 @@ import {
 import { requestNativePlacement } from "./protocol.js";
 
 export const NATIVE_PLACEMENT_PENDING_CAPACITY = 256;
+const NATIVE_PLACEMENT_AUTHORITY_TTL_MS = 10 * 60 * 1000;
+const NATIVE_PLACEMENT_AUTHORITY_CAPACITY = 256;
 
 type NativePlacementOwner = {
   openManagedWorkspace(request: OpenPlacedWorkspaceRequest): Promise<ManagedOpenWorkspaceResult>;
@@ -58,7 +64,7 @@ export type StationPlacementServiceOptions = {
   owner: NativePlacementOwner;
   clock?: RuntimeClock;
   processEvidence?: NativePlacementProofResolverOptions["processEvidence"];
-  authorityStore?: NativePlacementAuthorityStore;
+  authorityStore?: OneShotAuthorityStore<NativePrivateProof>;
   request?: typeof requestNativePlacement;
   inspectHost?: typeof inspectStationHost;
   closeHostPty?: typeof closeExactStationHostPty;
@@ -79,7 +85,7 @@ export class StationPlacementService implements TerminalPlacementPort {
 
   readonly #owner: NativePlacementOwner;
   readonly #clock: RuntimeClock;
-  readonly #authorities: NativePlacementAuthorityStore;
+  readonly #authorities: OneShotAuthorityStore<NativePrivateProof>;
   readonly #proofs: NativePlacementProofResolver;
   readonly #request: typeof requestNativePlacement;
   readonly #inspectHost: typeof inspectStationHost;
@@ -91,7 +97,11 @@ export class StationPlacementService implements TerminalPlacementPort {
     this.#owner = options.owner;
     this.#clock = options.clock ?? systemClock;
     this.#authorities =
-      options.authorityStore ?? new NativePlacementAuthorityStore({ now: () => this.#clock.now() });
+      options.authorityStore ??
+      new OneShotAuthorityStore<NativePrivateProof>({
+        capacity: NATIVE_PLACEMENT_AUTHORITY_CAPACITY,
+        now: () => this.#clock.now(),
+      });
     this.#request = options.request ?? requestNativePlacement;
     this.#inspectHost = options.inspectHost ?? inspectStationHost;
     this.#closeHostPty = options.closeHostPty ?? closeExactStationHostPty;

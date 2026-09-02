@@ -85,7 +85,7 @@
     "test:e2e:setup:guided:all-shells": "STATION_SETUP_E2E_ALL_SHELLS=true bun run test:e2e:setup:guided",
     "test:e2e:setup:core": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/setup-core-flow.test.ts",
     "test:e2e:setup:sqlite": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/observer-sqlite-smoke.test.ts",
-    "test:e2e:observer": "vitest run --config config/vitest/vitest.e2e.config.ts tests/e2e/observer-lifecycle.test.ts tests/e2e/session-migration.test.ts tests/e2e/full-session-lifecycle/session-create-scripted.test.ts",
+    "test:e2e:observer": "vitest run --config config/vitest/vitest.e2e.config.ts tests/e2e/observer-lifecycle.test.ts tests/e2e/session-migration.test.ts tests/e2e/full-session-lifecycle/session-create-scripted.test.ts tests/e2e/full-session-lifecycle/session-create-native.test.ts",
     "test:e2e:codex-hook-reconciliation": "vitest run --config config/vitest/vitest.e2e.config.ts tests/e2e/codex-hook-reconciliation.test.ts",
     "test:e2e:host-upgrade": "bun run --cwd station test:host:upgrade",
     "test:e2e": "vitest run --config config/vitest/vitest.e2e.config.ts",
