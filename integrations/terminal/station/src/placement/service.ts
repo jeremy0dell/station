@@ -18,12 +18,7 @@ import type {
   TerminalTargetId,
 } from "@station/contracts";
 import type { HostPtyAttachExpectation, HostSpawnResult } from "@station/host";
-import {
-  isSafeError,
-  OneShotAuthorityStore,
-  type RuntimeClock,
-  systemClock,
-} from "@station/runtime";
+import { OneShotAuthorityStore, type RuntimeClock, systemClock } from "@station/runtime";
 import { STATION_TERMINAL_PROVIDER_ID, StationTerminalProviderError } from "../errors.js";
 import { closeExactStationHostPty } from "../host/closeExactStationHostPty.js";
 import { inspectStationHost } from "../host/inspectStationHost.js";
@@ -210,6 +205,13 @@ export class StationPlacementService implements TerminalPlacementPort {
     if (!pending.committed) {
       throw cleanupUncertain("Native placement was finalized before its process was committed.");
     }
+    const value = await this.#request(pending.proof.socketPath, {
+      type: "finalize",
+      bindingToken: pending.bindingToken,
+    });
+    if (value.type !== "finalized") {
+      throw cleanupUncertain("Native renderer did not confirm placement finalization.");
+    }
     this.#pending.delete(request.bindingToken);
   }
 
@@ -354,9 +356,7 @@ export class StationPlacementService implements TerminalPlacementPort {
       });
       if (value.type !== "released") cleanupFailures.push(new Error("Wrong release response."));
     } catch (error) {
-      if (!(isSafeError(cause) && cause.code === "TERMINAL_PLACEMENT_REJECTED")) {
-        cleanupFailures.push(error);
-      }
+      cleanupFailures.push(error);
     }
     try {
       if (

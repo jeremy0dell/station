@@ -20,17 +20,12 @@ import type { StationTerminalProcess } from "./terminal/types.js";
 
 type NativePlacementRegistry = Pick<
   PtyRegistry,
-  "dispose" | "resize" | "terminate"
+  "dispose" | "resetUnstarted" | "resize" | "terminate"
 > & {
-  ensure(...args: Parameters<PtyRegistry["ensure"]>): NativePlacementRegistryEntry;
-  get(paneId: PaneId): NativePlacementRegistryEntry | undefined;
-  entries(): readonly NativePlacementRegistryEntry[];
+  ensure(...args: Parameters<PtyRegistry["ensure"]>): PtyRegistryEntry;
+  get(paneId: PaneId): PtyRegistryEntry | undefined;
+  entries(): readonly PtyRegistryEntry[];
 };
-
-type NativePlacementRegistryEntry = Pick<
-  PtyRegistryEntry,
-  "exited" | "generation" | "paneId" | "terminal"
->;
 
 type NativePlacementHandler = {
   generation: string;
@@ -44,7 +39,8 @@ type NativeReservation = {
   paneId: PaneId;
   identity: AgentIdentity;
   sourceViewport: { cols: number; rows: number };
-  entry?: NativePlacementRegistryEntry;
+  entry: PtyRegistryEntry;
+  committed: boolean;
   hostBacked?: boolean;
 };
 
@@ -121,6 +117,8 @@ export async function createStationNativePlacementEndpoint(options: {
         return reserve(active, request);
       case "commit":
         return commit(active, request);
+      case "finalize":
+        return finalize(active, request.bindingToken);
       case "release":
         return release(active, request.bindingToken);
     }
@@ -142,6 +140,9 @@ export async function createStationNativePlacementEndpoint(options: {
     if (active.store.getState().workspace.panes.some((pane) => pane.id === paneId)) {
       throw placementRejected("The native destination pane already exists.");
     }
+    if (active.registry.get(paneId) !== undefined) {
+      throw placementRejected("The native destination registry entry already exists.");
+    }
     const sourceViewport = currentSourceViewport(active, request.source);
     const identity: AgentIdentity = {
       sessionId: request.target.sessionId,
@@ -149,6 +150,15 @@ export async function createStationNativePlacementEndpoint(options: {
       terminalBindingToken: request.bindingToken,
       harnessProvider: request.target.harnessProvider,
     };
+    const entry = active.registry.ensure(paneId);
+    reservations.set(request.bindingToken, {
+      handlerGeneration: active.generation,
+      paneId,
+      identity,
+      sourceViewport,
+      entry,
+      committed: false,
+    });
     active.store.actions.createPane(paneId, {
       role: "primary-agent",
       worktreeId: request.target.worktreeId,
@@ -158,12 +168,6 @@ export async function createStationNativePlacementEndpoint(options: {
     if (!paneMatches(active.store, paneId, identity)) {
       throw cleanupUncertain("Native renderer could not prove the reserved pane identity.");
     }
-    reservations.set(request.bindingToken, {
-      handlerGeneration: active.generation,
-      paneId,
-      identity,
-      sourceViewport,
-    });
     return { type: "reserved", paneId };
   };
 
@@ -172,7 +176,7 @@ export async function createStationNativePlacementEndpoint(options: {
     request: Extract<NativePlacementRequest, { type: "commit" }>,
   ): NativePlacementValue => {
     const reservation = requireReservation(active, request.bindingToken, reservations);
-    if (reservation.entry !== undefined) {
+    if (reservation.committed) {
       const terminal = reservation.entry.terminal;
       if (
         active.registry.get(reservation.paneId) === reservation.entry &&
@@ -207,7 +211,15 @@ export async function createStationNativePlacementEndpoint(options: {
               ptyRef: host.ptyRef,
               size: reservation.sourceViewport,
             });
-    const entry = active.registry.ensure(reservation.paneId, spawnOptions, createTerminal);
+    const reset = active.registry.resetUnstarted(
+      reservation.entry,
+      spawnOptions,
+      createTerminal,
+    );
+    if (reset.kind !== "reset") {
+      throw cleanupUncertain("Native reserved PTY started or changed before commit.");
+    }
+    const entry = reset.entry;
     reservation.entry = entry;
     reservation.hostBacked = request.host !== undefined;
     active.store.actions.setPrimaryAgent(reservation.paneId, {
@@ -224,12 +236,35 @@ export async function createStationNativePlacementEndpoint(options: {
     ) {
       throw cleanupUncertain("Native renderer could not prove the committed placed process.");
     }
+    reservation.committed = true;
     return {
       type: "committed",
       paneId: reservation.paneId,
       entryGeneration: entry.generation,
       terminalPid: terminal.pid,
     };
+  };
+
+  const finalize = (
+    active: NativePlacementHandler,
+    bindingToken: string,
+  ): NativePlacementValue => {
+    const reservation = reservations.get(bindingToken);
+    if (reservation === undefined) {
+      return { type: "finalized", status: "already-finalized" };
+    }
+    const current = requireReservation(active, bindingToken, reservations);
+    const terminal = current.entry.terminal;
+    if (
+      !current.committed ||
+      active.registry.get(current.paneId) !== current.entry ||
+      terminal === null ||
+      terminal.pid <= 0
+    ) {
+      throw cleanupUncertain("Native renderer could not prove the finalized placed process.");
+    }
+    reservations.delete(bindingToken);
+    return { type: "finalized", status: "finalized" };
   };
 
   const release = async (
@@ -246,18 +281,16 @@ export async function createStationNativePlacementEndpoint(options: {
     if (!paneMatches(active.store, reservation.paneId, reservation.identity)) {
       throw cleanupUncertain("Native placed pane identity changed before cleanup.");
     }
-    if (reservation.entry !== undefined) {
-      if (active.registry.get(reservation.paneId) !== reservation.entry) {
-        throw cleanupUncertain("Native placed PTY generation changed before cleanup.");
-      }
-      if (reservation.hostBacked !== true) {
-        await active.registry.terminate(reservation.paneId);
-      }
-      if (active.registry.get(reservation.paneId) !== reservation.entry) {
-        throw cleanupUncertain("Native placed PTY changed while cleanup was running.");
-      }
-      active.registry.dispose(reservation.paneId);
+    if (active.registry.get(reservation.paneId) !== reservation.entry) {
+      throw cleanupUncertain("Native placed PTY generation changed before cleanup.");
     }
+    if (reservation.hostBacked !== true) {
+      await active.registry.terminate(reservation.paneId);
+    }
+    if (active.registry.get(reservation.paneId) !== reservation.entry) {
+      throw cleanupUncertain("Native placed PTY changed while cleanup was running.");
+    }
+    active.registry.dispose(reservation.paneId);
     active.store.actions.closePane(reservation.paneId);
     reservations.delete(bindingToken);
     return { type: "released", status: "released" };

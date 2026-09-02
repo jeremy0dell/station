@@ -88,6 +88,9 @@ const CommitRequestSchema = z
       .optional(),
   })
   .strict();
+const FinalizeRequestSchema = z
+  .object({ type: z.literal("finalize"), bindingToken: IdSchema })
+  .strict();
 const ReleaseRequestSchema = z
   .object({ type: z.literal("release"), bindingToken: IdSchema })
   .strict();
@@ -96,6 +99,7 @@ export const NativePlacementRequestSchema = z.discriminatedUnion("type", [
   SnapshotRequestSchema,
   ReserveRequestSchema,
   CommitRequestSchema,
+  FinalizeRequestSchema,
   ReleaseRequestSchema,
 ]);
 export type NativePlacementRequest = z.infer<typeof NativePlacementRequestSchema>;
@@ -114,6 +118,12 @@ const NativePlacementValueSchema = z.discriminatedUnion("type", [
       paneId: IdSchema,
       entryGeneration: IdSchema,
       terminalPid: PositiveIntegerSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("finalized"),
+      status: z.enum(["finalized", "already-finalized"]),
     })
     .strict(),
   z

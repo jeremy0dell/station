@@ -1,8 +1,10 @@
-import { readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { SessionView, StationSnapshot, WorktreeRow } from "@station/contracts";
 import { buildWorkbenchWindowName } from "@station/tmux";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { StationLayoutSnapshotSchema } from "../../../station/src/state/layout/layoutSnapshot.js";
+import { agentWorktreePaneId, MAIN_PANE_ID } from "../../../station/src/state/types.js";
 import { findRowByBranch } from "../../support/real-station/assertions";
 import { uniqueTmuxSession, writeRealStationConfig } from "../../support/real-station/config";
 import {
@@ -23,6 +25,7 @@ import {
   closeRealTmuxEndpoint,
   displayStationPopupAndSendKey,
   inspectTmuxClient,
+  killTmuxSession,
   launchNativeStationInTmux,
   startAttachedTmuxPtyClient,
 } from "../../support/real-station/tmux";
@@ -44,6 +47,132 @@ describeReal("real dashboard session-create navigation", () => {
   afterEach(async () => {
     await cleanup?.run();
   });
+
+  it("keeps native CLI from-current creation as an inactive sibling", async () => {
+    cleanup = new CleanupStack();
+    // Keep the private state path beneath Darwin's Unix-socket path limit.
+    const repo = await createRealTempRepo(env, "/tmp");
+    cleanup.defer(repo.cleanup);
+    const config = await writeRealStationConfig({
+      env,
+      repo,
+      harnessProvider: "scripted",
+      scriptedCommand: process.execPath,
+    });
+    cleanup.defer(() => closeRealTmuxEndpoint(config.tmuxEndpoint));
+    cleanup.defer(() =>
+      runStationJson(env, {
+        configPath: config.configPath,
+        args: ["observer", "stop"],
+      }),
+    );
+    await appendFile(config.configPath, "\n[workspace]\nwelcome_on_boot = false\n", "utf8");
+    const layoutPath = join(config.stateDir, "station", "layout.json");
+    await mkdir(join(config.stateDir, "station"), { recursive: true });
+    await writeFile(
+      layoutPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        panes: [{ id: MAIN_PANE_ID, split: null, role: "shell" }],
+        activePaneId: MAIN_PANE_ID,
+        cwdByPane: { [MAIN_PANE_ID]: repo.repoPath },
+      }),
+      "utf8",
+    );
+    await runStationJson(env, {
+      configPath: config.configPath,
+      args: ["reconcile", "--reason", "real-native-cli-from-current"],
+      timeoutMs: 60_000,
+    });
+    const observer = createRealObserverClient(config, 30_000);
+    const baseline = await observer.getSnapshot({ includeDebug: true });
+    const nativeSession = uniqueTmuxSession("station-real-native-from-current");
+    const launched = await launchNativeStationInTmux({
+      env,
+      endpoint: config.tmuxEndpoint,
+      configPath: config.configPath,
+      observerSocketPath: config.socketPath,
+      stateDir: config.stateDir,
+      sessionName: nativeSession,
+      cwd: repo.repoPath,
+    });
+    cleanup.defer(() => killTmuxSession(config.tmuxEndpoint, nativeSession));
+    const terminal = await startAttachedTmuxPtyClient({
+      endpoint: config.tmuxEndpoint,
+      sessionName: nativeSession,
+    });
+    cleanup.defer(terminal.close);
+    await waitForPaneText(config.tmuxEndpoint, launched.target, "┌─shell");
+
+    const readyPath = join(repo.root, "source-ready");
+    const sourceIdentityPath = join(repo.root, "source-identity");
+    await terminal.write(
+      Buffer.from(
+        `printf '%s:%s:%s' "$STATION_PANE" "$$" "$PPID" > ${shellQuote(sourceIdentityPath)}; printf ready > ${shellQuote(readyPath)}\r`,
+        "utf8",
+      ),
+    );
+    await waitForFileContent(readyPath, "ready");
+    await expect(readFile(sourceIdentityPath, "utf8")).resolves.toMatch(/^1:\d+:\d+$/u);
+
+    const branch = uniqueBranch("native-from-current");
+    cleanup.defer(() => removeRealWorktrunkWorktree({ env, config, repo, branch }));
+    const successPath = join(repo.root, "native-create-success");
+    const stdoutPath = join(repo.root, "native-create.stdout");
+    const stderrPath = join(repo.root, "native-create.stderr");
+    const command = [
+      shellQuote(env.stationBin),
+      "--config",
+      shellQuote(config.configPath),
+      "session",
+      "create",
+      shellQuote(config.projectId),
+      "--branch",
+      shellQuote(branch),
+      "--from-current",
+      "--harness",
+      "scripted",
+      "--layout",
+      "agent-only",
+      "--ungrouped",
+      "--timeout-ms",
+      "60000",
+      "--json",
+    ].join(" ");
+    await terminal.write(
+      Buffer.from(
+        `${command} > ${shellQuote(stdoutPath)} 2> ${shellQuote(stderrPath)} && printf success > ${shellQuote(successPath)} || printf failed > ${shellQuote(successPath)}\r`,
+        "utf8",
+      ),
+    );
+    await waitForFileContent(successPath, "success", 90_000, async () => {
+      const stdout = await readFile(stdoutPath, "utf8").catch(() => "");
+      const stderr = await readFile(stderrPath, "utf8").catch(() => "");
+      return `\nstdout:\n${stdout}\nstderr:\n${stderr}`;
+    });
+
+    const created = await waitForSnapshot(
+      observer,
+      (snapshot) => exactNewSession(snapshot, baseline)?.terminal?.provider === "native",
+      "Native CLI from-current did not expose one exact native session.",
+      90_000,
+    );
+    const session = exactNewSession(created, baseline);
+    if (session === undefined)
+      throw new Error("Native CLI created-session identity was ambiguous.");
+    const row = created.rows.find((candidate) => candidate.id === session.worktreeId);
+    if (row === undefined) throw new Error("Native CLI created worktree row was missing.");
+    const layout = await waitForLayout(layoutPath, agentWorktreePaneId(row.id));
+
+    expect(layout.activePaneId).toBe(MAIN_PANE_ID);
+    expect(layout.panes).toContainEqual(
+      expect.objectContaining({
+        id: agentWorktreePaneId(row.id),
+        role: "primary-agent",
+        worktreeId: row.id,
+      }),
+    );
+  }, 180_000);
 
   it("lands native New Session on the exact created native pane", async () => {
     cleanup = new CleanupStack();
@@ -331,6 +460,45 @@ async function waitForPaneText(
   throw new Error(`Station pane did not render ${expected}.\nLast frame:\n${frame}`);
 }
 
+async function waitForFileContent(
+  path: string,
+  expected: string,
+  timeoutMs = 30_000,
+  diagnostics: () => Promise<string> = async () => "",
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const actual = await readFile(path, "utf8").catch(() => "");
+    if (actual === expected) return;
+    if (actual.length > 0) {
+      throw new Error(
+        `File contained ${actual}, expected ${expected}: ${path}${await diagnostics()}`,
+      );
+    }
+    await delay(100);
+  }
+  throw new Error(`File did not contain ${expected}: ${path}${await diagnostics()}`);
+}
+
+async function waitForLayout(path: string, destinationPaneId: string) {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() <= deadline) {
+    const raw = await readFile(path, "utf8").catch(() => undefined);
+    if (raw !== undefined) {
+      const parsed = StationLayoutSnapshotSchema.safeParse(JSON.parse(raw));
+      if (
+        parsed.success &&
+        parsed.data.activePaneId === MAIN_PANE_ID &&
+        parsed.data.panes.some((pane) => pane.id === destinationPaneId)
+      ) {
+        return parsed.data;
+      }
+    }
+    await delay(100);
+  }
+  throw new Error(`Native layout did not retain inactive destination ${destinationPaneId}.`);
+}
+
 async function waitForTmuxClientView(
   endpoint: Parameters<typeof inspectTmuxClient>[0],
   clientName: string,
@@ -348,4 +516,8 @@ async function waitForTmuxClientView(
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }

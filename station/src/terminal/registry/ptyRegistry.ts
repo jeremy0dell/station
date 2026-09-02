@@ -51,6 +51,10 @@ export type PtyRegistryResetExitedResult =
   | { kind: "reset"; viewport: StationTerminalSize }
   | { kind: "refused"; reason: "missing" | "superseded" | "not-exited" };
 
+export type PtyRegistryResetUnstartedResult =
+  | { kind: "reset"; entry: PtyRegistryEntry }
+  | { kind: "refused"; reason: "missing" | "superseded" | "started" };
+
 export type PtyRegistry = {
   /**
    * Allocate the bookkeeping for a pane. Idempotent, does NOT spawn a PTY, and
@@ -76,6 +80,12 @@ export type PtyRegistry = {
     spawnOptions: StationTerminalSpawnOptions,
     createTerminalOverride?: (options: StationTerminalSpawnOptions) => StationTerminalProcess,
   ): PtyRegistryResetExitedResult;
+  /** Replace only the exact dormant entry with one carrying explicit launch ownership. */
+  resetUnstarted(
+    expectedEntry: PtyRegistryEntry,
+    spawnOptions: StationTerminalSpawnOptions,
+    createTerminalOverride?: (options: StationTerminalSpawnOptions) => StationTerminalProcess,
+  ): PtyRegistryResetUnstartedResult;
   get(paneId: PaneId): PtyRegistryEntry | undefined;
   has(paneId: PaneId): boolean;
   entries(): readonly PtyRegistryEntry[];
@@ -581,6 +591,23 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       disposeEntry(current);
       ensureEntry(current.paneId, spawnOptions, createTerminalOverride);
       return { kind: "reset", viewport };
+    },
+    resetUnstarted: (expectedEntry, spawnOptions, createTerminalOverride) => {
+      const current = entries.get(expectedEntry.paneId);
+      if (current === undefined) {
+        return { kind: "refused", reason: "missing" };
+      }
+      if (current !== expectedEntry) {
+        return { kind: "refused", reason: "superseded" };
+      }
+      if (current.screen !== null || current.terminal !== null || current.exited) {
+        return { kind: "refused", reason: "started" };
+      }
+      disposeEntry(current);
+      return {
+        kind: "reset",
+        entry: ensureEntry(current.paneId, spawnOptions, createTerminalOverride),
+      };
     },
     get: (paneId) => entries.get(paneId),
     has: (paneId) => entries.has(paneId),

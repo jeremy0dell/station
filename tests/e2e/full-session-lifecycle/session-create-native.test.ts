@@ -82,9 +82,10 @@ describe("native session create product path", () => {
       const created = fixture.worktree.snapshot().worktrees[0];
       if (created === undefined) throw new Error("native worktree was not created");
       expect(fixture.store.getState().workspace.activePaneId).toBe(MAIN_PANE_ID);
-      expect(
-        fixture.store.getState().workspace.panes.find((pane) => pane.worktreeId === created.id),
-      ).toMatchObject({
+      const destinationPane = fixture.store
+        .getState()
+        .workspace.panes.find((pane) => pane.worktreeId === created.id);
+      expect(destinationPane).toMatchObject({
         agentIdentity: {
           sessionId: fixture.sessionId,
           terminalTargetId: output.outcome.result.resolvedPlacement.targetId,
@@ -105,7 +106,9 @@ describe("native session create product path", () => {
         "--scenario",
         fixture.scenarioPath,
       ]);
-      expect(fixture.terminal.placement?.hasPendingBinding("binding_1")).toBe(false);
+      const bindingToken = destinationPane?.agentIdentity?.terminalBindingToken;
+      if (bindingToken === undefined) throw new Error("native binding token was not retained");
+      expect(fixture.terminal.placement?.hasPendingBinding(bindingToken)).toBe(false);
       await expect(fixture.terminal.listTargets()).resolves.toContainEqual(
         expect.objectContaining({
           provider: "native",
@@ -161,7 +164,6 @@ describe("native session create product path", () => {
       });
       await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
       await expect(fixture.terminal.listTargets()).resolves.toEqual([]);
-      expect(fixture.terminal.placement?.hasPendingBinding("binding_1")).toBe(false);
       expect(fixture.store.getState().workspace.activePaneId).toBe(MAIN_PANE_ID);
       expect(fixture.store.getState().workspace.panes.map((pane) => pane.id)).toEqual([
         MAIN_PANE_ID,
@@ -440,8 +442,11 @@ function observerIds() {
 type TestPtyRegistryEntry = {
   paneId: PaneId;
   generation: string;
+  screen: null;
   terminal: StationTerminalProcess | null;
   exited: boolean;
+  status: string;
+  cwd: string | undefined;
 };
 
 type NativeTestRegistry = {
@@ -452,6 +457,13 @@ type NativeTestRegistry = {
   ): TestPtyRegistryEntry;
   get(paneId: PaneId): TestPtyRegistryEntry | undefined;
   entries(): readonly TestPtyRegistryEntry[];
+  resetUnstarted(
+    expectedEntry: TestPtyRegistryEntry,
+    spawnOptions: StationTerminalSpawnOptions,
+    createTerminal?: (spawnOptions: StationTerminalSpawnOptions) => StationTerminalProcess,
+  ):
+    | { kind: "reset"; entry: TestPtyRegistryEntry }
+    | { kind: "refused"; reason: "missing" | "superseded" | "started" };
   resize(paneId: PaneId, size: StationTerminalSize): void;
   terminate(paneId: PaneId): Promise<void>;
   dispose(paneId: PaneId): void;
@@ -480,8 +492,11 @@ function createTestPtyRegistry(options: {
     const entry: TestPtyRegistryEntry = {
       paneId,
       generation: `test-pty-${++generation}`,
+      screen: null,
       terminal: null,
       exited: false,
+      status: "starting shell",
+      cwd: spawnOptions?.cwd,
     };
     records.set(paneId, { entry, spawnOptions, createTerminal });
     return entry;
@@ -497,6 +512,17 @@ function createTestPtyRegistry(options: {
     ensure,
     get: (paneId) => records.get(paneId)?.entry,
     entries: () => [...records.values()].map(({ entry }) => entry),
+    resetUnstarted: (expectedEntry, spawnOptions, createTerminal) => {
+      const current = records.get(expectedEntry.paneId);
+      if (current === undefined) return { kind: "refused", reason: "missing" };
+      if (current.entry !== expectedEntry) return { kind: "refused", reason: "superseded" };
+      if (current.entry.terminal !== null) return { kind: "refused", reason: "started" };
+      records.delete(expectedEntry.paneId);
+      return {
+        kind: "reset",
+        entry: ensure(expectedEntry.paneId, spawnOptions, createTerminal),
+      };
+    },
     resize: (paneId, size) => {
       const entry = ensure(paneId);
       const record = records.get(paneId);

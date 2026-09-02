@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   ManagedOpenWorkspaceResult,
   ManagedTerminalAttachment,
@@ -96,7 +97,6 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   #targetRevision = 0;
   #listRequestSequence = 0;
   #appliedHostListSequence: number | undefined;
-  #bindingSequence = 0;
 
   constructor(options: StationTerminalProviderOptions = {}) {
     this.#clock = options.clock ?? systemClock;
@@ -355,7 +355,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     } else {
       this.#previousBindings.delete(targetId);
     }
-    const bindingToken = `binding_${++this.#bindingSequence}`;
+    const bindingToken = `binding_${randomUUID()}`;
     this.#targets.set(targetId, observation);
     this.#bindingTokens.set(targetId, bindingToken);
     // Re-registration starts a new provisional generation; Host ownership must be

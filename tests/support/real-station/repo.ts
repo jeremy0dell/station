@@ -15,8 +15,11 @@ export type RealTempRepo = {
   cleanup(): Promise<void>;
 };
 
-export async function createRealTempRepo(env: RealE2eEnvironment): Promise<RealTempRepo> {
-  const root = await mkdtemp(join(tmpdir(), "station-real-e2e-"));
+export async function createRealTempRepo(
+  env: RealE2eEnvironment,
+  temporaryDirectory = tmpdir(),
+): Promise<RealTempRepo> {
+  const root = await mkdtemp(join(temporaryDirectory, "station-real-e2e-"));
   const repoPath = join(root, "repo");
   const realE2eDir = join(repoPath, ".station-real-e2e");
 

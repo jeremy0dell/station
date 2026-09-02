@@ -269,7 +269,7 @@ run/runtime-owners/v1/
 ```
 
 `run/np/` contains one short, opaque private socket per live native renderer.
-The endpoint exposes only strict placement proof and reserve/commit/release
+The endpoint exposes only strict placement proof and reserve/commit/finalize/release
 messages. Compatible HMR retains the socket but changes its handler generation,
 so authority from the prior generation is rejected instead of retargeted. A
 socket pathname with no process holder is an abandoned remnant and is skipped

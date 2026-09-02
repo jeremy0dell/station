@@ -1,6 +1,5 @@
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import type {
   ManagedOpenWorkspaceResult,
   OpenPlacedWorkspaceRequest,
@@ -50,7 +49,7 @@ describe("StationPlacementService", () => {
   });
 
   it("proves one native caller, reserves once, and rejects stale renderer generation", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-placement-service-"));
+    const stateDir = await mkdtemp("/tmp/stn-placement-");
     const socketPath = nativePlacementSocketPath(stateDir, "ui-1");
     let handlerGeneration = "renderer-1";
     let holderEvidenceFails = false;
@@ -87,6 +86,9 @@ describe("StationPlacementService", () => {
             entryGeneration: "entry-destination",
             terminalPid: 40,
           };
+        }
+        if (request.type === "finalize") {
+          return { type: "finalized", status: "finalized" };
         }
         return { type: "released", status: "released" };
       },
@@ -224,6 +226,7 @@ describe("StationPlacementService", () => {
         }),
       ).resolves.toBeUndefined();
       expect(service.hasPendingBinding(opened.bindingToken)).toBe(false);
+      expect(requests).toContain("finalize");
 
       const fresh = await service.resolveCurrentPlacement(caller);
       if (fresh === undefined) throw new Error("expected fresh source");
@@ -270,8 +273,90 @@ describe("StationPlacementService", () => {
     ).toThrow(/positive integer/u);
   });
 
+  it("retains cleanup uncertainty when an unconfirmed reserve cannot be rolled back", async () => {
+    const stateDir = await mkdtemp("/tmp/stn-placement-");
+    const socketPath = nativePlacementSocketPath(stateDir, "ui-reserve-loss");
+    let reserved = false;
+    const server = await startNativePlacementProtocolServer({
+      socketPath,
+      handle: async (request) => {
+        if (request.type === "snapshot") {
+          return nativeSnapshot({ uiRunId: "ui-reserve-loss", rendererPid: 10 });
+        }
+        if (request.type === "reserve") {
+          reserved = true;
+          return { type: "reserved", paneId: "pane-agent-wt-wt-feature" };
+        }
+        if (request.type === "release") {
+          reserved = false;
+          return { type: "released", status: "released" };
+        }
+        throw new Error("unexpected placement request");
+      },
+    });
+    const opened: ManagedOpenWorkspaceResult = {
+      target: {
+        provider: "native",
+        targetId: "native:wt-feature",
+        projectId: "web",
+        worktreeId: "wt-feature",
+        sessionId: "session-feature",
+      },
+      agentEndpointId: "native:wt-feature",
+      bindingToken: "binding-reserve-loss",
+    };
+    const owner = {
+      openManagedWorkspace: vi.fn(async () => opened),
+      releaseTarget: vi.fn(async () => true),
+    };
+    const request: typeof requestNativePlacement = async (path, message, timeoutMs) => {
+      if (message.type === "release") throw new Error("renderer became unreachable");
+      const value = await requestNativePlacement(path, message, timeoutMs);
+      if (message.type === "reserve") {
+        throw {
+          tag: "TerminalProviderError",
+          code: "TERMINAL_PLACEMENT_REJECTED",
+          message: "Native placement request failed after reservation.",
+          provider: "native",
+        };
+      }
+      return value;
+    };
+    const service = new StationPlacementService({
+      stateDir,
+      owner,
+      request,
+      processEvidence: nativeProcessEvidence(),
+      socketHolders: async () => [10],
+    });
+    try {
+      const source = await service.resolveCurrentPlacement(nativeCaller());
+      if (source === undefined) throw new Error("expected native source");
+
+      await expect(
+        service.openPlacedWorkspace({
+          project,
+          worktree,
+          harness: "codex",
+          layout: "agent-only",
+          sessionId: "session-feature",
+          placement: { intent: "sibling", source },
+        }),
+      ).rejects.toMatchObject({ code: "TERMINAL_CLEANUP_UNCERTAIN" });
+      expect(reserved).toBe(true);
+      expect(owner.releaseTarget).toHaveBeenCalledWith({
+        targetId: opened.target.targetId,
+        expectedSessionId: "session-feature",
+        expectedBindingToken: opened.bindingToken,
+      });
+    } finally {
+      await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("skips an abandoned no-holder socket before requesting a live renderer", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-placement-stale-socket-"));
+    const stateDir = await mkdtemp("/tmp/stn-placement-");
     const stalePath = nativePlacementSocketPath(stateDir, "ui-stale");
     const livePath = nativePlacementSocketPath(stateDir, "ui-live");
     const stale = await startNativePlacementProtocolServer({
@@ -310,7 +395,7 @@ describe("StationPlacementService", () => {
   });
 
   it("fails closed on live renderer request failure or ambiguous socket ownership", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-placement-live-failure-"));
+    const stateDir = await mkdtemp("/tmp/stn-placement-");
     const socketPath = nativePlacementSocketPath(stateDir, "ui-live-failure");
     const server = await startNativePlacementProtocolServer({
       socketPath,
@@ -345,7 +430,7 @@ describe("StationPlacementService", () => {
   });
 
   it("rejects more than one live renderer matching the caller", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-placement-multiple-renderers-"));
+    const stateDir = await mkdtemp("/tmp/stn-placement-");
     const firstPath = nativePlacementSocketPath(stateDir, "ui-first");
     const secondPath = nativePlacementSocketPath(stateDir, "ui-second");
     const first = await startNativePlacementProtocolServer({
@@ -381,7 +466,7 @@ describe("StationPlacementService", () => {
   });
 
   it("binds authority to Host lifetime without freezing unrelated terminal inventory", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-placement-host-proof-"));
+    const stateDir = await mkdtemp("/tmp/stn-placement-");
     const socketPath = nativePlacementSocketPath(stateDir, "ui-host");
     const hostTerminal = stationHostTerminal({ terminalTargetId: "native:source", pid: 20 });
     let hostEvidence = stationHostEvidence([hostTerminal]);
@@ -429,7 +514,7 @@ describe("StationPlacementService", () => {
   });
 
   it("rolls back the exact Host PTY, renderer pane, and owner binding after commit refusal", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-placement-host-rollback-"));
+    const stateDir = await mkdtemp("/tmp/stn-placement-");
     const socketPath = nativePlacementSocketPath(stateDir, "ui-host-rollback");
     const requests: string[] = [];
     const server = await startNativePlacementProtocolServer({
@@ -547,7 +632,7 @@ describe("StationPlacementService", () => {
   });
 
   it("refuses pending cleanup overflow without consuming the next authority", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-placement-capacity-"));
+    const stateDir = await mkdtemp("/tmp/stn-placement-");
     const socketPath = nativePlacementSocketPath(stateDir, "ui-capacity");
     const server = await startNativePlacementProtocolServer({
       socketPath,

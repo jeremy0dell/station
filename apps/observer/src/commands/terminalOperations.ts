@@ -181,7 +181,6 @@ export async function ensureAgentWorkspace(
     }
     if (placedOpened !== undefined && input.placementPort !== undefined) {
       throwIfAborted(input.context.signal);
-      await input.placementPort.finalizePlacedTarget(placedTargetRequest(input, placedOpened));
     }
   } catch (error) {
     if (placedOpened !== undefined && input.placementPort !== undefined) {
@@ -205,6 +204,13 @@ export async function ensureAgentWorkspace(
       },
       { commandId: input.context.commandId },
     );
+  }
+  if (placedOpened !== undefined && input.placementPort !== undefined) {
+    await finalizePlacedTargetOrThrow({
+      ...input,
+      placementPort: input.placementPort,
+      opened: placedOpened,
+    });
   }
   return placedOpened?.placement;
 }
@@ -283,6 +289,54 @@ async function releasePlacedTargetOrThrow(
       tag: "TerminalProviderError",
       code: "TERMINAL_CLEANUP_UNCERTAIN",
       message: "The terminal provider could not prove placed-target cleanup.",
+      provider: input.placementPort.id,
+    } satisfies SafeError;
+  }
+}
+
+async function finalizePlacedTargetOrThrow(
+  input: {
+    placementPort: TerminalPlacementPort;
+    opened: OpenPlacedWorkspaceResult;
+    sessionId: string;
+  } & TerminalOperationRuntime,
+): Promise<void> {
+  try {
+    await runProviderMutation(
+      {
+        operation: `provider.${input.placementPort.id}.finalizePlacedTarget`,
+        clock: input.clock,
+        trace: input.context.trace,
+        fallback: {
+          tag: "TerminalProviderError",
+          code: "TERMINAL_CLEANUP_UNCERTAIN",
+          message: "The terminal provider could not confirm placement finalization.",
+          provider: input.placementPort.id,
+        },
+      },
+      () => input.placementPort.finalizePlacedTarget(placedTargetRequest(input, input.opened)),
+    );
+  } catch (error) {
+    const normalized = safeErrorFromUnknown(error, {
+      tag: "TerminalProviderError",
+      code: "TERMINAL_CLEANUP_UNCERTAIN",
+      message: "The terminal provider could not confirm placement finalization.",
+      provider: input.placementPort.id,
+    });
+    await input.logger?.warn(
+      "Placed terminal finalization is uncertain; session state was retained.",
+      {
+        targetId: input.opened.target.targetId,
+        terminalProvider: input.placementPort.id,
+        traceId: input.context.trace.traceId,
+        error: normalized,
+      },
+    );
+    throw {
+      ...normalized,
+      tag: "TerminalProviderError",
+      code: "TERMINAL_CLEANUP_UNCERTAIN",
+      message: "The terminal provider could not confirm placement finalization.",
       provider: input.placementPort.id,
     } satisfies SafeError;
   }

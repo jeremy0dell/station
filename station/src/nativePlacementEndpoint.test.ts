@@ -4,29 +4,35 @@ import { join } from "node:path";
 import { requestNativePlacement } from "@station/terminal";
 import { describe, expect, it } from "bun:test";
 import { createStationNativePlacementEndpoint } from "./nativePlacementEndpoint.js";
+import { createPaneReconciler } from "./state/reconcilers/reconcilePanes.js";
 import { createStationStore } from "./state/store.js";
 import { MAIN_PANE_ID } from "./state/types.js";
 import { createPtyRegistry } from "./terminal/registry/ptyRegistry.js";
 import { createScriptedTerminal } from "./terminal/testing/scriptedTerminal.js";
+import type { StationTerminalSpawnOptions } from "./terminal/types.js";
 
 describe("native placement endpoint", () => {
-  it("reserves, starts, and exactly releases an inactive sibling pane", async () => {
+  it("uses the requested launch behind the live reconciler and retires finalized authority", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-native-placement-"));
     const source = createScriptedTerminal({ cols: 91, rows: 27 });
     const destination = createScriptedTerminal();
+    const finalizedDestination = createScriptedTerminal();
     destination.terminal.kill = () => destination.helpers.emitExit({ exitCode: 0 });
-    const terminals = [source.terminal, destination.terminal];
-    const spawnSizes: Array<{ cols: number; rows: number }> = [];
+    const terminals = [source.terminal, destination.terminal, finalizedDestination.terminal];
+    const spawnOptions: StationTerminalSpawnOptions[] = [];
     const store = createStationStore();
     const registry = createPtyRegistry({
       createTerminal: (options) => {
-        spawnSizes.push({ cols: options.size?.cols ?? 0, rows: options.size?.rows ?? 0 });
+        spawnOptions.push(options);
         const terminal = terminals.shift();
         if (terminal === undefined) throw new Error("terminal pool exhausted");
         return terminal;
       },
     });
     registry.resize(MAIN_PANE_ID, { cols: 91, rows: 27 });
+    const reconcile = createPaneReconciler(store, registry);
+    reconcile();
+    const unsubscribe = store.subscribe(reconcile);
     const endpoint = await createStationNativePlacementEndpoint({
       stateDir: root,
       uiRunId: "ui-test",
@@ -77,10 +83,12 @@ describe("native placement endpoint", () => {
         paneId: "pane-agent-wt-wt-1",
         terminalPid: destination.terminal.pid,
       });
-      expect(spawnSizes).toEqual([
-        { cols: 91, rows: 27 },
-        { cols: 91, rows: 27 },
-      ]);
+      expect(spawnOptions[1]).toMatchObject({
+        command: "codex",
+        args: [],
+        cwd: "/repo/wt-1",
+        size: { cols: 91, rows: 27 },
+      });
       expect(store.getState().workspace.activePaneId).toBe(MAIN_PANE_ID);
 
       await expect(
@@ -91,7 +99,51 @@ describe("native placement endpoint", () => {
       ).resolves.toEqual({ type: "released", status: "released" });
       expect(store.getState().workspace.panes.map((pane) => pane.id)).toEqual([MAIN_PANE_ID]);
       expect(destination.helpers.isDisposed()).toBe(true);
+
+      await requestNativePlacement(endpoint.socketPath, {
+        type: "reserve",
+        source: {
+          handlerGeneration,
+          paneId: MAIN_PANE_ID,
+          entryGeneration: sourceEntry.generation,
+          terminalPid: source.terminal.pid,
+        },
+        bindingToken: "binding-finalized",
+        target: {
+          terminalTargetId: "native:wt-finalized",
+          sessionId: "session-finalized",
+          worktreeId: "wt-finalized",
+          harnessProvider: "codex",
+        },
+      });
+      await requestNativePlacement(endpoint.socketPath, {
+        type: "commit",
+        bindingToken: "binding-finalized",
+        launch: { provider: "codex", command: "codex", args: [] },
+      });
+      const finalized = await requestNativePlacement(endpoint.socketPath, {
+        type: "finalize",
+        bindingToken: "binding-finalized",
+      });
+      expect(finalized).toEqual({ type: "finalized", status: "finalized" });
+      const finalizedAgain = await requestNativePlacement(endpoint.socketPath, {
+        type: "finalize",
+        bindingToken: "binding-finalized",
+      });
+      expect(finalizedAgain).toEqual({ type: "finalized", status: "already-finalized" });
+      await expect(
+        requestNativePlacement(endpoint.socketPath, {
+          type: "release",
+          bindingToken: "binding-finalized",
+        }),
+      ).resolves.toEqual({ type: "released", status: "already-absent" });
+      expect(store.getState().workspace.panes.map((pane) => pane.id)).toEqual([
+        MAIN_PANE_ID,
+        "pane-agent-wt-wt-finalized",
+      ]);
+      expect(finalizedDestination.helpers.isDisposed()).toBe(false);
     } finally {
+      unsubscribe();
       await endpoint.close();
       registry.disposeAll();
       await rm(root, { recursive: true, force: true });

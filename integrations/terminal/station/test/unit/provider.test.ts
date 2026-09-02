@@ -82,6 +82,14 @@ describe("StationTerminalProvider", () => {
     expect(provider.placement).toMatchObject({ id: "native", supportedIntents: ["sibling"] });
   });
 
+  it("does not reuse binding authority across provider lifetimes", async () => {
+    const first = await new StationTerminalProvider({ clock }).openManagedWorkspace(openRequest());
+    const second = await new StationTerminalProvider({ clock }).openManagedWorkspace(openRequest());
+
+    expect(first.bindingToken).toMatch(/^binding_[0-9a-f-]{36}$/u);
+    expect(second.bindingToken).not.toBe(first.bindingToken);
+  });
+
   it("launchProcess does not spawn without a host (the UI owns the PTY)", async () => {
     const provider = new StationTerminalProvider({ clock });
     const opened = await provider.openWorkspace(openRequest());

@@ -376,6 +376,37 @@ describe("terminal operations", () => {
     expect(terminal.snapshot().closed).toEqual([]);
   });
 
+  it("retains the placed target when finalization acknowledgement is uncertain", async () => {
+    const terminal = new RecordingTerminalProvider();
+    const finalize = vi.spyOn(terminal.placement, "finalizePlacedTarget").mockRejectedValue({
+      tag: "TerminalProviderError",
+      code: "FAKE_FINALIZE_FAILED",
+      message: "The renderer acknowledgement was lost.",
+      provider: terminal.id,
+    });
+    const release = vi.spyOn(terminal.placement, "releasePlacedTarget");
+    const logger = new CapturingLogger();
+
+    await expect(
+      ensureAgentWorkspace(
+        ensureInput(terminal, new CapturingHarnessProvider(), {
+          placementPort: terminal.placement,
+          placement: { intent: "detached" },
+          logger,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "TERMINAL_CLEANUP_UNCERTAIN" });
+    expect(finalize).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
+    expect(terminal.snapshot().closed).toEqual([]);
+    expect(logger.records).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: "Placed terminal finalization is uncertain; session state was retained.",
+      }),
+    );
+  });
+
   it("surfaces cleanup uncertainty instead of hiding a failed placed-target release", async () => {
     const terminal = new RecordingTerminalProvider({
       failures: {
