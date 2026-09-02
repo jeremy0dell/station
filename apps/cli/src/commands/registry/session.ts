@@ -16,6 +16,7 @@ const currentNotes = [
   "tmux and native Station panes can provide placement authority for session create/fork --from-current.",
   "The returned source is short-lived, one-shot bearer input; do not persist or log it.",
   "Detached placement is source-free and does not use stn session current.",
+  "Explicit --terminal tmux is the only source-free form.",
 ] as const;
 
 const exactSelectionNote =
@@ -105,7 +106,7 @@ export const sessionCliCommand: CliCommandNode = {
     },
     {
       name: "create",
-      description: "Create one complete Observer-managed tmux session.",
+      description: "Create one complete Observer-managed session.",
       usage: [
         "stn session create <projectId> --branch <branch> (--from-current | --terminal tmux) [--title <title>] [--base <ref>] [--harness <providerId>] [--layout <default|agent-only|agent-build-shell>] [--group <groupId> | --new-group <name> | --ungrouped] [--prompt-stdin] [--timeout-ms <ms>] [--json]",
       ],
@@ -113,7 +114,8 @@ export const sessionCliCommand: CliCommandNode = {
         { name: "--branch <branch>", description: "Set the exact new worktree branch." },
         {
           name: "--from-current",
-          description: "Create as a sibling of the invoking tmux pane using fresh authority.",
+          description:
+            "Create as a sibling of the invoking tmux or native Station pane using fresh authority.",
         },
         {
           name: "--terminal tmux",
@@ -153,7 +155,7 @@ export const sessionCliCommand: CliCommandNode = {
     },
     {
       name: "fork",
-      description: "Fork one exact session into a complete Observer-managed tmux session.",
+      description: "Fork one exact session into a complete Observer-managed session.",
       usage: [
         "stn session fork <sourceSessionId> --branch <branch> (--from-current | --terminal tmux) [--title <title>] [--base <ref>] [--harness <providerId>] [--layout <default|agent-only|agent-build-shell>] [--inherit-group | --ungrouped] [--copy-dirty | --no-copy-dirty] [--prompt-stdin] [--timeout-ms <ms>] [--json]",
       ],
@@ -161,7 +163,8 @@ export const sessionCliCommand: CliCommandNode = {
         { name: "--branch <branch>", description: "Set the exact forked worktree branch." },
         {
           name: "--from-current",
-          description: "Place beside the invoking tmux pane, independently of the code source.",
+          description:
+            "Place beside the invoking tmux or native Station pane, independently of the code source.",
         },
         {
           name: "--terminal tmux",
@@ -198,8 +201,8 @@ export const sessionCliCommand: CliCommandNode = {
         mutationTimeoutNote,
         "A grouped source inherits its transaction-current Group by default; --ungrouped opts out, and deletion before seed commit succeeds Ungrouped.",
         "Omitting both copy flags preserves Observer's copy-dirty default as a distinct third state.",
-        "The exact source session supplies project, worktree, and default harness. Placement may independently come from another invoking tmux pane.",
-        "No project override, provider fallback, implicit focus, native placement, or new-container mode is available.",
+        "The exact source session supplies project, worktree, and default harness. Placement may independently come from another invoking tmux or native Station pane.",
+        "No project override, provider fallback, implicit focus, or new-container mode is available.",
         "Prompt content never enters argv, fork output, or CLI process diagnostics; it remains part of the durable Observer command used for launch.",
         "A succeeded command followed by a stale or unavailable refresh exits successfully with a visible convergence warning.",
       ],

@@ -37,6 +37,36 @@ const worktree: WorktreeObservation = {
 };
 
 describe("StationPlacementService", () => {
+  it("rejects source-free placement before renderer IPC or terminal-owner mutation", async () => {
+    const request = vi.fn();
+    const openManagedWorkspace = vi.fn();
+    const service = new StationPlacementService({
+      stateDir: "/unused",
+      owner: {
+        openManagedWorkspace,
+        releaseTarget: vi.fn(),
+      },
+      request,
+    });
+
+    expect(service.supportedIntents).toEqual(["sibling"]);
+    await expect(service.validatePlacement({ intent: "detached" })).rejects.toMatchObject({
+      code: "TERMINAL_PLACEMENT_REJECTED",
+    });
+    await expect(
+      service.openPlacedWorkspace({
+        project,
+        worktree,
+        harness: "codex",
+        layout: "agent-only",
+        sessionId: "session-feature",
+        placement: { intent: "detached" },
+      }),
+    ).rejects.toMatchObject({ code: "TERMINAL_PLACEMENT_REJECTED" });
+    expect(request).not.toHaveBeenCalled();
+    expect(openManagedWorkspace).not.toHaveBeenCalled();
+  });
+
   it("keeps the representative native socket path within Darwin's limit", () => {
     const socketPath = nativePlacementSocketPath(
       "/Users/station-user/.local/state/station",

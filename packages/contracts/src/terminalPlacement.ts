@@ -48,8 +48,11 @@ export const TerminalPlacementIntentSchema = z.enum(["sibling", "detached"]);
 export type TerminalPlacementIntent = z.infer<typeof TerminalPlacementIntentSchema>;
 
 /**
- * `detached` is intentionally source-free and creates an unselected provider
- * target. Every presented destination instead requires a freshly validated source.
+ * The public placement vocabulary is closed to `sibling | detached`. Sibling
+ * placement requires fresh caller authority. Detached placement is source-free,
+ * creates an unselected target, and relies on Observer-composed provider
+ * configuration plus fresh adapter validation; clients cannot name endpoints or
+ * provider-private instances.
  */
 export const TerminalPlacementRequestSchema = z.discriminatedUnion("intent", [
   z.object({ intent: z.literal("sibling"), source: TerminalPlacementSourceSchema }).strict(),

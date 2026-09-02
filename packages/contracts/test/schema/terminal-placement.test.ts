@@ -16,9 +16,14 @@ const source = {
 describe("terminal placement contracts", () => {
   it("supports only authority-qualified sibling and source-free detached placement", () => {
     expect(TerminalPlacementRequestSchema.safeParse({ intent: "sibling" }).success).toBe(false);
-    expect(
-      TerminalPlacementRequestSchema.safeParse({ intent: "new-container", source }).success,
-    ).toBe(false);
+    for (const unsupported of [
+      { intent: "new-container" },
+      { intent: "new-container", source },
+      { intent: "new-container", destination: { provider: "native" } },
+      { intent: "new-container", source, destination: { provider: "native" } },
+    ]) {
+      expect(TerminalPlacementRequestSchema.safeParse(unsupported).success).toBe(false);
+    }
     expect(TerminalPlacementRequestSchema.safeParse({ intent: "sibling", source }).success).toBe(
       true,
     );

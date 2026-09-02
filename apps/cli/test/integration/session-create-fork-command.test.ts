@@ -407,7 +407,9 @@ describe("session create and fork commands", () => {
     ).toThrow("Placement options conflict");
     expect(() =>
       parseSessionArgs(["create", "web", "--branch", "feature/x", "--terminal", "native"]),
-    ).toThrow("--terminal must be tmux");
+    ).toThrow(
+      "--terminal supports only tmux; use --from-current from a native Station pane for native placement.",
+    );
     expect(() =>
       parseSessionArgs([
         "create",
@@ -469,6 +471,25 @@ describe("session create and fork commands", () => {
         "  Normalized  ",
       ]),
     ).toMatchObject({ title: "Normalized" });
+  });
+
+  it("rejects source-free native placement before Observer startup", async () => {
+    const fixture = await createTempState();
+    const spawnObserver = vi.fn();
+    try {
+      await expect(
+        runSessionCommand(
+          ["create", "web", "--branch", "feature/native", "--terminal", "native"],
+          { config: fixture.config },
+          { spawnObserver },
+        ),
+      ).rejects.toThrow(
+        "--terminal supports only tmux; use --from-current from a native Station pane for native placement.",
+      );
+      expect(spawnObserver).not.toHaveBeenCalled();
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
   it("rejects empty, oversized, or missing prompt stdin before Observer startup", async () => {

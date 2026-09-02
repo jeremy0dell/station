@@ -107,6 +107,7 @@ describe("session current command", () => {
     expect(manual).toContain("do not persist or log it");
     expect(manual).toContain("Detached placement is source-free");
     expect(manual).toContain("does not use stn session current");
+    expect(manual).toContain("Explicit --terminal tmux is the only source-free form");
   });
 
   it("reports missing, unknown, and extra arguments with accurate help hints", async () => {

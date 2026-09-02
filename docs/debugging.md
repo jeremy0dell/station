@@ -288,7 +288,12 @@ callers may instead run `stn session current` and reuse only its unexpired
 `source` in one sibling request. A native caller produces first-class sibling
 authority when Station proves exactly one renderer, pane/PTY generation, and
 process ancestry; Host-backed panes also require exact Host lifetime evidence.
-Native placement reserves an inactive root and does not change renderer focus.
+The provider ID names the composed placement capability, not the physical tmux
+server or native renderer. Clients cannot supply endpoints, renderer IDs, or
+socket paths. Source-free tmux placement resolves and freshly validates the
+configured endpoint and workbench; native renderer selection comes only from the
+fresh caller proof, never Station Host ownership. Native placement reserves an
+inactive root and does not change renderer focus.
 Evidence timeout or inspection failure is reported separately from a changed
 renderer or pane generation. On rejection, failure, or timeout, use the returned `commandId` with `stn command get` or
 `stn debug trace`; a successful

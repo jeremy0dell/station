@@ -477,17 +477,16 @@ export interface TerminalProvider {
 /**
  * DRIVEN PORT
  *
- * Resolves a caller claim into provider-private proof and a short-lived public
- * authority. Claims are merely hints from process environment; adapters prove
- * live topology and bounded process ancestry before minting authority. A
- * presented placement is validated once before worktree mutation and again in
- * `openPlacedWorkspace` immediately before terminal mutation. Implementations
- * must reject expiry, generation change, topology mismatch, and unknown intent;
- * they must never fall back to a current, recent, focused, or configured target.
- * After launch cancellation can no longer roll back the target, the caller
- * finalizes the exact binding so adapters can discard retained cleanup authority.
- * Finalization is the commit point: if its acknowledgement is uncertain, callers
- * retain session state and must not issue rollback for the same launch attempt.
+ * Authorizes terminal placement through a registered provider capability without
+ * exposing physical provider instances.
+ *
+ * Caller claims are untrusted, and clients cannot supply endpoints or
+ * provider-private instance identifiers. Adapters mint short-lived authority
+ * from live topology; source-free placement relies on Observer composition and
+ * fresh adapter validation. Placement is validated before worktree mutation and
+ * revalidated immediately before terminal mutation, with no inferred-target
+ * fallback. Finalization is the commit point: an uncertain acknowledgement
+ * retains session state and forbids rollback for the same launch attempt.
  */
 export interface TerminalPlacementPort {
   id: ProviderId;

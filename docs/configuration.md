@@ -140,8 +140,13 @@ harness uses the project default for create or the source session's provider for
 fork; omitted layout uses the exact project default. `--from-current` uses the
 provider carried by the freshly proved source, so callers inside tmux create a
 tmux sibling and callers inside a native Station pane create an inactive native
-root. Native placement has no configuration key, and its ordinary
-renderer-managed launch path remains separate.
+root. A placement provider ID selects a composed capability, not a physical
+provider instance. Clients cannot name a tmux endpoint, workbench session,
+renderer ID, or socket path in a placement request. Source-free placement relies
+on Observer composition and the tmux adapter's fresh validation of the configured
+server endpoint and workbench. Native placement has no configuration key, Station
+Host ownership does not select a renderer, and the ordinary renderer-managed
+launch path remains separate.
 
 | Key | Type | Notes |
 | --- | --- | --- |
