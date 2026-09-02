@@ -152,7 +152,7 @@ describe("a failed cross-build restart retains the incumbent build context", () 
             health: async () => {
               if (!running) throw new Error("stopped");
               return {
-                schemaVersion: "0.12.0",
+                schemaVersion: "0.13.0",
                 status: "healthy",
                 pid: 4321,
                 startedAt: now,
@@ -162,7 +162,7 @@ describe("a failed cross-build restart retains the incumbent build context", () 
             },
             stop: async () => {
               running = false;
-              return { schemaVersion: "0.12.0", stopped: true, at: now };
+              return { schemaVersion: "0.13.0", stopped: true, at: now };
             },
           }) as never,
       },
@@ -197,14 +197,14 @@ describe("a failed cross-build restart retains the incumbent build context", () 
         clientFactory: () =>
           ({
             health: async () => ({
-              schemaVersion: "0.12.0",
+              schemaVersion: "0.13.0",
               status: "healthy",
               pid: 4321,
               startedAt: now,
               version: compiledBuildVersion,
               socketPath: fixture.socketPath,
             }),
-            stop: async () => ({ schemaVersion: "0.12.0", stopped: true, at: now }),
+            stop: async () => ({ schemaVersion: "0.13.0", stopped: true, at: now }),
           }) as never,
       },
     );

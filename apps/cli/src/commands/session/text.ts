@@ -106,7 +106,11 @@ function renderSessionSummary(session: SessionSummary): string {
       `  terminal provider: ${escapeTerminalBytes(session.terminal.provider)}`,
       `  terminal state: ${escapeTerminalBytes(session.terminal.state)}`,
     );
-    appendOptionalBoolean(lines, "terminal focusable", session.terminal.focusable);
+    appendOptionalBoolean(
+      lines,
+      "terminal externally focusable",
+      session.terminal.externallyFocusable,
+    );
     appendOptionalBoolean(lines, "terminal closeable", session.terminal.closeable);
     appendOptionalBoolean(lines, "terminal workspace", session.terminal.hasWorkspace);
     appendOptionalBoolean(

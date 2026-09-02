@@ -324,13 +324,6 @@ async function applyNativeCreatedSessionPolicy(
       "The created session no longer matches its canonical native pane.",
     );
   }
-  if (session.terminal.focusable !== true) {
-    return createdSessionFailure(
-      "CREATED_SESSION_NOT_FOCUSABLE",
-      "The created session cannot be focused from the native dashboard.",
-    );
-  }
-
   const result = await options.managedLaunch.activate(agentWorktreePaneId(row.id), {
     projectId: row.projectId,
     worktreeId: row.id,
@@ -340,12 +333,12 @@ async function applyNativeCreatedSessionPolicy(
     return { kind: "failure", error: result.error, disposition: "remove-immediately" };
   }
   if (result.kind === "notice") {
-    return createdSessionFailure("CREATED_SESSION_FOCUS_FAILED", result.notice.message);
+    return createdSessionFailure("CREATED_SESSION_ACTIVATION_FAILED", result.notice.message);
   }
   if (!result.landed) {
     return createdSessionFailure(
-      "CREATED_SESSION_FOCUS_UNCONFIRMED",
-      "Station could not confirm that the created session was focused.",
+      "CREATED_SESSION_ACTIVATION_UNCONFIRMED",
+      "Station could not confirm that the created session was opened.",
     );
   }
   if (command.policy.dismissDashboard) options.store.actions.closeOverlay();

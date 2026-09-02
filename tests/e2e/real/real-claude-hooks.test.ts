@@ -203,7 +203,10 @@ async function waitForRowTerminalAttachment(input: {
         timeoutMs: 30_000,
       });
       const row = findRowByBranch(snapshot, input.branch);
-      if (row.terminal?.hasPrimaryAgentEndpoint === true && row.terminal.focusable === true) {
+      if (
+        row.terminal?.hasPrimaryAgentEndpoint === true &&
+        row.terminal.externallyFocusable === true
+      ) {
         return row;
       }
       await runStationJson(input.env, {

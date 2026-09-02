@@ -131,15 +131,15 @@ function resolveCanonicalTarget(
   ) {
     return { kind: "notice", notice: STALE_DASHBOARD_TARGET_NOTICE };
   }
-  if (worktreeHasLiveAgent(row) && session.terminal?.focusable !== true) {
+  if (worktreeHasLiveAgent(row) && session.terminal?.externallyFocusable !== true) {
     return {
       kind: "notice",
       notice: {
         kind: "info",
         message:
           session.terminal === undefined
-            ? "This session has no focusable terminal."
-            : `This agent runs in the "${session.terminal.provider}" terminal and can't be focused from the dashboard.`,
+            ? "This session has no terminal target."
+            : `The "${session.terminal.provider}" terminal provider can't be focused from this dashboard.`,
       },
     };
   }
@@ -253,15 +253,15 @@ async function runFocus(
   if (session === undefined) {
     return { kind: "notice", notice: STALE_DASHBOARD_TARGET_NOTICE };
   }
-  if (session.terminal?.focusable !== true) {
+  if (session.terminal?.externallyFocusable !== true) {
     return {
       kind: "notice",
       notice: {
         kind: "info",
         message:
           session.terminal === undefined
-            ? "This session has no focusable terminal."
-            : `This agent runs in the "${session.terminal.provider}" terminal and can't be focused from the dashboard.`,
+            ? "This session has no terminal target."
+            : `The "${session.terminal.provider}" terminal provider can't be focused from this dashboard.`,
       },
     };
   }

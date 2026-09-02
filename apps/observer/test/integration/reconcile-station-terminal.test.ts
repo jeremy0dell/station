@@ -83,10 +83,10 @@ describe("observer reconcile with a station-hosted target", () => {
     const stationRow = snapshot.rows.find((row) => row.id === "wt_web_station");
     expect(stationRow?.agent).toMatchObject({ harness: "claude", sessionId: "ses_station" });
     expect(stationRow?.terminal?.provider).toBe("native");
-    // A Station-hosted agent is not focusable/closeable from the dashboard — the
+    // A Station-hosted agent is not externally focusable/closeable from the dashboard — the
     // provider reports canFocusTarget/canCloseTarget:false — so the dashboard
     // does not dispatch a focus/close the station provider can only reject.
-    expect(stationRow?.terminal?.focusable).toBe(false);
+    expect(stationRow?.terminal?.externallyFocusable).toBe(false);
     expect(stationRow?.terminal?.closeable).toBe(false);
 
     // Reporting exit drops only the station target; the tmux session survives.
@@ -135,7 +135,7 @@ describe("observer reconcile with a station-hosted target", () => {
     );
   });
 
-  it("keeps a host-backed session non-focusable before and after provider reconstruction", async () => {
+  it("keeps a host-backed session externally unfocusable before and after provider reconstruction", async () => {
     const client = fakeHostClient({
       list: async () => [
         hostListEntry({
@@ -162,10 +162,10 @@ describe("observer reconcile with a station-hosted target", () => {
       worktreeId: "wt_web_station",
       terminal: { provider: "native", closeable: true },
     });
-    expect(stationSession?.terminal?.focusable).toBe(false);
+    expect(stationSession?.terminal?.externallyFocusable).toBe(false);
 
     // Observer-restart proxy: a fresh provider has no in-memory targets and must
-    // rebuild the same non-focusable projection from host.list.
+    // rebuild the same externally unfocusable projection from host.list.
     const rebuiltStation = hostBackedStation(client);
     const rebuiltCore = createObserverCore({
       config,
@@ -178,7 +178,7 @@ describe("observer reconcile with a station-hosted target", () => {
       worktreeId: "wt_web_station",
       terminal: { provider: "native", closeable: true },
     });
-    expect(rebuiltSession?.terminal?.focusable).toBe(false);
+    expect(rebuiltSession?.terminal?.externallyFocusable).toBe(false);
   });
 
   it("fails a direct native focus command without calling Station Host focus", async () => {
@@ -232,7 +232,7 @@ describe("observer reconcile with a station-hosted target", () => {
     sqlite.close();
   });
 
-  it("keeps host-backed Station fallback targets live but not dashboard-focusable", async () => {
+  it("keeps host-backed Station fallback targets live but not externally focusable", async () => {
     const station = hostBackedStation(fakeHostClient({ list: async () => [] }));
     await station.openWorkspace({
       project,
@@ -248,7 +248,7 @@ describe("observer reconcile with a station-hosted target", () => {
 
     expect(stationRow?.agent).toMatchObject({ harness: "claude", sessionId: "ses_station" });
     expect(stationRow?.terminal?.provider).toBe("native");
-    expect(stationRow?.terminal?.focusable).toBe(false);
+    expect(stationRow?.terminal?.externallyFocusable).toBe(false);
     expect(stationRow?.terminal?.closeable).toBe(false);
   });
 

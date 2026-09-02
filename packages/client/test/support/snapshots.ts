@@ -102,7 +102,7 @@ export function row(input: {
     built.terminal = {
       provider: "tmux",
       state: "open",
-      focusable: true,
+      externallyFocusable: true,
       closeable: true,
       hasWorkspace: true,
       hasPrimaryAgentEndpoint: true,
@@ -180,7 +180,8 @@ function sessionForRow(candidate: WorktreeRow): SessionView {
     provider: candidate.terminal.provider,
     state: candidate.terminal.state,
   };
-  if (candidate.terminal.focusable !== undefined) terminal.focusable = candidate.terminal.focusable;
+  if (candidate.terminal.externallyFocusable !== undefined)
+    terminal.externallyFocusable = candidate.terminal.externallyFocusable;
   if (candidate.terminal.closeable !== undefined) terminal.closeable = candidate.terminal.closeable;
   if (candidate.terminal.hasWorkspace !== undefined) {
     terminal.hasWorkspace = candidate.terminal.hasWorkspace;

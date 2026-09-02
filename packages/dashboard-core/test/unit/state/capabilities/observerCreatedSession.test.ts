@@ -95,7 +95,7 @@ describe("observer created-session capability", () => {
     expect(fixture.effects).toEqual([]);
   });
 
-  it("retains the dashboard when the exact target is not focusable", async () => {
+  it("retains the dashboard when the exact target is not externally focusable", async () => {
     const fixture = setup({ focusCreatedSession: true, dismissDashboard: true });
     const snapshot = createCommandSnapshot("idle");
     fixture.capability = createObserverCreatedSessionCapabilities({
@@ -104,7 +104,7 @@ describe("observer created-session capability", () => {
         sessions: snapshot.sessions.map((session) =>
           session.terminal === undefined
             ? session
-            : { ...session, terminal: { ...session.terminal, focusable: false } },
+            : { ...session, terminal: { ...session.terminal, externallyFocusable: false } },
         ),
       }),
       service: fixture.service,
@@ -115,7 +115,7 @@ describe("observer created-session capability", () => {
 
     await expect(fixture.capability.applyUiPolicy(fixture.command)).resolves.toMatchObject({
       kind: "failure",
-      error: { code: "CREATED_SESSION_NOT_FOCUSABLE" },
+      error: { code: "CREATED_SESSION_NOT_EXTERNALLY_FOCUSABLE" },
     });
     expect(fixture.service.dispatched).toEqual([]);
     expect(fixture.effects).toEqual([]);

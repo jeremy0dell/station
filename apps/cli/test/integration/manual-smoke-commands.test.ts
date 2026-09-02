@@ -63,7 +63,7 @@ describe("CLI manual-smoke commands", () => {
     const reconciles: Array<string | undefined> = [];
     const clientRequests: ObserverClientRequest[] = [];
     const receipt: ReconcileReceipt = {
-      schemaVersion: "0.12.0",
+      schemaVersion: "0.13.0",
       reason: "manual-smoke",
       reconciledAt: now,
       snapshot: snapshotFixture(),
@@ -452,7 +452,7 @@ function runningObserverDeps(options: {
       options.onClient?.(socketPath, clientOptions);
       const client = createObserverClient({ socketPath });
       client.health = async () => ({
-        schemaVersion: "0.12.0",
+        schemaVersion: "0.13.0",
         status: "healthy",
         pid: 1234,
         startedAt: now,
@@ -463,7 +463,7 @@ function runningObserverDeps(options: {
       client.reconcile =
         options.reconcile ??
         (async (reason?: string) => ({
-          schemaVersion: "0.12.0",
+          schemaVersion: "0.13.0",
           reason: reason ?? "manual",
           reconciledAt: now,
           snapshot: options.snapshot ?? snapshotFixture(),
@@ -476,7 +476,7 @@ function runningObserverDeps(options: {
 
 function snapshotFixture(): StationSnapshot {
   return {
-    schemaVersion: "0.12.0",
+    schemaVersion: "0.13.0",
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
     providerHealth: {},

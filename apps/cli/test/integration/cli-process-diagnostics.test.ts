@@ -699,7 +699,7 @@ function runningObserverDeps(
     clientFactory: () =>
       ({
         health: async () => ({
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           status: "healthy",
           pid: 1234,
           startedAt: now.toISOString(),

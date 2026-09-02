@@ -234,14 +234,22 @@ describeReal("real dashboard session-create navigation", () => {
     );
     const session = exactNewSession(created, baseline);
     if (session === undefined) throw new Error("Native created-session identity was ambiguous.");
+    expect(session.terminal).toMatchObject({
+      provider: "native",
+      externallyFocusable: false,
+    });
     const row = created.rows.find((candidate) => candidate.id === session.worktreeId);
     if (row === undefined) throw new Error("Native created worktree row was missing.");
     cleanup.defer(() => removeRealWorktrunkWorktree({ env, config, repo, branch: row.branch }));
 
     await waitForPaneText(config.tmuxEndpoint, launched.target, row.branch);
-    expect(
-      await captureTmuxPane({ endpoint: config.tmuxEndpoint, target: launched.target }),
-    ).not.toContain("New Session");
+    const paneText = await captureTmuxPane({
+      endpoint: config.tmuxEndpoint,
+      target: launched.target,
+    });
+    expect(paneText).not.toContain("New Session");
+    expect(paneText).not.toContain("The created session cannot be focused");
+    expect(paneText).not.toContain("The session was created successfully and remains available");
   }, 180_000);
 
   it.each([

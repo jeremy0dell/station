@@ -67,6 +67,7 @@ export type WorktreeCapabilities = z.infer<typeof WorktreeCapabilitiesSchema>;
 export const TerminalCapabilitiesSchema = z
   .object({
     canOpenWorkspace: z.boolean(),
+    /** Whether this provider can service `terminal.focus` for one of its targets. */
     canFocusTarget: z.boolean(),
     canCloseTarget: z.boolean(),
     canCaptureOutput: z.boolean(),

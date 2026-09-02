@@ -1131,7 +1131,7 @@ function createdSnapshot(
         terminal: {
           provider: "tmux",
           state: "open",
-          focusable: true,
+          externallyFocusable: true,
           closeable: true,
           hasWorkspace: true,
           hasPrimaryAgentEndpoint: true,
@@ -1156,7 +1156,7 @@ function createdSnapshot(
         terminal: {
           provider: "tmux",
           state: "open",
-          focusable: true,
+          externallyFocusable: true,
           closeable: true,
           hasWorkspace: true,
           hasPrimaryAgentEndpoint: true,
@@ -1305,7 +1305,7 @@ function sourceRow(id: string, title: string, branch: string) {
     terminal: {
       provider: "tmux",
       state: "open" as const,
-      focusable: true,
+      externallyFocusable: true,
       closeable: true,
       hasWorkspace: true,
       hasPrimaryAgentEndpoint: true,
@@ -1330,7 +1330,7 @@ function sourceSession(id: string, worktreeId: string, title: string, provider: 
     terminal: {
       provider: "tmux",
       state: "open" as const,
-      focusable: true,
+      externallyFocusable: true,
       closeable: true,
       hasWorkspace: true,
       hasPrimaryAgentEndpoint: true,

@@ -78,7 +78,7 @@ export const TerminalAttachmentSchema = z
     provider: ProviderIdSchema,
     state: TerminalStateSchema,
     /** Effective external provider-focus evidence; renderer-local opening routes are separate. */
-    focusable: z.boolean().optional(),
+    externallyFocusable: z.boolean().optional(),
     closeable: z.boolean().optional(),
     hasWorkspace: z.boolean().optional(),
     hasPrimaryAgentEndpoint: z.boolean().optional(),
@@ -294,7 +294,8 @@ export const SnapshotTerminalTargetDebugSchema = z
     worktreeId: WorktreeIdSchema.optional(),
     sessionId: SessionIdSchema.optional(),
     state: TerminalStateSchema,
-    focusable: z.boolean().optional(),
+    /** Effective external provider-focus evidence; renderer-local opening routes are separate. */
+    externallyFocusable: z.boolean().optional(),
     closeable: z.boolean().optional(),
     hasManagedAttachment: z.boolean().optional(),
     confidence: ConfidenceSchema,

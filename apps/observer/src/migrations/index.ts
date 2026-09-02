@@ -17,6 +17,7 @@ import { worktreeDisplayTitlesMigration } from "./016_worktree_display_titles.js
 import { sessionGroupsMigration } from "./017_session_groups.js";
 import { commandResultsMigration } from "./018_command_results.js";
 import { dropLegacyProviderHealthObservationsMigration } from "./019_drop_legacy_provider_health_observations.js";
+import { renameTerminalExternalFocusMigration } from "./020_rename_terminal_external_focus.js";
 
 /** @knipignore Retains the historical migration type import surface. */
 export type { ObserverSqliteMigration } from "./migration.js";
@@ -41,6 +42,7 @@ export const migrations = [
   sessionGroupsMigration,
   commandResultsMigration,
   dropLegacyProviderHealthObservationsMigration,
+  renameTerminalExternalFocusMigration,
 ] as const;
 
 export const latestSchemaVersion = migrations[migrations.length - 1]?.version ?? 0;

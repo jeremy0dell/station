@@ -420,7 +420,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
   creates stay at the Project root, while a Group-inheriting Fork targets its pending row at the
   source Group until canonical membership replaces it. Deliberate grouped creation first appears
   from a canonical snapshot with membership.
-- `terminal.focusable` describes external dashboard control, not native Station
+- `terminal.externallyFocusable` describes external provider control, not native Station
   interaction, and does not define renderer-relative openability. Native row activation
   resolves a managed attachment afresh and creates or reveals the local pane without
   dispatching `terminal.focus`; no attachment leaves the overlay open with an actionable notice.

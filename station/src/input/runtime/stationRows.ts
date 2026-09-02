@@ -5,7 +5,6 @@ import type {
   StationSnapshot,
   WorktreeRow,
 } from "@station/contracts";
-import { STATION_HOST_PROVIDER_ID } from "@station/host";
 
 const WORKTREE_APPEAR_TIMEOUT_MS = 10_000;
 const SESSION_APPEAR_TIMEOUT_MS = 10_000;
@@ -25,31 +24,6 @@ export function findWorktreeRowByBranch(
   return store
     .getState()
     .snapshot?.rows.find((row) => row.projectId === projectId && row.branch === branch);
-}
-
-/**
- * The external (non-Station) terminal provider holding this worktree, or
- * undefined when it's Station-hosted or unknown — used to tell the user a tmux
- * agent can't be shown in Station rather than focus it to no visible effect.
- */
-export function externalTerminalProviderForWorktree(
-  store: StationClientStateSource,
-  worktreeId: string,
-): string | undefined {
-  const provider = findWorktreeRowById(store, worktreeId)?.terminal?.provider;
-  return provider !== undefined && provider !== STATION_HOST_PROVIDER_ID ? provider : undefined;
-}
-
-export function nonFocusableStationTerminalForWorktree(
-  store: StationClientStateSource,
-  worktreeId: string,
-): { label: string } | undefined {
-  const row = findWorktreeRowById(store, worktreeId);
-  const terminal = row?.terminal;
-  if (row === undefined || terminal?.provider !== STATION_HOST_PROVIDER_ID) {
-    return undefined;
-  }
-  return terminal.focusable === true ? undefined : { label: row.branch };
 }
 
 /**

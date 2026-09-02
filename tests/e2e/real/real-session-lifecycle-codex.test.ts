@@ -108,7 +108,7 @@ describeReal("real Codex session lifecycle", () => {
             return (
               row.agent?.harness === "codex" &&
               row.terminal?.hasPrimaryAgentEndpoint === true &&
-              row.terminal.focusable === true
+              row.terminal.externallyFocusable === true
             );
           } catch {
             return false;
@@ -129,7 +129,7 @@ describeReal("real Codex session lifecycle", () => {
       expect(row.terminal).toMatchObject({
         provider: "tmux",
         state: expect.stringMatching(/^(open|detached|unknown)$/),
-        focusable: true,
+        externallyFocusable: true,
         hasPrimaryAgentEndpoint: true,
       });
       await expect(listTmuxWindows(config.tmuxEndpoint, config.tmuxSession)).resolves.toContain(

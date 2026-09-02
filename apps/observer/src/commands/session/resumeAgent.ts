@@ -191,7 +191,7 @@ export function createSessionResumeAgentHandler(
 function assertResumeAllowed(row: WorktreeRow | undefined): void {
   // Relaunchable states (no agent / none / exited, and unknown with a stale or
   // missing terminal — the crash-recovery case) fall through. A genuinely live
-  // agent — including unknown with an open, still-focusable target — is not
+  // agent — including unknown with an open, still externally focusable target — is not
   // overwritten. One shared predicate so resume and the Station launch agree.
   if (row === undefined || !worktreeHasLiveAgent(row)) {
     return;

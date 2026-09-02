@@ -28,7 +28,7 @@ describe("CLI observer commands", () => {
               throw new Error("stopped");
             }
             return {
-              schemaVersion: "0.12.0",
+              schemaVersion: "0.13.0",
               status: "healthy",
               pid: 1234,
               startedAt: now,
@@ -38,7 +38,7 @@ describe("CLI observer commands", () => {
           },
           stop: async () => {
             running = false;
-            return { schemaVersion: "0.12.0", stopped: true, at: now };
+            return { schemaVersion: "0.13.0", stopped: true, at: now };
           },
         }) as never,
       sleep: async () => undefined,
@@ -77,7 +77,7 @@ describe("CLI observer commands", () => {
         },
       ),
     ).resolves.toEqual({
-      schemaVersion: "0.12.0",
+      schemaVersion: "0.13.0",
       stopped: false,
       at: now,
       message: "Observer was already stopped; stale lifecycle evidence was reconciled.",
@@ -106,7 +106,7 @@ describe("CLI observer commands", () => {
               throw new Error("stopped");
             }
             return {
-              schemaVersion: "0.12.0",
+              schemaVersion: "0.13.0",
               status: "healthy",
               pid: 1234,
               startedAt: now,
@@ -116,7 +116,7 @@ describe("CLI observer commands", () => {
           },
           stop: async () => {
             running = false;
-            return { schemaVersion: "0.12.0", stopped: true, at: now };
+            return { schemaVersion: "0.13.0", stopped: true, at: now };
           },
         }) as never,
       sleep: async () => undefined,
@@ -175,7 +175,7 @@ describe("CLI observer commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.12.0",
+            schemaVersion: "0.13.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -325,7 +325,7 @@ describe("CLI observer commands", () => {
               healthCalls += 1;
               return healthCalls <= 2
                 ? {
-                    schemaVersion: "0.12.0",
+                    schemaVersion: "0.13.0",
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
@@ -333,7 +333,7 @@ describe("CLI observer commands", () => {
                     socketPath: fixture.socketPath,
                   }
                 : {
-                    schemaVersion: "0.12.0",
+                    schemaVersion: "0.13.0",
                     status: "healthy",
                     pid: 9876,
                     startedAt: now,

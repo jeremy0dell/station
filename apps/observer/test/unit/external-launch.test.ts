@@ -985,7 +985,7 @@ describe("prepareExternalLaunch", () => {
 
   it("still defers to a live unknown agent whose terminal is still open", async () => {
     const station = new FakeManagedTerminalLifecycle();
-    // Unknown but with an open, focusable terminal is genuinely reachable — hand
+    // Unknown but with an open, externally focusable terminal is genuinely reachable — hand
     // back its session rather than launching a second agent.
     const result = await prepareExternalLaunch(
       deps(

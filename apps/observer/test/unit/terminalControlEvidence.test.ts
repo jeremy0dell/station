@@ -4,19 +4,19 @@ import { terminalControlEvidence } from "../../src/reconcile/terminalControlEvid
 describe("terminal control evidence", () => {
   it("preserves the graph control policy for state, provider, and target evidence", () => {
     expect(terminalControlEvidence({ state: "detached" })).toEqual({
-      focusable: true,
+      externallyFocusable: true,
       closeable: true,
     });
     expect(terminalControlEvidence({ state: "stale" })).toEqual({ closeable: true });
     expect(terminalControlEvidence({ state: "none" })).toEqual({});
     expect(
       terminalControlEvidence({ state: "open" }, { canFocusTarget: false, canCloseTarget: false }),
-    ).toEqual({ focusable: false, closeable: false });
+    ).toEqual({ externallyFocusable: false, closeable: false });
     expect(
       terminalControlEvidence(
-        { state: "open", focusable: true, closeable: true },
+        { state: "open", externallyFocusable: true, closeable: true },
         { canFocusTarget: false, canCloseTarget: false },
       ),
-    ).toEqual({ focusable: true, closeable: true });
+    ).toEqual({ externallyFocusable: true, closeable: true });
   });
 });

@@ -70,7 +70,7 @@ describe("terminal snapshot debug evidence", () => {
           worktreeId: "wt_web_task",
           sessionId: "ses_web_task",
           state: "detached",
-          focusable: false,
+          externallyFocusable: false,
           closeable: true,
           hasManagedAttachment: false,
           confidence: "high",

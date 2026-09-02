@@ -206,7 +206,7 @@ describe("observer reconcile with fake providers", () => {
     expect(terminalDebug?.targets).toHaveLength(4);
     expect(terminalDebug?.targets.find((target) => target.id === "term_web_idle")).toMatchObject({
       provider: "fake-terminal",
-      focusable: true,
+      externallyFocusable: true,
       closeable: true,
       hasManagedAttachment: false,
     });

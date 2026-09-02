@@ -488,7 +488,7 @@ export async function launchProvenDormantRecovery(input: {
     input.branch,
     (row) =>
       row.terminal?.hasPrimaryAgentEndpoint === true &&
-      row.terminal.focusable === true &&
+      row.terminal.externallyFocusable === true &&
       row.agent?.harness === input.provider &&
       row.agent.sessionId !== undefined,
     input.timeoutMs ?? 90_000,
@@ -656,7 +656,7 @@ export function pathsReferToSameLocation(left: string, right: string): boolean {
 function hasLiveTerminal(row: WorktreeRow): boolean {
   return (
     row.terminal?.hasPrimaryAgentEndpoint === true ||
-    row.terminal?.focusable === true ||
+    row.terminal?.externallyFocusable === true ||
     row.terminal?.state === "open"
   );
 }

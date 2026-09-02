@@ -185,7 +185,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.12.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.13.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -571,7 +571,7 @@ describe("contract schemas", () => {
     const terminal = {
       provider: "tmux",
       state: "open",
-      focusable: true,
+      externallyFocusable: true,
       closeable: true,
       hasWorkspace: true,
       hasPrimaryAgentEndpoint: true,
@@ -650,7 +650,7 @@ describe("contract schemas", () => {
     const attachment = {
       provider: "tmux",
       state: "open",
-      focusable: true,
+      externallyFocusable: true,
       closeable: true,
       hasWorkspace: true,
       hasPrimaryAgentEndpoint: true,
@@ -661,6 +661,7 @@ describe("contract schemas", () => {
     expectParses(TerminalAttachmentSchema, attachment, "terminal attachment");
 
     const removedFields: Record<string, unknown> = {
+      focusable: true,
       workspaceTargetId: "term_workspace",
       primaryAgentTargetId: "term_agent",
       sessionName: "station",
@@ -701,7 +702,7 @@ describe("contract schemas", () => {
       worktreeId: "wt_terminal_evidence",
       sessionId: "ses_terminal_evidence",
       state: "open",
-      focusable: false,
+      externallyFocusable: false,
       closeable: true,
       confidence: "high",
       reason: "Station listed the managed terminal target.",
@@ -710,7 +711,7 @@ describe("contract schemas", () => {
     const attachment = {
       provider: "native",
       state: "open",
-      focusable: false,
+      externallyFocusable: false,
       closeable: true,
     };
 
@@ -734,6 +735,11 @@ describe("contract schemas", () => {
       { ...observation, hasManagedAttachment: "unknown" },
       "terminal target with non-boolean managed attachment evidence",
     );
+    expectFails(
+      TerminalTargetObservationSchema,
+      { ...observation, focusable: false },
+      "terminal target with legacy focusable evidence",
+    );
 
     expect(TerminalAttachmentSchema.parse(attachment)).not.toHaveProperty("hasManagedAttachment");
     expectFails(
@@ -751,7 +757,7 @@ describe("contract schemas", () => {
       worktreeId: "wt_web_idle",
       sessionId: "ses_web_idle",
       state: "open",
-      focusable: false,
+      externallyFocusable: false,
       closeable: true,
       hasManagedAttachment: true,
       confidence: "high",
@@ -773,6 +779,11 @@ describe("contract schemas", () => {
     const snapshotDebug = { terminal: terminalDebug };
 
     expectParses(SnapshotTerminalDebugSchema, terminalDebug, "terminal debug evidence");
+    expectFails(
+      SnapshotTerminalDebugSchema,
+      { ...terminalDebug, targets: [{ ...target, focusable: false }] },
+      "terminal debug evidence with legacy focusable evidence",
+    );
     expectParses(StationSnapshotDebugSchema, snapshotDebug, "snapshot debug evidence");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
@@ -2646,11 +2657,11 @@ describe("contract schemas", () => {
         status: "running",
         socketPath: "/tmp/station/run/observer.sock",
         health: {
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           status: "healthy",
         },
       }),
-    ).toMatchObject({ status: "running", health: { schemaVersion: "0.11.0" } });
+    ).toMatchObject({ status: "running", health: { schemaVersion: "0.12.0" } });
     expect(
       ObserverStartupFailureReportSchema.parse({
         kind: "observer-startup-failure",

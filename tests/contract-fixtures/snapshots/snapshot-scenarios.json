@@ -1,6 +1,6 @@
 {
   "noProjects": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -26,7 +26,7 @@
     "sessionGroups": []
   },
   "multipleProjects": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -115,7 +115,7 @@
     "sessionGroups": []
   },
   "zeroWorktreeProject": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -167,7 +167,7 @@
     "sessionGroups": []
   },
   "noAgentWorktree": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -241,7 +241,7 @@
     "sessionGroups": []
   },
   "idleAgent": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -292,7 +292,7 @@
         "terminal": {
           "provider": "tmux",
           "state": "open",
-          "focusable": true,
+          "externallyFocusable": true,
           "closeable": true,
           "hasWorkspace": true,
           "hasPrimaryAgentEndpoint": true
@@ -341,7 +341,7 @@
         "terminal": {
           "provider": "tmux",
           "state": "open",
-          "focusable": true,
+          "externallyFocusable": true,
           "closeable": true,
           "hasWorkspace": true,
           "hasPrimaryAgentEndpoint": true
@@ -372,7 +372,7 @@
     "sessionGroups": []
   },
   "workingAgent": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -424,7 +424,7 @@
         "terminal": {
           "provider": "tmux",
           "state": "open",
-          "focusable": true,
+          "externallyFocusable": true,
           "closeable": true,
           "hasWorkspace": true,
           "hasPrimaryAgentEndpoint": true
@@ -461,7 +461,7 @@
     "sessionGroups": []
   },
   "needsAttentionAgent": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -512,7 +512,7 @@
         "terminal": {
           "provider": "tmux",
           "state": "open",
-          "focusable": true,
+          "externallyFocusable": true,
           "closeable": true,
           "hasWorkspace": true,
           "hasPrimaryAgentEndpoint": true
@@ -549,7 +549,7 @@
     "sessionGroups": []
   },
   "stuckAgent": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -600,7 +600,7 @@
         "terminal": {
           "provider": "tmux",
           "state": "open",
-          "focusable": true,
+          "externallyFocusable": true,
           "closeable": true,
           "hasWorkspace": true,
           "hasPrimaryAgentEndpoint": true
@@ -638,7 +638,7 @@
     "sessionGroups": []
   },
   "exitedAgent": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -724,7 +724,7 @@
     "sessionGroups": []
   },
   "unknownLowConfidence": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -775,7 +775,7 @@
         "terminal": {
           "provider": "tmux",
           "state": "unknown",
-          "focusable": true,
+          "externallyFocusable": true,
           "closeable": true,
           "hasWorkspace": true
         },
@@ -812,7 +812,7 @@
     "sessionGroups": []
   },
   "orphanedTerminalTarget": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -848,7 +848,7 @@
     "sessionGroups": []
   },
   "providerFailure": {
-    "schemaVersion": "0.12.0",
+    "schemaVersion": "0.13.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,

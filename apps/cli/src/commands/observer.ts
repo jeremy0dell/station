@@ -167,7 +167,7 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
   }
   if ("health" in result) {
     const health =
-      "restartResultSchema" in result && result.restartResultSchema === "0.11.0"
+      "restartResultSchema" in result && result.restartResultSchema === "0.12.0"
         ? previousObserverHealth(result.health)
         : result.health;
     return {
@@ -184,12 +184,12 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
 }
 
 type PreviousObserverHealth = Omit<ObserverHealth, "schemaVersion" | "providerHealth"> & {
-  schemaVersion: "0.11.0";
+  schemaVersion: "0.12.0";
 };
 
 function previousObserverHealth(health: ObserverHealth): PreviousObserverHealth {
   const result: PreviousObserverHealth = {
-    schemaVersion: "0.11.0",
+    schemaVersion: "0.12.0",
     status: health.status,
   };
   if (health.pid !== undefined) result.pid = health.pid;

@@ -7349,6 +7349,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/020_rename_terminal_external_focus.ts",
+      "exports": [
+        {
+          "name": "renameTerminalExternalFocusMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -7484,6 +7503,12 @@
           "resolvedPath": "apps/observer/src/migrations/019_drop_legacy_provider_health_observations.ts",
           "edgeKind": "runtime",
           "bindings": ["dropLegacyProviderHealthObservationsMigration"]
+        },
+        {
+          "specifier": "./020_rename_terminal_external_focus.js",
+          "resolvedPath": "apps/observer/src/migrations/020_rename_terminal_external_focus.ts",
+          "edgeKind": "runtime",
+          "bindings": ["renameTerminalExternalFocusMigration"]
         },
         {
           "specifier": "./migration.js",
@@ -11328,7 +11353,7 @@
           "name": "terminalControlEvidence",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Projects target-specific and provider-wide terminal controls with the same optional semantics for canonical attachments and diagnostic target evidence."
+          "purpose": "Projects target-specific and provider-wide external focus and close controls with the same optional semantics for canonical attachments and diagnostic target evidence."
         }
       ],
       "imports": [
@@ -17036,7 +17061,7 @@
       "declaration": "terminalControlEvidence",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Projects target-specific and provider-wide terminal controls with the same optional semantics for canonical attachments and diagnostic target evidence.",
+      "purpose": "Projects target-specific and provider-wide external focus and close controls with the same optional semantics for canonical attachments and diagnostic target evidence.",
       "dependencies": []
     },
     {

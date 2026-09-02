@@ -15,7 +15,8 @@ export function stripTerminalProviderData(
   if (observation.worktreeId !== undefined) stripped.worktreeId = observation.worktreeId;
   if (observation.sessionId !== undefined) stripped.sessionId = observation.sessionId;
   if (observation.harnessRunId !== undefined) stripped.harnessRunId = observation.harnessRunId;
-  if (observation.focusable !== undefined) stripped.focusable = observation.focusable;
+  if (observation.externallyFocusable !== undefined)
+    stripped.externallyFocusable = observation.externallyFocusable;
   if (observation.closeable !== undefined) stripped.closeable = observation.closeable;
   if (observation.cwd !== undefined) stripped.cwd = observation.cwd;
   if (observation.pid !== undefined) stripped.pid = observation.pid;
