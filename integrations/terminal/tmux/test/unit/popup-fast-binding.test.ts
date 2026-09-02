@@ -302,6 +302,44 @@ describe("managed tmux popup fast binding", () => {
       );
     }
   });
+
+  it("bakes configured geometry and status bar into the open action", async () => {
+    const fixture = await createFixture({}, "managed bin", undefined, undefined, {
+      popupWidth: "60%",
+      popupHeight: "70%",
+      popupPosition: "P",
+      popupStatusBar: true,
+    });
+    await expect(runBinding(fixture)).resolves.toMatchObject({ code: 0 });
+    const action = (await fixture.calls())[1]?.args.at(-2) ?? "";
+    expect(action).toContain("display-popup -c /dev/ttys001 -w 60% -h 70% -x P -E");
+    expect(action).toContain("set-option -t _station-ui status on");
+  });
+
+  it("omits -x for the centered default position", async () => {
+    const fixture = await createFixture();
+    await expect(runBinding(fixture)).resolves.toMatchObject({ code: 0 });
+    const action = (await fixture.calls())[1]?.args.at(-2) ?? "";
+    expect(action).toContain("display-popup -c /dev/ttys001 -w 50% -h 50% -E");
+    expect(action).not.toContain(" -x ");
+    expect(action).toContain("set-option -t _station-ui status off");
+  });
+
+  it("rejects unsafe popup geometry tokens", () => {
+    const options = {
+      fallbackAlias: "/opt/station/stn-tmux-popup",
+      installedRoot: "/opt/station",
+      tmuxCommand: "/opt/homebrew/bin/tmux",
+    };
+    for (const bad of ["50 %", "50%;touch x", "#{session_name}", "", "$(id)"]) {
+      expect(() => buildManagedFastPopupRunShellCommand({ ...options, popupWidth: bad })).toThrow(
+        "safe popup geometry tokens",
+      );
+      expect(() =>
+        buildManagedFastPopupRunShellCommand({ ...options, popupPosition: bad }),
+      ).toThrow("safe popup geometry tokens");
+    }
+  });
 });
 
 type Fixture = {
@@ -317,6 +355,10 @@ async function createFixture(
   directoryName = "managed bin",
   configPath?: string,
   registeredConfigPath = configPath,
+  geometry: Pick<
+    Parameters<typeof buildManagedFastPopupRunShellCommand>[0],
+    "popupWidth" | "popupHeight" | "popupPosition" | "popupStatusBar"
+  > = {},
 ): Promise<Fixture> {
   const tempRoot = await mkdtemp(join(tmpdir(), "station-fast-binding-"));
   fixtureRoots.add(tempRoot);
@@ -398,6 +440,7 @@ exit \${FAKE_FALLBACK_EXIT:-0}
     fallbackAlias,
     installedRoot,
     tmuxCommand,
+    ...geometry,
   };
   if (configPath !== undefined) commandOptions.configPath = configPath;
   return {

@@ -18564,7 +18564,7 @@
       "declaration": "buildManagedFastPopupRunShellCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates the server-scoped installed popup owner into a silent tmux warm-path command that falls back to the exact compiled alias whenever its versioned route cannot be acted on safely.",
+      "purpose": "Translates the server-scoped installed popup owner into a silent tmux warm-path command that falls back to the exact compiled alias whenever its versioned route cannot be acted on safely. Configured popup geometry and status bar are baked into the warm-path `display-popup`, defaulting to `defaultTmuxWorkbenchConfig`; only `popup_scope = \"client\"` needs the runtime config-aware path.",
       "dependencies": []
     },
     {

@@ -396,6 +396,68 @@ describe("setup dependency checks", () => {
     );
   }, 15_000);
 
+  it("bakes configured popup geometry into the fast compiled binding at the default config location", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const home = join(root, "home");
+    const defaultConfigPath = join(home, ".config/station/config.toml");
+    const installedRoot = join(root, "installed");
+    const popupAlias = join(installedRoot, "stn-tmux-popup");
+    await mkdir(repo, { recursive: true });
+
+    const factsFor = (popup: Parameters<typeof configToml>[1]) =>
+      collectSetupFacts({
+        mode: "check",
+        cwd: repo,
+        homeDir: home,
+        compiled: true,
+        tmuxPopupOwnerRoot: installedRoot,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/hunk",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          popupAlias,
+        ]),
+        fs: readOnlyFs({ [defaultConfigPath]: configToml(repo, popup) }),
+      });
+
+    const geometry = await factsFor({
+      popupWidth: "60%",
+      popupHeight: "70%",
+      popupPosition: "P",
+      popupStatusBar: true,
+    });
+    expect(geometry.tmuxBinding.runShellCommand).toBe(
+      buildManagedFastPopupRunShellCommand({
+        installedRoot,
+        fallbackAlias: popupAlias,
+        tmuxCommand: "/fake/bin/tmux",
+        configPath: defaultConfigPath,
+        popupWidth: "60%",
+        popupHeight: "70%",
+        popupPosition: "P",
+        popupStatusBar: true,
+      }),
+    );
+    expect(geometry.tmuxBinding.runShellCommand).toContain("station-popup-binding");
+
+    const clientScope = await factsFor({ popupScope: "client" });
+    expect(clientScope.tmuxBinding.runShellCommand).toBe(
+      tmuxPopupRunShellCommand(popupAlias, defaultConfigPath),
+    );
+    expect(clientScope.tmuxBinding.runShellCommand).toContain("STATION_DISABLE_FAST_POPUP=1");
+  }, 15_000);
+
   it.each([
     {
       label: "custom geometry",
@@ -409,7 +471,9 @@ describe("setup dependency checks", () => {
       label: "visible popup status bar",
       popup: { popupStatusBar: true },
     },
-  ])("uses the config-aware popup alias for compiled bindings with $label", async ({ popup }) => {
+  ])("config-aware alias for compiled bindings with an explicit --config and $label", async ({
+    popup,
+  }) => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const home = join(root, "home");
