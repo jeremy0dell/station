@@ -1,185 +1,160 @@
 # Architecture
 
-Status: current living repository-wide system and boundary map.
+Status: current living repository-wide ownership and boundary map.
 
-Use [Philosophy](philosophy.md) for the product principles that guide Station.
-This document remains authoritative for implementation boundaries and ownership.
+Station is a terminal-native control plane for AI-agent worktree sessions. It
+correlates configured projects, provider observations, durable Observer state,
+terminal resources, and client interaction state without making any one layer
+authoritative for all of them.
 
-Use [Naming](naming.md) for provider hook, provider hook ingress, harness event report, STATION event, and observer event hook terminology.
+This document answers two questions: which repository area owns a concern, and
+which dependency directions are allowed. It deliberately does not duplicate
+subsystem flows or operating procedures.
 
-Use [Observer Architecture](observer-architecture.md) for the Observer's application model,
-dependency direction, runtime flows, state lifetimes, and active deviations. Use
-[Observer singleton lifecycle](observer-singleton.md) for process ownership, handoff,
-displacement, duplicate inspection, and explicit reap. Use
-[Architecture Documentation](architecture-documentation.md) for the controlled JSDoc language
-applied to Observer architectural seams.
+## Owning Guides
 
-station is a terminal-native control plane for AI-agent worktree sessions. It keeps repositories, worktrees, terminal targets, provider hooks, agent runs, commands, and diagnostics in one runtime graph.
+- [Philosophy](philosophy.md) owns product principles, and
+  [Naming](naming.md) owns shared terminology.
+- [Observer Architecture](observer-architecture.md) owns the Observer application
+  model, ports, adapters, use cases, persistence, and concurrency rules.
+  [Observer singleton lifecycle](observer-singleton.md) owns process and socket
+  ownership. [Architecture Documentation](architecture-documentation.md) owns
+  the controlled JSDoc role language for Observer seams.
+- [Dashboard Architecture](dashboard-architecture.md) owns renderer-independent
+  dashboard state and layout boundaries. [TUI Development](tui.md) owns the
+  OpenTUI renderer, Station Host and PTY integration, native workspace behavior,
+  and terminal interaction contracts.
+- [Configuration](configuration.md) owns TOML and environment-variable contracts.
+  [Install Station](install.md) owns install, update, and first-run behavior.
+- [Development](development.md), [Local Development](local-development.md), and
+  [Testing](../tests/README.md) own contributor procedures and verification.
+  [Debugging](debugging.md) owns runtime diagnosis and recovery procedures.
 
-## Current Shape
+## System Shape
 
-The main runtime model is:
+At runtime, config selects managed projects and concrete integrations. External
+providers report facts and perform operations through adapters. The Observer
+correlates those facts into a normalized graph and executes typed application
+operations. Protocol and client packages expose that application to the CLI and
+Station UI. The dashboard projects canonical client state, while Station owns
+terminal rendering and local pane hosting.
+
+Dependencies point toward shared contracts and application semantics. Concrete
+tools and representations remain at adapters and composition roots:
 
 ```text
-config declares managed projects and defaults
-providers observe external systems
-observer correlates provider truth into snapshots and commands
-protocol exposes observer APIs over NDJSON transport
-CLI starts, controls, and debugs the system
-TUI renders snapshots/events and submits typed commands
+CLI / Station / provider hooks
+            |
+            v
+protocol and client adapters
+            |
+            v
+Observer application -> provider-neutral ports -> integrations -> external tools
+            |
+            v
+     durable Observer state
+
+Station -> dashboard-core semantics
+Station -> Station Host / PTYs
 ```
 
-The repo is organized around these boundaries:
+The arrows show runtime conversations, not ownership of another subsystem's
+state. Composition layers may select concrete adapters; application logic may
+not reach outward around its ports.
 
-- `apps/observer` owns runtime correlation, reconciliation, command routing, provider health, persistence, hook ingestion, harness ingress queuing, diagnostics, and snapshot publication.
-- `apps/cli` owns the `stn` command surface: observer lifecycle, setup/doctor, reconcile/snapshot, hooks, debug trace, debug bundles, and terminal UI entrypoints.
-- `station/` owns the terminal UI (the OpenTUI renderer, package `@station/workspace`), including flex/intrinsic component composition and the explicit adapter from semantic identities to measured OpenTUI box coordinates. It consumes observer snapshots/events through `@station/protocol` and must not call providers directly.
-- `packages/dashboard-core` owns the render-framework-free dashboard behavior shared by Station's native workspace and standalone dashboard renderer compositions: semantic tree/identity, focus, collapse, screens, actions, lifecycle, and role entrypoints. It receives renderer-visible identities but never terminal coordinates, item heights, or scroll offsets (see [Dashboard Architecture](dashboard-architecture.md)).
-- `packages/contracts` owns shared application schemas and types, including `ObserverApi`, external-launch values, correlated command receipts/records/outcomes and strict creation results, events, snapshots, observations, provider ports, hooks, diagnostics, recovery-inventory evidence, and safe errors.
-- `packages/protocol` owns the observer NDJSON transport: envelopes, method mapping, validation execution, client/server mechanics, and fail-closed Unix-socket probing and stale-owner evidence.
-- `packages/runtime` owns shared runtime boundary helpers for timeouts, retry, cancellation, external commands, typed error conversion, and atomic text replacement.
-- `packages/setup-core` owns runtime-independent setup decisions, operation ports, and one serialized invocation-local application over normalized evidence and intent, including semantic issues, operations, plans, typed outcomes, and readiness results. The application directly enforces inspection and mutation phase order; no secondary event/effect protocol or completed-operation checkpoint collection sits between it and the ports. Its only package dependency is contracts for shared types such as `SafeError` and the CLI setup harness ID; setup-core imports no contract runtime values.
-- `packages/setup-messages` owns UI-independent setup message IDs, typed arguments, message references, and presentation copy variants. Setup core remains copy-independent; CLI presentation combines semantic setup state with this catalog.
-- `packages/client` owns the framework-neutral rich-client observer runtime: one canonical snapshot/connection state source, the event subscription/reconnect loop, event-to-snapshot reduction, and a convergence-safe Observer service whose loads and reconciliation commit to that same reducer base before resolving to Station UI consumers. Group events reduce directly only when version progress and graph relationships are safe; structural ambiguity and `session.created` enter the bounded canonical refresh chain so clients never synthesize a relationship-incomplete session. Accepted Group terminal outcomes await a canonical load. Provider-neutral typed command execution normalizes rejection, acceptance, completion, and thrown failures without owning UI policy, preserving any exact durable success result carried by the terminal command record.
-- `apps/cli/src/ingress` owns the tiny `stn-ingress` sender: raw provider hook delivery to the observer socket and offline spool writes. Events sent through this raw path normalize and compact observer-side via provider hook adapters; integrations that submit typed harness reports normalize in their own adapter.
-- `packages/station-host` owns the standalone `station-station-host` daemon contract and client: a process that owns PTYs and their bounded raw/semantic replay state beyond the Station UI lifetime, exposing attach/list/close over its own local socket so panes can warm-reattach. Station consumes it directly; Observer application code can reach host-backed terminal behavior only through an adapter supplied by CLI composition.
-- `packages/config` owns runtime-config parsing plus setup config generation, source-preserving mutation planning, validation, preconditions, backups, and atomic persistence. `packages/observability` and `packages/testing` are shared support packages.
-- `integrations/...` adapt external tools: Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, OpenCode, scripted harnesses, and GitHub repository metadata.
+## Repository Ownership
 
-## Source Of Truth
+| Area | Owns | Does not own |
+| --- | --- | --- |
+| `apps/observer` | Long-lived correlation, reconciliation, commands, provider health, ingress, persistence ports, diagnostics, and snapshot publication | Concrete provider behavior, UI policy, or transport-native representations in application logic |
+| `apps/cli` | The `stn` command surface and outer composition for Observer lifecycle, setup, diagnostics, integrations, and UI launch | Long-lived runtime truth or provider policy duplicated from adapters |
+| `station/` (`@station/workspace`) | OpenTUI rendering, renderer geometry, native workspace and pane state, and Station Host/PTY presentation integration | Provider truth, Observer persistence, or renderer-independent dashboard semantics |
+| `packages/dashboard-core` | Renderer-independent dashboard state, semantic hierarchy, focus, screens, actions, and operation flows | OpenTUI geometry, Node filesystem policy, terminal providers, or canonical Observer state |
+| `packages/client` | Canonical in-process snapshot and connection state, subscription recovery, and typed command completion for rich clients | UI policy, provider logic, or a second durable graph |
+| `packages/contracts` | Shared application schemas, values, errors, commands, events, snapshots, and provider-neutral ports | Transport mechanics or concrete adapters |
+| `packages/protocol` | NDJSON envelopes, method mapping, validation, and client/server transport mechanics | Provider selection, business policy, or application persistence |
+| `packages/config` | Runtime-config parsing, validation, source-preserving mutation, backup, and persistence | Setup presentation or runtime orchestration |
+| `packages/setup-core` / `packages/setup-messages` | Runtime-independent setup decisions and setup copy contracts | CLI interaction, concrete tool execution, or configuration storage |
+| `packages/station-host` (`@station/host`) | The local Host protocol/client and PTY lifetime, attachment, and replay contracts | Observer graph authority or dashboard presentation policy |
+| `packages/runtime` | Shared mechanics for bounded IO, cancellation, external commands, process evidence, paths, and atomic files | Product decisions that belong to an application or integration |
+| `packages/harness-shared` | Reusable harness-adapter mechanics | Provider-specific parsing or policy |
+| `packages/observability` / `packages/testing` | Shared diagnostics/redaction and test support | Production state authority |
+| `integrations/**` | Translation to Worktrunk, terminal, harness, and repository systems, including provider-private parsing and commands | Observer application policy or shared-contract ownership |
 
-No single layer owns all truth.
+Folders organize code; they do not create architectural roles by themselves.
+Name modules after the responsibility they own, and extract shared mechanics
+only when more than one owner genuinely uses the same contract.
 
-- Config is authoritative for the projects station manages, project defaults, provider choices, and safe local policy.
-- Fresh worktree-provider reads are authoritative for external worktree existence and metadata they can prove;
-  adapters do not retain list results as a second inventory.
-- Terminal providers are authoritative for ordinary terminal topology and provider-owned target identity. Reconcile-aware discovery refuses adapter-retained fallback as indeterminate even when other callers may still inspect those cached hints; Observer therefore admits only complete target reads into the current graph and debug evidence. On complete reads, a target's debug-only optional `hasManagedAttachment` is tri-state evidence: `true` means the provider can issue an opaque managed attachment, `false` means the provider definitively reports none, and omission means unknown or inapplicable. The canonical terminal attachment has no managed-attachment field. Placement is a separate explicit capability supplied by tmux and native Station, with a public vocabulary closed to `sibling | detached`; a provider ID selects the registered capability, not a physical instance. Sibling creation requires a source minted from live caller proof; Observer validates it before worktree mutation, and the selected adapter consumes and revalidates it immediately before terminal mutation. Source-free placement is authorized by Observer-composed provider configuration plus fresh adapter validation, never by client-supplied endpoints or provider-private instance identifiers. Tmux resolves its configured server endpoint and creates targets in its configured workbench session. Native proves one renderer socket, HMR generation, pane/PTY generation, bounded process ancestry, and exact Host lifetime when applicable; only that caller-derived authority selects the renderer, while Station Host ownership never does. The source remains a bearer reference within Station's same-UID local-client trust model, not a cross-user security boundary. There is no current, recent, focused, alternate-server, or configured-target fallback. Detached creation remains tmux-only and creates an unselected workbench window. Native sibling placement creates an inactive root in the proven renderer without changing focus; ordinary native launches retain their renderer-managed path.
-- Harness providers are authoritative for agent launch, present-tense run discovery observations,
-  persisted-event compatibility, status signals, and provider-native recovery artifacts they can prove. Each
-  discovered run carries its normalized current status; Observer overlays newer admitted event
-  evidence without a second provider classification call. Provider hook adapters own raw-event
-  admission, compaction, and normalization into harness reports.
-- A sealed session-rescue archive becomes temporary cutover authority only after the exact source sessions have stopped and every recovery-critical asset has been captured and hashed; a live-source archive remains evidence, not launch authority.
-- Repository providers are authoritative only for code-host metadata they fetch or cache through their integration boundary.
-- Observer SQLite is durable observer memory for command lifecycle and strict optional success results, events, correlations, explicit Station-session lifecycle, project-local Session Group definitions and exclusive membership, canonical worktree display titles keyed by project and worktree, provider observations, and current metadata cache rows. Reconcile prunes an absent Group assignment only when provider-read completeness grants authority for that project; provider uncertainty preserves the durable assignment and its Group version.
-- Observer snapshots are the normalized current graph exposed to clients. `rows` is configured
-  worktree inventory; `sessions` is canonical session membership; and `sessionGroups` is the
-  flat project-local organizational projection, retaining optional parent relationships in
-  deterministic parent-before-child order. Snapshots remain provider-truthful during degraded
-  reads and do not hydrate preserved but currently unavailable sessions from SQLite. `WorktreeRow.title` is the
-  display authority, while `SessionView.title` is its lifecycle projection. Session and activity
-  counts derive from `sessions`, while worktree counts derive from `rows`. Opt-in
-  `debug.terminal` is co-produced with the latest committed reconcile and carries its
-  `reconciledAt`, per-provider read outcomes, and sanitized current targets. It is diagnostic
-  evidence, not a second graph, mutation authority, or renderer-relative openability contract.
-  Starting a newer reconcile invalidates the retained envelope; a failed attempt leaves debug
-  absent instead of republishing evidence from the preceding generation.
-- Session start and resume resolve only from current snapshot `rows`; absence is not repaired from
-  provider-process memory. Mutating providers receive configured project context explicitly and may
-  perform a final fresh read when the operation requires race-safe identity revalidation.
-- JSONL logs and debug bundles are diagnostic evidence, not runtime truth.
-  Observer command records remain the sole default evidence for accepted CLI
-  mutations. `logs/cli.jsonl` may contain a best-effort process failure that
-  lacks adequate command evidence, or an explicitly enabled process trace; both
-  may be incomplete and never prove current state or command completion.
-- Observer recovery inventories are point-in-time retained-session and redacted recovery-handle evidence, never recovery eligibility or persistence-mutation authority.
+## Sources Of Truth
 
-When these disagree, reconcile from config, providers, and current observer state first. Treat stale logs, old bundles, and historical plans as evidence to inspect, not as authority.
+Authority is scoped. When facts disagree, resolve the owner of that fact rather
+than choosing a globally preferred layer.
+
+| Fact | Authority |
+| --- | --- |
+| Managed projects, defaults, provider choices, and local policy | Validated loaded configuration |
+| Worktrees, terminal targets, harness runs, and repository metadata | A fresh, complete read from the adapter for the owning external system |
+| Recorded commands and events, admitted Station sessions, Groups, titles, observations, and recovery evidence | Observer durable state, within the contract of each persistence port |
+| The current normalized graph presented to clients | The latest committed Observer snapshot; it is derived state, not a durable replay log |
+| Client connection state and reducible snapshot updates | The canonical `@station/client` runtime for that process |
+| Dashboard filters, focus, screens, optimistic rows, and other presentation state | The dashboard runtime; these are projections, not external or Observer truth |
+| Pane layout, renderer geometry, terminal buffers, attachments, and hosted PTY lifetime | Station and Station Host within their respective UI and Host boundaries |
+| Logs, traces, bundles, and debug projections | Diagnostic evidence only; they never authorize mutation or outrank current owner evidence |
+
+Incomplete or ambiguous provider evidence never proves absence. External
+identity remains opaque outside the integration that minted it; shared code may
+carry that identity but must not parse its format or reconstruct provider-private
+endpoints. Reconciliation combines authoritative inputs without promoting cached
+or diagnostic evidence into a second source of truth.
 
 ## Boundary Rules
 
-- Provider-specific behavior stays in `integrations/...` or provider-injected capabilities. Observer/core code aggregates through contracts, registries, and provider interfaces; session migration locates Codex, Claude, and OpenCode recovery artifacts through provider-owned adapters rather than scraping their layouts in Observer code.
-- Provider hook state crosses that boundary only as the strict `ProviderHookHealth` read model or `ProviderHookReconciliationResult`. Integrations resolve profiles and paths, parse provider files, preserve backups, run the provider-owned writer, and verify mutations with provider doctor. Observer and CLI orchestration may request those capabilities but may not inspect provider payloads or implement a second writer. Automatic reconciliation never carries takeover authority. A reconciliation budget becomes one absolute pre-commit deadline across inspection, provider locking, and the under-lock replan; after the writer begins a durable mutation, it finishes writes and provider verification. The integration serializes every resolved artifact with crash-released locks and admits ownership across every generated artifact reference it can replace or remove.
-- Station-managed terminal lifecycle is supplied as an explicit application role. Observer application code may forward opaque managed-terminal attachments returned by that role, but must not select its adapter by provider ID, reconstruct provider-owned target IDs, or expose Station Host PTY and socket mechanics. Forgetting a deterministic managed target from an external exit requires its expected Station session and opaque binding generation, so delayed exits and failed launches cannot remove a replacement binding; tokenless Host exits reconcile from provider truth.
-- Station resolves managed-terminal attachments through its own host attacher. An absent attachment permits the existing local launch; an advertised attachment that cannot resolve fails visibly and must never fall through to a local spawn. Neither canonical `externallyFocusable` nor debug-only `hasManagedAttachment` defines whether a particular renderer can open a target; renderer-local pane and attachment state remains UI-owned.
-- The Station UI is a client. It renders snapshots/events and dispatches typed commands; shared dispatch/completion normalization belongs to `@station/client`, while optimistic rows, fallback copy, toasts, and renderer effects remain dashboard or composition policy. Project and Group components own their semantic descendants and frames; physical clipping, pointer hit resolution, and focus-follow belong only to named Station layout adapters downstream of dashboard state. Station must not import providers, read SQLite, run `wt`, run `tmux`, run `git`/`gh`, or parse raw provider payloads for core behavior.
-- Observer singleton selection remains generic: non-UI commands, hooks, ingress, and protocol clients may use the healthy handoff winner selected by Observer build ordering. A command-capable Station UI launcher adds a stricter composition check after that selection and proceeds only when its complete caller selector exactly equals the accepted Observer selector. Native Station directly operates Station Host, while the pane-free popup dashboard can dispatch commands that produce later Host work, so both refuse before renderer, reconcile, popup, Host, PTY, or layout effects.
-- Checkout-local devbox orchestration explicitly converges only its configured
-  Observer socket to the checkout's exact immutable build before private hook
-  preparation and UI launch. Before awaiting work, the CLI strictly parses and
-  detaches current-only start-if-absent or restart-exact authority. Restart
-  requires complete health, pidfile, process-generation, executable-provenance,
-  recovery, and selected-handle evidence, then revalidates that evidence on one
-  identity-pinned current-schema NDJSON connection before its sole cooperative
-  stop. One absolute deadline covers inspection, stop receipt and peer closure,
-  preserve-incumbent startup, and an independent final exact inspection. Drift,
-  an unchanged admitted generation after known or uncertain mutation, or a later
-  non-target winner fails closed without mutating that winner. This explicit
-  operation adds no negotiation,
-  reconnect, signal, reap, repair, Host, update, or compatibility authority and
-  does not change generic singleton ordering.
-- The outer terminal environment is authoritative only for Station's OpenTUI
-  renderer. Its strictly observed palette is appearance authority only for the
-  embedded standalone/tmux dashboard; Station resolves that evidence into one
-  complete provider-neutral theme, and terminal providers do not participate in
-  appearance selection. Native `auto` remains Station-owned; Station does not
-  request or consume outer-palette evidence for native appearance selection.
-  Native composition supplies one resolved `StationTerminalTheme` projection
-  to the PTY registry, which remembers it for future emulator screens and fans
-  updates out to existing Station-owned screens without becoming appearance
-  authority. This visual operation changes no PTY identity, environment,
-  lifecycle, provider behavior, or Observer/Station Host contract.
-  Every Station-owned child PTY receives Station's terminal
-  identity and supported capabilities at the final native spawn boundary; local
-  bridge, Bun, and Station Host paths must not expose outer-emulator identity as
-  child capability evidence. A persistent Station Host process is never renderer
-  provenance, so Host PTYs fail closed on inherited and launch-plan tmux
-  context and on daemon-inherited color controls; only color controls carried
-  by the explicit launch request are authoritative.
-- The CLI is the command/debug entrypoint, but long-lived runtime correlation belongs in the observer. `runCliMain` alone may append best-effort process failures or exact-opt-in traces; command adapters contribute only narrow pre-render receipt correlation. Diagnostics never gate effects, change output or exit status, emit degradation warnings, or replace Observer command records.
-- First-class `stn session create` and `stn session fork` are snapshot-driven CLI adapters over the existing recorded Observer commands. They resolve exact project, source-session, provider, and Group facts, consume fresh caller-relative tmux or native authority for `--from-current`, and submit one strict command without importing provider mechanics or focusing the new target. Explicit `--terminal tmux` remains the only source-free detached placement. The durable command result remains authoritative; one bounded refreshed snapshot can confirm projection or add a non-failing convergence warning. CLI output projects only safe identities, placement, status, and bounded errors, while an initial prompt remains exclusively in the durable command payload.
-- The Observer recovery-inventory query projects provider-neutral retained-session and redacted recovery-handle evidence from one coherent persistence read. It never evaluates recovery eligibility, reconciles providers, or writes durable state.
-- Update orchestration remains in the CLI. Install-channel adapters prove physical ownership and normalize only current/target identity, mutation commands, warnings, successor launcher identity, and apply recovery they alone can own. `stn update` captures one immutable `StationBuildInfo`, selects exactly one owner, plans before mutation, and leaves package-manager channels deferred unless explicitly driven. Mutation-capable updates default to `processes` Host preservation: before install mutation the CLI performs updater-specific dry-run convergence, strictly validates the assembled durable park manifest and each live bridge's read-only identity/status, requires future bridge eligibility whenever the selected artifact can replace the incumbent, and fails closed when preservation is uncertain. `--handoff=screen` changes fidelity, while `--no-handoff` explicitly leaves the incumbent in place and warns that a later TUI may refuse it. Before a dev-checkout fast-forward moves HEAD, the loaded adapter parses the fetched target as either the legacy pnpm split workspace or an exact-version root Bun workspace, proves the target preparation scripts, and verifies the exact Bun runtime for a root-Bun target; pnpm is required only for a legacy target. The adapter then commits the fast-forward and uses that target classification for its complete frozen install, rebuild, native-helper repair, launcher relink, and idempotent recovery sequence. Preparation failure preserves the target commit. After channel apply completes, the new launcher reconciles configured provider hooks, restarts Observer, and then independently converges fresh Host evidence to its exact display/identity pair; it recovers every still-parked validated bridge before accepting an already-exact, idle-replaced, or concurrently started target. A same-version apply is a resumable convergence path through the current launcher: it reconciles hooks, idempotently starts or attaches to the accepted Observer singleton, and completes exact Host convergence without reapplying the build. Every dry-run instead captures live read-only runtime evidence, derives one canonical convergence plan, and returns before scenario resolution or mutation. A higher-build restart cooperatively stops the identity-pinned older Observer before spawning the successor; lower-build callers still refuse, and automatic handoff or signal recovery retains executable-provenance checks. Later failure does not roll back a verified installation or Git fast-forward and reports sanitized evidence plus the exact ordered hook repair, Observer, and pending Host commands; Host crossover failures retain a bounded aggregate of phase, dispositions, and recovery counts rather than per-terminal identities. An ownership-conflict recovery may report an explicit `--takeover` command for the operator to choose, but automatic reconciliation never receives takeover authority.
-- The update recovery preflight remains read-only. Every `stn update --dry-run`, including `--dry-run --reap`, composes one assessment from the shared exact Observer identity verifier, one captured Observer graph, exactly one Observer API recovery-assessment read, the shared strict-current Host inspector, provider-normalized resume and hook-health capabilities, and the canonical eligibility and newest-handle selection policies. A stopped socket does not imply absence while an exact pidfile-backed Observer process remains live. Host display version alone is insufficient to equate same-version revisions: exact Host evidence also carries immutable build identity. The inspector binds the configured socket path to inode and birth time across discovery health, incumbent-build health, exactly one identity-bound inventory read, final health, and a final endpoint probe. Non-current protocol, malformed evidence, endpoint or health drift, invalid build identity, independently duplicated terminal lifetime identities, or noncanonical terminal order is unknown rather than compatible; there is no inventory-list fallback. Its private endpoint evidence grants no mutation or pinned-session authority and is redacted from public update facts. The CLI never reads Observer persistence directly, does not claim cross-source transactional coherence, and reports typed unknown or blocked facts when identity or evidence is missing or drifts. Its public report aliases only structural local identities while preserving public correlation handles, provider names, artifact revisions, and build identities. The shared live-convergence plan contract and CLI-owned pure policy consume this aggregate with resolved install, runtime, and handoff intent to derive the selected artifact and seven named phases. The plan may report `reap-required` evidence but carries no executable authority; authorization, process-group discovery, signaling, and journals remain responsibilities of the downstream destructive executor.
-- Setup orchestration remains in the CLI. Its inspection adapter validates external facts, probes provider-owned tracking status, and normalizes only semantic evidence for the in-memory `@station/setup-core` session. `setup check`, `setup plan`, and non-interactive apply drive that session through inspect, install/preflight, re-inspect, config commit, provider tracking, Observer activation, re-inspect, optional integrations, and final verification; provider tracking must consume the committed config before startup enforces its hook intent. A failed selected required tracking operation blocks before Observer activation, while recommended tracking remains an independent best-effort operation. Recorded operation outcomes prevent completed operations from replaying within that process and make no restart-recovery claim. Config, TOML, provider payloads, and provider-native identities remain in CLI adapters; provider tracking runs in-process and only sanitized commit evidence returns to setup-core. The session view resolves no copy. `presenters/json.ts` owns the sole schema-validated check/action projection, and terminal presentation consumes that same frozen `CliSetupPlan` with semantic operation outcomes rather than constructing a parallel view. Human presenters alone resolve `@station/setup-messages` references. Guided `stn setup` now drives the same invocation-local session application through the Clack terminal adapter, including typed cancellation, staged prerequisite preparation, and the complete apply sequence; its recorded outcomes remain process-local and make no persistence or restart-recovery claim. Clack is selected only at CLI composition, owns interactive controls and compact progress, and requires TTY input and output before inspection starts. Guided presentation progressively discloses the current decision, selected prerequisite changes, and focused blockers; the complete Core/Recommended/Actions/Next diagnostic matrix remains exclusive to check and plan surfaces. Mutation consent copy keeps the decision primary and supporting effects visually secondary; trusted web sources use allowlisted OSC 8 labels, stable command names replace resolved temporary shim paths, and home-relative targets avoid exposing raw operation payloads. Tmux configuration revalidates the selected key against the exact admitted config bytes and current server immediately before mutation. Operation progress is a non-authoritative outward port: presenter failures surface only after operation evidence is incorporated and cannot rewrite outcomes. Check and plan JSON project the frozen CLI schema directly from semantic state and inspection evidence; machine actions are presentation records and never execution authority. `setup system` is a bootstrap boundary that executes ordered typed tool operations through the same CLI operation adapter, stops after the first required install failure, and then collects fresh bootstrap facts. The text presenter remains available for semantic setup results, recovery blocks, non-Clack terminal layout, styling, shell quoting, and output writing. Routine successful progress is intentionally outcome-only, without repeating path or command details already present in the plan; failures retain sanitized evidence plus exact recovery commands. Future graphical variants live beside terminal copy rather than in setup state or flow control.
-- `packages/contracts` defines shared language with strict schemas for untrusted input and shared payloads.
-- The protocol validates transport messages and keeps consumer APIs simple. It should not become a provider boundary.
-- Client processes may spawn after an absent or proven-stale socket, but only the process binding the replacement may unlink it. Fresh causal Host admission additionally requires the platform `lsof -t <socketPath>` executable and accepts only strict canonical decimal holder output from a clean, unsignaled exit. Inaccessible or uncertain ownership is preserved; pidfiles never establish liveness or authorize reclaim.
-- Observer start, stop, and restart serialize stale-evidence repair with the socket-relative boot claim. One shared read-only exact process-identity verifier classifies the strict pidfile against executable/argv, OS start token, process token, build selector, and resolved socket evidence. Repair may atomically remove only a twice-revalidated stale pidfile; it never signals or unlinks, and uncertain evidence remains a typed refusal. `observer status` and diagnostics remain read-only.
-- Effect/runtime usage belongs at IO, orchestration, timeout, retry, cancellation, queue, and external-command boundaries. Prefer Effect when one block combines async streams or subscriptions with cancellation, cleanup, retry/reconnect, timeout, queueing, or typed error mapping. Pure schemas, mappers, selectors, fixtures, and OpenTUI/React presentation components should stay plain TypeScript.
-- Provider hooks are ingress notifications and fast status reports. Adapter-backed harness hooks normalize once into reports; other hooks are persisted reconcile hints and never invoke provider operations or fabricate observations. Provider hooks can trigger projection, spool fallback, or scheduled reconcile, but they are not authoritative graph truth by themselves. Observer event hooks are configured commands triggered by STATION events and should not be conflated with provider hook ingress.
-- Every managed agent launch preflights only its selected active harness immediately before mutation: launch capability, a fresh provider-health probe, and provider-owned hook status when supported remain separate authoritative facts coordinated by one ephemeral Observer use case. This creates no readiness catalog, cache, or durable readiness state, and returning an existing live session remains ungated.
-- Recorded command handlers invoke provider-neutral terminal operations directly after command validation; there is no second intent protocol, receipt lifecycle, or command-identity cache between the command queue and terminal/harness ports. Result-producing handlers return only the shared provider-neutral result variants, which the queue correlates to the command before durable success.
-- Terminal topology is provider-owned. Shared contracts and Station UI behavior should express product intent where possible, not provider target mechanics.
-- The Station terminal provider may select a generic terminal-output compatibility policy at the managed-PTY launch boundary. Station carries the selected policy into both UI-owned fallback PTYs and Host-owned PTYs without exposing harness identity at either PTY boundary. The current policy rewrites only the exact row-1 region scroll followed by its correlated cursor-and-erase repaint.
-
-## Station UI Module Layout
-
-Within `station/`, when a directory outgrows a handful of files, keep its public surface and composition root at the directory root and push internal concern-clusters into lowercase subdirs — mirroring `terminal/`'s `protocol|pty|registry` and `state/`'s `reducers|reconcilers`. For example `input/` keeps the consumed hubs (`router`, `mouse`) and the `stationInput` composition root at root, with `keymap/` and `runtime/` beneath. `station/view/layout/` owns renderer geometry adapters whose independent outputs are semantic visibility, focus reveal, bounded overlay height, anchored placement, pointer target resolution, and measured insets; feature components must not reimplement those mechanics. Large runtime directories such as `host/` and `terminal/pty/` keep their tests in one lowercase `test/` child; smaller concerns may colocate tests beside their source. Add an `index.ts` barrel only when a directory's public symbols would otherwise be reached through deep subpaths; skip it when the public surface already sits at the root.
-
-Runtime adapters follow their actual owners: `client/` composes canonical Observer-backed or mock clients, `attention/` owns local notification effects, `config/` owns the Observer socket policy, `folderNavigation/` owns the Node filesystem adapter, `host/` owns Host inventory and socket policy, and `state/layout/` owns the durable layout path. Native and standalone renderer roots each construct folder navigation explicitly; dashboard-core owns only the port and browsing lifecycle.
-
-Observer layout follows ownership and dependency direction rather than this UI-specific shape.
-See [Observer Architecture](observer-architecture.md).
-
-## Station Subsystem
-
-The Station UI in `station/` is a `@station/client` consumer plus a terminal-hosting runtime. Its Station-owned VT vocabulary lives under `station/src/terminal/protocol/`: typed command identities, domain values, complete sequence constants, and state reducers support explicit byte templates without widening `packages/protocol` or `packages/contracts`.
-
-- The `station-station-host` daemon (`packages/station-host`) owns PTYs that outlive the UI. Its socket defaults beside the observer socket at `<state_dir>/run/station-host.sock` (override `STATION_HOST_SOCKET_PATH`). Station Host is a same-UID local control plane: access to the protected socket admits lifecycle and operational requests, including stop-if-idle, handoff, terminal close, and other Host mutations. Display version, build identity, client identity, and requested target identity provide compatibility, correctness, and correlation evidence; they are not authentication. After admission, opaque physical-connection ownership prevents handoff completion, abort, or restoration authority from migrating to another connection.
-- Host output compatibility is an optional generic spawn policy selected by integrations and applied before both scrollback retention and attached-client broadcast, so live and warm-reattached views consume one byte stream.
-- Host retains complete transformed output plus every production-geometry transition within its bounded raw replay budget. Attach returns those ordered events while complete; after eviction it prefers restoration VT from xterm's serializer plus the small set of Station-relevant modes that serializer omits. Semantic capture fails closed between xterm parser boundaries, and the client retries that transient state after later output can complete the sequence. At a safe boundary where exact reconstruction is unavailable, Host retains the live sink and returns RIS-prefixed, control-only reset data that restores the boundary-captured interaction modes and a valid active-buffer cursor anchor without historical content; Station applies it before nudging PTY geometry so cursor-relative child repaint remains positioned from the captured frame. Live resize frames remain ordered with later output.
-- Generic Host ensure is compatibility-only: it reuses the current protocol and exact display version, starts after absent or proven-stale evidence, atomically replaces an idle different-display Host, and visibly refuses a busy or incompatible incumbent. Exact artifact ownership is a separate, unversioned convergence composition over the immutable `{ buildVersion, buildIdentity }` pair. Its strict command binds one configured socket, physical incumbent endpoint, complete canonical terminal-lifetime evidence, action, and absolute deadline before I/O. Protocol-v8 `host.list` remains unchanged; `host.recoveryInventory` supplies the immutable Host identity and complete per-PTY handoff facts in canonical `{ terminalTargetId, ptyId, ptyInstanceId }` order. Each identifier is independently unique; `sessionId` is not globally unique. Exact convergence validates the incumbent on one non-reconnecting lifecycle connection, releases only that lifetime, and admits one direct successor only when the socket endpoint and pinned Host health remain unchanged before and after canonical `lsof` holder evidence. It then adopts exactly the receipt set and independently verifies the exact successor endpoint and registry. The fixed final two seconds remain reserved for settling an untransferred child. A successful transfer is the sole ownership milestone; later failures never signal the proven successor.
-- Each physical Host connection receives an opaque lifecycle owner. A successful `beginHandoff` binds pre-complete complete/abort/disconnect authority to that object; another connection cannot complete, abort, or acquire restoration authority. Abort or disconnect may return the Host to serving only after every parked entry is restored; partial restoration retains only the unproven manifest entries and blocks ordinary Host operations without transferring recovery authority to another connection. Disconnect after completion is inert. Attach still transfers replay and live frames, never PTY file descriptors; ownership moves by parking per-terminal bridges and adopting their control sockets. Adoption acknowledgements and handoff receipts correlate identities but authorize nothing until exact successor evidence confirms them.
-- Native TUI launch keeps the compatibility-only path unless `STATION_HOST_HANDOFF` is exactly `1`. Under that gate, it performs read-only exact inspection and reuses only an exact display/identity pair; a same-display different-identity Host therefore takes idle replacement or eligible live handoff. Noncanonical, unsupported, drifted, ineligible, or incomplete evidence refuses without `host.list`, cold restore, or local-spawn fallback. Canonical convergence returns the exact successor inventory used for warm restoration, preserving PTY ID, `ptyInstanceId`, replay, and live I/O. Standalone `stn host handoff` uses the same composition while retaining its existing output and exit contract; dry-run performs inspection only. Observer selectors remain independent, so UI admission is not an immutable three-process cohort rule. After invoking the native renderer, CLI composition starts one process-local owner-aware update detection and planning check with no persistent cache. It never calls the plan's apply capability; renderer resolution aborts unfinished discovery without awaiting it, and only an already-completed version-changing plan may print after a normal zero-code, unsignaled exit. Popup and fake-dashboard renderers never start this check.
-- Host output may fan out to many attachments, while a Host-issued attachment lease allows at most one controller to write or resize each PTY. Controller grants advance a per-PTY epoch and revoke the former controller before it can mutate again; detach leaves viewers and the live PTY intact without promoting either. Native renderers cache their desired geometry while viewing and reclaim only for user input, then apply the latest geometry before forwarding that input. Bare PTY identity, resize traffic, process identity, and renderer environment never grant mutation authority.
-- Host attachment response reduction strictly validates the complete PTY lifetime and immutable spawn identity, then installs that attempt's frame sink before resolving the attach promise. Output sent immediately after the acknowledgement is therefore ordered into the validated attempt instead of falling through the response-to-continuation window; a failed or mismatched replacement leaves the previous sink current.
-- A source-mode Host PTY runs behind a Node/node-pty bridge process. When the owning Host dies without an intentional stop, or when `beginHandoff` releases owner pipes without SIGTERM, that bridge can enter orphan mode: it keeps the PTY alive, parks output in a bounded backlog, and serves a per-bridge control socket under `<state_dir>/run/pty-bridges/` until a new Host adopts it or a bounded TTL reaps it. The PTY instance ID survives negotiated handoff, abort re-adoption, and crash-orphan adoption; a bridge rejects an adopter naming another instance before changing ownership. Fidelity `processes` transfers registry plus raw scrollback; `screen` additionally best-effort semantic snapshots and degrades to replay when capture fails. Compiled binaries, including immutable `v0.0.0-pre-alpha.5.2`, instead use in-process Bun PTYs. They do not expose this park/adopt boundary, so a busy compiled Host cannot preserve a live PTY across replacement and must remain in place after a visible handoff refusal. An intentional `host stop` still disposes owned PTYs.
- - Host handoff and orphan-bridge adoption preserve an existing PTY and therefore always precede application recovery. Only when no live or attachable managed target remains may native activation resume one exact provider-native handle into a new PTY under reconcile's canonical open Station session ID. This preserves provider transcript identity while leaving canonical worktree-title, status-projection, and session-readiness ownership unchanged; it does not transfer a PTY, child process, file descriptor, screen, or scrollback. If that retained Station session has no actionable recovery handle, activation requires explicit **Start fresh / Cancel** confirmation instead of falling back silently. Fresh-start consent in every renderer is bound to the selected session identity; Observer retires its superseded provider execution, recovery handles, and readiness before launching a new provider conversation under the same Station session. Terminal adapters may replace their old target, while native Station additionally keeps pane layout and retained pane transcript.
-- Observer external-launch results carry only an opaque managed-terminal target identity. Station resolves exactly one matching live Station Host PTY for the expected Station session immediately before pane creation, then retains its canonical PTY reference across reconnects; duplicate targets or stale identity fail visibly without a local-spawn fallback. Socket paths and PTY identity remain on the Station side of the boundary.
-- Pane liveness is split from pane layout and attachment availability. A proven-exited managed pane retains its transcript and layout until explicit dashboard activation successfully prepares and recycles that exact runtime entry; direct pane navigation never relaunches it. On a UI restart while the host survives, panes **warm-reattach** through the Host's boundary-captured replay or mode-restoring live reset; on a cold start (reboot or host down) the saved layout spec **cold-respawns** fresh shells in their saved working directory. Compatibility and exhausted-transport failures mark the pane attachment unavailable without reporting a process exit to Observer; inability to reconstruct historical output does not block a live attachment. Layout persists to `<state_dir>/station/layout.json` (override `STATION_LAYOUT_PATH`), which deliberately does not fall back to `XDG_RUNTIME_DIR` so it survives a reboot.
-- "New Session" and Fork in Station host the agent in a Station pane by dispatching observer `worktree.create` or `worktree.fork` with the resolved `launchHarness`, rather than launching an external tmux session. The optional field distinguishes launch-bound mutation from ordinary worktree-only commands; Station reuses that exact harness for later external preparation. New Session may carry an existing-root or inline-create Group placement, while Fork may carry source-session Group inheritance with an explicit Ungrouped opt-out; Observer resolves source membership and commits placement with the fresh session seed before target publication. Native deliberate creation settles only after the canonical snapshot carries the complete requested relationship, with one bounded refresh before a non-retryable warning. A pre-launch Group rejection removes only the exact fresh worktree through the ordinary non-force removal command; uncertain removal retains it and closes the flow with recovery guidance. Liveness decisions (launch vs. focus, destructive guards) route through the shared `worktreeHasLiveAgent` contract in `packages/contracts`.
-- Each `DashboardRuntime` owns one private effect scope for dashboard operations, capability completion, directory polling, and failed-row expiry. Disposal closes admission synchronously, detaches subscriptions, clears owned timers, suppresses late state writes, and asynchronously drains already-started bounded work before the renderer composition stops its client.
-- Native and standalone dashboard composition each inject Station's Node folder-navigation adapter. Dashboard-core resolves browsing, search, review, parent navigation, and polling only through that required port and imports no Node filesystem or path policy.
-
-This subsystem is the Bun-executed `@station/workspace` package in the root Bun
-workspace. Node 24 remains the source runtime for the CLI, Observer, and default
-PTY bridge, while OpenTUI and renderer dependencies stay owned by Station. See
-`docs/local-development.md` for the dev host workflow and `docs/debugging.md`
-for the runtime-topology checklist.
+- Provider-specific behavior belongs in `integrations/**` or an injected
+  provider capability. Observer application code depends on provider-neutral
+  contracts and must not parse raw provider payloads, invoke provider commands,
+  or select a concrete adapter to recover private identity.
+- Parse untrusted TOML, JSON, CLI, hook, protocol, and provider input once at its
+  boundary with the owning strict schema. Pass typed application values inward;
+  keep raw payloads and representation-specific errors at the adapter edge.
+- `packages/protocol` adapts transport to application contracts. It must not
+  become a provider boundary or a home for product policy.
+- Composition roots choose concrete adapters and own their lifecycle. Anything
+  that owns a socket, process, timer, queue, watcher, or durable handle must have
+  an explicit startup-failure and shutdown owner.
+- Station is an Observer client. Core UI behavior must not import provider
+  packages, read Observer SQLite, shell out to provider, terminal-multiplexer,
+  Git, or repository tools, or infer runtime truth from provider-private data.
+- Observer sees Station-managed terminals only through provider-neutral
+  lifecycle contracts and opaque target identity. Host sockets, PTY identity,
+  replay, attachment, and renderer selection stay inside Station or its terminal
+  integration.
+- Dashboard-core owns semantic state and identity. Station owns measured
+  terminal geometry, clipping, pointer resolution, focus-follow, and painting.
+  Neither side may recreate the other's state as a parallel authority.
+- Setup decisions remain independent of presentation and concrete execution:
+  setup-core decides, setup-messages names copy, config owns persistence, and CLI
+  composition supplies adapters and interaction.
+- CLI composition owns native update discovery as one process-local, read-only
+  check with no persistent cache. Only a completed version-changing result can
+  become a TUI notice; [Install Station](install.md#automatic-update-ownership)
+  and [TUI Development](tui.md#renderers-and-entry-points) own its behavior.
+- Observer and Station Host sockets are same-user local control planes. Access
+  to their protected endpoints admits privileged operations; PID, version, and
+  build metadata provide identity or compatibility evidence, not authentication.
+  Ambiguous ownership fails closed, and only freshly proven ownership may
+  authorize unlink, replacement, signaling, handoff, or destructive cleanup.
+- Retry, fallback, and destructive behavior stay with the boundary that can
+  prove identity, idempotency, and safe repetition. A failed advertised
+  capability must not silently fall through to a second implementation that
+  could duplicate work or abandon owned state.
 
 ## Conflict Rule
 
-For ordinary work, current code, current tests, package scripts, runtime evidence, and these living docs supersede old planning baselines.
+This document is authoritative for repository ownership and allowed dependency
+direction. Current code, tests, schemas, and runtime evidence establish what the
+program does; the owning living document establishes the durable subsystem
+contract or procedure.
 
-When a living doc conflicts with current code or tests, verify the runtime/code path and update the doc in the same change if the doc is stale.
+If implementation and a living document disagree, determine which is stale and
+correct it in the same change. Historical plans, release narratives, audit
+findings, and old acceptance evidence are context only, never current authority.
