@@ -17,7 +17,7 @@ Choose the path that matches what you want to do:
 | Goal | Start with |
 | --- | --- |
 | Install Station safely | [Install Station](install.md) |
-| Let a coding agent handle installation | [Agent-led install prompt](install.md#let-your-agent-install-and-validate-station) |
+| Let a coding agent handle installation | [Agent-led install prompt](../README.md#let-your-agent-install-and-validate-station) |
 | Create your first agent session | [Quick start](quick-start.md) |
 | Understand the system before using it | [Overview](overview.md) |
 | Understand the choices behind Station | [Philosophy](philosophy.md) |

@@ -22,44 +22,11 @@ ownership. On Linux, install it with `sudo apt-get install lsof` (Debian/Ubuntu)
 or `sudo dnf install lsof` (Fedora/RHEL). See
 [System dependencies](system-dependencies.md) for the complete setup contract.
 
-## Let Your Agent Install and Validate Station
+## Let an Agent Install Station
 
-If you prefer an agent-led install, paste this prompt into a coding agent on the
-target machine:
-
-```text
-Install experimental Station v0.0.0-pre-alpha.14.3 and validate setup on this machine.
-
-Safety and scope:
-- Do not clone the repository or build from source. Use only
-  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.3/install.sh`.
-- Install to `~/.local/bin` unless I approve another location. Do not edit any
-  shell startup file. If the installer reports a PATH mismatch, do not assume
-  an export persists across agent tool calls or reaches my Terminal. Use the
-  absolute installed `stn` path for every remaining agent command, show me the
-  exact future-shell export, and treat it as an unfinished manual step until I
-  verify all three launchers in a new shell.
-- Do not infer or add the current directory as a Station project.
-
-Validation:
-1. Verify all three absolute installed launcher paths and run `stn --version`
-   through the absolute installed path. Record `command -v stn`,
-   `command -v stn-ingress`, and `command -v stn-tmux-popup` only as evidence
-   about the current agent execution context.
-2. Run the guided `stn setup` through the absolute installed path and let me
-   answer its choices. If you cannot pass through an interactive prompt, ask me
-   to run it, then continue afterward.
-3. Run `stn setup check --json` and `stn doctor` through the absolute installed
-   path.
-4. Report the installed path and version, whether setup reports
-   `summary.requiredOk: true`, doctor health, future-shell verification state,
-   and any remaining manual steps. A valid zero-project config is acceptable.
-   Do not claim success while a required check is failing or future-shell PATH
-   remains unverified.
-```
-
-The agent should stop at approval boundaries rather than inventing setup
-choices.
+Use the canonical [agent-led install and validation prompt](../README.md#let-your-agent-install-and-validate-station)
+from the repository README, then return here for the full install, verification,
+setup, update, and recovery reference.
 
 ## Install the Exact Public Pre-Alpha
 

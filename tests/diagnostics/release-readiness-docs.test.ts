@@ -45,7 +45,7 @@ describe("release readiness docs", () => {
     expect(readme).toContain("docs/quick-start.md");
     expect(readme).toContain("docs/limitations.md");
     expect(docsReadme).toContain("## Start Here");
-    expect(docsReadme).toContain("install.md#let-your-agent-install-and-validate-station");
+    expect(docsReadme).toContain("../README.md#let-your-agent-install-and-validate-station");
     expect(docsReadme).toContain("## Use Station");
     expect(docsReadme).toContain("## Develop Station");
     expect(docsReadme).toContain("../tests/README.md");
@@ -70,39 +70,38 @@ describe("release readiness docs", () => {
     expect(localRealConfig).not.toContain('profile = "default"');
   });
 
-  it("provides an agent-led binary install and setup validation prompt", async () => {
+  it("keeps the agent-led install prompt in one canonical location", async () => {
     const [readme, install] = await Promise.all(["README.md", "docs/install.md"].map(read));
 
-    for (const document of [readme, install]) {
-      const prompt = agentInstallPrompt(document);
-      const normalizedPrompt = prompt.replace(/\s+/g, " ").toLowerCase();
-      expect(document.replace(/\s+/g, " ").toLowerCase()).toContain(
-        "let your agent install and validate station",
-      );
-      expect(prompt).toContain(
-        "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.3/install.sh",
-      );
-      expect(prompt).toContain("v0.0.0-pre-alpha.14.3");
-      expect(prompt).toContain("stn setup check --json");
-      expect(prompt).toContain("stn doctor");
-      expect(prompt).toContain("summary.requiredOk: true");
-      expect(normalizedPrompt).toContain("do not clone the repository or build from source");
-      expect(normalizedPrompt).toContain("do not edit any shell startup file");
-      expect(normalizedPrompt).not.toContain("github token");
-      expect(normalizedPrompt).not.toContain("gh auth");
-      expect(normalizedPrompt).not.toContain("latest");
-      expect(normalizedPrompt).not.toContain("homebrew");
-      expect(normalizedPrompt).not.toContain("ref=main");
-      expect(normalizedPrompt).not.toContain("/main/");
-      expect(normalizedPrompt).toContain("absolute installed `stn` path");
-      expect(normalizedPrompt).toContain(
-        "only as evidence about the current agent execution context",
-      );
-      expect(normalizedPrompt).toContain("unfinished manual step");
-      expect(normalizedPrompt).toContain("verify all three launchers in a new shell");
-      expect(normalizedPrompt).toContain("do not claim success");
-    }
-    expect(agentInstallPrompt(readme)).toBe(agentInstallPrompt(install));
+    const prompt = agentInstallPrompt(readme);
+    const normalizedPrompt = prompt.replace(/\s+/g, " ").toLowerCase();
+    expect(readme.replace(/\s+/g, " ").toLowerCase()).toContain(
+      "let your agent install and validate station",
+    );
+    expect(prompt).toContain(
+      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.3/install.sh",
+    );
+    expect(prompt).toContain("v0.0.0-pre-alpha.14.3");
+    expect(prompt).toContain("stn setup check --json");
+    expect(prompt).toContain("stn doctor");
+    expect(prompt).toContain("summary.requiredOk: true");
+    expect(normalizedPrompt).toContain("do not clone the repository or build from source");
+    expect(normalizedPrompt).toContain("do not edit any shell startup file");
+    expect(normalizedPrompt).not.toContain("github token");
+    expect(normalizedPrompt).not.toContain("gh auth");
+    expect(normalizedPrompt).not.toContain("latest");
+    expect(normalizedPrompt).not.toContain("homebrew");
+    expect(normalizedPrompt).not.toContain("ref=main");
+    expect(normalizedPrompt).not.toContain("/main/");
+    expect(normalizedPrompt).toContain("absolute installed `stn` path");
+    expect(normalizedPrompt).toContain(
+      "only as evidence about the current agent execution context",
+    );
+    expect(normalizedPrompt).toContain("unfinished manual step");
+    expect(normalizedPrompt).toContain("verify all three launchers in a new shell");
+    expect(normalizedPrompt).toContain("do not claim success");
+    expect(install).toContain("../README.md#let-your-agent-install-and-validate-station");
+    expect(install).not.toContain("Install experimental Station v0.0.0-pre-alpha.14.3");
   });
 
   it("keeps the Node.js 24.2+ development requirement consistent", async () => {
