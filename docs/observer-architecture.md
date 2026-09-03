@@ -341,11 +341,15 @@ The use case that produces an event owns whether it is persisted and whether
 persistence precedes publication. Callers must not infer a global
 persist-before-publish guarantee.
 
-The process-local event bus is currently unbounded and provides no replay or
-publisher backpressure. The Observer protocol adapter separately bounds each
-connection by frame count, bytes, and socket backpressure. Overflow closes only
-that connection and requires the client to resynchronize from a snapshot.
-Other transports do not inherit this policy automatically.
+The process-local event bus provides no replay or publisher backpressure. Each
+subscriber has a fixed event-count capacity; overflow releases that queue and
+ends only that subscription, requiring the client to resynchronize from a
+snapshot. Observer health reports the current queue depth, per-subscriber
+capacity, high-water depth, and content-free overflow, disconnect,
+resync-required counts and reason. The Observer protocol adapter separately
+bounds each connection by frame count,
+bytes, and socket backpressure. Other transports do not inherit the protocol
+policy automatically.
 
 Observer command records are the default evidence for accepted mutations.
 Process logs, exact-opt-in traces, and debug bundles are best-effort,

@@ -240,6 +240,14 @@ describe("Observer API composition with in-memory persistence", () => {
     await expect(api.health()).resolves.toMatchObject({
       status: "healthy",
       sqlite: healthStub,
+      eventBus: {
+        activeSubscribers: 0,
+        queuedEvents: 0,
+        subscriberCapacity: 1_024,
+        overflowCount: 0,
+        disconnectCount: 0,
+        resyncRequiredCount: 0,
+      },
     });
     await expect(api.collectDiagnostics({ includeLogs: false })).resolves.toMatchObject({
       observerHealth: {

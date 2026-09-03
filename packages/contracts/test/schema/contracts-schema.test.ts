@@ -2353,6 +2353,16 @@ describe("contract schemas", () => {
             finishedAt: "2026-05-20T12:00:02.000Z",
           },
         },
+        eventBus: {
+          activeSubscribers: 1,
+          queuedEvents: 12,
+          subscriberCapacity: 1_024,
+          highWaterQueuedEvents: 64,
+          overflowCount: 1,
+          disconnectCount: 1,
+          resyncRequiredCount: 1,
+          lastOverflowReason: "subscriber-capacity",
+        },
       },
       "observer health",
     );

@@ -210,6 +210,21 @@ export const HarnessIngressQueueHealthSchema = z
 
 export type HarnessIngressQueueHealth = z.infer<typeof HarnessIngressQueueHealthSchema>;
 
+export const ObserverEventBusHealthSchema = z
+  .object({
+    activeSubscribers: z.number().int().nonnegative(),
+    queuedEvents: z.number().int().nonnegative(),
+    subscriberCapacity: z.number().int().positive(),
+    highWaterQueuedEvents: z.number().int().nonnegative(),
+    overflowCount: z.number().int().nonnegative(),
+    disconnectCount: z.number().int().nonnegative(),
+    resyncRequiredCount: z.number().int().nonnegative(),
+    lastOverflowReason: z.literal("subscriber-capacity").optional(),
+  })
+  .strict();
+
+export type ObserverEventBusHealth = z.infer<typeof ObserverEventBusHealthSchema>;
+
 export const ObserverHealthSchema = z
   .object({
     schemaVersion: SchemaVersionSchema,
@@ -221,6 +236,7 @@ export const ObserverHealthSchema = z
     stateDir: nonEmptyStringSchema.optional(),
     uptimeMs: z.number().nonnegative().optional(),
     hookSpoolDepth: z.number().int().nonnegative().optional(),
+    eventBus: ObserverEventBusHealthSchema.optional(),
     harnessIngressQueue: HarnessIngressQueueHealthSchema.optional(),
     providerHealth: z.record(ProviderIdSchema, ProviderHealthSchema).optional(),
     sqlite: ObserverSqliteHealthSummarySchema.optional(),
