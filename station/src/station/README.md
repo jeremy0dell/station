@@ -1,105 +1,36 @@
-# Station STATION View
+# Station Dashboard Renderer
 
-The full read-only dashboard surface behind Ctrl-O / header-click.
-Architecture: render-framework-free dashboard behavior comes
-from `@station/dashboard-core`; the OpenTUI render layer under `view/` and the
-Station input/mouse plumbing stay local. Input registers into Station's router:
-the overlay keymap slot delegates to the shared transition machine
-(`input/stationOverlayLayer.ts`), and both native and standalone mouse targets
-resolve through one pure `routeStationMouse` (`input/stationMouse.ts`).
+`station/src/station` is the OpenTUI presentation layer shared by the native
+workspace and standalone dashboard compositions. It turns renderer-neutral
+dashboard state into views, measured terminal layout, scrolling, and pointer
+targets.
 
-## Running it
+`@station/dashboard-core` owns semantic state, focus, transitions, operations,
+and capability contracts. Renderer compositions supply canonical client state
+and capabilities. Code here remains provider-neutral and must not become a
+second source of Observer, session, or Group truth.
 
-```bash
-cd station
+## Local invariants
 
-# live observer (default)
-bun run station
+- Views receive read-only dashboard state; semantic input goes through
+  `DashboardActions`.
+- Terminal coordinates, clipping, scroll position, and pointer hit testing stay
+  in the renderer layer and do not enter dashboard-core state.
+- While the dashboard or another modal covers native panes, ordinary keyboard,
+  paste, and pointer input must not reach hidden PTYs or mutate the hidden pane
+  layout. Those panes remain alive for return after dismissal.
 
-# deterministic fixtures, no observer needed
-STATION_SOURCE=mock bun run station
-STATION_SOURCE=mock STATION_SCENARIO=many-projects bun run station
-STATION_SOURCE=mock STATION_SCENARIO=attention-and-failures bun run station
-STATION_SOURCE=mock STATION_SCENARIO=disconnected bun run station
+## Develop
+
+From the repository root, start the isolated devbox with UI hot reload:
+
+```sh
+bun run station:devbox dev
 ```
 
-Ctrl-O or header click toggles STATION mode; the shell pane survives underneath.
-Ctrl-Q always exits Station. Pane split, focus, and close chords are ignored while
-the dashboard is open so the hidden native layout cannot change.
+Use the owning guides for details:
 
-## Input
-
-Runtime keyboard dispatch goes through the shared dashboard-core transition
-machine. Workflow mouse targets call `DashboardActions.dispatch(...)` with
-renderer-neutral Dashboard actions; direct commands and focused Enter decode to the
-same core intents, and the runtime applies every resulting transition and semantic
-capability execution through one executor.
-`DashboardRuntime.state` is read-only (`getState`, `getInitialState`, and
-`subscribe`), while `DashboardRuntime.actions` is the only external mutation
-authority. Presentation receives the state source; input receives state plus actions;
-`createStation` alone owns `start` and asynchronous repeat-safe `dispose`. Disposal
-closes actions immediately, cancels dashboard subscriptions and timers, prevents late
-state writes, and drains already-started operations before the composition stops its
-client. Native and standalone HMR release renderer/stdin ownership synchronously and
-await the prior dashboard disposer before composing a replacement; native HMR retains
-the compatible workspace store and live PTYs.
-
-Every renderer injects session-activation, managed-session, shell-opening, and
-dismissal capabilities plus required folder navigation. Native Station composes those
-capabilities with managed panes, overlay authority, and `folderNavigation/nodeFolderService.ts`;
-standalone rendering composes Observer commands, popup IPC, and the same Node adapter.
-Dashboard state contains no renderer control intents, and dashboard-core owns optimistic
-rows, notices, failures, and expiry. Native pointer Create, direct `C`, and focused
-Create Enter therefore converge after semantic resolution and shared validation before
-the same managed-session capability invocation.
-
-## Acceptance suite
-
-- `bun run test` — everything below; `bun run typecheck`.
-- Dashboard binding behavior:
-  `../../../packages/dashboard-core/test/unit/state/keymap.test.ts`.
-- Sequence translation: `input/sequenceToTuiKey.test.ts`.
-- Mouse guard matrix + click/key equivalence: `input/stationMouse.test.ts`.
-- Router/runtime conformance (reserved chords, modal swallow, paste,
-  overlay-close): `../input/stationIntegration.test.ts`.
-- Live command dispatch through the shared client (focus, jump-to-session,
-  Z-through-runtime, convergence, recovery): `store/stationCommandDispatch.test.ts`.
-- Source-adjacent action rendering:
-  `view/sheets/AddProjectSheetView.test.tsx` and
-  `view/sheets/NewSessionSheetView.test.tsx`.
-- Golden frames: `view/dashboard.golden.test.tsx` (scenario × size matrix +
-  span color probes), `view/modals.golden.test.tsx` (all modal and focused-action views).
-- Isolation: `importBoundaries.test.ts` (no apps/tui imports, only linked
-  @station packages, no local ported fork, no `focusable`).
-
-## Command execution
-
-Live mode dispatches through the single shared `@station/client` service: one
-client runtime owns canonical snapshot/connection state and the `ObserverService`
-used by commands (`../client/observerStationClient.ts`). Its provider-neutral
-`executeObserverCommand` primitive dispatches typed commands and normalizes
-rejection, acceptance, successful completion, completion failure, and thrown
-failure exactly once while retaining receipt/trace identity. Dashboard and native
-callers continue to own optimistic rows, operation-specific fallback copy, toasts,
-and launch or popup effects. Reconcile and operation snapshot loads commit through
-the client runtime before resolving, so the next event reduces from the same
-snapshot object dashboard projection receives through its read-only client-state
-subscription. Row-activate focus, jump-to-session on click, and `Z` refresh are live
-(`store/stationCommandDispatch.test.ts`).
-
-Mock mode keeps the rejecting service by design
-(`store/stubObserverService.ts`): mutating commands run the shared operations
-paths (pending rows, TTL revert, toasts) and resolve as rejected receipts
-naming mock mode.
-
-Known gap: canonical client state carries snapshot and connection truth, not a
-notice queue, so `command.failed` event notices do not independently surface as
-toasts; failures still toast once through command-completion waits on focus and
-operation paths.
-
-## Known not-yet
-
-- Footer hint chips and help rows are not click targets; the footer renders as
-  one truncated string.
-- The attention marker is static red `!` per the visual notes
-  recommendation (pulse deferred).
+- [Dashboard architecture](../../../docs/dashboard-architecture.md)
+- [TUI development](../../../docs/tui.md)
+- [Local development](../../../docs/local-development.md)
+- [Testing](../../../tests/README.md)
