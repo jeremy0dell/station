@@ -24,7 +24,10 @@ import {
   runUpdateSuccessorCommand,
   type UpdateCommandDeps,
   type UpdateCommandOptions,
+  type UpdateSuccessorRunner,
 } from "../update.js";
+
+type UpdateSuccessorResult = Awaited<ReturnType<UpdateSuccessorRunner>>;
 
 export const updateCliCommand: CliCommandNode = {
   name: "update",
@@ -80,11 +83,12 @@ async function runUpdateCliCommand(context: CliCommandRunContext) {
   const deps = createUpdateDeps(context, loaded);
   if (isSuccessorInvocation(context.args)) {
     const stdin = context.options.stdin ?? (await readStdinIfAvailable({ maxBytes: 64 * 1024 }));
-    return runUpdateSuccessorCommand({
-      ...(stdin === undefined ? {} : { stdin }),
+    const input: Parameters<typeof runUpdateSuccessorCommand>[0] = {
       options,
       deps,
-    });
+    };
+    if (stdin !== undefined) input.stdin = stdin;
+    return runUpdateSuccessorCommand(input);
   }
   return runUpdateCommand(context.args, options, deps);
 }
@@ -205,14 +209,15 @@ function createSuccessorRunner(
   suppliedDeps: UpdateCommandDeps,
 ): NonNullable<UpdateCommandDeps["runSuccessor"]> {
   return async (input) => {
+    const handoff: UpdateSuccessorRequest["handoff"] =
+      input.handoff === undefined
+        ? { action: "leave-in-place" }
+        : { action: "preserve", fidelity: input.handoff };
     const request: UpdateSuccessorRequest = {
       schemaVersion: 1,
       channel: input.channel,
       target: input.target,
-      handoff:
-        input.handoff === undefined
-          ? { action: "leave-in-place" }
-          : { action: "preserve", fidelity: input.handoff },
+      handoff,
       hookProviderIds: [...input.hookProviderIds],
     };
     const transportOptions: UpdateSuccessorTransportInput = {
@@ -224,7 +229,7 @@ function createSuccessorRunner(
       transportOptions.commandRunner = suppliedDeps.commandRunner;
     }
     const receipt = await runUpdateSuccessorTransport(transportOptions);
-    const result = {
+    const result: UpdateSuccessorResult = {
       status: receipt.status,
       finalInspection: receipt.finalInspection,
       hookReconciliations: receipt.hookReconciliations,
@@ -233,20 +238,13 @@ function createSuccessorRunner(
         status: action.status,
         detail: action.detail,
       })),
-      ...(receipt.status === "failed"
-        ? {
-            recoveryCommands: [
-              retrySuccessorCommand(
-                input.launcher,
-                loaded.configPath,
-                input.channel,
-                input.handoff,
-              ),
-            ],
-          }
-        : {}),
-      ...(receipt.error === undefined ? {} : { error: receipt.error }),
     };
+    if (receipt.status === "failed") {
+      result.recoveryCommands = [
+        retrySuccessorCommand(input.launcher, loaded.configPath, input.channel, input.handoff),
+      ];
+    }
+    if (receipt.error !== undefined) result.error = receipt.error;
     return result;
   };
 }
@@ -272,13 +270,9 @@ function retrySuccessorCommand(
   handoff: "processes" | "screen" | undefined,
 ): readonly [string, ...string[]] {
   const [command, ...prefix] = launcher;
-  return [
-    command,
-    ...prefix,
-    ...(configPath === undefined ? [] : ["--config", configPath]),
-    "update",
-    "--channel",
-    channel,
-    ...(handoff === undefined ? ["--no-handoff"] : [`--handoff=${handoff}`]),
-  ];
+  const retryCommand: [string, ...string[]] = [command, ...prefix];
+  if (configPath !== undefined) retryCommand.push("--config", configPath);
+  retryCommand.push("update", "--channel", channel);
+  retryCommand.push(handoff === undefined ? "--no-handoff" : `--handoff=${handoff}`);
+  return retryCommand;
 }
