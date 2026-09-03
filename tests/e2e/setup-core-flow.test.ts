@@ -48,6 +48,19 @@ describe("setup core flow e2e", () => {
       await writeShim(bin, "npm", "echo 0.1.0\n");
       await writeShim(
         bin,
+        "npx",
+        [
+          'if [ "$1 $2" != "--yes bun@1.4.0" ]; then',
+          '  echo "unexpected npx $*" >&2',
+          "  exit 2",
+          "fi",
+          "shift 2",
+          `exec "${bunBin}" "$@"`,
+          "",
+        ].join("\n"),
+      );
+      await writeShim(
+        bin,
         "wt",
         'if [ "$1" = "--version" ]; then echo "worktrunk 1.2.3"; exit 0; fi\nexit 0\n',
       );
