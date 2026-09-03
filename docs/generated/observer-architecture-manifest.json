@@ -11814,7 +11814,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventFilter", "StationEvent"]
+          "bindings": ["EventFilter", "ObserverEventBusHealth", "StationEvent"]
         },
         {
           "specifier": "@station/runtime",

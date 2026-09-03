@@ -104,6 +104,66 @@ describe("observer protocol server", () => {
     }
   });
 
+  it("disconnects an overflowed event subscriber and accepts a fresh subscription", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const fixture = createObserverFixture(socketPath, 2);
+    const server = await startObserverServer({
+      socketPath,
+      api: fixture.api,
+      clock: fixture.clock,
+    });
+    const client = createObserverClient({ socketPath, requestId: ids("event-overflow") });
+    const stalled = client.subscribe()[Symbol.asyncIterator]();
+    const stalledNext = stalled.next();
+    const event = {
+      type: "observer.reconciled" as const,
+      at: now,
+      changed: 0,
+    };
+
+    try {
+      await vi.waitFor(() => {
+        expect(fixture.eventBus.health()).toMatchObject({ activeSubscribers: 1 });
+      });
+      fixture.eventBus.publish(event);
+      fixture.eventBus.publish(event);
+      fixture.eventBus.publish(event);
+      fixture.eventBus.publish(event);
+
+      await expect(stalledNext).rejects.toMatchObject({
+        code: "PROTOCOL_SUBSCRIPTION_CLOSED",
+      });
+      await expect(client.health()).resolves.toMatchObject({
+        eventBus: {
+          activeSubscribers: 0,
+          queuedEvents: 0,
+          subscriberCapacity: 2,
+          highWaterQueuedEvents: 2,
+          overflowCount: 1,
+          disconnectCount: 1,
+          resyncRequiredCount: 1,
+          lastOverflowReason: "subscriber-capacity",
+        },
+      });
+
+      const fresh = client.subscribe()[Symbol.asyncIterator]();
+      const freshNext = fresh.next();
+      await vi.waitFor(() => {
+        expect(fixture.eventBus.health()).toMatchObject({ activeSubscribers: 1 });
+      });
+      fixture.eventBus.publish(event);
+      await expect(freshNext).resolves.toEqual({ done: false, value: event });
+      await fresh.return?.();
+      await vi.waitFor(() => {
+        expect(fixture.eventBus.health()).toMatchObject({ activeSubscribers: 0, queuedEvents: 0 });
+      });
+    } finally {
+      await stalled.return?.();
+      await server.close();
+      fixture.sqlite.close();
+    }
+  });
+
   it("does not report generic attach ready when startup cancellation wins", async () => {
     const { dir, socketPath } = await createTempSocketPath();
     const fixture = createObserverFixture(socketPath);
@@ -847,7 +907,7 @@ describe("observer protocol server", () => {
   });
 });
 
-function createObserverFixture(socketPath: string) {
+function createObserverFixture(socketPath: string, subscriberCapacity?: number) {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
   const persistence = createSqliteObserverPersistence({
@@ -855,7 +915,9 @@ function createObserverFixture(socketPath: string) {
     clock,
     idFactory: observerIds(),
   });
-  const eventBus = createObserverEventBus();
+  const eventBus = createObserverEventBus(
+    subscriberCapacity === undefined ? {} : { subscriberCapacity },
+  );
   const queue = createCommandQueue({
     persistence,
     clock,
@@ -901,7 +963,7 @@ function createObserverFixture(socketPath: string) {
     eventBus,
     clock,
   });
-  return { api, queue, sqlite, clock };
+  return { api, queue, eventBus, sqlite, clock };
 }
 
 const config: StationConfig = {

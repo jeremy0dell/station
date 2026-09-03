@@ -628,6 +628,7 @@ async function buildHealth(
   if (options.socketPath !== undefined) health.socketPath = options.socketPath;
   if (options.stateDir !== undefined) health.stateDir = options.stateDir;
   if (spoolDepth !== undefined) health.hookSpoolDepth = spoolDepth;
+  health.eventBus = options.eventBus.health();
   health.harnessIngressQueue = harnessIngressQueue.health();
   health.sqlite = options.persistenceHealth.health();
   if (coreHealth.lastReconcile !== undefined) health.lastReconcile = coreHealth.lastReconcile;

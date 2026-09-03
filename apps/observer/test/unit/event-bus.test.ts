@@ -124,4 +124,81 @@ describe("observer event bus", () => {
     await expect(next).resolves.toEqual({ done: false, value: matchingEvent });
     await iterator.return?.();
   });
+
+  it("preserves order through the subscriber capacity and releases returned queues", async () => {
+    const bus = createObserverEventBus({ subscriberCapacity: 2 });
+    const iterator = bus.subscribe()[Symbol.asyncIterator]();
+    const first = failedEvent(1);
+    const second = failedEvent(2);
+
+    bus.publish(first);
+    bus.publish(second);
+
+    expect(bus.health()).toEqual({
+      activeSubscribers: 1,
+      queuedEvents: 2,
+      subscriberCapacity: 2,
+      highWaterQueuedEvents: 2,
+      overflowCount: 0,
+      disconnectCount: 0,
+      resyncRequiredCount: 0,
+    });
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: first });
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: second });
+    expect(bus.health()).toMatchObject({ queuedEvents: 0, highWaterQueuedEvents: 2 });
+
+    await iterator.return?.();
+    expect(bus.health()).toMatchObject({ activeSubscribers: 0, queuedEvents: 0 });
+  });
+
+  it("disconnects only a lagging subscriber while a healthy subscriber stays responsive", async () => {
+    const bus = createObserverEventBus({ subscriberCapacity: 2 });
+    const stalled = bus.subscribe()[Symbol.asyncIterator]();
+    const healthy = bus.subscribe()[Symbol.asyncIterator]();
+
+    for (const sequence of [1, 2, 3]) {
+      const next = healthy.next();
+      const event = failedEvent(sequence);
+      bus.publish(event);
+      await expect(next).resolves.toEqual({ done: false, value: event });
+    }
+
+    expect(bus.health()).toEqual({
+      activeSubscribers: 1,
+      queuedEvents: 0,
+      subscriberCapacity: 2,
+      highWaterQueuedEvents: 2,
+      overflowCount: 1,
+      disconnectCount: 1,
+      resyncRequiredCount: 1,
+      lastOverflowReason: "subscriber-capacity",
+    });
+    await expect(stalled.next()).resolves.toEqual({ done: true, value: undefined });
+
+    const next = healthy.next();
+    const event = failedEvent(4);
+    bus.publish(event);
+    await expect(next).resolves.toEqual({ done: false, value: event });
+    await healthy.return?.();
+
+    expect(bus.health()).toMatchObject({
+      activeSubscribers: 0,
+      queuedEvents: 0,
+      overflowCount: 1,
+      disconnectCount: 1,
+      resyncRequiredCount: 1,
+    });
+  });
 });
+
+function failedEvent(sequence: number): StationEvent {
+  return {
+    type: "command.failed",
+    commandId: `cmd_${sequence}`,
+    error: {
+      tag: "EventBusTestError",
+      code: "EVENT_BUS_TEST",
+      message: `Event bus test ${sequence}.`,
+    },
+  };
+}
