@@ -123,6 +123,10 @@ function GroupBranchView({
   const row = branch.row;
   if (row.payload.type !== "groupHeader") return null;
   const renderableId = `station-dashboard-group:${row.id}`;
+  const frameFocus = {
+    focusedHeader: row.focusedCellId !== undefined,
+    containsFocusedRow: row.containsFocusedRow === true,
+  };
   const header = (
     <GroupHeaderView
       renderableId={semanticItemRenderableId(row.id)}
@@ -131,6 +135,7 @@ function GroupBranchView({
       payload={row.payload}
       cells={row.cells}
       focusedCellId={row.focusedCellId}
+      {...(row.payload.collapsed ? {} : { frameFocus })}
     />
   );
   if (row.payload.collapsed) {
@@ -141,13 +146,7 @@ function GroupBranchView({
     );
   }
   return (
-    <GroupFrameView
-      renderableId={renderableId}
-      focus={{
-        focusedHeader: row.focusedCellId !== undefined,
-        containsFocusedRow: row.containsFocusedRow === true,
-      }}
-    >
+    <GroupFrameView renderableId={renderableId} focus={frameFocus}>
       {header}
       {branch.children.map((child) => (
         <DashboardBranchView

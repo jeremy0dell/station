@@ -207,8 +207,14 @@ describe("dashboard golden frames", () => {
     expect(groupsFirstFrame).toContain("[a]");
     expect(groupsFirstFrame).toContain("[b]");
     expect(groupsFirstFrame).toContain("[c]");
+    const designHeader = groupsFirstLines.find((line) => line.includes("▼ Design refresh"));
+    expect(designHeader?.trimEnd()).toMatch(
+      /Design refresh 2 sessions─+ \[quick session\] \[▾\]─╮$/u,
+    );
     const emptyHeader = groupsFirstLines.findIndex((line) => line.includes("▼ Post-launch"));
-    expect(groupsFirstLines[emptyHeader + 1]?.trim()).toMatch(/^╰─+╯$/u);
+    expect(groupsFirstLines[emptyHeader]?.trimEnd()).toMatch(/^╭─.*─╮$/u);
+    expect(groupsFirstLines[emptyHeader + 1]?.trimEnd()).toMatch(/^╰─+╯$/u);
+    expect(groupsFirstLines[emptyHeader + 2]).toContain("▼ Release train");
 
     const collapsed = await renderDashboard({
       width: 120,
@@ -276,6 +282,7 @@ describe("dashboard golden frames", () => {
     expect(hasAncestor(group, "station-dashboard-project:project:station")).toBe(true);
     expect(lines[firstLine]?.startsWith("│")).toBe(true);
     expect(lines[firstLine]?.trimEnd().endsWith("│")).toBe(true);
+    expect(lines[firstLine + 1]?.trimEnd()).toMatch(/^╰─+╯$/u);
   });
 
   it("lays out mixed-height children and follows semantic focus through resize and reflow", async () => {
@@ -434,14 +441,14 @@ describe("dashboard golden frames", () => {
     });
     const lines = setup.captureCharFrame().split("\n");
     const project = lines.find((line) => line.includes("▼ 界e\u0301"));
-    const group = lines.find((line) => line.includes("▼ A 界e\u0301") && line.startsWith("│"));
+    const group = lines.find((line) => line.includes("▼ A 界e\u0301") && line.startsWith("╭─"));
 
     expect(project).toBeDefined();
     expect(group).toBeDefined();
     expect(project).not.toContain("�");
     expect(group).not.toContain("�");
     expect(project?.replace(/[▐▕▲▼]$/u, "").trimEnd().endsWith("[sh] [qs] [▾]")).toBe(true);
-    expect(group?.replace(/[▐▕▲▼]$/u, "").trimEnd().endsWith("[qs] [▾]│")).toBe(true);
+    expect(group?.replace(/[▐▕▲▼]$/u, "").trimEnd().endsWith("[qs] [▾]─╮")).toBe(true);
     expect(cellWidth(project ?? "")).toBe(40);
     expect(cellWidth(group ?? "")).toBe(40);
   });
@@ -519,10 +526,18 @@ describe("dashboard golden frames", () => {
     const memberColumn = memberLines[memberRow]?.indexOf("group-contracts") ?? -1;
     const spans = member.captureSpans();
     const ring = spanAtFrameCell(spans, headerRow, 0);
+    const headerRuleColumn = memberLines[headerRow]?.search(/─{2,}/u) ?? -1;
 
-    expect(spanHex(ring)).toBe(stationColorSnapshotValue(nativeStationTheme.status.working));
+    expect(spanHex(ring)).not.toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.working),
+    );
+    expect(spanHex(ring)).not.toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hairline),
+    );
+    expect(headerRuleColumn).toBeGreaterThan(-1);
+    expect(spanHex(spanAtFrameCell(spans, headerRow, headerRuleColumn))).toBe(spanHex(ring));
     expect(((ring?.attributes ?? 0) & TextAttributes.DIM) !== 0).toBe(false);
-    expect(memberLines[memberRow]).toMatch(/^│▏/u);
+    expect(memberLines[memberRow]).toMatch(/^│ ▏/u);
     expect(memberLines[memberRow]?.match(/▏/gu)).toHaveLength(1);
     expect(spanBgHex(spanAtFrameCell(spans, memberRow, memberColumn))).toBe(
       stationColorSnapshotValue(nativeStationTheme.interaction.keyboardFocus),
@@ -535,25 +550,25 @@ describe("dashboard golden frames", () => {
         visibility: { quickSession: true, menu: true },
         quickSession: true,
         menu: true,
-        expandedSuffix: "[qs] [▾]│",
+        expandedSuffix: "[qs] [▾]─╮",
       },
       {
         visibility: { quickSession: true, menu: false },
         quickSession: true,
         menu: false,
-        expandedSuffix: "[qs]│",
+        expandedSuffix: "[qs]─╮",
       },
       {
         visibility: { quickSession: false, menu: true },
         quickSession: false,
         menu: true,
-        expandedSuffix: "[▾]│",
+        expandedSuffix: "[▾]─╮",
       },
       {
         visibility: { quickSession: false, menu: false },
         quickSession: false,
         menu: false,
-        expandedSuffix: "│",
+        expandedSuffix: "─╮",
       },
     ] as const;
 
@@ -580,13 +595,13 @@ describe("dashboard golden frames", () => {
           expect(line?.replace(/[▐▕]$/u, "").trimEnd().endsWith(testCase.expandedSuffix)).toBe(
             true,
           );
-          expect(line?.lastIndexOf("│")).toBe(78);
+          expect(line?.lastIndexOf("╮")).toBe(78);
         }
       }
     }
   });
 
-  it("keeps Group frame cells inert and restores target focus after hover", async () => {
+  it("keeps Group edge cells inert and restores target focus after hover", async () => {
     const targets: StationMouseTarget[] = [];
     const groupId = dashboardRowIds.group("group_design_refresh");
     const setup = await renderDashboard({

@@ -18,6 +18,10 @@ import {
   useStationMouse,
 } from "./stationMouseContext.js";
 import { dashboardQuickSessionActionLabel } from "./dashboardHeaderActionLabels.js";
+import {
+  GroupFrameHeaderRule,
+  type GroupFrameFocus,
+} from "./GroupFrameView.js";
 
 const MENU_LABEL = "[▾]";
 
@@ -40,6 +44,7 @@ export function GroupHeaderView({
   payload,
   cells,
   focusedCellId,
+  frameFocus,
 }: {
   renderableId?: string;
   columns: number;
@@ -47,6 +52,7 @@ export function GroupHeaderView({
   payload: DashboardGroupHeaderPayload;
   cells: readonly DashboardCellId[];
   focusedCellId?: DashboardCellId | undefined;
+  frameFocus?: GroupFrameFocus;
 }) {
   const actions = groupHeaderActions(cells, Math.max(1, Math.floor(columns)));
   const dimmed = payload.persistentFilterMatch?.matched === false;
@@ -66,7 +72,11 @@ export function GroupHeaderView({
           dimmed={dimmed}
           persistentFilterMatch={payload.persistentFilterMatch}
         />
-        <box flexGrow={1} />
+        {frameFocus === undefined ? (
+          <box flexGrow={1} />
+        ) : (
+          <GroupFrameHeaderRule focus={frameFocus} />
+        )}
       </box>
       {actions.map((action) => (
         <Fragment key={action.cellId}>

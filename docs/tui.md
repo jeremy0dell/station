@@ -249,6 +249,12 @@ settings, Help, menus, and filter conditions follow the same rule: semantic
 content stays mounted while one renderer-owned body scrolls inside a bounded
 surface.
 
+An expanded Group shares its top edge with the semantic header row and fills
+otherwise-empty cells between the header labels and corner chrome. Its full
+bottom edge remains a dedicated footer row. The frame uses the quiet hairline
+color by default, bright working color for header focus, and dim working color
+while a direct member has focus.
+
 Use `@station/dashboard-core/text` for grapheme-safe terminal-cell measurement,
 clipping, and truncation. JavaScript string length and indices are not terminal
 geometry. Optional headers and indicators should be absent when empty rather
