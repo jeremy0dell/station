@@ -13,7 +13,7 @@ describe("release readiness docs", () => {
 
     expect(install).toContain(notice);
     expect(tui).toContain(notice);
-    for (const document of [architecture, install, tui]) {
+    for (const document of [architecture, tui]) {
       expect(document).toContain("one process-local");
       expect(document).toContain("no persistent cache");
       expect(document).toContain("version-changing");
@@ -55,9 +55,10 @@ describe("release readiness docs", () => {
     expect(docsReadme).not.toContain("homebrew.md");
     expect(quickStart).toContain("Add your first project");
     expect(quickStart).toContain("Create Session");
-    expect(install).toContain("Node.js 24.2+");
-    expect(install).toContain("bun run smoke:release");
-    expect(install).toContain("examples/local-real-config.toml");
+    expect(install).toContain("development.md");
+    expect(install).toContain("local-development.md");
+    expect(install).toContain("system-dependencies.md");
+    expect(install).toContain("single-binary.md");
     expect(limitations).toContain("Agent Status Can Be Conservative");
     expect(limitations).not.toMatch(/TODO|Test Coverage Gaps|Remaining work/i);
     expect(systemDependencies).toContain("tmux");
@@ -106,13 +107,9 @@ describe("release readiness docs", () => {
 
   it("keeps the Node.js 24.2+ development requirement consistent", async () => {
     const documents = await Promise.all(
-      [
-        "README.md",
-        "docs/development.md",
-        "docs/install.md",
-        "docs/system-dependencies.md",
-        "docs/homebrew.md",
-      ].map(read),
+      ["README.md", "docs/development.md", "docs/system-dependencies.md", "docs/homebrew.md"].map(
+        read,
+      ),
     );
 
     for (const document of documents) {
@@ -279,15 +276,11 @@ describe("release readiness docs", () => {
       "Each accepted agent is attempted independently",
     );
     expect(install).toContain("streams the child installer's terminal output");
-    expect(install.replace(/\s+/g, " ")).toContain(
-      "The old `v0.7.1-rc.*` releases were internal previews",
-    );
-    expect(install).toContain("Automatic-update ownership");
+    expect(install).toContain("## Update Station");
     expect(install).toContain("stn update --dry-run --json");
     expect(install).toContain("stn update --drive-package-manager");
-    expect(install).toContain("defaults to preserving");
+    expect(install).toContain("default to preserving");
     expect(install).toContain("--no-handoff");
-    expect(install).toContain("first incumbent capable of attempting the next self-update");
     expect(releasing).toMatch(/never publishes the draft automatically/);
     expect(releasing).toContain("accepted-release-candidate-*");
     expect(releasing).toContain("target build identity");
@@ -390,19 +383,10 @@ describe("release readiness docs", () => {
       expect(document, path).toContain("<install-dir>/.station-install.lock/owner-*");
       expect(document, path).toContain("<data-home>/station/.station-install.lock");
       expect(document, path).toContain("<data-home>/station/.station-install.lock/owner-*");
-      expect(normalized, path).toContain("requested tag");
-      expect(normalized, path).not.toContain("requested tag or `latest`");
-      expect(document, path).toContain("token");
-      expect(document, path).toMatch(/10(?:-second| seconds)/);
-      expect(document, path).toMatch(/existing\s+Station\s+installation\s+was\s+unchanged/);
-      expect(document, path).toContain("sole runtime commit point");
-      expect(document, path).toMatch(/129, 130, (?:and|or) 143/);
-      expect(document, path).toContain("4096");
-      expect(document, path).toContain("124");
-      expect(document, path).toContain("125");
-      expect(document, path).toContain("SIGKILL");
+      expect(document, path).toMatch(/existing\s+Station\s+installation\s+unchanged/);
       expect(document, path).toMatch(/power\s+loss/i);
       expect(normalized, path).toMatch(/no post-power-loss durability guarantee/);
+      expect(document, path).toContain("Atomic rename");
       expect(document, path).toContain("fsync");
       expect(document, path).toContain("manually");
       expect(document, path).toContain("alive");
@@ -419,6 +403,33 @@ describe("release readiness docs", () => {
     ]) {
       expect(releasing).toContain(acceptance);
     }
+  });
+
+  it("keeps the install guide focused on current installation and recovery", async () => {
+    const install = await read("docs/install.md");
+    const lines = install.split("\n");
+
+    expect(lines.length).toBeLessThanOrEqual(220);
+    for (const [index, line] of lines.entries()) {
+      expect(
+        line.length,
+        `docs/install.md:${index + 1} exceeds 120 characters`,
+      ).toBeLessThanOrEqual(120);
+    }
+    for (const link of [
+      "system-dependencies.md",
+      "single-binary.md",
+      "quick-start.md",
+      "configuration.md",
+      "development.md",
+      "local-development.md",
+      "../tests/README.md",
+    ]) {
+      expect(install).toContain(link);
+    }
+    expect(install).not.toMatch(
+      /## Development Requirements|## Fresh Development Checkout|## Local Command|## Local Real Config|v0\.7\.1-rc|\.5\.2|status 124|status 125/,
+    );
   });
 
   it("documents the complete first-run handoff after the binary install", async () => {

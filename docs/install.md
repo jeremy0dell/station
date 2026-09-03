@@ -5,26 +5,22 @@ Station is experimental pre-alpha software. The current public version is
 
 ## Binary Requirements
 
-The compiled binary supports these targets:
+The compiled binary supports:
 
 - macOS 13 or newer on Apple silicon (`darwin-arm64`)
 - macOS 13 or newer on Intel (`darwin-x64`)
 - glibc 2.39 or newer Linux on arm64 (`linux-arm64`)
 - glibc 2.39 or newer Linux on x64 (`linux-x64`)
 
-Windows and musl Linux are not supported. The binary install needs `curl` and
+Windows and musl Linux are not supported. Installation requires `curl` and
 either `sha256sum` or `shasum`; it does not require a GitHub account, GitHub CLI,
-a source checkout, Homebrew, Node.js, or Bun. `stn setup` handles the
-separate tools needed for the complete agent workflow after Station is
-installed. Report feedback through
-[GitHub Issues](https://github.com/jeremy0dell/station/issues).
+a source checkout, Homebrew, Node.js, or Bun.
 
-Station uses the platform `lsof` executable (`/usr/sbin/lsof` on macOS,
-`/usr/bin/lsof` on Linux) to prove causal ownership when admitting a Station
-Host and to prove that an unreachable Unix socket has no live owner. Setup
-therefore reports its absence as a required failure. Linux VM images can install
-it with `sudo apt-get install lsof` (Debian/Ubuntu) or `sudo dnf install lsof`
-(Fedora/RHEL); macOS normally includes it.
+The complete workflow also uses external tools configured by `stn setup`.
+Station requires the platform `lsof` executable to prove Station Host and socket
+ownership. On Linux, install it with `sudo apt-get install lsof` (Debian/Ubuntu)
+or `sudo dnf install lsof` (Fedora/RHEL). See
+[System dependencies](system-dependencies.md) for the complete setup contract.
 
 ## Let Your Agent Install and Validate Station
 
@@ -73,13 +69,10 @@ From any directory, run:
 curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.3/install.sh | sh
 ```
 
-The released `install.sh` is stamped with `v0.0.0-pre-alpha.14.3`. With no
-arguments it downloads only that tag's matching native archive and
-`SHA256SUMS` over unauthenticated HTTPS. The old `v0.7.1-rc.*` releases were
-internal previews, not predecessors in the public version line.
-
-The installer selects the matching platform archive, verifies it against
-`SHA256SUMS`, and installs these launchers in `~/.local/bin` by default:
+The installer downloads only the stamped tag's matching native archive and
+`SHA256SUMS`. It verifies the checksum, archive contents, and embedded version
+before atomically activating `stn`. It installs these launchers in
+`~/.local/bin` by default:
 
 ```text
 stn
@@ -87,15 +80,17 @@ stn-ingress
 stn-tmux-popup
 ```
 
-It also installs the redistributed license under
-`${XDG_DATA_HOME:-$HOME/.local/share}/station/`.
+It also installs the license and an ownership receipt used by `stn update`. It
+does not read, create, or edit shell startup files, and installation does not add
+the current directory as a Station project. The compiled runtime contract is in
+[Single-binary Station](single-binary.md).
 
 ## Verify the Install
 
-The installer physically verifies all three launchers. If the install directory
-is not visible in the current shell, it prints an exact current-shell recovery
-block and one export command for future shells. For the default directory, the
-current-shell commands are:
+The installer physically verifies all three launcher names. If the install
+directory is not visible in the current shell, it prints a current-shell PATH
+block, a future-shell export for your chosen shell configuration, and an
+`Absolute fallback` command. For the default directory, run:
 
 ```bash
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
@@ -103,34 +98,16 @@ export PATH
 hash -r
 
 command -v stn
+command -v stn-ingress
+command -v stn-tmux-popup
 stn --version
 ```
 
-`command -v stn` should resolve to `~/.local/bin/stn`, and `stn --version`
-should print the installed release version. If another `stn` shadows the binary,
-use the exact PATH block or the `Absolute fallback` printed by the installer.
-
-The PATH assignment affects only the current shell. Copy the installer's exact
-export into the chosen shell configuration if you want it applied in future
-shells. If an agent runs the assignment, it does not change your Terminal or a
-later login shell; the agent should continue through the absolute installed
-`stn` path and report future-shell PATH as unverified until you check all three
-launchers in a new shell. The installer does not read, create, or edit shell
-startup files.
-
-Successful setup preserves the final probe's current-process launcher
-mismatch under **Remaining**, including the selected absolute launcher paths.
-When installed launchers share one directory, setup also repeats a safely
-quoted current-shell PATH block and uses the absolute selected `stn` executable
-for its immediate doctor and launch commands. It explains that the absolute
-commands already work and that configuring the shorter `stn` name is optional.
-For that convenience, use PATH rather than a `stn` alias so all three launcher
-names resolve together; setup names the directory, leaves shell-configuration
-selection to the user, and prints `command -v` checks for all three names. It
-does not edit a startup file or generate a future-shell export. If the installer
-current-shell block repaired PATH before setup, the final probe is clean and
-setup stays concise, but a future login shell remains unverified until you test
-it separately.
+All three names should resolve under `~/.local/bin`, and `stn --version` should
+print the installed release version. The PATH assignment affects only the
+current shell. Add the installer's exact export to your chosen shell
+configuration if you want it applied in future shells, then verify all three
+names in a new shell.
 
 ## Use a Custom Install Directory
 
@@ -141,16 +118,14 @@ curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0
   sh -s -- --install-dir "$HOME/bin"
 ```
 
-Use the PATH and absolute commands printed by that install rather than the
-default `~/.local/bin` examples. The normalized install directory cannot
-contain `:` because PATH uses `:` to separate entries. This validation happens
-before network requests, temporary-directory creation, or destination mutation.
+Use the PATH and absolute commands printed by that install. The normalized
+directory cannot contain `:` because PATH uses `:` to separate entries. The
+installer rejects that path before network requests,
+temporary-directory creation, or destination mutation.
 
 ## Complete First-Run Setup
 
-Run setup only after `stn --version` succeeds. Guided setup requires a real terminal connected to
-both stdin and stdout; piping answers is unsupported. If a coding agent cannot pass through that
-TTY, it must ask you to run `stn setup` directly and continue with read-only JSON checks afterward.
+Run setup after `stn --version` succeeds:
 
 ```bash
 stn setup
@@ -159,417 +134,65 @@ stn doctor
 stn tui
 ```
 
-Setup uses immediate Y/N controls and navigable agent menus. Guided output starts with a compact
-read-only inspection step, then shows only the current decision or blocker. Before installing
-required tools, it names the selected installations and presents each official Homebrew Formulae
-page as a compact terminal hyperlink; the complete machine inventory remains available through
-`stn setup check`. Later consent prompts keep the decision as the primary line and visually subdue
-the command, home-relative target, bounded effect, and important non-effects. Station asks before
-installing tools or updating Station,
-provider, shell, or tmux configuration. Ctrl-C cancels safely: completed
-bootstrap, installer, config, hook, shell, or tmux changes remain committed, and rerunning setup
-inspects the current state before continuing. Native Homebrew and agent-installer output remains
-live between explicit Station start and finish boundaries; no Clack prompt or spinner competes for
-the terminal.
+Guided setup needs a real terminal connected to stdin and stdout. It asks before
+installing tools or changing Station, provider, shell, or tmux configuration.
+Setup never starts an agent or enters its sign-in flow. Each accepted agent is
+attempted independently; Station streams the child installer's terminal output
+and reports completion or failure before continuing.
 
-Setup checks or offers to install or upgrade Worktrunk, tmux, and Hunk;
-requires a runnable supported agent CLI; writes a valid zero-project
-`~/.config/station/config.toml`; starts or restarts the Observer; and offers
-Worktrunk shell integration and the `Ctrl-b Space` tmux popup binding. Setup may replace tmux's
-built-in `next-layout` action on that key, but it refuses to replace a user-configured prefix-table
-binding found in `~/.tmux.conf` or the current tmux server. With no config, exactly one runnable
-agent CLI is inferred and identified; several
-runnable CLIs require explicit guided selection. When multiple CLIs are selected for a new config,
-setup asks which selected CLI should be the default. Check, plan, dry-run, and noninteractive apply
-never choose the catalog-first CLI in an ambiguous case. An existing config always preserves and
-marks its global default, even when another CLI is available or selected.
+Setup writes a valid zero-project `~/.config/station/config.toml`; it never
+adopts the current directory or an ancestor repository. Add the first Git
+project explicitly in Station. See [Quick start](quick-start.md) for that flow
+and [Configuration](configuration.md) for later changes.
 
-If no supported agent CLI is runnable, setup presents one multiselect containing Claude Code,
-Codex, Cursor Agent, OpenCode, and Pi. An empty selection declines installation; selected installers
-run independently in the selected order, and one failure does not prevent later choices. On macOS with Homebrew available,
-Codex and Claude Code use the official casks and OpenCode and Pi use fully
-qualified official core formulae; Cursor uses its unattended vendor installer.
-Without a usable Homebrew package, Codex runs with the vendor's documented
-noninteractive mode under an isolated installer home, OpenCode receives
-`--no-modify-path`, and npm fallbacks install under `~/.local` with lifecycle
-scripts disabled. Setup never starts an agent, enters its sign-in or onboarding
-flow, or edits a shell startup file while installing an agent. Each accepted
-agent is attempted independently, then setup re-probes the actual CLI. If one
-install fails but another runnable agent is available, setup reports the failed
-selection and continues; if none is runnable, it stops with recovery guidance.
-For every accepted selection, setup prints a clear install heading, temporarily
-suspends its own prompt reader, streams the child installer's terminal output,
-and prints an explicit completion or failure line before moving on. A quiet or
-slow progress bar is therefore still bracketed by visible Station status.
+## Update Station
 
-Installing Station itself through Homebrew remains unsupported. Homebrew is
-only a setup mechanism for third-party workflow tools and agent CLIs. Its
-official macOS bootstrap requires administrator access and may show the normal
-password and confirmation prompts after the explicit Station consent prompt.
-
-For required Claude, Codex, Cursor, and OpenCode selections, guided setup
-explains that Station needs tracking and asks for consent before changing config
-or provider files. Declining stops before a new config or `install_hooks` intent
-is written. Noninteractive `apply --yes` is consent for these Station-owned
-artifacts, not for provider trust bypass or unrelated hook changes. Setup
-re-probes config and artifacts after applying and exits from those fresh facts.
-Pi has no external hook artifact requirement. Complete each enabled agent CLI's
-own sign-in before starting a real session.
-
-If setup writes the config but cannot activate it, it leaves the config and the
-incumbent Observer untouched, prints the exact error and recovery commands, and
-exits nonzero before installing remaining tracking artifacts. Restore the socket
-access/evidence named by that error, run the printed
-`stn --config ... observer restart`, then run the printed setup command to
-finish and re-probe those artifacts. Restoring a live socket to mode `0600`
-lets Station reconnect to its original process.
-
-Setup never adopts its current directory or an ancestor repository. On the
-empty dashboard, choose **Add your first project**, select a folder inside an
-existing Git repository, and confirm its detected Git root. Then press `N`,
-review the **Create Session** dialog, and choose **Create session** to start the
-agent session. The complete walkthrough is in [Quick start](quick-start.md).
-
-The installer and setup have separate ownership:
-
-| Concern | Owner |
-| --- | --- |
-| Download, verify, and install the binary artifacts | Station installer |
-| Verify all three launcher paths physically | Station installer |
-| Print install-time current-shell, future-shell, and absolute recovery | Station installer |
-| Repeat final current-shell recovery and absolute next commands | `stn setup` |
-| Choose or edit a shell configuration | User |
-| Write Station configuration and install integrations | `stn setup` |
-| Choose the first Git project | User in Station |
-
-The installer:
-
-- accepts only `darwin-arm64`, `darwin-x64`, `linux-arm64`, and `linux-x64`;
-- downloads the exact `stn-v{version}-{os}-{arch}.tar.gz` asset and `SHA256SUMS` from the stamped public tag with unauthenticated `curl --disable` (`{version}` excludes the tag's leading `v`), so user curl configuration cannot change the request;
-- verifies the matching SHA-256 before extraction and rejects an unexpected archive manifest;
-- stages the verified binary on the destination filesystem and requires its `--version` to match within 10 seconds, so a hung or incompatible OS/libc/CPU artifact and an embedded-version mismatch fail without replacing an existing command; compatibility failures include at most 4096 sanitized bytes of probe stderr;
-- keeps `stn-ingress` and `stn-tmux-popup` as stable symlinks to `stn`, installs the redistributed `LICENSE` under `${XDG_DATA_HOME:-$HOME/.local/share}/station/`, then atomically renames the verified `stn` last as the sole runtime commit point;
-- preserves or enrolls `<install-dir>/.station-install-receipt` as a regular, non-symlink `0600` file containing exactly `station-installer-binary-v1`; and
-- removes `com.apple.quarantine` from the verified binary defensively on macOS; and
-- physically resolves all three bare launchers after installation. If any is missing or shadowed, it names every mismatch, prints one safely quoted future-shell export for the user's chosen shell configuration, prints a current-shell block that prepends the install directory, runs `hash -r`, and starts `stn setup`, and prints an absolute installed `stn` fallback. If all three launchers already resolve to the installed runtime, it prints only `Next: run stn setup`.
-
-### Automatic-update ownership
-
-`stn update` detects the installation owner, resolves its current and target
-builds, and either applies the update or defers to that owner. Review the same
-plan without mutation in text or JSON:
+Inspect the complete update plan before applying it:
 
 ```sh
-stn update --dry-run
 stn update --dry-run --json
-stn update --dry-run --reap
-stn update --dry-run --reap --json
+stn update
 ```
 
-Every `--dry-run`, with or without `--reap`, includes one read-only initial
-aggregate and one canonical live-convergence plan in the update report. The
-aggregate captures the installed and target builds, one live Observer graph snapshot,
-one retained-session inventory query through the Observer API, exact
-Station-owned terminal evidence, Host handoff support, provider resume
-capability and deterministic handle selection, and provider-neutral hook
-health. Every affected terminal and retained session receives a disposition;
-non-resumable consequences are called out explicitly. The dry run does not
-install, signal, restart, reconcile hooks, resume sessions, authorize actions,
-or produce an execution digest. `--reap` does not authorize recovery and produces
-the same single report; without `--dry-run` it is rejected before
-update detection or mutation; destructive execution remains a later command
-boundary.
+Dry run is read-only. Station detects the installation owner, and
+package-manager-owned installs defer to that manager unless you explicitly use
+`stn update --drive-package-manager`. Updates default to preserving a busy
+compatible Station Host; uncertain preservation fails closed. `--no-handoff`
+opts out and can leave the new TUI unable to use the incumbent Host.
 
-The supported channel IDs are:
-
-- `installer-binary`: requires the exact installer receipt above, verifies a
-  complete GitHub release and checksums, then delegates the locked atomic swap
-  to the verified `install.sh`;
-- `dev-checkout`: requires Git and Bun plus a clean attached branch with an
-  upstream; pnpm is required only while the fetched target remains on the
-  legacy split workspace. It fetches the planned SHA, validates the target's
-  package-manager layout and preparation scripts, verifies an exact target Bun
-  runtime when required, then fast-forwards and runs that layout's frozen
-  install, rebuild, native-helper repair, and launcher relink;
-- `homebrew`: recognizes an already Homebrew-owned formula or cask;
-- `npm-global`: recognizes the global package whose `stn` bin entry owns the
-  running CLI; and
-- `mise`: recognizes the active tool installation whose `bin/stn` owns the
-  running CLI.
-
-Each native fullscreen TUI launch starts one process-local read-only owner and
-availability check after invoking its renderer; there is no persistent cache.
-The check never applies an update and is aborted without being awaited when the
-renderer finishes. If a version-changing plan has already completed when the
-renderer exits normally, Station restores the terminal and then prints exactly:
+After a normal exit, the TUI may report:
 
 ```text
 Station <version> is available — run `stn update`
 ```
 
-Immediate or abnormal exits, current or same-version development revisions,
-unknown or ambiguous ownership, failed discovery, popup sessions, and the fake
-dashboard print no notice.
+See [Single-binary Station](single-binary.md) for update ownership and runtime
+compatibility boundaries.
 
-Homebrew, npm-global, and mise print their exact native upgrade command and
-return `deferred` by default. `stn update --drive-package-manager` explicitly
-allows Station to execute that command. This does not make those managers
-supported public Station distribution channels; it preserves manager ownership
-for installations that already use them. Use `--channel <id>` to resolve an
-ambiguous installation, but explicit selection never bypasses ownership proof.
+## Interrupted Install Recovery
 
-Dev-checkout preparation runs after every fast-forward rather than guessing from
-the changed files. Before moving HEAD, the currently loaded launcher classifies
-the fetched target as the legacy pnpm split workspace or an exact-version root
-Bun workspace and proves the tools and scripts that its matching preparation
-sequence needs. This lets the legacy launcher safely cross the package-manager
-boundary without running removed pnpm or nested-link commands after the
-fast-forward. Preparation may take longer and access package registries, but it
-does not install or upgrade Git, Node.js, pnpm, Bun, or other system tools. If a
-preparation command fails, the checkout remains at the verified target and the
-report lists that target layout's complete frozen-install, build, repair, and
-relink sequence to resume safely.
+The installer serializes changes to the commands and license, validates staged
+artifacts before the binary commit, and refuses conflicting destination paths.
+An interruption before that commit leaves the existing Station installation
+unchanged. If activation may have committed, the installer exits nonzero and
+prints the absolute `stn --version` command to inspect the result.
 
-Before mutation, `stn update` defaults to preserving a busy compatible Host with
-preflighted `processes` handoff. Absent, stale, reusable, and idle Hosts need no handoff;
-uncertain preservation fails closed, and deferred package-manager updates skip
-Host inspection. Use `--handoff=screen` for semantic snapshots or
-`--no-handoff` to leave the incumbent in place with a stale-Host warning.
+If an interrupted process leaves a lock, inspect its sole owner file at
+`<install-dir>/.station-install.lock/owner-*` or
+`<data-home>/station/.station-install.lock/owner-*`. Remove the lock manually
+only after confirming that no installer with the recorded PID is alive, then
+retry the same exact-tag install.
 
-After channel apply completes, the new launcher runs `stn observer restart`, so
-Observer build precedence is evaluated by the installed build rather than the
-old process. The same successor launcher then performs any preflighted Host
-handoff. Failures report completed phases, sanitized evidence, and exact
-recovery commands; a verified install or Git fast-forward is not rolled back
-after a later preparation or runtime-crossover failure.
+Atomic rename gives readers a complete old or new runtime, but the installer
+makes no post-power-loss durability guarantee because it does not `fsync` files
+or directories. After power loss, inspect the absolute installed `stn --version`
+and both lock directories before retrying.
 
-Current compiled binaries, including immutable `.5.2`, use in-process Bun PTYs
-and cannot preserve a live PTY across Host replacement. If handoff fails after
-installation and Observer crossover, Station leaves the old Host and PTY alive;
-the target native UI visibly refuses that old Host. The pane-free tmux dashboard
-may still render against the target Observer, while Host-producing work remains
-guarded. This bounded partial crossover is not transparent runtime continuity.
-Source mode alone has the parkable Node/node-pty bridge.
+## Develop from Source
 
-The `installer-binary` channel may own only compiled installations carrying the
-receipt. Detection is local and network-free. Before release discovery and
-again at the installer's locked commit boundary, it binds the physical `stn`
-hash, device, and inode plus the device and inode of both launchers and the
-receipt. A missing or changed path is refused before mutation.
+Source development has separate runtime and isolation requirements. Start with
+[Development](development.md), then use [Local development](local-development.md)
+and [Testing](../tests/README.md) for the appropriate workflow and checks.
 
-The immutable public `v0.0.0-pre-alpha.5.2` installer already creates this
-receipt, and `.5.2` installations are enrolled in the `installer-binary`
-channel. It is the first incumbent capable of attempting the next self-update;
-no later manual receipt bootstrap is required. A malformed, nonregular, or
-symlinked receipt is never replaced automatically.
-
-### Concurrent and interrupted installs
-
-Every install serializes both mutated resources with these locks:
-
-- `<install-dir>/.station-install.lock` (by default
-  `~/.local/bin/.station-install.lock`) for the commands; and
-- `<data-home>/station/.station-install.lock` (by default
-  `~/.local/share/station/.station-install.lock`) for `LICENSE`.
-
-Each lock's sole `owner-*` file records the installer PID, requested tag, and
-the unique ownership token embedded in its filename. Cleanup
-removes only that token-specific file and revalidates the lock inode, so an
-earlier installer cannot remove a replacement lock. The installer acquires
-the command lock first and the license lock second, skips the second acquisition
-if both paths coincide, and releases them in reverse order. A refusal happens
-before a release download, names
-the lock and readable owner PID, states that the existing Station installation
-was unchanged, and tells the user to wait and retry. A license-lock refusal
-releases the command lock and performs no release request.
-
-The installer never guesses that either lock is stale. For an abandoned lock,
-read its sole `<install-dir>/.station-install.lock/owner-*` or
-`<data-home>/station/.station-install.lock/owner-*` file and confirm that no
-installer process with the recorded PID is alive. Only then remove that lock
-directory manually and retry the same install. Do not remove a lock while its
-owner may still be running. Legacy locks with a single `owner` file remain
-readable for safe refusal and manual recovery.
-
-The staged `stn --version` probe has a 10-second supervised deadline and a
-bounded output file. Timeout status 124 means the watchdog terminated, killed
-if necessary, and reaped the probe; status 125 means the timer machinery
-failed. Common GitHub and Actions token variables are removed from the probe's
-environment. A loader or compatibility failure prints no more than 4096 sanitized
-bytes of probe stderr. HUP, INT, and TERM forward to the active child, run the
-same TERM/KILL/reap and rollback path, and exit with status 129, 130, and 143
-respectively, so Ctrl-C does not return to an interrupted install.
-
-Immediately before license mutation and again immediately before commit, the
-installer revalidates both aliases as exact symlinks to `stn`, the receipt, and
-the accepted binary and license destination types. An internal update invocation
-also rechecks every expected hash, device, and inode while holding both locks. Before
-the final rename, a caught failure restores the prior license and removes only
-an alias that this attempt successfully created and that still matches it. If
-a failed final `mv` leaves the staged `stn` present, rollback restores the
-previous state and the installer reports it unchanged. If the staged `stn`
-disappeared, activation may have committed: the installer preserves the new
-license and aliases, exits nonzero, and prints an absolute
-`<install-dir>/stn --version` inspection command. It does not claim that the previous installation
-was unchanged in that ambiguous case. A newly staged receipt is published
-without clobbering only after the binary commit; publication and other
-post-commit cleanup failures are warnings.
-
-SIGKILL cannot run shell cleanup, so it can leave a stale lock or staging path;
-recover a lock only with the inspection-and-manual-removal procedure above.
-Atomic rename gives coherent process-level visibility—continuous readers see a
-complete old or new runtime—but this installer does not fsync the files or
-containing directories. It therefore makes no post-power-loss durability
-guarantee, and power loss can also leave old/new cross-filesystem `LICENSE`
-metadata. Inspect the absolute installed `stn --version` and both locks before
-retrying after a machine loss.
-
-The compiled binary launches the native TUI and Observer without Node.js, Bun,
-`node_modules`, or a source checkout. External programs are installed separately
-and gate only the features that use them: Git and Worktrunk for managed worktrees,
-tmux for popup/provider behavior, Hunk for diff automation, and a supported agent
-CLI for agent sessions.
-
-Every public version carries its own exact-tag stamped installer asset.
-Published tags and assets are immutable; do not delete, move, or overwrite
-them. If a published binary is bad, reinstall a known-good published version
-and ship a higher version containing the revert or fix.
-
-## Development Checkout
-
-The source checkout remains the development path. On macOS, one script installs the development dependencies via Homebrew, builds the workspace, and links the source `stn` command:
-
-```bash
-./scripts/setup/bootstrap.sh
-stn setup
-stn
-```
-
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, Hunk), derives
-the exact Bun version from the root `packageManager` policy, and uses that
-version for the root install, build, retained `node-pty` helper repair, and
-`station:link`. The final command publishes only Station's package registration
-and the `stn`, `stn-ingress`, and `stn-tmux-popup` launchers in Bun's configured
-global directories. Link and unlink operations lock those directories and prove
-the exact checkout-owned symlinks before replacing or removing them; a stale
-Station lock must be inspected and removed manually only after confirming no
-link operation is active. If you manage your own runtimes, the manual steps
-below are equivalent. See [Development](development.md) for the source workflow and
-[Testing](../tests/README.md) for gate selection.
-
-## Development Requirements
-
-For a complete source-development workflow, `stn setup check` exits 1 until these tools are present. A compiled binary can still launch when a feature-gated tool is missing:
-
-- Git (macOS: the Command Line Tools); choose the repository explicitly after setup
-- Worktrunk `wt` for core worktree setup
-- tmux for the reference terminal provider and popup path
-- Bun — source-checkout `stn` renders the TUI through `bun run`; compiled `stn` embeds the renderer
-- Hunk for the "See diff (split right)" automation
-- One agent CLI: Claude Code, Codex, Cursor, OpenCode, or Pi
-
-`lsof` is required for causal Station Host admission and recovery. Setup remains
-incomplete until canonical socket-holder evidence is available.
-
-`bootstrap.sh`'s `brew bundle` installs the brew-available subset (Worktrunk,
-Bun, tmux, Hunk, plus keg-only Node 24); Git / Command Line Tools
-are obtained separately, and guided `stn setup` can offer the supported agent
-CLIs described above.
-
-Node.js 24.2+ (and below 25) and exact Bun 1.4.0 are dev/build prerequisites
-for this checkout, validated by `stn setup system --check` (not `stn setup
-check`); setup does not install or change them. The repo selects the current
-Node 24 release with `.node-version` and `.nvmrc` (`24`), so fnm/nvm use the
-supported release in the checkout instead of falling back to your global
-default (asdf reads these only with `legacy_version_file = yes` in
-`~/.asdfrc`).
-
-## Fresh Development Checkout
-
-From the repository root:
-
-```bash
-bun install
-bun run build
-bun run stn setup
-bun run smoke:release
-bun run smoke:install
-```
-
-The root `bun install` includes the terminal UI and its native dependencies.
-Without it, bare source `stn` refuses to launch and prints the root install hint.
-`stn doctor` reports this explicitly as a `renderer-runtime` warning with code
-`STATION_UI_NOT_INSTALLED`.
-
-After STATION is installed:
-
-```text
-STATION is installed.
-
-Next:
-  stn setup
-
-This configures the core local workflow: the required tools, an agent CLI, and a zero-project config.
-Optional integrations can be added later.
-```
-
-`bun run smoke:release` builds by default, creates an isolated temporary config, runs `bin/stn doctor`, `reconcile`, `snapshot --json`, `debug bundle`, and the scripted-agent lane, then stops the observer and removes the temp state.
-
-`bun run smoke:install` exercises stamped and explicit public selection plus
-release-ID-scoped authenticated draft acceptance; first-argument curl
-isolation; receipt enrollment and preservation; strict expected-installation
-parsing and identity races; strict download arguments;
-all four platform mappings; startup-file
-non-interaction, safely evaluated PATH guidance for spaces and apostrophes,
-normalized-colon preflight, and physical PATH shadow behavior;
-checksum/archive/probe failures; dual-lock concurrency and stale recovery;
-rollback and ambiguous commit points; continuous readers; HUP/INT/TERM/SIGKILL;
-and runner self-interruption against local fake release assets. Every child and
-the overall runner have deadlines. It does not contact GitHub or modify the real
-home directory.
-
-Guided setup writes a zero-project config, can enable optional Worktrunk hooks, requires prepared tracking artifacts for selected/default Claude, Codex, Cursor, and OpenCode harnesses, and can install the tmux popup binding. Add the first Git repository explicitly from Station after setup. Generated tmux and hook commands persist the resolved absolute launcher paths, whether they came from an installed runtime or the current checkout, so later processes do not depend on setup's PATH. Hook setup validates the active `stn` runtime and its exact `stn-ingress` sibling; an unrelated launcher elsewhere on `PATH` cannot satisfy that pair. Successful output describes these artifacts as **Prepared**, not runtime Ready. Codex may still require `/hooks` review; setup does not mutate trust state, enable unrelated hooks, or claim delivery was verified. When bare `stn` launchers are not on `PATH`, setup offers `bun run --cwd <checkout> station:link` as the convenience path for bare terminal commands.
-
-Useful smoke options:
-
-```bash
-bun run smoke:release -- --skip-build
-bun run smoke:release -- --skip-scripted
-bun run smoke:release -- --keep-temp
-```
-
-## Local Command
-
-During development, either use the repo-local command:
-
-```bash
-bun run stn hooks doctor worktrunk
-bun run stn doctor
-bun run stn reconcile --reason manual
-bun run stn snapshot --json
-bun run stn
-```
-
-or link all three checkout launchers after setup:
-
-```bash
-bun run station:link
-stn doctor
-```
-
-The tmux popup binding and generated provider hooks no longer require a global link when setup can resolve the current checkout launchers. Linking is still useful when you want bare `stn`, `stn-ingress`, and `stn-tmux-popup` from arbitrary directories.
-
-## Local Real Config
-
-Prefer `stn setup` for a first real config. Use [examples/local-real-config.toml](../examples/local-real-config.toml) only when you want to manually edit a fuller real-tool starting point. Copy it to `~/.config/station/config.toml`, update the project root, and keep the managed Worktrunk root policy unless you intentionally want to show main or external worktrees.
-
-```bash
-mkdir -p ~/.config/station
-cp examples/local-real-config.toml ~/.config/station/config.toml
-```
-
-Run `stn hooks doctor worktrunk` and `stn doctor` after editing the config.
-Both surfaces validate the same canonical Worktrunk hook commands; full doctor
-additionally reports config diagnostics, Worktrunk availability and stale
-registrations, effective automation mode, SQLite health, provider health,
-local-state retention, and debug-bundle availability.
+Report installation problems through
+[GitHub Issues](https://github.com/jeremy0dell/station/issues).
