@@ -2,24 +2,15 @@
 // Contract: STATION-native (first-party Pi harness, no external upstream) — see packages/contracts (HarnessEventReport).
 // STATION ingress flow: docs/harness-ingress.md.
 import type { HarnessEventReport, ObservedStatus } from "@station/contracts";
-import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
-import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
+import {
+  assignDefined,
+  buildHarnessEventReport,
+  type HarnessEventReportInput,
+  harnessEventStatus,
+  reportCorrelation,
+} from "@station/harness-shared";
 import { piHarnessError } from "../errors.js";
 import { normalizePiEventType, type PiCompactEvent, parsePiCompactEvent } from "./compactEvent.js";
-
-export type PiHarnessEventReportInput = {
-  reportId: string;
-  eventType: string;
-  observedAt: string;
-  payload: unknown;
-  diagnostics?: {
-    payloadBytes?: number | null;
-    compactedBytes?: number | null;
-    compacted?: boolean;
-    truncated?: boolean;
-    omittedFieldNames?: string[];
-  };
-};
 
 function usesSettledEvent(event: PiCompactEvent): boolean {
   return event.station_extension_protocol === 2;
@@ -37,48 +28,48 @@ function turnFromPiEvent(event: PiCompactEvent): HarnessEventReport["turn"] | un
 
 function providerDataFromPiEvent(event: PiCompactEvent): Record<string, unknown> {
   const providerData: Record<string, unknown> = {};
-  assignProviderData(providerData, "piSessionId", event.pi_session_id);
-  assignProviderData(providerData, "piSessionFile", event.pi_session_file);
-  assignProviderData(providerData, "model", event.model);
-  assignProviderData(providerData, "stationExtensionProtocol", event.station_extension_protocol);
+  assignDefined(providerData, "piSessionId", event.pi_session_id);
+  assignDefined(providerData, "piSessionFile", event.pi_session_file);
+  assignDefined(providerData, "model", event.model);
+  assignDefined(providerData, "stationExtensionProtocol", event.station_extension_protocol);
   switch (event.event_type) {
     case "session_start":
-      assignProviderData(providerData, "sessionStartReason", event.reason);
-      assignProviderData(providerData, "previousSessionFile", event.previous_session_file);
+      assignDefined(providerData, "sessionStartReason", event.reason);
+      assignDefined(providerData, "previousSessionFile", event.previous_session_file);
       break;
     case "session_shutdown":
-      assignProviderData(providerData, "shutdownReason", event.reason);
-      assignProviderData(providerData, "targetSessionFile", event.target_session_file);
+      assignDefined(providerData, "shutdownReason", event.reason);
+      assignDefined(providerData, "targetSessionFile", event.target_session_file);
       break;
     case "turn_start":
-      assignProviderData(providerData, "turnIndex", event.turn_index);
+      assignDefined(providerData, "turnIndex", event.turn_index);
       break;
     case "tool_execution_start":
-      assignProviderData(providerData, "toolCallId", event.tool_call_id);
-      assignProviderData(providerData, "toolName", event.tool_name);
-      assignProviderData(providerData, "activeQuestionCallId", event.active_question_call_id);
+      assignDefined(providerData, "toolCallId", event.tool_call_id);
+      assignDefined(providerData, "toolName", event.tool_name);
+      assignDefined(providerData, "activeQuestionCallId", event.active_question_call_id);
       break;
     case "tool_execution_end":
-      assignProviderData(providerData, "toolCallId", event.tool_call_id);
-      assignProviderData(providerData, "toolName", event.tool_name);
-      assignProviderData(providerData, "isError", event.is_error);
-      assignProviderData(providerData, "activeQuestionCallId", event.active_question_call_id);
+      assignDefined(providerData, "toolCallId", event.tool_call_id);
+      assignDefined(providerData, "toolName", event.tool_name);
+      assignDefined(providerData, "isError", event.is_error);
+      assignDefined(providerData, "activeQuestionCallId", event.active_question_call_id);
       break;
     case "question_prompt_open":
-      assignProviderData(providerData, "toolCallId", event.tool_call_id);
-      assignProviderData(providerData, "toolName", event.tool_name);
+      assignDefined(providerData, "toolCallId", event.tool_call_id);
+      assignDefined(providerData, "toolName", event.tool_name);
       break;
     case "message_end":
-      assignProviderData(providerData, "messageRole", event.message_role);
+      assignDefined(providerData, "messageRole", event.message_role);
       break;
     case "agent_end":
-      assignProviderData(providerData, "messageCount", event.message_count);
+      assignDefined(providerData, "messageCount", event.message_count);
       break;
     case "session_compact":
-      assignProviderData(providerData, "fromExtension", event.from_extension);
-      assignProviderData(providerData, "compactionEntryId", event.compaction_entry_id);
-      assignProviderData(providerData, "compactionReason", event.reason);
-      assignProviderData(providerData, "willRetry", event.will_retry);
+      assignDefined(providerData, "fromExtension", event.from_extension);
+      assignDefined(providerData, "compactionEntryId", event.compaction_entry_id);
+      assignDefined(providerData, "compactionReason", event.reason);
+      assignDefined(providerData, "willRetry", event.will_retry);
       break;
     case "agent_start":
     case "agent_settled":
@@ -127,18 +118,12 @@ function reportCoalesceKeyFromPiEvent(event: PiCompactEvent): string | undefined
   return parts.length === 0 ? undefined : parts.join(":");
 }
 
-function assignProviderData(target: Record<string, unknown>, key: string, value: unknown): void {
-  if (value !== undefined) {
-    target[key] = value;
-  }
-}
-
 function assertNever(value: never): never {
   throw piHarnessError("HARNESS_PI_EVENT_INVALID", `Unhandled Pi event: ${String(value)}.`);
 }
 
 export function piHookPayloadToHarnessEventReport(
-  input: PiHarnessEventReportInput,
+  input: HarnessEventReportInput & { eventType: string },
 ): HarnessEventReport {
   const event = parsePiCompactEvent(input.payload);
   const eventType = normalizePiEventType(input.eventType);
@@ -149,30 +134,15 @@ export function piHookPayloadToHarnessEventReport(
     );
   }
 
-  const report: HarnessEventReport = {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    reportId: input.reportId,
+  return buildHarnessEventReport(input, {
     provider: "pi",
-    kind: "harness",
     eventType: event.event_type,
-    observedAt: input.observedAt,
     status: statusFromPiEvent(event, input.observedAt),
-  };
-  const turn = turnFromPiEvent(event);
-  if (turn !== undefined) {
-    report.turn = turn;
-  }
-  const correlation = reportCorrelationFromPiEvent(event);
-  if (correlation !== undefined) {
-    report.correlation = correlation;
-  }
-  report.diagnostics = harnessEventDiagnostics(event.event_type, input.diagnostics);
-  const coalesceKey = reportCoalesceKeyFromPiEvent(event);
-  if (coalesceKey !== undefined) {
-    report.coalesceKey = coalesceKey;
-  }
-  report.providerData = providerDataFromPiEvent(event);
-  return HarnessEventReportSchema.parse(report);
+    turn: turnFromPiEvent(event),
+    correlation: reportCorrelationFromPiEvent(event),
+    coalesceKey: reportCoalesceKeyFromPiEvent(event),
+    providerData: providerDataFromPiEvent(event),
+  });
 }
 
 function statusForPiShutdown(
@@ -180,24 +150,16 @@ function statusForPiShutdown(
   observedAt: string,
 ): ObservedStatus {
   if (event.reason === "quit") {
-    return {
-      value: "exited",
-      confidence: "high",
-      reason: "Pi session quit.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus("exited", "high", "Pi session quit.", observedAt);
   }
-  return {
-    value: "working",
-    confidence: "medium",
-    reason:
-      event.reason === undefined
-        ? "Pi session is shutting down."
-        : `Pi session is shutting down for ${event.reason}.`,
-    source: "harness_event",
-    updatedAt: observedAt,
-  };
+  return harnessEventStatus(
+    "working",
+    "medium",
+    event.reason === undefined
+      ? "Pi session is shutting down."
+      : `Pi session is shutting down for ${event.reason}.`,
+    observedAt,
+  );
 }
 
 function statusForPiCompaction(
@@ -206,35 +168,31 @@ function statusForPiCompaction(
 ): ObservedStatus {
   // Only an explicitly completed manual /compact is idle; every other form may continue.
   if (event.reason === "manual" && event.will_retry === false) {
-    return {
-      value: "idle",
-      confidence: "high",
-      reason: "Pi completed manual session compaction.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "idle",
+      "high",
+      "Pi completed manual session compaction.",
+      observedAt,
+    );
   }
-  return {
-    value: "working",
-    confidence: "medium",
-    reason:
-      event.reason === undefined
-        ? "Pi compacted the session; continuation state is unknown."
-        : `Pi completed ${event.reason} session compaction and may continue.`,
-    source: "harness_event",
-    updatedAt: observedAt,
-  };
+  return harnessEventStatus(
+    "working",
+    "medium",
+    event.reason === undefined
+      ? "Pi compacted the session; continuation state is unknown."
+      : `Pi completed ${event.reason} session compaction and may continue.`,
+    observedAt,
+  );
 }
 
 function piQuestionAttention(observedAt: string): ObservedStatus {
-  return {
-    value: "needs_attention",
-    confidence: "high",
-    reason: "Pi is waiting for a question response.",
-    source: "harness_event",
-    updatedAt: observedAt,
-    attention: "question",
-  };
+  return harnessEventStatus(
+    "needs_attention",
+    "high",
+    "Pi is waiting for a question response.",
+    observedAt,
+    { attention: "question" },
+  );
 }
 
 function statusForPiToolStart(
@@ -244,16 +202,14 @@ function statusForPiToolStart(
   if (event.active_question_call_id !== undefined) {
     return piQuestionAttention(observedAt);
   }
-  return {
-    value: "working",
-    confidence: "medium",
-    reason:
-      event.tool_name === undefined
-        ? "Pi started a tool execution."
-        : `Pi started ${event.tool_name}.`,
-    source: "harness_event",
-    updatedAt: observedAt,
-  };
+  return harnessEventStatus(
+    "working",
+    "medium",
+    event.tool_name === undefined
+      ? "Pi started a tool execution."
+      : `Pi started ${event.tool_name}.`,
+    observedAt,
+  );
 }
 
 function statusForPiToolEnd(
@@ -264,24 +220,16 @@ function statusForPiToolEnd(
     return piQuestionAttention(observedAt);
   }
   if (event.tool_name === "ask_user_question") {
-    return {
-      value: "working",
-      confidence: "high",
-      reason: "Pi question execution ended.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus("working", "high", "Pi question execution ended.", observedAt);
   }
-  return {
-    value: "working",
-    confidence: "medium",
-    reason:
-      event.tool_name === undefined
-        ? "Pi completed a tool execution."
-        : `Pi completed ${event.tool_name}.`,
-    source: "harness_event",
-    updatedAt: observedAt,
-  };
+  return harnessEventStatus(
+    "working",
+    "medium",
+    event.tool_name === undefined
+      ? "Pi completed a tool execution."
+      : `Pi completed ${event.tool_name}.`,
+    observedAt,
+  );
 }
 
 /**
@@ -290,51 +238,30 @@ function statusForPiToolEnd(
 export function statusFromPiEvent(event: PiCompactEvent, observedAt: string): ObservedStatus {
   switch (event.event_type) {
     case "session_start":
-      return {
-        value: "starting",
-        confidence: "high",
-        reason:
-          event.reason === undefined
-            ? "Pi session started."
-            : `Pi session started from ${event.reason}.`,
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus(
+        "starting",
+        "high",
+        event.reason === undefined
+          ? "Pi session started."
+          : `Pi session started from ${event.reason}.`,
+        observedAt,
+      );
     case "agent_start":
-      return {
-        value: "working",
-        confidence: "high",
-        reason: "Pi agent started.",
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus("working", "high", "Pi agent started.", observedAt);
     case "agent_end":
       if (!usesSettledEvent(event)) {
-        return {
-          value: "idle",
-          confidence: "medium",
-          reason: "Legacy Pi agent turn completed.",
-          source: "harness_event",
-          updatedAt: observedAt,
-        };
+        return harnessEventStatus("idle", "medium", "Legacy Pi agent turn completed.", observedAt);
       }
       // A low-level run can still be followed by retry, compaction, or queued continuation.
-      return {
-        value: "working",
-        confidence: "medium",
-        reason: "Pi agent run ended and may continue automatically.",
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus(
+        "working",
+        "medium",
+        "Pi agent run ended and may continue automatically.",
+        observedAt,
+      );
     case "agent_settled":
       // Pi emits settlement only after automatic continuation paths are exhausted.
-      return {
-        value: "idle",
-        confidence: "high",
-        reason: "Pi agent settled.",
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus("idle", "high", "Pi agent settled.", observedAt);
     case "session_shutdown":
       return statusForPiShutdown(event, observedAt);
     case "session_compact":
@@ -346,27 +273,23 @@ export function statusFromPiEvent(event: PiCompactEvent, observedAt: string): Ob
     case "question_prompt_open":
       return piQuestionAttention(observedAt);
     case "message_end":
-      return {
-        value: "working",
-        confidence: "medium",
-        reason:
-          event.message_role === undefined
-            ? "Pi completed a message."
-            : `Pi completed a ${event.message_role} message.`,
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus(
+        "working",
+        "medium",
+        event.message_role === undefined
+          ? "Pi completed a message."
+          : `Pi completed a ${event.message_role} message.`,
+        observedAt,
+      );
     case "turn_start":
-      return {
-        value: "working",
-        confidence: "medium",
-        reason:
-          event.turn_index === undefined
-            ? "Pi turn started."
-            : `Pi turn ${event.turn_index} started.`,
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus(
+        "working",
+        "medium",
+        event.turn_index === undefined
+          ? "Pi turn started."
+          : `Pi turn ${event.turn_index} started.`,
+        observedAt,
+      );
     default:
       return assertNever(event);
   }

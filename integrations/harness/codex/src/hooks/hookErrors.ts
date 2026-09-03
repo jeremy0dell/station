@@ -1,3 +1,5 @@
+import { type HookSetupErrorClass, hookSetupErrorClass } from "@station/harness-shared";
+
 export type CodexHookSetupErrorCode =
   | "CODEX_HOOK_CONFIG_UNREADABLE"
   | "CODEX_HOOK_INVALID_TOML"
@@ -8,18 +10,12 @@ export type CodexHookSetupErrorCode =
   | "CODEX_HOOK_RECONCILIATION_LOCK_RELEASE_FAILED"
   | "CODEX_HOOK_WRITE_FAILED";
 
-export class CodexHookSetupError extends Error {
-  readonly tag = "CodexHookSetupError";
-  readonly code: CodexHookSetupErrorCode;
-  readonly provider = "codex";
+// Annotated so declaration emit names the class type instead of a deep package path.
+export const CodexHookSetupError: HookSetupErrorClass<CodexHookSetupErrorCode> =
+  hookSetupErrorClass({
+    tag: "CodexHookSetupError",
+    provider: "codex",
+  });
 
-  constructor(code: CodexHookSetupErrorCode, message: string, options: { cause?: unknown } = {}) {
-    super(message, { cause: options.cause });
-    Object.defineProperty(this, "name", {
-      value: this.tag,
-      enumerable: false,
-      configurable: true,
-    });
-    this.code = code;
-  }
-}
+// The lock helpers annotate their return type, which a class expression does not name on its own.
+export type CodexHookSetupErrorInstance = InstanceType<typeof CodexHookSetupError>;

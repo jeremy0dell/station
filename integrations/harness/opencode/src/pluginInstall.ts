@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
+import { isHookOwnershipConflict } from "@station/harness-shared";
 import {
   assertProviderHookArtifactOwnership,
   classifyProviderHookArtifactOwnership,
@@ -130,8 +131,7 @@ export async function doctorOpenCodePlugin(
 ): Promise<OpenCodePluginDoctorResult> {
   const plan = await planOpenCodePlugin(options);
   const installed = plan.before.includes(OPENCODE_STATION_PLUGIN_MARKER);
-  const ownershipConflict =
-    plan.ownership?.status === "different-owner" || plan.ownership?.status === "unknown-owner";
+  const ownershipConflict = isHookOwnershipConflict(plan.ownership);
   if (!installed && options.enabled === true) {
     return {
       provider: "opencode",

@@ -3,13 +3,7 @@ import { compactFieldNamesForPiEvent } from "./catalog.js";
 import { normalizePiEventType } from "./compactEvent.js";
 import type { PiSupportedEventName } from "./names.js";
 
-export type PiPayloadCompactionResult = {
-  payload: unknown;
-  compacted: boolean;
-  originalByteCount: number | null;
-  compactedByteCount: number | null;
-  omittedFieldNames: string[];
-};
+export type { PayloadCompactionResult };
 
 function normalizedEventType(
   eventType: string,
@@ -20,10 +14,7 @@ function normalizedEventType(
   );
 }
 
-export function compactPiHookPayload(
-  eventType: string,
-  payload: unknown,
-): PiPayloadCompactionResult {
+export function compactPiHookPayload(eventType: string, payload: unknown): PayloadCompactionResult {
   return compactPayloadByFieldNames(payload, {
     retainedFieldNames: (record) =>
       compactFieldNamesForPiEvent(normalizedEventType(eventType, record)),

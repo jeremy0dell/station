@@ -1,12 +1,6 @@
 import { compactPayloadByFieldNames, type PayloadCompactionResult } from "@station/harness-shared";
 
-export type CursorProviderHookPayloadCompactionResult = {
-  payload: unknown;
-  compacted: boolean;
-  originalByteCount: number | null;
-  compactedByteCount: number | null;
-  omittedFieldNames: string[];
-};
+export type { PayloadCompactionResult };
 
 const retainedFieldNames = [
   "hook_event_name",
@@ -31,9 +25,7 @@ const retainedFieldNames = [
   "station_terminal_target_id",
 ] as const;
 
-export function compactCursorProviderHookPayload(
-  payload: unknown,
-): CursorProviderHookPayloadCompactionResult {
+export function compactCursorProviderHookPayload(payload: unknown): PayloadCompactionResult {
   return compactPayloadByFieldNames(payload, {
     retainedFieldNames,
   }) satisfies PayloadCompactionResult;

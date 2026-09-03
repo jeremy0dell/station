@@ -1,8 +1,7 @@
 import {
-  type HarnessProviderError,
+  defineHarnessProviderErrors,
   type HarnessProviderErrorClass,
-  harnessProviderErrorClass,
-  harnessProviderErrorFromUnknown,
+  type HarnessProviderErrors,
 } from "@station/harness-shared";
 
 export type CursorHarnessErrorCode =
@@ -12,19 +11,15 @@ export type CursorHarnessErrorCode =
   | "HARNESS_CURSOR_EVENT_INVALID"
   | "HARNESS_CURSOR_EVENT_INGEST_FAILED";
 
+const cursorErrors: HarnessProviderErrors<CursorHarnessErrorCode> = defineHarnessProviderErrors({
+  name: "CursorHarnessProviderError",
+  provider: "cursor",
+});
+
+// Annotated so declaration emit names the class type instead of a deep package path.
 export const CursorHarnessProviderError: HarnessProviderErrorClass<CursorHarnessErrorCode> =
-  harnessProviderErrorClass<CursorHarnessErrorCode>({
-    name: "CursorHarnessProviderError",
-    provider: "cursor",
-  });
-
-export function cursorHarnessError(code: CursorHarnessErrorCode, message: string, cause?: unknown) {
-  return new CursorHarnessProviderError(code, message, { cause });
-}
-
-export function cursorProviderErrorFromUnknown(
-  error: unknown,
-  fallback: { code: CursorHarnessErrorCode; message: string; hint?: string | undefined },
-): HarnessProviderError<CursorHarnessErrorCode> {
-  return harnessProviderErrorFromUnknown(CursorHarnessProviderError, error, fallback);
-}
+  cursorErrors.ErrorClass;
+export const cursorHarnessError: HarnessProviderErrors<CursorHarnessErrorCode>["create"] =
+  cursorErrors.create;
+export const cursorProviderErrorFromUnknown: HarnessProviderErrors<CursorHarnessErrorCode>["fromUnknown"] =
+  cursorErrors.fromUnknown;
