@@ -1,6 +1,6 @@
 {
   "name": "station",
-  "version": "0.0.0-pre-alpha.14.3",
+  "version": "0.0.0-pre-alpha.14.4",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -108,7 +108,7 @@
     "test:env:docker": "node scripts/test-runners/run-setup-container.mjs",
     "test:ci:fast": "bun run build && bun run test:unit && bun run test:contracts && bun run test:diagnostics && bun run test:agent:scripted",
     "test:ci:station": "bun run --cwd station typecheck && bun run --cwd station test && bun run --cwd station test:pty && bun run --cwd station test:pty:bun && bun run test:e2e:host-upgrade",
-    "test:ci:binary": "bun run build:binary -- --version 0.0.0-local && bun run smoke:binary -- --expected-version 0.0.0-local && bun run smoke:update -- --incumbent-binary station/dist/bin/stn --incumbent-version 0.0.0-local --target-source-version 0.0.1-local --busy-host-outcome preserved-refusal",
+    "test:ci:binary": "bun run build:binary -- --version 0.0.0-local && bun run smoke:binary -- --expected-version 0.0.0-local && bun run smoke:update -- --incumbent-binary station/dist/bin/stn --incumbent-version 0.0.0-local --target-source-version 0.0.1-local --scenarios release --busy-host-outcome preserved-refusal",
     "test:all": "bun run build && bun run typecheck && bun run lint && bun run test:unit && bun run test:contracts && bun run test:integration && bun run test:diagnostics && bun run test:agent:scripted && bun run test:e2e:setup && bun run test:e2e:observer && bun run smoke:install",
     "test:pre-push": "bun run lint"
   },

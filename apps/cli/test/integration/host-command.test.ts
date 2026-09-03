@@ -1,5 +1,6 @@
 import { runCli } from "@station/cli";
 import { stationHostSocketPath } from "@station/config";
+import { StationHostUpdateCrossoverResultSchema } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
@@ -8,6 +9,33 @@ const targetIdentity = "b".repeat(64);
 const runningBuild = "0.9.0+incumbent";
 
 describe("registered stn host command", () => {
+  it("retains the strict update Host crossover process boundary", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const recoverHostOrphans = vi.fn(async () => ({ recoveredPtyIds: [] }));
+    const result = await runCli(
+      ["--config", configPath, "host", "handoff", "--update-crossover", "--fidelity", "processes"],
+      {
+        hostDeps: {
+          expectedBuildVersion: targetBuild,
+          expectedBuildIdentity: targetIdentity,
+          inspectHost: async () => ({ status: "absent" }),
+          recoverHostOrphans,
+          resolveHostCommand: () => ["station-host"],
+        },
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(StationHostUpdateCrossoverResultSchema.parse(JSON.parse(String(result.output)))).toEqual(
+      {
+        schemaVersion: 1,
+        status: "completed",
+      },
+    );
+    expect(recoverHostOrphans).toHaveBeenCalledOnce();
+  });
+
   it("preserves complete current status text and invokes no mutation dependency", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
