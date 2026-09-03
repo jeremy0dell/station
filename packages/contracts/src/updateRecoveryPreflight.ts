@@ -236,12 +236,48 @@ export const UpdateReapTerminalDispositionSchema = z
   .strict();
 export type UpdateReapTerminalDisposition = z.infer<typeof UpdateReapTerminalDispositionSchema>;
 
+/** Strict, redaction-safe viability facts for durable parked PTY bridges. */
+export const UpdateReapParkedBridgeEvidenceSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("assessed"),
+      totalParkedCount: z.number().int().nonnegative(),
+      unownedParkedCount: z.number().int().nonnegative(),
+      adoptionRequiredCount: z.number().int().nonnegative(),
+    })
+    .strict()
+    .superRefine((evidence, context) => {
+      if (evidence.unownedParkedCount > evidence.totalParkedCount) {
+        context.addIssue({
+          code: "custom",
+          path: ["unownedParkedCount"],
+          message: "Unowned parked bridges cannot exceed the total parked bridges.",
+        });
+      }
+      if (evidence.adoptionRequiredCount > evidence.unownedParkedCount) {
+        context.addIssue({
+          code: "custom",
+          path: ["adoptionRequiredCount"],
+          message: "Required adoption cannot exceed unowned parked bridges.",
+        });
+      }
+    }),
+  z
+    .object({
+      status: z.literal("unknown"),
+      reason: z.literal("inspection-failed"),
+      error: SafeErrorSchema,
+    })
+    .strict(),
+]);
+export type UpdateReapParkedBridgeEvidence = z.infer<typeof UpdateReapParkedBridgeEvidenceSchema>;
 type UpdateReapEvidenceSet = {
   observer: UpdateReapObserverEvidence;
   host: UpdateReapHostEvidence;
   hookProviderIds: ProviderId[];
   hooks: z.infer<typeof ProviderHookHealthSchema>[];
   terminalDispositions: UpdateReapTerminalDisposition[];
+  parkedBridges: UpdateReapParkedBridgeEvidence;
 };
 
 /**
@@ -265,6 +301,7 @@ export const UpdateReapRecoveryPreflightSchema = z
     hookProviderIds: z.array(ProviderIdSchema),
     hooks: z.array(ProviderHookHealthSchema),
     terminalDispositions: z.array(UpdateReapTerminalDispositionSchema),
+    parkedBridges: UpdateReapParkedBridgeEvidenceSchema,
     evidenceComplete: z.boolean(),
   })
   .strict()
@@ -385,6 +422,7 @@ export function updateReapEvidenceIsComplete(preflight: UpdateReapEvidenceSet): 
     return false;
   }
   if (preflight.hooks.some((hook) => hook.status === "inspection-failed")) return false;
+  if (preflight.parkedBridges.status === "unknown") return false;
   return !preflight.terminalDispositions.some(
     (terminal) => terminal.handoff === "unknown" || terminal.reapRecovery === "unknown",
   );

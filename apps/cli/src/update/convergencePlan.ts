@@ -194,8 +194,22 @@ function hostDecision(
   ): HostPhases =>
     pair({ action: "blocked", reason: terminalReason }, { action: "blocked", reason: hostReason });
   if (!runtimeValid) return blocked("evidence-contradictory", "evidence-contradictory");
-  if (host.status === "absent")
-    return pair({ action: "no-op", reason: "no-terminals" }, { action: "no-op", reason: "absent" });
+  const parked = input.preflight.parkedBridges;
+  const parkedRecoveryUnknown = parked.status === "unknown";
+  const parkedRecoveryNeeded = parked.status === "assessed" && parked.adoptionRequiredCount > 0;
+  if (host.status === "absent") {
+    if (parkedRecoveryUnknown) return blocked("recovery-incomplete", "recovery-incomplete");
+    return parkedRecoveryNeeded
+      ? pair(
+          { action: "no-op", reason: "no-terminals" },
+          {
+            action: "recover-parked",
+            reason: "unowned-parked-bridges",
+            parkedCount: parked.unownedParkedCount,
+          },
+        )
+      : pair({ action: "no-op", reason: "no-terminals" }, { action: "no-op", reason: "absent" });
+  }
   if (!terminalDispositionsAreCanonical) {
     return blocked("evidence-contradictory", "evidence-contradictory");
   }
@@ -211,6 +225,17 @@ function hostDecision(
     host.relation === "matching-target" &&
     host.compatibility === "reuse"
   ) {
+    if (parkedRecoveryUnknown) return blocked("recovery-incomplete", "recovery-incomplete");
+    if (parkedRecoveryNeeded) {
+      return pair(
+        { action: "no-op", reason: "matching-host" },
+        {
+          action: "recover-parked",
+          reason: "unowned-parked-bridges",
+          parkedCount: parked.unownedParkedCount,
+        },
+      );
+    }
     return pair(
       { action: "no-op", reason: "matching-host" },
       { action: "no-op", reason: "matching-target" },
@@ -223,6 +248,7 @@ function hostDecision(
     );
   }
   if (host.status === "unknown") return blocked("inventory-incomplete", "inventory-incomplete");
+  if (parkedRecoveryUnknown) return blocked("recovery-incomplete", "recovery-incomplete");
   if (input.targetRuntime.status === "not-yet-provable") {
     if (host.relation !== "different" || host.buildVersion === input.preflight.target.version) {
       return pair(

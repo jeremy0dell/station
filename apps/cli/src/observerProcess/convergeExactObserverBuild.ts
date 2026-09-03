@@ -107,6 +107,16 @@ export type ExactObserverConvergenceDependencies = {
   withSession: ExactObserverLifecycleSessionCapability;
 };
 
+/** Narrow current-process capability used by callers that already resolved update policy. */
+export type ExactObserverBuildCapability = (input: {
+  action: "start" | "restart" | "no-op";
+  targetSelector: string;
+  buildInfo: runtime.StationBuildInfo;
+  config: NonNullable<processTypes.ObserverProcessOptions["config"]>;
+  configPath?: string;
+  expected?: ExactObserverOwnershipEvidence;
+}) => Promise<processTypes.ExactObserverBuildStatus>;
+
 /** Strictly parses and clones a current command before convergence performs any async work. */
 export function parseExactObserverConvergenceCommand(input: unknown, context: ParseContext) {
   const parsed = CommandSchema.safeParse(input);
@@ -151,18 +161,7 @@ export async function ensureExactObserverBuild(
   const paths = options.paths ?? resolveObserverPaths(options.config);
   const targetSelector = processDeps.buildVersion ?? runtime.stationObserverBuildVersion();
   const deadlineMs = Date.now() + (options.timeoutMs ?? 10_000);
-  const exactOptions = { ...options, paths, startupDeadlineMs: deadlineMs };
-  const deps: ExactObserverConvergenceDependencies = {
-    paths,
-    targetSelector,
-    inspect: (session) => inspectExactObserverOwnerWithLocalAdapters(exactOptions, {}, session),
-    start: () => lifecycle.startObserverPreservingIncumbent(exactOptions, processDeps),
-    withSession: ({ health, deadlineMs }, task) =>
-      protocol.withExactObserverLifecycleSession(
-        { socketPath: paths.socketPath, expectedObserverIdentity: health, deadlineMs },
-        task,
-      ),
-  };
+  const deps = exactDependencies({ ...options, paths }, targetSelector, deadlineMs, processDeps);
   let initial: ExactObserverOwnershipEvidence;
   try {
     initial = await beforeDeadline(deadlineMs, deps.inspect);
@@ -189,6 +188,70 @@ export async function ensureExactObserverBuild(
     { action: "restart-exact", targetSelector, deadlineMs, expected: project(initial) },
     deps,
   );
+}
+
+function exactDependencies(
+  options: processTypes.ObserverProcessOptions,
+  targetSelector: string,
+  deadlineMs: number,
+  processDeps: processTypes.ObserverProcessDeps = {},
+): ExactObserverConvergenceDependencies {
+  const paths = options.paths ?? resolveObserverPaths(options.config);
+  const exactOptions = { ...options, paths, startupDeadlineMs: deadlineMs };
+  return {
+    paths,
+    targetSelector,
+    inspect: (session) => inspectExactObserverOwnerWithLocalAdapters(exactOptions, {}, session),
+    start: () => lifecycle.startObserverPreservingIncumbent(exactOptions, processDeps),
+    withSession: ({ health, deadlineMs: sessionDeadlineMs }, task) =>
+      protocol.withExactObserverLifecycleSession(
+        {
+          socketPath: paths.socketPath,
+          expectedObserverIdentity: health,
+          deadlineMs: sessionDeadlineMs,
+        },
+        task,
+      ),
+  };
+}
+
+/**
+ * COMPOSITION ROOT
+ *
+ * Binds the standalone exact Observer capability to update's provider-neutral executor.
+ */
+export function createExactObserverBuildCapability(
+  options: { timeoutMs?: number } = {},
+): ExactObserverBuildCapability {
+  return async ({ action, targetSelector, config, configPath, expected }) => {
+    if (action === "restart" && expected !== undefined) {
+      if (expected.status !== "exact" || expected.recovery.status !== "assessed") {
+        throw new Error("Exact Observer restart evidence is incomplete.");
+      }
+      const paths = resolveObserverPaths(config);
+      const deadlineMs = Date.now() + (options.timeoutMs ?? 20_000);
+      const deps = exactDependencies(
+        { config, ...(configPath === undefined ? {} : { configPath }), paths },
+        targetSelector,
+        deadlineMs,
+      );
+      const command = {
+        action: "restart-exact" as const,
+        targetSelector,
+        deadlineMs,
+        expected: project(expected),
+      };
+      return convergeExactObserverBuild(command, deps);
+    }
+    return ensureExactObserverBuild(
+      {
+        config,
+        ...(configPath === undefined ? {} : { configPath }),
+        timeoutMs: options.timeoutMs ?? 20_000,
+      },
+      { buildVersion: targetSelector },
+    );
+  };
 }
 
 async function converge(

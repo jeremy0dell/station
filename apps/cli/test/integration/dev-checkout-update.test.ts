@@ -425,6 +425,10 @@ describe("dev-checkout update channel", () => {
 
     expect(failure).toMatchObject({ code: "UPDATE_DEV_CHECKOUT_PREPARE_FAILED" });
     expect(await git(fixture.checkout, ["rev-parse", "HEAD"])).toBe(fixture.targetRevision);
+    await expect(channel.inspectInstalled(plan)).resolves.toEqual({
+      version: "1.0.0",
+      revision: fixture.targetRevision,
+    });
     expect(channel.applyRecoveryCommands?.(plan, failure)).toEqual([
       [plan.bunPath, "install", "--cwd", plan.repoRoot, "--frozen-lockfile"],
       [plan.bunPath, "run", "--cwd", plan.repoRoot, "build"],
@@ -434,7 +438,11 @@ describe("dev-checkout update channel", () => {
   });
 
   it("preserves cancellation after the checkout fast-forwards", async () => {
-    const fixture = await checkoutFixture();
+    const fixture = await checkoutFixture({
+      targetPackage: rootBunTargetPackage("1.4.0"),
+      bunVersion: "1.4.0",
+      includePnpm: false,
+    });
     const channel = createDevCheckoutUpdateChannel({
       cliEntryPath: fixture.cliEntryPath,
       pathEnv: fixture.pathEnv,
@@ -444,7 +452,7 @@ describe("dev-checkout update channel", () => {
         buildIdentity: "a".repeat(64),
       }),
       commandRunner: async (input) => {
-        if (basename(input.command) === "pnpm" && input.args?.[0] === "install") {
+        if (basename(input.command) === "bun" && input.args?.[0] === "install") {
           throw Object.assign(new Error("cancelled"), { name: "AbortError" });
         }
         return nodeExternalCommandRunner(input);
@@ -463,6 +471,12 @@ describe("dev-checkout update channel", () => {
       ],
     });
     expect(await git(fixture.checkout, ["rev-parse", "HEAD"])).toBe(fixture.targetRevision);
+    expect(channel.applyRecoveryCommands?.(plan, failure)).toEqual([
+      [plan.bunPath, "install", "--cwd", plan.repoRoot, "--frozen-lockfile"],
+      [plan.bunPath, "run", "--cwd", plan.repoRoot, "build"],
+      [plan.bunPath, "run", "--cwd", join(plan.repoRoot, "station"), "repair:node-pty"],
+      [plan.bunPath, "run", "--cwd", plan.repoRoot, "station:link"],
+    ]);
   });
 
   it("refuses to plan a dirty checkout", async () => {

@@ -112,9 +112,8 @@ describe("convergence report text", () => {
       "terminal public-terminal-target-00000001 pty=public-pty-00000001/public-pty-instance-00000001 session=public-session-00000001 handoff=non-preservable reap=non-resumable",
     );
     expect(text).toContain("reasons: session_non_resumable");
-    expect(text).toContain(
-      "session public-session-00000001 disposition=non-resumable handle=none rejected=0",
-    );
+    expect(text).toContain("session public-session-00000001 disposition=non-resumable");
+    expect(text).toContain("handle=none rejected=0");
     expect(text).toContain("resume capabilities: codex=enabled");
     expect(text).not.toContain("private-session");
   });
@@ -206,7 +205,7 @@ function recoveryReport(): PreviewReport {
 function report(outcome: PreviewReport["plan"]["outcome"], targetVersion = "1.1.0"): PreviewReport {
   const phase = { action: "no-op", reason: "healthy" } as const;
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     kind: "preview",
     channel: "installer-binary",
     current: { version: "1.0.0" },
@@ -220,6 +219,12 @@ function report(outcome: PreviewReport["plan"]["outcome"], targetVersion = "1.1.
       host: { status: "absent" },
       hookProviderIds: [],
       hooks: [],
+      parkedBridges: {
+        status: "assessed",
+        totalParkedCount: 0,
+        unownedParkedCount: 0,
+        adoptionRequiredCount: 0,
+      },
       terminalDispositions: [],
       evidenceComplete: false,
     },

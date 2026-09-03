@@ -7,7 +7,10 @@ import {
   type StationHostExactEvidence,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import { preflightParkedOrphanRecovery } from "../../src/host/preflightParkedOrphanRecovery.js";
+import {
+  parkedOrphanTerminalEvidence,
+  preflightParkedOrphanRecovery,
+} from "../../src/host/preflightParkedOrphanRecovery.js";
 
 describe("preflightParkedOrphanRecovery", () => {
   it.each([
@@ -15,41 +18,58 @@ describe("preflightParkedOrphanRecovery", () => {
     true,
   ])("admits strict reachable parks without requesting adoption (evicted=%s)", async (parkedEvicted) => {
     const park = parkRecord("/state/run/pty-bridges/pty-1.sock");
-    await expect(
-      preflightParkedOrphanRecovery(
-        { stateDir: "/state", deadlineMs: 10_000 },
-        {
-          now: () => 1_000,
-          loadRecoveryEvidence: async () => ({
-            manifest: {
-              "pty-1": {
-                bridgeProtocolVersion: 2,
-                bridgePid: park.bridgePid,
-                controlSocket: park.controlSocket,
-                command: park.command,
-                cols: park.cols,
-                rows: park.rows,
-                ptyInstanceId: park.ptyInstanceId,
-                identity: park.identity,
-              },
+    const result = await preflightParkedOrphanRecovery(
+      { stateDir: "/state", deadlineMs: 10_000 },
+      {
+        now: () => 1_000,
+        loadRecoveryEvidence: async () => ({
+          manifest: {
+            "pty-1": {
+              bridgeProtocolVersion: 2,
+              bridgePid: park.bridgePid,
+              controlSocket: park.controlSocket,
+              command: park.command,
+              cols: park.cols,
+              rows: park.rows,
+              ptyInstanceId: park.ptyInstanceId,
+              identity: park.identity,
             },
-            payloadPids: { "pty-1": park.pid },
-          }),
-          readBridgeStatus: async () => ({
-            type: "status",
-            bridgeProtocol: 2,
-            ptyInstanceId: park.ptyInstanceId,
-            pid: park.pid,
-            bridgePid: park.bridgePid,
-            cols: park.cols,
-            rows: park.rows,
-            adopted: false,
-            exited: false,
-            parkedEvicted,
-          }),
-        },
-      ),
-    ).resolves.toEqual({ parkedPtyCount: 1 });
+          },
+          payloadPids: { "pty-1": park.pid },
+        }),
+        readBridgeStatus: async () => ({
+          type: "status",
+          bridgeProtocol: 2,
+          ptyInstanceId: park.ptyInstanceId,
+          pid: park.pid,
+          bridgePid: park.bridgePid,
+          cols: park.cols,
+          rows: park.rows,
+          adopted: false,
+          exited: false,
+          parkedEvicted,
+        }),
+      },
+    );
+    expect(result).toEqual({
+      totalParkedCount: 1,
+      unownedParkedCount: 1,
+      adoptionRequiredCount: 1,
+    });
+    expect(parkedOrphanTerminalEvidence(result)).toEqual([
+      {
+        kind: "agent",
+        terminalTargetId: "target-1",
+        ptyId: "pty-1",
+        ptyInstanceId: "instance-1",
+        projectId: "project-1",
+        worktreeId: "worktree-1",
+        sessionId: "session-1",
+        harnessProvider: "codex",
+        alive: true,
+        handoffSupport: "bridge-releasable",
+      },
+    ]);
   });
 
   it("admits a bridge adopted by the fully matching current Host on a successive update", async () => {
@@ -67,7 +87,7 @@ describe("preflightParkedOrphanRecovery", () => {
           readBridgeStatus: async () => bridgeStatus(park, true),
         },
       ),
-    ).resolves.toEqual({ parkedPtyCount: 1 });
+    ).resolves.toEqual({ totalParkedCount: 1, unownedParkedCount: 0, adoptionRequiredCount: 0 });
   });
 
   it("admits an unowned park whose lifetime identities are disjoint from the current Host", async () => {
@@ -89,7 +109,7 @@ describe("preflightParkedOrphanRecovery", () => {
           readBridgeStatus: async () => bridgeStatus(park, false),
         },
       ),
-    ).resolves.toEqual({ parkedPtyCount: 1 });
+    ).resolves.toEqual({ totalParkedCount: 1, unownedParkedCount: 1, adoptionRequiredCount: 1 });
   });
 
   it.each([

@@ -17,6 +17,7 @@ describe("registered stn update command", () => {
     }));
     const probe: UpdateChannelProbe = {
       channel: "installer-binary",
+      inspectInstalled: async () => ({ version: "1.1.0" }),
       detectAndPlan: async () => ({
         channel: "installer-binary",
         plan: {
@@ -27,6 +28,7 @@ describe("registered stn update command", () => {
           currentCli: ["/opt/stn"],
         },
         apply,
+        inspectInstalled: async () => ({ version: "1.1.0" }),
       }),
     };
     const build = {
@@ -48,7 +50,7 @@ describe("registered stn update command", () => {
     expect(result).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         kind: "preview",
         channel: "installer-binary",
         plan: { outcome: "actionable" },
@@ -69,7 +71,7 @@ describe("registered stn update command", () => {
     expect(reapResult).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         kind: "preview",
         initial: {
           boundary: {
@@ -99,6 +101,7 @@ describe("registered stn update command", () => {
     const clientFactory = vi.fn();
     const probe: UpdateChannelProbe = {
       channel: "installer-binary",
+      inspectInstalled: async () => ({ version: "1.0.0" }),
       detectAndPlan: async () => ({
         channel: "installer-binary",
         plan: {
@@ -109,6 +112,7 @@ describe("registered stn update command", () => {
           currentCli: ["/opt/stn"],
         },
         apply: vi.fn(),
+        inspectInstalled: async () => ({ version: "1.0.0" }),
       }),
     };
 
@@ -130,6 +134,15 @@ describe("registered stn update command", () => {
     expect(result.output).toContain("--reap");
     expect(result.output).toContain("--handoff[=processes|screen]");
     expect(result.output).toContain("--no-handoff");
+  });
+
+  it("rejects direct invocation of the private successor transport", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+
+    await expect(
+      runCli(["--config", configPath, "update", "--successor"], { stdin: "{}" }),
+    ).rejects.toThrow("private transport command");
   });
 });
 
@@ -157,6 +170,12 @@ async function emptyPreflight({
     target,
     observer: { status: "absent" as const },
     host: { status: "absent" as const },
+    parkedBridges: {
+      status: "assessed" as const,
+      totalParkedCount: 0,
+      unownedParkedCount: 0,
+      adoptionRequiredCount: 0,
+    },
     hookProviderIds: [],
     hooks: [],
     terminalDispositions: [],

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import type { UpdateArtifact } from "@station/contracts";
 import type {
   UpdateApplyReportBase,
   UpdateChannel,
@@ -11,13 +13,19 @@ import { updateErrorFromUnknown } from "./updateError.js";
 
 export type PlannedUpdateChannel = {
   channel: UpdateChannelId;
+  installedScopeDigest: string;
   plan: UpdatePlanBase;
   apply(options?: UpdateOperationOptions): Promise<UpdateApplyReportBase>;
+  inspectInstalled(options?: UpdateOperationOptions): Promise<UpdateArtifact | undefined>;
   applyRecoveryCommands?(error: unknown): readonly UpdateCommandArgv[] | undefined;
 };
 
 export type UpdateChannelProbe = {
   channel: UpdateChannelId;
+  inspectInstalled(
+    installedScopeDigest: string,
+    options?: UpdateOperationOptions,
+  ): Promise<UpdateArtifact | undefined>;
   detectAndPlan(options?: UpdateOperationOptions): Promise<PlannedUpdateChannel | undefined>;
 };
 
@@ -28,6 +36,24 @@ export function createUpdateChannelProbe<
 >(channel: UpdateChannel<Detection, Plan, Report>): UpdateChannelProbe {
   return {
     channel: channel.id,
+    async inspectInstalled(installedScopeDigest, options = {}) {
+      const before = await channel.detect(options);
+      const current = await channel.detect(options);
+      if (
+        before === undefined ||
+        current === undefined ||
+        before.currentVersion !== current.currentVersion ||
+        before.currentRevision !== current.currentRevision ||
+        scopeDigest(channel.id, channel.installedScope(before)) !== installedScopeDigest ||
+        scopeDigest(channel.id, channel.installedScope(current)) !== installedScopeDigest
+      ) {
+        return undefined;
+      }
+      return {
+        version: current.currentVersion,
+        ...(current.currentRevision === undefined ? {} : { revision: current.currentRevision }),
+      };
+    },
     async detectAndPlan(options = {}) {
       const detection = await channel.detect(options);
       if (detection === undefined) return undefined;
@@ -35,14 +61,66 @@ export function createUpdateChannelProbe<
       const applyRecoveryCommands = channel.applyRecoveryCommands;
       return {
         channel: channel.id,
+        installedScopeDigest: scopeDigest(channel.id, channel.installedScope(detection)),
         plan,
         apply: (applyOptions = {}) => channel.apply(plan, applyOptions),
+        inspectInstalled: (inspectOptions = {}) => channel.inspectInstalled(plan, inspectOptions),
         ...(applyRecoveryCommands === undefined
           ? {}
           : { applyRecoveryCommands: (error: unknown) => applyRecoveryCommands(plan, error) }),
       };
     },
   };
+}
+
+export async function inspectSelectedUpdateChannel(input: {
+  probes: readonly UpdateChannelProbe[];
+  requested: UpdateChannelId;
+  installedScopeDigest: string;
+  options?: UpdateOperationOptions;
+}): Promise<
+  Pick<PlannedUpdateChannel, "channel" | "inspectInstalled"> & { installed: UpdateArtifact }
+> {
+  const selectedProbes = input.probes.filter(({ channel }) => channel === input.requested);
+  if (selectedProbes.length === 0) {
+    throw selectionError(
+      "UPDATE_CHANNEL_UNKNOWN",
+      `Unknown Station update channel '${input.requested}'.`,
+      "Use stn update --help to list supported channels.",
+    );
+  }
+  const matches: Array<
+    Pick<PlannedUpdateChannel, "channel" | "inspectInstalled"> & { installed: UpdateArtifact }
+  > = [];
+  for (const probe of selectedProbes) {
+    const installed = await probe.inspectInstalled(input.installedScopeDigest, input.options);
+    if (installed !== undefined) {
+      matches.push({
+        channel: probe.channel,
+        installed,
+        inspectInstalled: (options) => probe.inspectInstalled(input.installedScopeDigest, options),
+      });
+    }
+  }
+  if (matches.length === 1 && matches[0] !== undefined) return matches[0];
+  if (matches.length === 0) {
+    throw selectionError(
+      "UPDATE_CHANNEL_NOT_DETECTED",
+      `The ${input.requested} channel does not own the running Station installation.`,
+      "Run the installation owner's update command or select the channel that owns this launcher.",
+    );
+  }
+  throw selectionError(
+    "UPDATE_CHANNEL_AMBIGUOUS",
+    `Multiple ${input.requested} probes own the running Station installation.`,
+    "Run Station with one unambiguous installation owner.",
+  );
+}
+
+function scopeDigest(channel: UpdateChannelId, fields: readonly string[]): string {
+  return createHash("sha256")
+    .update(JSON.stringify([channel, ...fields]))
+    .digest("hex");
 }
 
 export async function selectUpdateChannel(input: {

@@ -851,6 +851,12 @@ function preflight(
     host: { status: "absent" as const },
     hookProviderIds: [],
     hooks: [],
+    parkedBridges: {
+      status: "assessed",
+      totalParkedCount: 0,
+      unownedParkedCount: 0,
+      adoptionRequiredCount: 0,
+    },
     terminalDispositions: [],
     ...overrides,
   };

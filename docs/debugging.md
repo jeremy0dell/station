@@ -203,6 +203,18 @@ For a stalled Observer subscriber, use the opt-in transport probe described in
 not a normal runtime recovery step; keep its output outside the live state
 directory and inspect the complete evidence bundle rather than RSS alone.
 
+## Update convergence
+
+`stn update --dry-run --json` is the read-only starting point. It reports the
+v5 aggregate and plan, including exact Observer/Host evidence and parked-bridge
+viability. Same-artifact apply runs hook, exact Observer, Host, parked-bridge,
+persisted-state, and final-inspection capabilities in process. Artifact-changing
+apply installs once and crosses once into the target launcher through a bounded
+strict successor request; the target performs runtime convergence in process.
+Unknown ownership and busy non-preservable terminals fail closed as
+`reap-required`; `--no-handoff` is `intentionally-incomplete`. `current` and
+`updated` require a completed final aggregate whose plan is `converged`.
+
 ## Detailed references
 
 - [Diagnostics](diagnostics.md) — commands, bundles, redaction, retention, and hooks.

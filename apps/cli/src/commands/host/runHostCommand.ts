@@ -12,8 +12,7 @@ import { stationBuildInfo } from "@station/runtime";
 import {
   convergeStationHost,
   inspectStationHost,
-  preflightParkedOrphanRecovery,
-  recoverExactStationHostOrphans,
+  type recoverExactStationHostOrphans,
 } from "@station/terminal";
 import { resolveObserverPaths } from "../../paths.js";
 import { selfExecArgv } from "../../selfExec.js";
@@ -25,7 +24,6 @@ export type { HostHandoffResult } from "./hostHandoff.js";
 export type HostCommandDeps = {
   convergeHost?: typeof convergeStationHost;
   inspectHost?: typeof inspectStationHost;
-  preflightHostOrphans?: typeof preflightParkedOrphanRecovery;
   recoverHostOrphans?: typeof recoverExactStationHostOrphans;
   resolveHostCommand?: () => readonly [string, ...string[]];
   /** Test/composition override for the requesting Station display build. */
@@ -77,14 +75,10 @@ export async function runHostCommand(
       targetBuild,
       dryRun: parsed.dryRun,
       fidelity: parsed.fidelity,
-      updateCrossover: parsed.updateCrossover,
-      replacementRequired: parsed.replacementRequired,
       inspection,
     },
     {
       convergeHost: deps.convergeHost ?? convergeStationHost,
-      preflightHostOrphans: deps.preflightHostOrphans ?? preflightParkedOrphanRecovery,
-      recoverHostOrphans: deps.recoverHostOrphans ?? recoverExactStationHostOrphans,
       resolveHostCommand: deps.resolveHostCommand ?? resolveStationHostCommand,
       now: deps.now ?? Date.now,
     },
@@ -150,7 +144,7 @@ function resolveStationHostEntry(): string {
   const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
   return join(repoRoot, "station/src/host/hostMain.ts");
 }
-function resolveStationHostCommand(): readonly [string, ...string[]] {
+export function resolveStationHostCommand(): readonly [string, ...string[]] {
   return selfExecArgv("station-host", [
     process.env.STATION_BUN ?? "bun",
     resolveStationHostEntry(),

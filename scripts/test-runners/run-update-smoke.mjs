@@ -307,7 +307,8 @@ async function runScenario(input) {
   const stateHome = join(scenarioRoot, "state-home");
   const dataHome = join(scenarioRoot, "data-home");
   const cacheHome = join(scenarioRoot, "cache-home");
-  const stateDir = join(scenarioRoot, "state");
+  // Bridge control sockets inherit this path; keep it short enough for macOS sun_path.
+  const stateDir = join(input.root, "s", scenarioKey);
   const runtimeDir = join(input.root, "r", scenarioKey);
   const tempDir = join(scenarioRoot, "tmp");
   const tmuxTempDir = await mkdtemp(join("/tmp", `stn-tmux-${scenarioKey}-`));
@@ -339,7 +340,6 @@ async function runScenario(input) {
       stateHome,
       dataHome,
       cacheHome,
-      stateDir,
       runtimeDir,
       tempDir,
       tmuxTempDir,
@@ -395,6 +395,9 @@ async function runScenario(input) {
       input.options.incumbentVersion,
       `${input.name} incumbent Observer`,
     );
+    const incumbentBuildIdentity = parseStationObserverBuildVersion(
+      incumbentObserver.version,
+    ).buildIdentity;
     diagnostics.observerPid = incumbentObserver.pid;
     await recordProcessIdentity(processIdentities, "incumbent-observer", incumbentObserver.pid);
     observerClient = createObserverClient({
@@ -404,11 +407,35 @@ async function runScenario(input) {
     });
 
     if (input.busyHost) {
-      incumbentHostProcess = spawn(
-        installedBinary,
-        ["__station-host", "--socket", hostSocketPath, "--state-dir", stateDir],
-        { cwd: scenarioRoot, env, stdio: ["ignore", "pipe", "pipe"] },
-      );
+      const bridgeBackedHost =
+        input.invocation === "tmux" && input.options.busyHostOutcome === "full-handoff";
+      if (bridgeBackedHost && incumbentBuildIdentity === undefined) {
+        throw new Error(`${input.name} incumbent Observer did not expose a build identity.`);
+      }
+      const hostCommand = bridgeBackedHost
+        ? (process.env.STATION_BUN ?? findExecutable("bun", env.PATH))
+        : installedBinary;
+      const hostArgs = bridgeBackedHost
+        ? [
+            join(repoRoot, "station", "src", "host", "hostMain.ts"),
+            "--socket",
+            hostSocketPath,
+            "--state-dir",
+            stateDir,
+            "--build-version",
+            input.options.incumbentVersion,
+            "--build-identity",
+            incumbentBuildIdentity,
+          ]
+        : ["__station-host", "--socket", hostSocketPath, "--state-dir", stateDir];
+      const hostEnvironment = bridgeBackedHost
+        ? { ...env, STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE: "1", STATION_PTY_IMPL: "bridge" }
+        : env;
+      incumbentHostProcess = spawn(hostCommand, hostArgs, {
+        cwd: bridgeBackedHost ? repoRoot : scenarioRoot,
+        env: hostEnvironment,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
       incumbentHostOutput = collectOutput(incumbentHostProcess);
       diagnostics.hostPid = incumbentHostProcess.pid;
       await recordProcessIdentity(processIdentities, "incumbent-host", incumbentHostProcess.pid);
@@ -516,8 +543,7 @@ async function runScenario(input) {
       );
     }
 
-    const preservedRefusal =
-      input.busyHost && input.options.busyHostOutcome === "preserved-refusal";
+    const preservedRefusal = updateRequiresPreservation(input);
     let completedInstallRefusal = false;
     const expectedUpdateCode = preservedRefusal ? 1 : 0;
     const updateResult =
@@ -558,7 +584,7 @@ async function runScenario(input) {
         );
         assertUpdateReport(report, input, installedBinary, configPath);
         assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
-        completedInstallRefusal = true;
+        completedInstallRefusal = report.status === "failed";
       }
     } else {
       const report = parseComposedUpdateReport(
@@ -613,7 +639,7 @@ async function runScenario(input) {
       );
     }
 
-    if (input.busyHost && input.options.busyHostOutcome === "full-handoff") {
+    if (input.busyHost && !preservedRefusal) {
       assertEqual(
         await waitForExactProcessExit(processIdentities.get("incumbent-host"), 10_000),
         true,
@@ -710,16 +736,15 @@ async function runScenario(input) {
       processIdentities,
     });
     if (input.busyHost) {
-      const expectedHostVersion =
-        input.options.busyHostOutcome === "preserved-refusal"
-          ? input.options.incumbentVersion
-          : input.target.version;
+      const expectedHostVersion = preservedRefusal
+        ? input.options.incumbentVersion
+        : input.target.version;
       const cleanupClient = createStationHostClient({
         socketPath: hostSocketPath,
         timeoutMs: 3000,
         expectedBuildVersion: expectedHostVersion,
       });
-      if (input.options.busyHostOutcome === "preserved-refusal") {
+      if (preservedRefusal) {
         const live = (await cleanupClient.list()).find((entry) => entry.ptyId === spawnedPty.ptyId);
         assertPreservedPty(live, spawnedPty, ptyChildPid, input.name);
         await writeFile(releaseSignal, "\n", { mode: 0o600 });
@@ -731,11 +756,7 @@ async function runScenario(input) {
       await waitForMissing(hostSocketPath, 10_000);
       assertEqual(
         await waitForExactProcessExit(
-          processIdentities.get(
-            input.options.busyHostOutcome === "preserved-refusal"
-              ? "incumbent-host"
-              : "target-host",
-          ),
+          processIdentities.get(preservedRefusal ? "incumbent-host" : "target-host"),
           10_000,
         ),
         true,
@@ -798,6 +819,9 @@ async function runScenario(input) {
     });
     await cleanupAction(cleanupWarnings, "tmux temp directory", async () => {
       await rm(tmuxTempDir, { recursive: true, force: true });
+    });
+    await cleanupAction(cleanupWarnings, "state directory", async () => {
+      await rm(stateDir, { recursive: true, force: true });
     });
     await cleanupAction(cleanupWarnings, "Host cleanup", async () => {
       if (!(await pathExists(hostSocketPath))) return;
@@ -1195,9 +1219,7 @@ async function assertExactTransportRequests(transportDir, input, completedInstal
   ];
   const expected = [
     ...detectionRequests,
-    ...(input.busyHost &&
-    input.options.busyHostOutcome === "preserved-refusal" &&
-    !completedInstallRefusal
+    ...(updateRequiresPreservation(input) && !completedInstallRefusal
       ? []
       : [
           releaseDownloadUrl(input.target.tag, "install.sh"),
@@ -1621,46 +1643,43 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
     assertLegacyUpdateReport(report, input, installedBinary, configPath);
     return;
   }
-  assertEqual(report.schemaVersion, 4, `${input.name} update schema`);
+  assertEqual(report.schemaVersion, 5, `${input.name} update schema`);
   assertEqual(report.kind, "result", `${input.name} update result kind`);
   assertEqual(report.channel, "installer-binary", `${input.name} update channel`);
-  const refusal = input.busyHost && input.options.busyHostOutcome === "preserved-refusal";
-  assertEqual(report.status, refusal ? "failed" : "updated", `${input.name} update status`);
+  const refusal = updateRequiresPreservation(input);
+  assertEqual(report.status, refusal ? "reap-required" : "updated", `${input.name} update status`);
   assertEqual(report.current?.version, input.options.incumbentVersion, `${input.name} current`);
   assertEqual(report.target?.version, input.target.version, `${input.name} target`);
   assertDeepEqual(report.warnings, [], `${input.name} update warnings`);
   const expectedRecovery = refusal
-    ? [[installedBinary, "--config", configPath, "host", "handoff", "--fidelity", "processes"]]
+    ? [[installedBinary, "--config", configPath, "update", "--handoff=processes"]]
     : [];
   assertDeepEqual(
     report.recoveryCommands,
     expectedRecovery,
     `${input.name} recovery commands (${JSON.stringify({ error: report.error, steps: report.steps })})`,
   );
-  assertEqual(
-    report.error?.code,
-    refusal ? "UPDATE_RUNTIME_CROSSOVER_FAILED" : undefined,
-    `${input.name} update error`,
-  );
+  assertEqual(report.error?.code, undefined, `${input.name} update error`);
   assertDeepEqual(
-    report.hookReconciliation,
-    {
-      provider: "codex",
-      status: "configured-disabled",
-      changed: false,
-      verified: false,
-      followUp: { action: "enable-hooks" },
-    },
+    report.hookReconciliations,
+    refusal ? [] : expectedNoOpHookReconciliations(report.initial.hooks),
     `${input.name} provider-neutral hook reconciliation`,
   );
-  const expectedIds = [
-    "detect",
-    "plan",
-    "apply",
-    "hook-reconciliation",
-    "observer-restart",
-    "host-handoff",
-  ];
+  const expectedIds = refusal
+    ? ["detect", "plan", "apply"]
+    : [
+        "detect",
+        "plan",
+        "apply",
+        "detect",
+        "plan",
+        "apply",
+        "hook-reconciliation",
+        "observer-restart",
+        ...(input.busyHost ? ["host-handoff"] : []),
+        "persisted-state-reconcile",
+        "final-verification",
+      ];
   assertDeepEqual(
     report.steps.map((step) => step.id),
     expectedIds,
@@ -1668,16 +1687,41 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
   );
   assertDeepEqual(
     report.steps.map((step) => step.status),
-    [
-      "completed",
-      "completed",
-      "completed",
-      "completed",
-      "completed",
-      refusal ? "failed" : "completed",
-    ],
+    refusal
+      ? ["completed", "completed", "skipped"]
+      : expectedIds.map((id, index) => (id === "apply" && index > 2 ? "skipped" : "completed")),
     `${input.name} exact update step outcomes`,
   );
+}
+
+function updateRequiresPreservation(input) {
+  return (
+    input.busyHost &&
+    (input.options.busyHostOutcome === "preserved-refusal" || input.invocation === "external")
+  );
+}
+
+function expectedNoOpHookReconciliations(hooks) {
+  return hooks.map((hook) => {
+    switch (hook.status) {
+      case "configured-disabled":
+        return {
+          provider: hook.provider,
+          status: hook.status,
+          changed: false,
+          verified: false,
+          followUp: hook.followUp,
+        };
+      case "unsupported":
+        return { provider: hook.provider, status: hook.status, changed: false, verified: false };
+      case "healthy":
+        return { provider: hook.provider, status: hook.status, changed: false, verified: true };
+      default:
+        throw new Error(
+          `Expected a successful no-op hook health result, received ${hook.status} for ${hook.provider}.`,
+        );
+    }
+  });
 }
 
 function assertLegacyUpdateReport(report, input, installedBinary, configPath) {
@@ -1755,7 +1799,7 @@ function assertDryUpdateReport(report, input) {
     );
     return 0;
   }
-  assertEqual(report.schemaVersion, 4, `${input.name} dry-run schema`);
+  assertEqual(report.schemaVersion, 5, `${input.name} dry-run schema`);
   assertEqual(report.kind, "preview", `${input.name} dry-run kind`);
   assertEqual(report.channel, "installer-binary", `${input.name} dry-run channel`);
   assertEqual(report.current?.version, input.options.incumbentVersion, `${input.name} dry current`);

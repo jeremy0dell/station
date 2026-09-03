@@ -6,10 +6,6 @@ export type ParsedHostArgs = {
   action: HostCommandAction;
   dryRun: boolean;
   fidelity: HostHandoffFidelity;
-  /** Selects the updater's idempotent exact-convergence projection. */
-  updateCrossover: boolean;
-  /** Preflight-only fact that the selected artifact will replace an exact incumbent. */
-  replacementRequired: boolean;
 };
 
 export function parseHostArgs(args: readonly string[]): ParsedHostArgs {
@@ -25,8 +21,6 @@ export function parseHostArgs(args: readonly string[]): ParsedHostArgs {
 
   let dryRun = false;
   let fidelity: HostHandoffFidelity = "processes";
-  let updateCrossover = false;
-  let replacementRequired = false;
   while (tokens.length > 0) {
     const token = tokens.shift();
     if (token === undefined) {
@@ -37,16 +31,6 @@ export function parseHostArgs(args: readonly string[]): ParsedHostArgs {
     }
     if (token === "--dry-run") {
       dryRun = true;
-      continue;
-    }
-    if (token === "--update-crossover") {
-      if (updateCrossover) throw new Error("Host update crossover may be selected only once.");
-      updateCrossover = true;
-      continue;
-    }
-    if (token === "--replacement-required") {
-      if (replacementRequired) throw new Error("Host replacement may be required only once.");
-      replacementRequired = true;
       continue;
     }
     if (token === "--fidelity") {
@@ -61,16 +45,7 @@ export function parseHostArgs(args: readonly string[]): ParsedHostArgs {
     throw new Error(`Unknown host flag: ${token}`);
   }
 
-  if (replacementRequired && (!updateCrossover || !dryRun)) {
-    throw new Error("Host replacement-required is valid only for update crossover dry-run.");
-  }
-  return {
-    action: actionToken,
-    dryRun,
-    fidelity,
-    updateCrossover,
-    replacementRequired,
-  };
+  return { action: actionToken, dryRun, fidelity };
 }
 
 function parseFidelity(value: string | undefined): HostHandoffFidelity {

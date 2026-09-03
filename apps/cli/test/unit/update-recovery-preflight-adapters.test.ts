@@ -70,6 +70,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
+        currentBuildArtifact: artifacts.installed,
         currentBuildInfo,
         inspectObserverOwner,
         inspectHost: async () => ({ status: "absent" }),
@@ -87,6 +88,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers,
+      currentBuildArtifact: artifacts.installed,
       currentBuildInfo,
       inspectObserverOwner,
       inspectHost: async () =>
@@ -144,6 +146,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers: providerRegistry(),
+      currentBuildArtifact: artifacts.installed,
       currentBuildInfo,
       inspectObserverOwner: async () => ({ status: "blocked", reason: "process-without-socket" }),
       inspectHost: async () => ({ status: "absent" }),
@@ -160,6 +163,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers: providerRegistry(),
+      currentBuildArtifact: artifacts.installed,
       currentBuildInfo,
       inspectObserverOwner: async () => ({ status: "blocked", reason: "identity-drift" }),
       inspectHost: async () => ({ status: "absent" }),
@@ -177,6 +181,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers: providerRegistry(),
+      currentBuildArtifact: { version: "1.0.0" },
       currentBuildInfo,
       inspectHost: async () => exactHost(targetBuildVersion, "b".repeat(64)),
     });
@@ -200,17 +205,26 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const cases = [
       {
         installed: target,
+        currentBuildArtifact: target,
         runningBuildIdentity: currentBuildIdentity,
         expectedRelation: "matching-target",
       },
       {
         installed: { version: "1.1.0", revision: "installed-revision" },
+        currentBuildArtifact: { version: "1.1.0", revision: "installed-revision" },
         runningBuildIdentity: currentBuildIdentity,
         expectedRelation: "different",
       },
       {
         installed: { version: "1.1.0", revision: "installed-revision" },
+        currentBuildArtifact: { version: "1.1.0", revision: "installed-revision" },
         runningBuildIdentity: "b".repeat(64),
+        expectedRelation: "unknown",
+      },
+      {
+        installed: target,
+        currentBuildArtifact: { version: "1.1.0", revision: "previous-revision" },
+        runningBuildIdentity: currentBuildIdentity,
         expectedRelation: "unknown",
       },
     ] as const;
@@ -219,6 +233,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
+        currentBuildArtifact: testCase.currentBuildArtifact,
         currentBuildInfo,
         inspectHost: async () => exactHost(target.version, testCase.runningBuildIdentity),
       });
@@ -254,6 +269,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
+        currentBuildArtifact: target,
         currentBuildInfo,
         inspectObserverOwner: async () => exactObserver(observerBuildVersion),
         inspectHost: async () =>
@@ -276,6 +292,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers: providerRegistry(),
+      currentBuildArtifact: { version: "0.9.0" },
       currentBuildInfo,
       inspectHost: async () => exactHost(target.version, "b".repeat(64)),
     });

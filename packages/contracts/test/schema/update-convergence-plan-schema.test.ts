@@ -13,13 +13,13 @@ describe("UpdateConvergencePlanningInputSchema", () => {
     expect(UpdateConvergencePlanningInputSchema.parse(planningInput())).toEqual(planningInput());
   });
 
-  it("requires target runtime knowledge exactly when the target artifact is installed", () => {
+  it("requires the target artifact before accepting target runtime knowledge", () => {
     expect(
       UpdateConvergencePlanningInputSchema.safeParse({
         ...planningInput(),
         targetRuntime: { status: "not-yet-provable" },
       }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       UpdateConvergencePlanningInputSchema.safeParse({
         ...planningInput(),
@@ -466,6 +466,12 @@ function preflight(overrides: Record<string, unknown> = {}) {
     host: { status: "absent" as const },
     hookProviderIds: [],
     hooks: [],
+    parkedBridges: {
+      status: "assessed" as const,
+      totalParkedCount: 0,
+      unownedParkedCount: 0,
+      adoptionRequiredCount: 0,
+    },
     terminalDispositions: [],
     evidenceComplete: false,
     ...overrides,

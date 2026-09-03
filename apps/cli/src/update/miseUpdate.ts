@@ -66,6 +66,7 @@ export function createMiseUpdateChannel(
   return {
     id: channel,
     detect: (options = {}) => detectMise(deps, options),
+    installedScope: (detection) => [detection.misePath, detection.tool],
     async plan(detection, options = {}) {
       await requireSameDetection(detection, deps, options);
       const targetVersion = await miseTargetVersion(detection, deps.commandRunner, options);
@@ -77,6 +78,22 @@ export function createMiseUpdateChannel(
         managerCommand: [detection.misePath, "upgrade", detection.tool],
         successorCli: [detection.misePath, "exec", "--", "stn"],
       };
+    },
+    async inspectInstalled(plan, options = {}) {
+      const before = await detectMise(deps, options, plan.tool);
+      const current = await detectMise(deps, options, plan.tool);
+      if (
+        before === undefined ||
+        current === undefined ||
+        current.currentVersion !== before.currentVersion ||
+        current.installPath !== before.installPath ||
+        current.runtimePath !== before.runtimePath ||
+        current.misePath !== plan.misePath ||
+        current.tool !== plan.tool
+      ) {
+        return undefined;
+      }
+      return { version: current.currentVersion };
     },
     async apply(plan, options = {}) {
       return applyPackageManagerPlan(plan, options, {
@@ -127,7 +144,14 @@ async function detectMise(
       options,
     );
     const runningRuntimePath =
-      expectedTool === undefined ? await realpath(deps.runtimePath) : undefined;
+      expectedTool === undefined
+        ? await realpath(deps.runtimePath)
+        : await realpath(
+            oneLine(
+              (await runMise(misePath, ["which", "stn"], deps.commandRunner, options)).stdout,
+              "mise active Station path",
+            ),
+          );
     const installs = MiseListSchema.parse(JSON.parse(result.stdout));
     for (const [tool, entries] of Object.entries(installs)) {
       if (expectedTool !== undefined && tool !== expectedTool) continue;
@@ -138,7 +162,7 @@ async function detectMise(
         } catch {
           continue;
         }
-        if (runningRuntimePath !== undefined && candidate !== runningRuntimePath) continue;
+        if (candidate !== runningRuntimePath) continue;
         return {
           channel,
           currentVersion: entry.version,
@@ -226,6 +250,14 @@ function runMise(
     },
     commandRunner,
   );
+}
+
+function oneLine(output: string, label: string): string {
+  const lines = output.trim().split(/\r?\n/u);
+  if (lines.length !== 1 || lines[0] === undefined || lines[0].length === 0) {
+    throw new Error(`${label} was not one non-empty line.`);
+  }
+  return lines[0];
 }
 
 function stalePlan(message: string) {

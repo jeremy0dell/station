@@ -141,6 +141,9 @@ presentation remain at the Station integration boundary. An advertised managed
 attachment that cannot be resolved must fail visibly; it must not fall through
 to a second local spawn.
 
+Update convergence is a CLI-owned composition over these capabilities. Its read-only aggregate retains only invocation-local commitments; the public v5 report contains the initial and final aggregates, the derived plan, and ordered provider-neutral hook results. Same-artifact updates revalidate the installed artifact before they execute hook, exact Observer, Host, parked-bridge, persisted-state, and final-inspection capabilities in the current process. Artifact-changing updates cross once into the installed target launcher with a strict request containing channel, artifact, an installation-scope digest, handoff policy, and sorted hook providers. The digest commits to stable local ownership fields without carrying a path or executable command. The target performs runtime capabilities in process and returns a bounded, authenticated encrypted receipt that includes exact parked-terminal preservation evidence. The target consumes the one-shot transport key before composing runtime capabilities, and the parent validates target, channel, installation scope, provider, plan derivation, terminal preservation, and exit correlation before one public projection. Final inspection brackets the runtime aggregate with local installed-artifact reads without resolving another remote target. No successor receipt, parked-terminal identity, endpoint, PID, recovery handle, or updater-only Host command is public authority. Unknown ownership or non-preservable terminals block mutation, and `reap-required` remains an explicit no-signal outcome for the later destructive executor.
+
+
 ## State, Authority, And Lifetime
 
 No single layer owns all truth:

@@ -1,10 +1,12 @@
 import net from "node:net";
 import {
+  compareStationHostTerminalLifetimeIdentity,
   type PtyBridgeStatus,
   PtyBridgeStatusCommandSchema,
   PtyBridgeStatusSchema,
   type PtyHandoffEntry,
   type StationHostExactEvidence,
+  type UpdateReapTerminalEvidence,
 } from "@station/contracts";
 import { stationHostErrorFromUnknown, stationHostSafeError } from "@station/host";
 import {
@@ -15,6 +17,7 @@ import {
 } from "./orphanRecovery.js";
 
 const MAX_STATUS_LINE_CHARS = 16 * 1024;
+const parkedTerminalIdentities = Symbol("station.parked-terminal-identities");
 
 /** DRIVEN PORT: supplies durable park evidence, read-only bridge status, and one clock. */
 export type ParkedOrphanRecoveryPreflightPorts = {
@@ -35,7 +38,7 @@ export function preflightParkedOrphanRecovery(
     deadlineMs?: number;
   },
   deps: Partial<ParkedOrphanRecoveryPreflightPorts> = {},
-): Promise<{ parkedPtyCount: number }> {
+): Promise<ParkedOrphanRecoveryPreflightResult> {
   const now = deps.now ?? Date.now;
   const deadlineMs = options.deadlineMs ?? now() + 5_000;
   return executeParkedOrphanRecoveryPreflight(
@@ -68,11 +71,13 @@ export async function executeParkedOrphanRecoveryPreflight(
     deadlineMs: number;
   },
   ports: ParkedOrphanRecoveryPreflightPorts,
-): Promise<{ parkedPtyCount: number }> {
+): Promise<ParkedOrphanRecoveryPreflightResult> {
   const evidence = await ports.loadRecoveryEvidence(input.stateDir);
   const { deadlineMs } = input;
   const now = ports.now;
   if (now() >= deadlineMs) throw invalidParkViabilityError();
+  let unownedParkedCount = 0;
+  const unownedTerminals: UpdateReapTerminalEvidence[] = [];
   for (const [ptyId, entry] of Object.entries(evidence.manifest)) {
     if (now() >= deadlineMs) throw invalidParkViabilityError();
     let status: PtyBridgeStatus;
@@ -92,9 +97,53 @@ export async function executeParkedOrphanRecoveryPreflight(
       status,
       input.currentHostEvidence,
     );
+    if (!status.adopted) {
+      unownedParkedCount += 1;
+      unownedTerminals.push({
+        kind: entry.identity.kind,
+        terminalTargetId: entry.identity.terminalTargetId,
+        ptyId,
+        ptyInstanceId: entry.ptyInstanceId,
+        projectId: entry.identity.projectId,
+        worktreeId: entry.identity.worktreeId,
+        sessionId: entry.identity.sessionId,
+        harnessProvider: entry.identity.harnessProvider,
+        alive: true,
+        handoffSupport: "bridge-releasable",
+      });
+    }
   }
   if (now() >= deadlineMs) throw invalidParkViabilityError();
-  return { parkedPtyCount: Object.keys(evidence.manifest).length };
+  unownedTerminals.sort(compareStationHostTerminalLifetimeIdentity);
+  const result: ParkedOrphanRecoveryPreflightResult = {
+    totalParkedCount: Object.keys(evidence.manifest).length,
+    unownedParkedCount,
+    adoptionRequiredCount: unownedParkedCount,
+  };
+  Object.defineProperty(result, parkedTerminalIdentities, {
+    value: unownedTerminals,
+    enumerable: false,
+  });
+  return result;
+}
+
+export type ParkedOrphanRecoveryPreflightResult = {
+  totalParkedCount: number;
+  unownedParkedCount: number;
+  adoptionRequiredCount: number;
+};
+
+/** Returns exact unowned park identities only to the composing update invocation. */
+export function parkedOrphanTerminalEvidence(
+  result: ParkedOrphanRecoveryPreflightResult,
+): readonly UpdateReapTerminalEvidence[] {
+  return (
+    (
+      result as ParkedOrphanRecoveryPreflightResult & {
+        [parkedTerminalIdentities]?: readonly UpdateReapTerminalEvidence[];
+      }
+    )[parkedTerminalIdentities] ?? []
+  );
 }
 
 function assertBridgeMatchesPark(

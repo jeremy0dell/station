@@ -67,12 +67,12 @@ export const UpdateConvergencePlanningInputSchema = z
   .superRefine((input, context) => {
     // A future build cannot be compared to live immutable runtime identity until it is installed.
     const installed = artifactsMatch(input.preflight.installed, input.preflight.target);
-    if (installed !== (input.targetRuntime.status === "known")) {
+    if (!installed && input.targetRuntime.status === "known") {
       context.addIssue({
         code: "custom",
         path: ["targetRuntime", "status"],
         message:
-          "Target runtime identity is known exactly when the selected artifact is installed.",
+          "Target runtime identity can be known only when the selected artifact is installed.",
       });
     }
   });
@@ -207,6 +207,9 @@ const terminalPhaseSchema = z.discriminatedUnion("action", [
 ]);
 const hostPhaseSchema = z.discriminatedUnion("action", [
   phaseVariant("no-op", z.enum(["absent", "matching-target"]), {}),
+  phaseVariant("recover-parked", z.literal("unowned-parked-bridges"), {
+    parkedCount: z.number().int().positive(),
+  }),
   phaseVariant("replace-idle", z.literal("different-idle-host"), {}),
   phaseVariant("handoff", z.literal("busy-different-host"), {
     fidelity: HostHandoffFidelitySchema,

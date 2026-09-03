@@ -3,18 +3,23 @@ import { type SafeError, SafeErrorSchema } from "./errors.js";
 import { ObserverStartupEvidenceSchema } from "./observer.js";
 import { ProviderHookReconciliationResultSchema } from "./providerHooks.js";
 import { compareCodeUnitStrings } from "./shared.js";
-import { StationHostConvergenceFailureSummarySchema } from "./stationHostConvergence.js";
 import {
   UpdateChannelIdSchema,
   UpdateCommandArgvSchema,
   UpdateCommandStepSchema,
 } from "./update.js";
 import { type UpdateArtifact, UpdateArtifactSchema } from "./updateArtifact.js";
-import { UpdateConvergencePlanSchema } from "./updateConvergencePlan.js";
-import { UpdateReapRecoveryPreflightSchema } from "./updateRecoveryPreflight.js";
+import {
+  type UpdateConvergencePlan,
+  UpdateConvergencePlanSchema,
+} from "./updateConvergencePlan.js";
+import {
+  type UpdateReapRecoveryPreflight,
+  UpdateReapRecoveryPreflightSchema,
+} from "./updateRecoveryPreflight.js";
 
 const common = {
-  schemaVersion: z.literal(4),
+  schemaVersion: z.literal(5),
   channel: UpdateChannelIdSchema,
   current: UpdateArtifactSchema,
   target: UpdateArtifactSchema,
@@ -27,19 +32,39 @@ const previewSchema = z
     plan: UpdateConvergencePlanSchema,
   })
   .strict();
+export const UpdateFinalInspectionSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("completed"),
+      aggregate: UpdateReapRecoveryPreflightSchema,
+      plan: UpdateConvergencePlanSchema,
+    })
+    .strict(),
+  z.object({ status: z.literal("failed"), error: SafeErrorSchema }).strict(),
+]);
 const resultSchema = z
   .object({
     ...common,
     kind: z.literal("result"),
-    status: z.enum(["current", "updated", "deferred", "failed"]),
+    status: z.enum([
+      "current",
+      "updated",
+      "deferred",
+      "blocked",
+      "reap-required",
+      "intentionally-incomplete",
+      "failed",
+    ]),
+    initial: UpdateReapRecoveryPreflightSchema,
+    plan: UpdateConvergencePlanSchema,
+    finalInspection: UpdateFinalInspectionSchema.optional(),
     steps: z.array(UpdateCommandStepSchema),
     warnings: z.array(SafeErrorSchema),
     recoveryCommands: z.array(UpdateCommandArgvSchema),
-    hookReconciliation: ProviderHookReconciliationResultSchema.optional(),
+    hookReconciliations: z.array(ProviderHookReconciliationResultSchema),
     error: SafeErrorSchema.optional(),
     cause: SafeErrorSchema.optional(),
     startupEvidence: ObserverStartupEvidenceSchema.optional(),
-    hostConvergenceFailure: StationHostConvergenceFailureSummarySchema.optional(),
   })
   .strict();
 
@@ -63,6 +88,8 @@ const parsedReportSchema = z.union([previewSchema, resultSchema]).superRefine((r
     )
       issue(context, ["target"], "Preview target artifact must match its evidence.");
     validateTerminalCorrelation(report, context);
+  } else {
+    validateResult(report, context);
   }
   validatePublicAliases(report, context);
 });
@@ -71,7 +98,68 @@ const strictReportSchema = z
   .superRefine(rejectExplicitUndefined)
   .pipe(parsedReportSchema);
 
+function validateResult(report: ResultReport, context: z.RefinementCtx): void {
+  const initial = report.initial;
+  if (
+    report.channel !== report.plan.phases.artifactApplication.owner ||
+    !artifactsMatch(report.current, initial.installed) ||
+    !artifactsMatch(report.target, initial.target) ||
+    !artifactsMatch(report.target, report.plan.selectedTarget.artifact)
+  ) {
+    issue(context, ["initial"], "Result initial evidence must match its enclosing artifacts.");
+  }
+  const providers = report.hookReconciliations.map((entry) => entry.provider);
+  if (
+    !strictlySorted(providers) ||
+    providers.some((provider) => !initial.hookProviderIds.includes(provider))
+  ) {
+    issue(
+      context,
+      ["hookReconciliations"],
+      "Hook reconciliations must be a unique canonical subset of the initial providers.",
+    );
+  }
+  if (report.finalInspection?.status === "completed") {
+    if (
+      !artifactsMatch(report.target, report.finalInspection.aggregate.target) ||
+      !artifactsMatch(
+        report.finalInspection.aggregate.target,
+        report.finalInspection.plan.selectedTarget.artifact,
+      )
+    ) {
+      issue(
+        context,
+        ["finalInspection"],
+        "Final evidence must retain the selected target artifact.",
+      );
+    }
+  }
+  if (report.status === "current" || report.status === "updated") {
+    if (report.finalInspection?.status !== "completed") {
+      issue(
+        context,
+        ["finalInspection"],
+        "Successful results require completed final verification.",
+      );
+    } else if (report.finalInspection.plan.outcome !== "converged") {
+      issue(
+        context,
+        ["finalInspection", "plan"],
+        "Successful results require a converged final plan.",
+      );
+    }
+    if (report.status === "current" && !artifactsMatch(report.current, report.target)) {
+      issue(context, ["status"], "Current results must retain the selected target artifact.");
+    }
+    if (report.status === "updated" && artifactsMatch(report.current, report.target)) {
+      issue(context, ["status"], "Updated results must represent an artifact change.");
+    }
+  }
+}
+
 export type UpdateCommandReport = z.output<typeof parsedReportSchema>;
+export type UpdateFinalInspection = z.output<typeof UpdateFinalInspectionSchema>;
+export type UpdateCommandResultReport = z.output<typeof resultSchema>;
 
 /** Current strict update-report boundary for one preview plan or one completed command result. */
 export const UpdateCommandReportSchema = strictReportSchema;
@@ -141,25 +229,43 @@ function validatePublicAliases(report: UpdateCommandReport, context: z.Refinemen
   }
 }
 
+function strictlySorted(values: readonly string[]): boolean {
+  return values.every(
+    (value, index) => index === 0 || compareCodeUnitStrings(values[index - 1] ?? "", value) < 0,
+  );
+}
+
 function mapReportIdentities(report: PreviewReport | ResultReport, map: IdentityMap): void {
   const pass: IdentityPass = { map, seen: new WeakMap() };
   if (report.kind === "result") {
     for (const error of report.warnings) mapSafeError(error, pass);
     if (report.error !== undefined) mapSafeError(report.error, pass);
     if (report.cause !== undefined) mapSafeError(report.cause, pass);
-    if (report.hostConvergenceFailure !== undefined) {
-      mapSafeError(report.hostConvergenceFailure.error, pass);
+    for (const hook of report.hookReconciliations) {
+      if (
+        hook.status === "write-failed" ||
+        hook.status === "post-write-doctor-failed" ||
+        hook.status === "inspection-failed"
+      ) {
+        mapSafeError(hook.error, pass);
+      }
     }
-    if (
-      report.hookReconciliation?.status === "write-failed" ||
-      report.hookReconciliation?.status === "post-write-doctor-failed" ||
-      report.hookReconciliation?.status === "inspection-failed"
-    ) {
-      mapSafeError(report.hookReconciliation.error, pass);
+    mapAggregateIdentities(report.initial, report.plan, pass);
+    if (report.finalInspection?.status === "completed") {
+      mapAggregateIdentities(report.finalInspection.aggregate, report.finalInspection.plan, pass);
+    } else if (report.finalInspection?.status === "failed") {
+      mapSafeError(report.finalInspection.error, pass);
     }
     return;
   }
-  const { initial } = report;
+  mapAggregateIdentities(report.initial, report.plan, pass);
+}
+
+function mapAggregateIdentities(
+  initial: UpdateReapRecoveryPreflight,
+  plan: UpdateConvergencePlan,
+  pass: IdentityPass,
+): void {
   if (initial.observer.status === "unknown") mapSafeError(initial.observer.error, pass);
   if (initial.observer.status === "exact") {
     if (initial.observer.recovery.status === "unknown") {
@@ -183,7 +289,7 @@ function mapReportIdentities(report: PreviewReport | ResultReport, map: Identity
     if (hook.status === "inspection-failed") mapSafeError(hook.error, pass);
   }
   for (const terminal of initial.terminalDispositions) mapTerminal(terminal, pass);
-  const plannedTerminals = report.plan.phases.terminalConvergence.terminals;
+  const plannedTerminals = plan.phases.terminalConvergence.terminals;
   for (const terminal of plannedTerminals) mapTerminal(terminal, pass);
 }
 
