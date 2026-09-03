@@ -178,24 +178,24 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
  ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Design refresh 2 sessions                                         [qs]▸[▾]│▐
-│ [1] ⠋ group-contracts             codex     workin┌─Design refresh───────────┐
-│ [2] ○ group-keyboard              codex     idle  │▸Quick session           Q│
+╭─ ▼ Design refresh 2 sessions────────────────────────────────────── [qs]▸[▾]─╮▐
+│  [1] ⠋ group-contracts           codex     working┌─Design refresh───────────┐
+│  [2] ○ group-keyboard            codex     idle   │▸Quick session           Q│
 ╰───────────────────────────────────────────────────│ New session…            N│
-╭───────────────────────────────────────────────────│──────────────────────────│
-│ ▼ Input parity and minimum-width interaction verif│ Group settings…         S│
-│ [3] ○ input-routing               codex     idle  │──────────────────────────│
-╰───────────────────────────────────────────────────│ Remove Group…           R│
-╭───────────────────────────────────────────────────└──────────────────────────┘
-│ ▼ Observer hardening 3 sessions                                     [qs] [▾]│▕
-│ [4] ○ diagnostic-index            codex     idle                      +38 -7│▕
-│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│▕
-│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│▕
+╭─ ▼ Input parity and minimum-width interaction veri│──────────────────────────│
+│  [3] ○ input-routing             codex     idle   │ Group settings…         S│
+╰───────────────────────────────────────────────────│──────────────────────────│
+╭─ ▼ Observer hardening 3 sessions──────────────────│ Remove Group…           R│
+│  [4] ○ diagnostic-index          codex     idle   └──────────────────────────┘
+│  [5] ! handoff-refusal           codex     Agent needs app… +53 -11 #476 x1 │▐
+│  [6] ⠋ trace-readiness           codex     working           +91 -22 #478 … │▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+╭─ ▼ Post-launch 0 sessions───────────────────────────────────────── [qs] [▾]─╮▕
 ╰─────────────────────────────────────────────────────────────────────────────╯▕
-╭─────────────────────────────────────────────────────────────────────────────╮▕
-│ ▼ Post-launch 0 sessions                                            [qs] [▾]│▼
-── ▼ 6 below · showing 6 of 12 ──────────────────────────────────────────────── 
+╭─ ▼ Release train 3 sessions─────────────────────────────────────── [qs] [▾]─╮▕
+│  [7] x asset-proof               codex     exited                    +19 -2 │▕
+│  [8] ⠋ installer-replay          codex     working                  +64 -12 │▼
+── ▼ 4 below · showing 8 of 12 ──────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;
@@ -204,9 +204,9 @@ exports[`modal flow golden frames renders the Group menu above a short viewport 
 "  ┌─Design refresh───────────┐
 FL│──────────────────────────│
 ──│ Group settings…         S│
-▲ │──────────────────────────│
-╭─│▸Remove Group…           R│
-│ └──────────────────────────┘
+  │──────────────────────────│
+ ▼│▸Remove Group…           R│
+╭─└──────────────────────────┘
 ───────────────────────────── 
 ↵ activate  N new  ⇥ next  /… 
 "
@@ -302,13 +302,13 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
  ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╭─ ▼ Design refresh 2 sessions────────────────────────────────────── [qs] [▾]─╮▐
+│  [1] ⠋ group-contracts           codex     working           +84 -20 #481 … │▐
+│  [2] ○ group-keyboard            codex     idle               +16 -4 #482 ✓ │▐
 ╰─────────────────────────────────────────────────────────────────────────────╯▐
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
+╭─ ▼ Input parity and minimum-width interaction verification 1 sessi [qs] [▾]─╮▐
+│  [3] ○ input-routing             codex     idle                      +27 -6 │▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Move to Group                                                                │
 │ Session    group-contracts                                                   │
@@ -330,13 +330,13 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
  ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╭─ ▼ Design refresh 2 sessions────────────────────────────────────── [qs] [▾]─╮▐
+│  [1] ⠋ group-contracts           codex     working           +84 -20 #481 … │▐
+│  [2] ○ group-keyboard            codex     idle               +16 -4 #482 ✓ │▐
 ╰─────────────────────────────────────────────────────────────────────────────╯▐
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
+╭─ ▼ Input parity and minimum-width interaction verification 1 sessi [qs] [▾]─╮▐
+│  [3] ○ input-routing             codex     idle                      +27 -6 │▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Move to Group                                                                │
 │  U Ungrouped                                                                 │
@@ -358,13 +358,13 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
  ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╭─ ▼ Design refresh 2 sessions────────────────────────────────────── [qs] [▾]─╮▐
+│  [1] ⠋ group-contracts           codex     working           +84 -20 #481 … │▐
+│  [2] ○ group-keyboard            codex     idle               +16 -4 #482 ✓ │▐
 ╰─────────────────────────────────────────────────────────────────────────────╯▐
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
+╭─ ▼ Input parity and minimum-width interaction verification 1 sessi [qs] [▾]─╮▐
+│  [3] ○ input-routing             codex     idle                      +27 -6 │▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Group                                                                 │
 │ Session    group-contracts                                                   │
@@ -646,24 +646,24 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ───┌────────────────────────────────────────────────────────────────────────┐── 
    │ Group settings · Design refresh                                        │PR 
  ▼ │ Design refresh           │ General                                     │▾]▲
-╭──│▸ General                 │  Name Design refresh                        │─╮▐
-│ ▼│  Sessions                │ Save renames; sessions stay attached.       │]│▐
-│ [│  Remove Group            │                                             │…│▐
-│ [│                          │ Project station (read-only)                 │✓│▐
-╰──│                          │ /Users/example/Developer/station            │─╯▐
-╭──│                          │                                             │─╮▐
-│ ▼│                          │                                             │]│▐
-│ [│                          │                                             │6│▐
+╭─ │▸ General                 │  Name Design refresh                        │─╮▐
+│  │  Sessions                │ Save renames; sessions stay attached.       │ │▐
+│  │  Remove Group            │                                             │ │▐
+╰──│                          │ Project station (read-only)                 │─╯▐
+╭─ │                          │ /Users/example/Developer/station            │─╮▐
+│  │                          │                                             │ │▐
 ╰──│                          │                                             │─╯▐
-╭──│                          │                                             │─╮▕
-│ ▼│                          │                                             │]│▕
-│ [│                          │                                             │7│▕
-│ [│                          │                                             │1│▕
-│ [│                          │                                             │…│▕
-╰──│                          │  Save (Enter)    Cancel (Esc)               │─╯▕
-╭──│ ↑↓ or G/S/R select · →/enter edit · esc back                           │─╮▕
-│ ▼└────────────────────────────────────────────────────────────────────────┘]│▼
-── ▼ 6 below · showing 6 of 12 ──────────────────────────────────────────────── 
+╭─ │                          │                                             │─╮▐
+│  │                          │                                             │ │▐
+│  │                          │                                             │ │▐
+│  │                          │                                             │ │▐
+╰──│                          │                                             │─╯▐
+╭─ │                          │                                             │─╮▕
+╰──│                          │                                             │─╯▕
+╭─ │                          │  Save (Enter)    Cancel (Esc)               │─╮▕
+│  │ ↑↓ or G/S/R select · →/enter edit · esc back                           │ │▕
+│  └────────────────────────────────────────────────────────────────────────┘ │▼
+── ▼ 4 below · showing 8 of 12 ──────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;
@@ -674,36 +674,36 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle        
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
        SESSION                                   AGENT     STATUS                                             DIFF · PR 
  ▼ station  12 sessions · 6 Groups · 11 agents                                              [shell] [quick session] [▾] 
-╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
-│ ▼ Design refresh 2 sessions                                                                      [quick session]▸[▾]│ 
-│ [1] ⠋ group-contracts                           codex     working                                     +84 -20 #481 …│ 
-│ [2] ○ group-keyboard                            codex     idle                                         +16 -4 #482 ✓│ 
+╭─ ▼ Design refresh 2 sessions─────────────────────────────────────────────────────────────────── [quick session]▸[▾]─╮ 
+│  [1] ⠋ group-contracts                           codex     working                                   +84 -20 #481 … │ 
+│  [2] ○ group-keyboard                            codex     idle                                       +16 -4 #482 ✓ │ 
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 
-╭───────────────┌──────────────────────────────────────────────────────────────────────────────────────┐──────────────╮ 
-│ ▼ Input parity│ Group settings · Design refresh                                                      │k session] [▾]│ 
-│ [3] ○ input-ro│ Design refresh           │ General                                                   │        +27 -6│ 
-╰───────────────│▸ General                 │  Name Design refresh                                      │──────────────╯ 
-╭───────────────│  Sessions                │ Save renames; sessions stay attached.                     │──────────────╮ 
-│ ▼ Observer har│  Remove Group            │                                                           │k session] [▾]│ 
-│ [4] ○ diagnost│                          │ Project station (read-only)                               │        +38 -7│ 
-│ [5] ! handoff-│                          │ /Users/example/Developer/station                          │53 -11 #476 x1│ 
-│ [6] ⠋ trace-re│                          │                                                           │+91 -22 #478 …│ 
+╭─ ▼ Input parity and minimum-width interaction verification 1 session─────────────────────────── [quick session] [▾]─╮ 
+│  [3] ○ input-r┌──────────────────────────────────────────────────────────────────────────────────────┐       +27 -6 │ 
+╰───────────────│ Group settings · Design refresh                                                      │──────────────╯ 
+╭─ ▼ Observer ha│ Design refresh           │ General                                                   │ session] [▾]─╮ 
+│  [4] ○ diagnos│▸ General                 │  Name Design refresh                                      │       +38 -7 │ 
+│  [5] ! handoff│  Sessions                │ Save renames; sessions stay attached.                     │3 -11 #476 x1 │ 
+│  [6] ⠋ trace-r│  Remove Group            │                                                           │91 -22 #478 … │ 
+╰───────────────│                          │ Project station (read-only)                               │──────────────╯ 
+╭─ ▼ Post-launch│                          │ /Users/example/Developer/station                          │ session] [▾]─╮ 
 ╰───────────────│                          │                                                           │──────────────╯ 
-╭───────────────│                          │                                                           │──────────────╮ 
-│ ▼ Post-launch │                          │                                                           │k session] [▾]│ 
+╭─ ▼ Release tra│                          │                                                           │ session] [▾]─╮ 
+│  [7] x asset-p│                          │                                                           │       +19 -2 │ 
+│  [8] ⠋ install│                          │                                                           │      +64 -12 │ 
+│  [9] ○ rc-mani│                          │                                                           │+31 -3 #471 ✓ │ 
 ╰───────────────│                          │                                                           │──────────────╯ 
-╭───────────────│                          │                                                           │──────────────╮ 
-│ ▼ Release trai│                          │                                                           │k session] [▾]│ 
-│ [7] x asset-pr│                          │                                                           │        +19 -2│ 
-│ [8] ⠋ installe│                          │                                                           │       +64 -12│ 
-│ [9] ○ rc-manif│                          │  Save (Enter)    Cancel (Esc)                             │ +31 -3 #471 ✓│ 
-╰───────────────│ ↑↓ or G/S/R select · →/enter edit · esc back                                         │──────────────╯ 
-╭───────────────└──────────────────────────────────────────────────────────────────────────────────────┘──────────────╮ 
-│ ▼ Runtime cleanup 1 session                                                                      [quick session] [▾]│ 
-│ [a] ○ runtime-cleanup                           codex     idle                                                 +9 -2│ 
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 
- [b] ○ docs-refresh                              codex     idle                                            +8 -2 #479 ✓ 
- [c] - main                                      codex     no agent                                                     
+╭─ ▼ Runtime cle│                          │                                                           │ session] [▾]─╮ 
+│  [a] ○ runtime│                          │                                                           │        +9 -2 │ 
+╰───────────────│                          │                                                           │──────────────╯ 
+ [b] ○ docs-refr│                          │  Save (Enter)    Cancel (Esc)                             │   +8 -2 #479 ✓ 
+ [c] - main     │ ↑↓ or G/S/R select · →/enter edit · esc back                                         │                
+                └──────────────────────────────────────────────────────────────────────────────────────┘                
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -1206,23 +1206,23 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
  ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╭─ ▼ Design refresh 2 sessions────────────────────────────────────── [qs] [▾]─╮▐
+│  [1] ⠋ group-contracts           codex     working           +84 -20 #481 … │▐
+│  [2] ○ group-keyboard            codex     idle               +16 -4 #482 ✓ │▐
 ╰─────────────────────────────────────────────────────────────────────────────╯▐
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
-┌────────────────────────────────────────────┐idle                      +27 -6│▐
-│ Fork Session                               │────────────────────────────────╯▐
-│ Source   station · group-contracts         │────────────────────────────────╮▕
-│  Name   group-contracts-fork               │                        [qs] [▾]│▕
-│▸ Group  [x] create in Design refresh       │idle                      +38 -7│▕
-│  Copy   [x] uncommitted changes            │Agent needs app… +53 -11 #476 x1│▕
-│ Source keeps running — copy is read-only.  │working           +91 -22 #478 …│▕
-│                                            │────────────────────────────────╯▕
-│                                            │────────────────────────────────╮▕
-│  Fork (enter)                              │                        [qs] [▾]│▼
+╭─ ▼ Input parity and minimum-width interaction verification 1 sessi [qs] [▾]─╮▐
+│  [3] ○ input-routing             codex     idle                      +27 -6 │▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
+┌────────────────────────────────────────────┐────────────────────── [qs] [▾]─╮▐
+│ Fork Session                               │dle                      +38 -7 │▐
+│ Source   station · group-contracts         │gent needs app… +53 -11 #476 x1 │▐
+│  Name   group-contracts-fork               │orking           +91 -22 #478 … │▐
+│▸ Group  [x] create in Design refresh       │────────────────────────────────╯▐
+│  Copy   [x] uncommitted changes            │────────────────────── [qs] [▾]─╮▕
+│ Source keeps running — copy is read-only.  │────────────────────────────────╯▕
+│                                            │────────────────────── [qs] [▾]─╮▕
+│                                            │xited                    +19 -2 │▕
+│  Fork (enter)                              │orking                  +64 -12 │▼
 │ Space/Enter toggle · ↑↓ focus · Esc back   │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
@@ -1694,13 +1694,13 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
  ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╭─ ▼ Design refresh 2 sessions────────────────────────────────────── [qs] [▾]─╮▐
+│  [1] ⠋ group-contracts           codex     working           +84 -20 #481 … │▐
+│  [2] ○ group-keyboard            codex     idle               +16 -4 #482 ✓ │▐
 ╰─────────────────────────────────────────────────────────────────────────────╯▐
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
+╭─ ▼ Input parity and minimum-width interaction verification 1 sessi [qs] [▾]─╮▐
+│  [3] ○ input-routing             codex     idle                      +27 -6 │▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Choose Group                                                                 │
 │                                                                              │
@@ -1722,13 +1722,13 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
  ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╭─ ▼ Design refresh 2 sessions────────────────────────────────────── [qs] [▾]─╮▐
+│  [1] ⠋ group-contracts           codex     working           +84 -20 #481 … │▐
+│  [2] ○ group-keyboard            codex     idle               +16 -4 #482 ✓ │▐
 ╰─────────────────────────────────────────────────────────────────────────────╯▐
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
+╭─ ▼ Input parity and minimum-width interaction verification 1 sessi [qs] [▾]─╮▐
+│  [3] ○ input-routing             codex     idle                      +27 -6 │▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Choose Group                                                                 │
 │ ✓U Ungrouped                                                                 │
@@ -1750,13 +1750,13 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                       AGENT     STATUS                 DIFF · PR 
  ▼ station  12 sessions · 6 Groups · 11 agents                    [sh] [qs] [▾]▲
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Design refresh 2 sessions                                         [qs] [▾]│▐
-│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│▐
-│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│▐
+╭─ ▼ Design refresh 2 sessions────────────────────────────────────── [qs] [▾]─╮▐
+│  [1] ⠋ group-contracts           codex     working           +84 -20 #481 … │▐
+│  [2] ○ group-keyboard            codex     idle               +16 -4 #482 ✓ │▐
 ╰─────────────────────────────────────────────────────────────────────────────╯▐
-╭─────────────────────────────────────────────────────────────────────────────╮▐
-│ ▼ Input parity and minimum-width interaction verification 1 session [qs] [▾]│▐
+╭─ ▼ Input parity and minimum-width interaction verification 1 sessi [qs] [▾]─╮▐
+│  [3] ○ input-routing             codex     idle                      +27 -6 │▐
+╰─────────────────────────────────────────────────────────────────────────────╯▐
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Group                                                                 │
 │ Project      station                                                         │

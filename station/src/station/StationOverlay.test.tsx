@@ -152,7 +152,7 @@ describe("StationOverlay", () => {
     const groupId = dashboardRowIds.group("group_design_refresh");
     const header = cellFor(setup.captureCharFrame(), "Design refresh");
 
-    expect(setup.captureCharFrame()).toContain("│ ▼ Design refresh 2 sessions");
+    expect(setup.captureCharFrame()).toContain("╭─ ▼ Design refresh 2 sessions");
     await setup.mockMouse.click(header.col, header.row, MouseButtons.LEFT);
 
     expect(calls.at(-1)).toEqual({
