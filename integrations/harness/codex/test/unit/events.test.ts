@@ -1035,3 +1035,31 @@ function expectStatusAllowedByCodexIngressRule(
   expect(rule?.statusIntents).toContain(status?.value);
   expect(rule?.confidences).toContain(status?.confidence);
 }
+
+describe("codex correlation identity", () => {
+  it("never derives a harnessRunId from the Station terminal target", () => {
+    const report = codexHookPayloadToHarnessEventReport({
+      reportId: "report_identity",
+      observedAt: now,
+      payload: {
+        session_id: "codex_session_123",
+        transcript_path: null,
+        cwd: "/tmp/station/web/task",
+        hook_event_name: "SessionStart",
+        model: "gpt-5.4-codex",
+        permission_mode: "default",
+        source: "startup",
+        station_project_id: "web",
+        station_worktree_id: "wt_web_task",
+        station_worktree_path: "/tmp/station/web/task",
+        station_session_id: "ses_web_task",
+        station_terminal_provider: "tmux",
+        station_terminal_target_id: "tt_web_task",
+      },
+    });
+
+    expect(report.correlation).toBeDefined();
+    expect(report.correlation).not.toHaveProperty("harnessRunId");
+    expect(report.correlation?.terminalTargetId).toBe("tt_web_task");
+  });
+});

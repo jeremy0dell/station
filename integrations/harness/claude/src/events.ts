@@ -2,23 +2,16 @@
 // Upstream hook contract: https://code.claude.com/docs/en/hooks-guide
 // STATION ingress flow: docs/harness-ingress.md. Keep the parsed payload shape in sync with upstream.
 import type { HarnessEventReport, ObservedStatus } from "@station/contracts";
-import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
-import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
+import {
+  buildHarnessEventReport,
+  type HarnessEventReportInput,
+  harnessEventStatus,
+  reportCorrelation,
+  stationIdentityCorrelation,
+  stationIdentityProviderData,
+} from "@station/harness-shared";
 import { z } from "zod";
 import { claudeHarnessError } from "./errors.js";
-
-export type ClaudeHarnessEventReportInput = {
-  reportId: string;
-  observedAt: string;
-  payload: unknown;
-  diagnostics?: {
-    payloadBytes?: number | null;
-    compactedBytes?: number | null;
-    compacted?: boolean;
-    truncated?: boolean;
-    omittedFieldNames?: string[];
-  };
-};
 
 export type ClaudeHookEvent = z.infer<typeof ClaudeHookEventSchema>;
 
@@ -152,24 +145,7 @@ function providerDataFromClaudeEvent(event: ClaudeHookEvent): Record<string, unk
   if ("trigger" in event && event.trigger !== undefined) {
     providerData.trigger = event.trigger;
   }
-  if (event.station_project_id !== undefined) {
-    providerData.stationProjectId = event.station_project_id;
-  }
-  if (event.station_worktree_id !== undefined) {
-    providerData.stationWorktreeId = event.station_worktree_id;
-  }
-  if (event.station_worktree_path !== undefined) {
-    providerData.stationWorktreePath = event.station_worktree_path;
-  }
-  if (event.station_session_id !== undefined) {
-    providerData.stationSessionId = event.station_session_id;
-  }
-  if (event.station_terminal_provider !== undefined) {
-    providerData.stationTerminalProvider = event.station_terminal_provider;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    providerData.stationTerminalTargetId = event.station_terminal_target_id;
-  }
+  Object.assign(providerData, stationIdentityProviderData(event));
   return providerData;
 }
 
@@ -179,14 +155,7 @@ function reportCorrelationFromClaudeEvent(
   return reportCorrelation({
     cwd: event.cwd,
     nativeSessionId: event.session_id,
-    projectId: event.station_project_id,
-    worktreeId: event.station_worktree_id,
-    sessionId: event.station_session_id,
-    terminalTargetId: event.station_terminal_target_id,
-    harnessRunId:
-      event.station_terminal_target_id === undefined
-        ? undefined
-        : `claude:${event.station_terminal_target_id}`,
+    ...stationIdentityCorrelation("claude", event),
   });
 }
 
@@ -223,64 +192,53 @@ export function statusFromClaudeHookEvent(
   observedAt: string,
 ): ObservedStatus | undefined {
   if (event.hook_event_name === "SessionStart") {
-    return {
-      value: "starting",
-      confidence: "high",
-      reason: `Claude Code session started from ${event.source}.`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "starting",
+      "high",
+      `Claude Code session started from ${event.source}.`,
+      observedAt,
+    );
   }
   if (event.hook_event_name === "PermissionRequest") {
-    return {
-      value: "needs_attention",
-      confidence: "high",
-      reason: `Claude Code requested permission for ${event.tool_name}.`,
-      source: "harness_event",
-      updatedAt: observedAt,
-      attention: "tool_approval",
-    };
+    return harnessEventStatus(
+      "needs_attention",
+      "high",
+      `Claude Code requested permission for ${event.tool_name}.`,
+      observedAt,
+      { attention: "tool_approval" },
+    );
   }
   if (event.hook_event_name === "Notification") {
     if (event.notification_type === "permission_prompt") {
-      return {
-        value: "needs_attention",
-        confidence: "high",
-        reason: "Claude Code is waiting for permission approval.",
-        source: "harness_event",
-        updatedAt: observedAt,
-        attention: "tool_approval",
-      };
+      return harnessEventStatus(
+        "needs_attention",
+        "high",
+        "Claude Code is waiting for permission approval.",
+        observedAt,
+        { attention: "tool_approval" },
+      );
     }
     if (event.notification_type === "idle_prompt") {
-      return {
-        value: "idle",
-        confidence: "medium",
-        reason: "Claude Code is waiting for user input.",
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus(
+        "idle",
+        "medium",
+        "Claude Code is waiting for user input.",
+        observedAt,
+      );
     }
     return undefined;
   }
   if (event.hook_event_name === "Stop") {
     if (event.stop_hook_active) {
       // stop_hook_active means a user Stop hook blocked stoppage — the agent keeps working.
-      return {
-        value: "working",
-        confidence: "medium",
-        reason: "A Stop hook kept Claude Code working.",
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus(
+        "working",
+        "medium",
+        "A Stop hook kept Claude Code working.",
+        observedAt,
+      );
     }
-    return {
-      value: "idle",
-      confidence: "high",
-      reason: "Claude Code turn completed.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus("idle", "high", "Claude Code turn completed.", observedAt);
   }
   if (event.hook_event_name === "SessionEnd") {
     if (event.reason === "clear") {
@@ -288,78 +246,53 @@ export function statusFromClaudeHookEvent(
       // exited would stick because exited+high is preserved against same-time reports.
       return undefined;
     }
-    return {
-      value: "exited",
-      confidence: "high",
-      reason: `Claude Code session ended (${event.reason}).`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "exited",
+      "high",
+      `Claude Code session ended (${event.reason}).`,
+      observedAt,
+    );
   }
   if (event.hook_event_name === "PreToolUse") {
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: `Claude Code is about to use ${event.tool_name}.`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "working",
+      "medium",
+      `Claude Code is about to use ${event.tool_name}.`,
+      observedAt,
+    );
   }
   if (event.hook_event_name === "PostToolUse") {
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: `Claude Code completed ${event.tool_name}.`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "working",
+      "medium",
+      `Claude Code completed ${event.tool_name}.`,
+      observedAt,
+    );
   }
   if (event.hook_event_name === "PreCompact") {
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: "Claude Code is about to compact the conversation.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "working",
+      "medium",
+      "Claude Code is about to compact the conversation.",
+      observedAt,
+    );
   }
-  return {
-    value: "working",
-    confidence: "medium",
-    reason: "Claude Code received a user prompt.",
-    source: "harness_event",
-    updatedAt: observedAt,
-  };
+  return harnessEventStatus("working", "medium", "Claude Code received a user prompt.", observedAt);
 }
 
 export function claudeHookPayloadToHarnessEventReport(
-  input: ClaudeHarnessEventReportInput,
+  input: HarnessEventReportInput,
 ): HarnessEventReport {
   const event = parseClaudeHookEvent(input.payload);
-  const report: HarnessEventReport = {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    reportId: input.reportId,
+  return buildHarnessEventReport(input, {
     provider: "claude",
-    kind: "harness",
     eventType: event.hook_event_name,
-    observedAt: input.observedAt,
-  };
-  const status = statusFromClaudeHookEvent(event, input.observedAt);
-  if (status !== undefined) {
-    report.status = status;
-  }
-  const turn = turnFromClaudeHookEvent(event);
-  if (turn !== undefined) {
-    report.turn = turn;
-  }
-  report.correlation = reportCorrelationFromClaudeEvent(event);
-  report.diagnostics = harnessEventDiagnostics(event.hook_event_name, input.diagnostics);
-  const coalesceKey = reportCoalesceKeyFromClaudeEvent(event);
-  if (coalesceKey !== undefined) {
-    report.coalesceKey = coalesceKey;
-  }
-  report.providerData = providerDataFromClaudeEvent(event);
-  return HarnessEventReportSchema.parse(report);
+    status: statusFromClaudeHookEvent(event, input.observedAt),
+    turn: turnFromClaudeHookEvent(event),
+    correlation: reportCorrelationFromClaudeEvent(event),
+    coalesceKey: reportCoalesceKeyFromClaudeEvent(event),
+    providerData: providerDataFromClaudeEvent(event),
+  });
 }
 
 // Claude Code has no turn identifier, so the observed timestamp is part of the report id;

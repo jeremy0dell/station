@@ -2,8 +2,13 @@
 // Upstream contract: https://opencode.ai/docs/plugins/
 // STATION ingress flow: docs/harness-ingress.md. Keep the parsed payload shape in sync with upstream.
 import type { HarnessEventReport, ObservedStatus } from "@station/contracts";
-import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
-import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
+import {
+  buildHarnessEventReport,
+  type HarnessEventReportInput,
+  harnessEventStatus,
+  reportCorrelation,
+  stationIdentityProviderData,
+} from "@station/harness-shared";
 import { openCodeHarnessError } from "./errors.js";
 import {
   type OpenCodeCompactEvent,
@@ -11,20 +16,6 @@ import {
   OpenCodeEventTypeSchema,
 } from "./eventSchemas.js";
 import { openCodeIngressRuleForEventType } from "./ingressRules.js";
-
-export type OpenCodeHarnessEventReportInput = {
-  reportId: string;
-  eventType: string;
-  observedAt: string;
-  payload: unknown;
-  diagnostics?: {
-    payloadBytes?: number | null;
-    compactedBytes?: number | null;
-    compacted?: boolean;
-    truncated?: boolean;
-    omittedFieldNames?: string[];
-  };
-};
 
 export function parseOpenCodeCompactEvent(input: unknown): OpenCodeCompactEvent {
   const result = OpenCodeCompactEventSchema.safeParse(input);
@@ -51,7 +42,7 @@ export function normalizeOpenCodeEventType(input: string): string {
 }
 
 export function openCodeHookPayloadToHarnessEventReport(
-  input: OpenCodeHarnessEventReportInput,
+  input: HarnessEventReportInput & { eventType: string },
 ): HarnessEventReport {
   const event = parseOpenCodeCompactEvent(input.payload);
   const eventType = normalizeOpenCodeEventType(input.eventType);
@@ -62,36 +53,18 @@ export function openCodeHookPayloadToHarnessEventReport(
     );
   }
 
-  const report: HarnessEventReport = {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    reportId: input.reportId,
+  return buildHarnessEventReport(input, {
     provider: "opencode",
-    kind: "harness",
     eventType: event.event_type,
-    observedAt: input.observedAt,
-  };
-  const status =
-    openCodeIngressRuleForEventType(event.event_type) !== undefined
-      ? statusFromOpenCodeEvent(event, input.observedAt)
-      : undefined;
-  if (status !== undefined) {
-    report.status = status;
-  }
-  const turn = turnFromOpenCodeEvent(event);
-  if (turn !== undefined) {
-    report.turn = turn;
-  }
-  const correlation = reportCorrelationFromOpenCodeEvent(event);
-  if (correlation !== undefined) {
-    report.correlation = correlation;
-  }
-  report.diagnostics = harnessEventDiagnostics(event.event_type, input.diagnostics);
-  const coalesceKey = reportCoalesceKeyFromOpenCodeEvent(event);
-  if (coalesceKey !== undefined) {
-    report.coalesceKey = coalesceKey;
-  }
-  report.providerData = providerDataFromOpenCodeEvent(event);
-  return HarnessEventReportSchema.parse(report);
+    status:
+      openCodeIngressRuleForEventType(event.event_type) === undefined
+        ? undefined
+        : statusFromOpenCodeEvent(event, input.observedAt),
+    turn: turnFromOpenCodeEvent(event),
+    correlation: reportCorrelationFromOpenCodeEvent(event),
+    coalesceKey: reportCoalesceKeyFromOpenCodeEvent(event),
+    providerData: providerDataFromOpenCodeEvent(event),
+  });
 }
 
 export function statusFromOpenCodeEvent(
@@ -100,38 +73,64 @@ export function statusFromOpenCodeEvent(
 ): ObservedStatus | undefined {
   switch (event.event_type) {
     case "permission.asked":
-      return {
-        ...status("needs_attention", "high", permissionAskedReason(event), observedAt),
-        attention: "tool_approval",
-      };
+      return harnessEventStatus(
+        "needs_attention",
+        "high",
+        permissionAskedReason(event),
+        observedAt,
+        { attention: "tool_approval" },
+      );
     case "question.asked":
-      return {
-        ...status("needs_attention", "high", "OpenCode asked a question.", observedAt),
-        attention: "question",
-      };
+      return harnessEventStatus(
+        "needs_attention",
+        "high",
+        "OpenCode asked a question.",
+        observedAt,
+        { attention: "question" },
+      );
     case "permission.replied":
       return event.permission_reply === "reject"
-        ? status("idle", "medium", "OpenCode permission request was rejected.", observedAt)
-        : status("working", "high", "OpenCode permission request was approved.", observedAt);
+        ? harnessEventStatus(
+            "idle",
+            "medium",
+            "OpenCode permission request was rejected.",
+            observedAt,
+          )
+        : harnessEventStatus(
+            "working",
+            "high",
+            "OpenCode permission request was approved.",
+            observedAt,
+          );
     case "question.replied":
-      return status("working", "high", "OpenCode question was answered.", observedAt);
+      return harnessEventStatus("working", "high", "OpenCode question was answered.", observedAt);
     case "question.rejected":
-      return status("idle", "medium", "OpenCode question was rejected.", observedAt);
+      return harnessEventStatus("idle", "medium", "OpenCode question was rejected.", observedAt);
     case "session.created":
-      return status("starting", "medium", "OpenCode session was created.", observedAt);
+      return harnessEventStatus("starting", "medium", "OpenCode session was created.", observedAt);
     case "session.deleted":
-      return status("exited", "high", "OpenCode session was deleted.", observedAt);
+      return harnessEventStatus("exited", "high", "OpenCode session was deleted.", observedAt);
     case "session.error":
-      return status("needs_attention", "high", "OpenCode reported a session error.", observedAt);
+      return harnessEventStatus(
+        "needs_attention",
+        "high",
+        "OpenCode reported a session error.",
+        observedAt,
+      );
     case "session.idle":
-      return status("idle", "high", "OpenCode session is idle.", observedAt);
+      return harnessEventStatus("idle", "high", "OpenCode session is idle.", observedAt);
     case "session.status":
       return statusFromSessionStatus(event, observedAt);
     case "session.compacted":
     case "session.next.compaction.started":
     case "session.next.compaction.delta":
     case "session.next.compaction.ended":
-      return status("working", "medium", "OpenCode is compacting the session.", observedAt);
+      return harnessEventStatus(
+        "working",
+        "medium",
+        "OpenCode is compacting the session.",
+        observedAt,
+      );
     case "command.executed":
     case "session.next.prompted":
     case "session.next.synthetic":
@@ -149,10 +148,10 @@ export function statusFromOpenCodeEvent(
     case "session.next.tool.input.ended":
     case "tool.execute.before":
     case "tool.execute.after":
-      return status("working", "medium", workingReason(event), observedAt);
+      return harnessEventStatus("working", "medium", workingReason(event), observedAt);
     case "tui.command.execute":
       return event.command_name === "session.interrupt"
-        ? status("idle", "medium", "OpenCode session was interrupted.", observedAt)
+        ? harnessEventStatus("idle", "medium", "OpenCode session was interrupted.", observedAt)
         : undefined;
     default:
       return undefined;
@@ -170,30 +169,20 @@ function statusFromSessionStatus(
   observedAt: string,
 ): ObservedStatus | undefined {
   if (event.status_type === "idle") {
-    return status("idle", "high", "OpenCode session status is idle.", observedAt);
+    return harnessEventStatus("idle", "high", "OpenCode session status is idle.", observedAt);
   }
   if (event.status_type === "busy") {
-    return status("working", "high", "OpenCode session status is busy.", observedAt);
+    return harnessEventStatus("working", "high", "OpenCode session status is busy.", observedAt);
   }
   if (event.status_type === "retry") {
-    return status("working", "medium", "OpenCode is retrying a session step.", observedAt);
+    return harnessEventStatus(
+      "working",
+      "medium",
+      "OpenCode is retrying a session step.",
+      observedAt,
+    );
   }
   return undefined;
-}
-
-function status(
-  value: ObservedStatus["value"],
-  confidence: ObservedStatus["confidence"],
-  reason: string,
-  observedAt: string,
-): ObservedStatus {
-  return {
-    value,
-    confidence,
-    reason,
-    source: "harness_event",
-    updatedAt: observedAt,
-  };
 }
 
 function permissionAskedReason(event: OpenCodeCompactEvent): string {
@@ -232,21 +221,7 @@ function providerDataFromOpenCodeEvent(event: OpenCodeCompactEvent): Record<stri
   if (event.file_path !== undefined) providerData.filePath = event.file_path;
   if (event.error_name !== undefined) providerData.errorName = event.error_name;
   if (event.property_keys !== undefined) providerData.propertyKeys = event.property_keys;
-  if (event.station_project_id !== undefined)
-    providerData.stationProjectId = event.station_project_id;
-  if (event.station_worktree_id !== undefined)
-    providerData.stationWorktreeId = event.station_worktree_id;
-  if (event.station_worktree_path !== undefined) {
-    providerData.stationWorktreePath = event.station_worktree_path;
-  }
-  if (event.station_session_id !== undefined)
-    providerData.stationSessionId = event.station_session_id;
-  if (event.station_terminal_provider !== undefined) {
-    providerData.stationTerminalProvider = event.station_terminal_provider;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    providerData.stationTerminalTargetId = event.station_terminal_target_id;
-  }
+  Object.assign(providerData, stationIdentityProviderData(event));
   if (event.station_integration_id !== undefined) {
     providerData.stationIntegrationId = event.station_integration_id;
   }

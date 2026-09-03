@@ -13,6 +13,7 @@ import {
   harnessCommand,
   harnessHookDoctorOptions,
   harnessHooksStatusFrom,
+  hookDoctorCheck,
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
@@ -150,26 +151,20 @@ async function doctorChecks(
     });
   }
 
-  try {
-    const hookResult = await doctorCursorHooks(cursorHookDoctorOptions(options, context));
-    checks.push({
+  checks.push(
+    await hookDoctorCheck({
       name: "cursor-hooks",
-      status: hookResult.status,
-      message: `${hookResult.message} Hooks: ${hookResult.hooksPath}. Script: ${hookResult.hookScriptPath}.`,
-    });
-  } catch (cause) {
-    checks.push({
-      name: "cursor-hooks",
-      status: "error",
-      message: "Cursor hook diagnostics failed.",
-      error: safeErrorFromUnknown(cause, {
+      run: () => doctorCursorHooks(cursorHookDoctorOptions(options, context)),
+      describe: (result) =>
+        `${result.message} Hooks: ${result.hooksPath}. Script: ${result.hookScriptPath}.`,
+      failure: {
         tag: "CursorHookSetupError",
         code: "CURSOR_HOOK_DIAGNOSTIC_FAILED",
         message: "Cursor hook diagnostics failed.",
         provider: "cursor",
-      }),
-    });
-  }
+      },
+    }),
+  );
   return checks;
 }
 

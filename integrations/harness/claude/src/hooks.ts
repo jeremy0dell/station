@@ -2,10 +2,10 @@
 // Upstream hook contract: https://code.claude.com/docs/en/hooks-guide
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
 import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
+import { hookSetupFileOpsFor, isHookOwnershipConflict } from "@station/harness-shared";
 import {
   assertProviderHookArtifactOwnership,
   classifyProviderHookArtifactOwnership,
-  createHookSetupFileOps,
   expectedProviderHookScript,
   installConfigScriptHook,
   type ProviderHookScriptOptions,
@@ -101,28 +101,11 @@ export type ClaudeHookScriptOptions = ProviderHookScriptOptions & {
   hookScriptPath: string;
 };
 
-const fileOps = createHookSetupFileOps(({ operation, cause }) => {
-  if (operation === "read" || operation === "metadata") {
-    return new ClaudeHookSetupError(
-      "CLAUDE_HOOK_CONFIG_UNREADABLE",
-      operation === "read"
-        ? "Claude hook config could not be read."
-        : "Claude hook config metadata could not be read.",
-      { cause },
-    );
-  }
-  return new ClaudeHookSetupError(
-    "CLAUDE_HOOK_WRITE_FAILED",
-    operation === "remove"
-      ? "Claude hook file could not be removed."
-      : operation === "writeScript"
-        ? "Claude hook script could not be written."
-        : operation === "backup"
-          ? "Claude hook config backup could not be written."
-          : "Claude hook config could not be written.",
-    { cause },
-  );
-});
+const fileOps = hookSetupFileOpsFor(
+  ClaudeHookSetupError,
+  { unreadable: "CLAUDE_HOOK_CONFIG_UNREADABLE", writeFailed: "CLAUDE_HOOK_WRITE_FAILED" },
+  { displayName: "Claude", removeTarget: "file" },
+);
 
 function parseArtifactDocument(contents: string): {
   document: ClaudeSettingsDocument;
@@ -379,8 +362,7 @@ export async function doctorClaudeHooks(
   }
 
   const installed = !plan.settingsChanged && !plan.scriptChanged && !plan.artifactInvalid;
-  const ownershipConflict =
-    plan.ownership?.status === "different-owner" || plan.ownership?.status === "unknown-owner";
+  const ownershipConflict = isHookOwnershipConflict(plan.ownership);
   const result: ClaudeHookDoctorResult = {
     provider: "claude",
     settingsPath: plan.settingsPath,

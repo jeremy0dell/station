@@ -72,3 +72,25 @@ export function harnessProviderErrorFromUnknown<TCode extends string>(
   }
   return new ErrorClass(fallback.code, fallback.message, options);
 }
+
+export type HarnessProviderErrors<TCode extends string> = {
+  ErrorClass: HarnessProviderErrorClass<TCode>;
+  create: (code: TCode, message: string, cause?: unknown) => HarnessProviderError<TCode>;
+  fromUnknown: (
+    error: unknown,
+    fallback: { code: TCode; message: string; hint?: string | undefined },
+  ) => HarnessProviderError<TCode>;
+};
+
+// One provider's error class plus its two constructors, so each integration declares only codes.
+export function defineHarnessProviderErrors<TCode extends string>(input: {
+  name: string;
+  provider: string;
+}): HarnessProviderErrors<TCode> {
+  const ErrorClass = harnessProviderErrorClass<TCode>(input);
+  return {
+    ErrorClass,
+    create: (code, message, cause) => new ErrorClass(code, message, { cause }),
+    fromUnknown: (error, fallback) => harnessProviderErrorFromUnknown(ErrorClass, error, fallback),
+  };
+}
