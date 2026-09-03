@@ -12,7 +12,6 @@ import {
 } from "@station/contracts";
 import { type HarnessEventCorrelation, harnessEventDiagnostics } from "./events.js";
 
-/** Loose normalizer input; the hook adapter always supplies diagnostics counters. */
 export type HarnessEventReportInput = {
   reportId: string;
   eventType?: string;
@@ -38,8 +37,8 @@ export type HarnessEventReportFields = {
   providerData?: Record<string, unknown> | undefined;
 };
 
-/** Assembles and validates one report; undefined optional fields stay absent. Providers that
- * annotate diagnostics (a correlation issue, say) pass the finished object in `fields`. */
+/** Undefined optional fields stay absent. A provider that annotates diagnostics, with a
+ * correlation issue say, passes the finished object in `fields`. */
 export function buildHarnessEventReport(
   input: Pick<HarnessEventReportInput, "reportId" | "observedAt" | "diagnostics">,
   fields: HarnessEventReportFields,
@@ -82,8 +81,8 @@ export type StationIdentityProviderData = {
   stationTerminalTargetId?: string;
 };
 
-/** Copies inherited station_* identity into camelCase providerData keys. Key order is part of
- * the contract: providerData is stored verbatim, so callers merge this in a fixed position. */
+/** Key order is part of the contract: providerData is stored verbatim, so callers merge this
+ * in a fixed position. */
 export function stationIdentityProviderData(
   event: StationHookIdentityPayload,
 ): StationIdentityProviderData {
@@ -112,7 +111,6 @@ export function stationIdentityProviderData(
   return data;
 }
 
-/** Station correlation ids, plus the pane-stable harnessRunId unless the provider mints none. */
 export function stationIdentityCorrelation(
   provider: ProviderId,
   event: StationHookIdentityPayload,

@@ -5,8 +5,8 @@ export type HarnessEventStatusExtra = {
   source?: ObservedStatus["source"];
 };
 
-/** Builds one normalized status; `source` defaults to harness_event, so process-derived
- * and unknown-provenance statuses must pass `extra.source` explicitly. */
+/** `source` defaults to harness_event, so process-derived and unknown-provenance statuses
+ * must pass `extra.source` explicitly. */
 export function harnessEventStatus(
   value: ObservedStatus["value"],
   confidence: ObservedStatus["confidence"],

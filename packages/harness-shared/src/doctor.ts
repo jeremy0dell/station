@@ -1,7 +1,6 @@
 import type { ProviderDoctorCheck, ProviderHealth } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
 
-/** Projects a fresh health probe onto one doctor check, carrying lastError when unavailable. */
 export function healthDoctorCheck(
   health: ProviderHealth,
   text: { name: string; ok: string; error: string },
@@ -16,7 +15,6 @@ export function healthDoctorCheck(
   return check;
 }
 
-/** Runs a provider hook doctor and converts a thrown failure into an error check. */
 export async function hookDoctorCheck<
   TResult extends { status: "ok" | "warn"; message: string },
 >(input: {

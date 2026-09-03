@@ -19,7 +19,6 @@ const openCodeErrors: HarnessProviderErrors<OpenCodeHarnessErrorCode> = defineHa
   },
 );
 
-// Annotated so declaration emit names the class type instead of a deep package path.
 export const OpenCodeHarnessProviderError: HarnessProviderErrorClass<OpenCodeHarnessErrorCode> =
   openCodeErrors.ErrorClass;
 export const openCodeHarnessError: HarnessProviderErrors<OpenCodeHarnessErrorCode>["create"] =
