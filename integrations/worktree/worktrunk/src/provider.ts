@@ -92,16 +92,8 @@ type ProjectSetupPlan = {
 /**
  * ADAPTER
  *
- * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
- * Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition
- * expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk
- * project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated
- * before Worktrunk runs. Concurrent creates share only an in-flight managed-path identity probe and retain
- * their common-case mutation overlap. Reads and removals drain active creates; the exact nested Git
- * sibling-registration race does the same before Worktrunk resumes its half-created branch. Removal freshly
- * revalidates native Git identity, path, and branch before mutation. Create validates and copies configured
- * project-root files after any working-tree seed. Copy failure removes the exact new worktree or reports
- * cleanup uncertainty.
+ * Translates Station worktree lifecycle requests into Worktrunk commands and
+ * Worktrunk output into provider-neutral observations.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
