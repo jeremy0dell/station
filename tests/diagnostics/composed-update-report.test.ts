@@ -131,6 +131,16 @@ function predecessorV4Report() {
 }
 
 describe("composed update report parsing", () => {
+  it("maps each emitter generation to its exact report schema", async () => {
+    const { updateReportSchemaVersionForEmitter } = await loadReportModule();
+
+    expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.5.16")).toBe(1);
+    expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.14.3")).toBe(4);
+    expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.14.4")).toBe(5);
+    expect(updateReportSchemaVersionForEmitter("0.0.0-local")).toBe(5);
+    expect(updateReportSchemaVersionForEmitter("0.0.1-local")).toBe(5);
+  });
+
   it("accepts the strict published-predecessor report", async () => {
     const { parseComposedUpdateReport } = await loadReportModule();
     const report = legacyReport();

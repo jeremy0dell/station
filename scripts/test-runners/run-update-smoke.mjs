@@ -40,7 +40,10 @@ import {
   releaseBinarySmokeEvidenceReservation,
   reserveBinarySmokeEvidenceDestination,
 } from "./binary-smoke-evidence.mjs";
-import { parseComposedUpdateReport } from "./composed-update-report.mjs";
+import {
+  parseComposedUpdateReport,
+  updateReportSchemaVersionForEmitter,
+} from "./composed-update-report.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const runnerPath = fileURLToPath(import.meta.url);
@@ -715,35 +718,31 @@ async function runScenario(input) {
         stderr: updateResult.stderr,
       })})`,
     );
-    if (preservedRefusal) {
-      if (updateResult.stdout.trim().length === 0) {
-        assertIncludes(
-          updateResult.stderr,
-          "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
-          `${input.name} refused update code`,
-        );
-        assertIncludes(
-          updateResult.stderr,
-          "Host terminals are not all eligible for live handoff.",
-          `${input.name} refused update reason`,
-        );
-        assertDeepEqual(
-          await captureDryRunState(dryRunStateInput),
-          beforeDryRun,
-          `${input.name} refused update persistent and runtime state`,
-        );
-      } else {
-        const reportJson = parseJson(updateResult.stdout, `${input.name} update report`);
-        const report = parseComposedUpdateReport(reportJson, reportEmitterVersion(input));
-        assertUpdateReport(report, reportJson, input, installedBinary, configPath, reportEvidence);
-        assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
-        completedInstallRefusal = report.status === "failed";
-      }
+    const emitterVersion = reportEmitterVersion(input);
+    const reportSchemaVersion = updateReportSchemaVersionForEmitter(emitterVersion);
+    const allowsStderrOnlyRefusal = reportSchemaVersion === 1 || reportSchemaVersion === 4;
+    if (preservedRefusal && updateResult.stdout.trim().length === 0 && allowsStderrOnlyRefusal) {
+      assertIncludes(
+        updateResult.stderr,
+        "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
+        `${input.name} refused update code`,
+      );
+      assertIncludes(
+        updateResult.stderr,
+        "Host terminals are not all eligible for live handoff.",
+        `${input.name} refused update reason`,
+      );
+      assertDeepEqual(
+        await captureDryRunState(dryRunStateInput),
+        beforeDryRun,
+        `${input.name} refused update persistent and runtime state`,
+      );
     } else {
       const reportJson = parseJson(updateResult.stdout, `${input.name} update report`);
-      const report = parseComposedUpdateReport(reportJson, reportEmitterVersion(input));
+      const report = parseComposedUpdateReport(reportJson, emitterVersion);
       assertUpdateReport(report, reportJson, input, installedBinary, configPath, reportEvidence);
       assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
+      completedInstallRefusal = preservedRefusal && report.status === "failed";
     }
     if (preservedRefusal) {
       assertDeepEqual(

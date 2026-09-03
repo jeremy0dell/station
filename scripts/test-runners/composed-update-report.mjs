@@ -154,14 +154,21 @@ const predecessorV4UpdateCommandReportSchema = z.union([
 const legacyV1IncumbentVersion = "0.0.0-pre-alpha.5.16";
 const predecessorV4EmitterVersion = "0.0.0-pre-alpha.14.3";
 
-export function parseComposedUpdateReport(value, incumbentVersion) {
-  if (incumbentVersion === legacyV1IncumbentVersion) {
-    return parseExpectedReport(legacyV1UpdateCommandReportSchema, value, incumbentVersion, 1);
-  }
-  if (incumbentVersion === predecessorV4EmitterVersion) {
-    return parseExpectedReport(predecessorV4UpdateCommandReportSchema, value, incumbentVersion, 4);
-  }
-  return parseExpectedReport(UpdateCommandReportSchema, value, incumbentVersion, 5);
+export function updateReportSchemaVersionForEmitter(version) {
+  if (version === legacyV1IncumbentVersion) return 1;
+  if (version === predecessorV4EmitterVersion) return 4;
+  return 5;
+}
+
+export function parseComposedUpdateReport(value, emitterVersion) {
+  const schemaVersion = updateReportSchemaVersionForEmitter(emitterVersion);
+  const schema =
+    schemaVersion === 1
+      ? legacyV1UpdateCommandReportSchema
+      : schemaVersion === 4
+        ? predecessorV4UpdateCommandReportSchema
+        : UpdateCommandReportSchema;
+  return parseExpectedReport(schema, value, emitterVersion, schemaVersion);
 }
 
 function parseExpectedReport(schema, value, incumbentVersion, expectedSchemaVersion) {

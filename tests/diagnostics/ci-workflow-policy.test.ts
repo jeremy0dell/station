@@ -68,6 +68,14 @@ function workflowSteps(file: WorkflowFile): readonly WorkflowStep[] {
   });
 }
 
+function namedWorkflowStep(document: string, name: string): string {
+  const steps = workflowSteps({ path: "", document, lines: document.split("\n") }).filter(
+    (step) => step.text.split("\n")[0]?.trim() === `- name: ${name}`,
+  );
+  expect(steps, `workflow step named ${name}`).toHaveLength(1);
+  return steps[0]?.text ?? "";
+}
+
 function workflowJobNames(document: string): readonly string[] {
   const lines = document.slice(document.indexOf("jobs:")).split("\n");
   return lines.flatMap((line) => {
@@ -453,6 +461,7 @@ describe("hosted CI policy", () => {
     const promotion = read(".github/workflows/promote-release.yml");
     const updateSmoke = read("scripts/test-runners/run-update-smoke.mjs");
     const installDraft = workflowJob(release, "install-draft");
+    const preparePredecessor = namedWorkflowStep(installDraft, "Prepare exact predecessor");
     const createDraft = workflowJob(release, "create-draft");
     const accepted = workflowJob(release, "record-accepted-candidate");
     const promote = workflowJob(promotion, "promote");
@@ -467,7 +476,7 @@ describe("hosted CI policy", () => {
       createDraft.indexOf("release-candidate-input-"),
     );
     expect(createDraft).toContain("targetBuildIdentity: $targetBuildIdentity");
-    expect(installDraft).toContain("Fetch staged update assets and exact predecessor");
+    expect(installDraft).toContain("Fetch staged update assets");
     expect(installDraft).toContain("fetch-depth: 0");
     expect(installDraft).toContain("actions/download-artifact@");
     expect(installDraft).toContain('awk -F= -v name="$name"');
@@ -478,11 +487,31 @@ describe("hosted CI policy", () => {
     expect(installDraft).toContain('git worktree add --detach "$predecessor_source"');
     expect(installDraft).toContain("bun install --frozen-lockfile");
     expect(installDraft).toContain("bun run --cwd station repair:node-pty");
+    expect(preparePredecessor).toContain(
+      `env:\n          PREVIOUS_TAG: ${actionsExpression("needs.validate.outputs.previous_tag")}\n        run:`,
+    );
+    expect(preparePredecessor).not.toContain(actionsExpression("github.token"));
+    const credentialRemoval = preparePredecessor.indexOf(
+      "unset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN",
+    );
+    expect(credentialRemoval).toBeGreaterThanOrEqual(0);
+    for (const command of [
+      "curl --disable",
+      '/bin/sh "$predecessor_installer"',
+      "bun install --frozen-lockfile",
+      "bun run build",
+      "bun run --cwd station repair:node-pty",
+    ]) {
+      expect(credentialRemoval, command).toBeLessThan(preparePredecessor.indexOf(command));
+    }
     expect(installDraft).toContain(
       '--predecessor-source-dir "$RUNNER_TEMP/update-predecessor-source"',
     );
     expect(installDraft).toContain("--scenarios release");
     expect(installDraft).toContain("--busy-host-outcome preserved-refusal");
+    expect(updateSmoke).toMatch(
+      /options\.scenarios === "release"\s*\? \[\.\.\.predecessorScenarios, \.\.\.currentArtifactScenarios\]/u,
+    );
     for (const scenario of [
       "external-busy-host",
       "tmux-busy-host",
