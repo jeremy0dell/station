@@ -8,13 +8,23 @@ import { readStdinIfAvailable } from "../../stdin.js";
 import { createDefaultUpdateProbes } from "../../update/defaultUpdateProbes.js";
 import { runUpdateRecoveryPreflight } from "../../update/recoveryPreflight.js";
 import {
+  type CreateUpdateRecoveryPreflightPortsOptions,
+  type CreateUpdateRuntimeCapabilitiesOptions,
   createUpdateRecoveryPreflightPorts,
   createUpdateRuntimeCapabilities,
 } from "../../update/recoveryPreflightAdapters.js";
-import { runUpdateSuccessorTransport } from "../../update/successorExecution.js";
+import {
+  runUpdateSuccessorTransport,
+  type UpdateSuccessorTransportInput,
+} from "../../update/successorExecution.js";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
-import { runUpdateCommand, runUpdateSuccessorCommand, type UpdateCommandDeps } from "../update.js";
+import {
+  runUpdateCommand,
+  runUpdateSuccessorCommand,
+  type UpdateCommandDeps,
+  type UpdateCommandOptions,
+} from "../update.js";
 
 export const updateCliCommand: CliCommandNode = {
   name: "update",
@@ -66,85 +76,135 @@ export const updateCliCommand: CliCommandNode = {
 
 async function runUpdateCliCommand(context: CliCommandRunContext) {
   const loaded = loadedConfigCommandOptions(context);
-  const deps = updateDeps(context, loaded);
-  if (context.args.length === 1 && context.args[0] === "--successor") {
+  const options = updateCommandOptions(context, loaded);
+  const deps = createUpdateDeps(context, loaded);
+  if (isSuccessorInvocation(context.args)) {
     const stdin = context.options.stdin ?? (await readStdinIfAvailable({ maxBytes: 64 * 1024 }));
     return runUpdateSuccessorCommand({
       ...(stdin === undefined ? {} : { stdin }),
-      options: {
-        config: loaded.config,
-        cliEntryPath: context.cliEntryPath,
-        ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
-        ...(context.options.env === undefined ? {} : { env: context.options.env }),
-      },
+      options,
       deps,
     });
   }
-  return runUpdateCommand(
-    context.args,
-    {
-      config: loaded.config,
-      cliEntryPath: context.cliEntryPath,
-      ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
-      ...(context.options.env === undefined ? {} : { env: context.options.env }),
-    },
-    deps,
-  );
+  return runUpdateCommand(context.args, options, deps);
 }
 
-function updateDeps(
+function updateCommandOptions(
+  context: CliCommandRunContext,
+  loaded: ReturnType<typeof loadedConfigCommandOptions>,
+): UpdateCommandOptions {
+  const options: UpdateCommandOptions = {
+    config: loaded.config,
+    cliEntryPath: context.cliEntryPath,
+  };
+  if (loaded.configPath !== undefined) options.configPath = loaded.configPath;
+  if (context.options.env !== undefined) options.env = context.options.env;
+  return options;
+}
+
+function isSuccessorInvocation(args: readonly string[]): boolean {
+  return args.length === 1 && args[0] === "--successor";
+}
+
+/** COMPOSITION ROOT: assembles one update invocation's read and mutation capabilities. */
+function createUpdateDeps(
   context: CliCommandRunContext,
   loaded: ReturnType<typeof loadedConfigCommandOptions>,
 ): UpdateCommandDeps {
-  const hostDeps = context.options.updateDeps?.hostDeps ?? context.options.hostDeps;
+  const suppliedDeps = context.options.updateDeps ?? {};
+  const hostDeps = suppliedDeps.hostDeps ?? context.options.hostDeps;
+  const currentBuildInfo =
+    suppliedDeps.currentBuildInfo ?? (suppliedDeps.buildInfo ?? stationBuildInfo)();
+  const probes = suppliedDeps.probes ?? createUpdateProbes(context, suppliedDeps, currentBuildInfo);
+  const providers =
+    suppliedDeps.providers ??
+    createProviderRegistry(loaded.config, providerRegistryOptions(loaded));
+  const recoveryPreflight =
+    suppliedDeps.recoveryPreflight ?? createRecoveryPreflight(loaded, providers, hostDeps);
+  const capabilities = createRuntimeCapabilities(loaded, suppliedDeps, providers, hostDeps);
+
   const deps: UpdateCommandDeps = {
-    ...context.options.updateDeps,
-    ...(hostDeps === undefined ? {} : { hostDeps }),
+    ...suppliedDeps,
+    currentBuildInfo,
+    probes,
+    providers,
+    recoveryPreflight,
+    convergeObserver: suppliedDeps.convergeObserver ?? capabilities.convergeObserver,
+    reconcileHook: suppliedDeps.reconcileHook ?? capabilities.reconcileHook,
+    convergeHost: suppliedDeps.convergeHost ?? capabilities.convergeHost,
+    reconcilePersisted: suppliedDeps.reconcilePersisted ?? capabilities.reconcilePersisted,
   };
-  const currentBuildInfo = deps.currentBuildInfo ?? (deps.buildInfo ?? stationBuildInfo)();
-  deps.currentBuildInfo = currentBuildInfo;
-  deps.probes ??= createDefaultUpdateProbes(
-    {
-      cliEntryPath: context.cliEntryPath,
-      ...(context.options.env === undefined ? {} : { env: context.options.env }),
-    },
-    {
-      buildInfo: currentBuildInfo,
-      ...(deps.executablePath === undefined ? {} : { executablePath: deps.executablePath }),
-      ...(deps.commandRunner === undefined ? {} : { commandRunner: deps.commandRunner }),
-    },
-  );
-  deps.providers ??= createProviderRegistry(loaded.config, registryOptions(loaded));
-  if (deps.recoveryPreflight === undefined) {
-    deps.recoveryPreflight = (input) => {
-      const preflightOptions: Parameters<typeof createUpdateRecoveryPreflightPorts>[0] = {
-        config: loaded.config,
-        providers: deps.providers as NonNullable<UpdateCommandDeps["providers"]>,
-        currentBuildInfo: input.currentBuildInfo,
-      };
-      if (loaded.configPath !== undefined) preflightOptions.configPath = loaded.configPath;
-      if (hostDeps?.inspectHost !== undefined) preflightOptions.inspectHost = hostDeps.inspectHost;
-      const ports = createUpdateRecoveryPreflightPorts(preflightOptions);
-      return runUpdateRecoveryPreflight({ ...input, ports });
-    };
+  if (hostDeps !== undefined) deps.hostDeps = hostDeps;
+  deps.runSuccessor = suppliedDeps.runSuccessor ?? createSuccessorRunner(loaded, suppliedDeps);
+  return deps;
+}
+
+function createUpdateProbes(
+  context: CliCommandRunContext,
+  suppliedDeps: UpdateCommandDeps,
+  currentBuildInfo: NonNullable<UpdateCommandDeps["currentBuildInfo"]>,
+) {
+  const options: Parameters<typeof createDefaultUpdateProbes>[0] = {
+    cliEntryPath: context.cliEntryPath,
+  };
+  if (context.options.env !== undefined) options.env = context.options.env;
+  const probeDeps: Parameters<typeof createDefaultUpdateProbes>[1] = {
+    buildInfo: currentBuildInfo,
+  };
+  if (suppliedDeps.executablePath !== undefined) {
+    probeDeps.executablePath = suppliedDeps.executablePath;
   }
-  const runtimeCapabilities = createUpdateRuntimeCapabilities({
+  if (suppliedDeps.commandRunner !== undefined)
+    probeDeps.commandRunner = suppliedDeps.commandRunner;
+  return createDefaultUpdateProbes(options, probeDeps);
+}
+
+function createRecoveryPreflight(
+  loaded: ReturnType<typeof loadedConfigCommandOptions>,
+  providers: NonNullable<UpdateCommandDeps["providers"]>,
+  hostDeps: UpdateCommandDeps["hostDeps"],
+): NonNullable<UpdateCommandDeps["recoveryPreflight"]> {
+  return (input) => {
+    const options: CreateUpdateRecoveryPreflightPortsOptions = {
+      config: loaded.config,
+      providers,
+      currentBuildInfo: input.currentBuildInfo,
+    };
+    if (loaded.configPath !== undefined) options.configPath = loaded.configPath;
+    if (hostDeps?.inspectHost !== undefined) options.inspectHost = hostDeps.inspectHost;
+    const ports = createUpdateRecoveryPreflightPorts(options);
+    return runUpdateRecoveryPreflight({ ...input, ports });
+  };
+}
+
+function createRuntimeCapabilities(
+  loaded: ReturnType<typeof loadedConfigCommandOptions>,
+  suppliedDeps: UpdateCommandDeps,
+  providers: NonNullable<UpdateCommandDeps["providers"]>,
+  hostDeps: UpdateCommandDeps["hostDeps"],
+) {
+  const options: CreateUpdateRuntimeCapabilitiesOptions = {
     config: loaded.config,
-    ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
-    ...(deps.providers === undefined ? {} : { providers: deps.providers }),
-    ...(hostDeps === undefined ? {} : { hostDeps }),
-    ...(deps.convergeObserver === undefined ? {} : { convergeObserver: deps.convergeObserver }),
-    ...(deps.reconcileHook === undefined ? {} : { reconcileHook: deps.reconcileHook }),
-    ...(deps.convergeHost === undefined ? {} : { convergeHost: deps.convergeHost }),
-    ...(deps.reconcilePersisted === undefined
-      ? {}
-      : { reconcilePersisted: deps.reconcilePersisted }),
-  });
-  deps.convergeObserver ??= runtimeCapabilities.convergeObserver;
-  deps.reconcileHook ??= runtimeCapabilities.reconcileHook;
-  deps.convergeHost ??= runtimeCapabilities.convergeHost;
-  deps.reconcilePersisted ??= runtimeCapabilities.reconcilePersisted;
-  deps.runSuccessor ??= (input) => {
+    providers,
+  };
+  if (loaded.configPath !== undefined) options.configPath = loaded.configPath;
+  if (hostDeps !== undefined) options.hostDeps = hostDeps;
+  if (suppliedDeps.convergeObserver !== undefined) {
+    options.convergeObserver = suppliedDeps.convergeObserver;
+  }
+  if (suppliedDeps.reconcileHook !== undefined) options.reconcileHook = suppliedDeps.reconcileHook;
+  if (suppliedDeps.convergeHost !== undefined) options.convergeHost = suppliedDeps.convergeHost;
+  if (suppliedDeps.reconcilePersisted !== undefined) {
+    options.reconcilePersisted = suppliedDeps.reconcilePersisted;
+  }
+  return createUpdateRuntimeCapabilities(options);
+}
+
+function createSuccessorRunner(
+  loaded: ReturnType<typeof loadedConfigCommandOptions>,
+  suppliedDeps: UpdateCommandDeps,
+): NonNullable<UpdateCommandDeps["runSuccessor"]> {
+  return async (input) => {
     const request: UpdateSuccessorRequest = {
       schemaVersion: 1,
       channel: input.channel,
@@ -155,12 +215,16 @@ function updateDeps(
           : { action: "preserve", fidelity: input.handoff },
       hookProviderIds: [...input.hookProviderIds],
     };
-    return runUpdateSuccessorTransport({
+    const transportOptions: UpdateSuccessorTransportInput = {
       launcher: input.launcher,
       request,
-      ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
-      ...(deps.commandRunner === undefined ? {} : { commandRunner: deps.commandRunner }),
-    }).then((receipt) => ({
+    };
+    if (loaded.configPath !== undefined) transportOptions.configPath = loaded.configPath;
+    if (suppliedDeps.commandRunner !== undefined) {
+      transportOptions.commandRunner = suppliedDeps.commandRunner;
+    }
+    const receipt = await runUpdateSuccessorTransport(transportOptions);
+    const result = {
       status: receipt.status,
       finalInspection: receipt.finalInspection,
       hookReconciliations: receipt.hookReconciliations,
@@ -182,12 +246,12 @@ function updateDeps(
           }
         : {}),
       ...(receipt.error === undefined ? {} : { error: receipt.error }),
-    }));
+    };
+    return result;
   };
-  return deps;
 }
 
-function registryOptions(
+function providerRegistryOptions(
   loaded: ReturnType<typeof loadedConfigCommandOptions>,
 ): CreateProviderRegistryOptions {
   const options: CreateProviderRegistryOptions = {};
