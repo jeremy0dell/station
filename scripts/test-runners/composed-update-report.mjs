@@ -43,7 +43,7 @@ const legacyV1IncumbentVersion = "0.0.0-pre-alpha.5.16";
 
 export function parseComposedUpdateReport(value, incumbentVersion) {
   const report = composedUpdateReportSchema.parse(value);
-  const expectedSchemaVersion = incumbentVersion === legacyV1IncumbentVersion ? 1 : 4;
+  const expectedSchemaVersion = incumbentVersion === legacyV1IncumbentVersion ? 1 : 5;
   if (report.schemaVersion !== expectedSchemaVersion) {
     throw new Error(
       `Expected update report schema ${expectedSchemaVersion} from incumbent ${incumbentVersion}, received ${report.schemaVersion}.`,

@@ -1,14 +1,20 @@
+import type { UpdateSuccessorRequest } from "@station/contracts";
 import { stationBuildInfo } from "@station/runtime";
 import {
   type CreateProviderRegistryOptions,
   createProviderRegistry,
 } from "../../observerProviders.js";
+import { readStdinIfAvailable } from "../../stdin.js";
 import { createDefaultUpdateProbes } from "../../update/defaultUpdateProbes.js";
 import { runUpdateRecoveryPreflight } from "../../update/recoveryPreflight.js";
-import { createUpdateRecoveryPreflightPorts } from "../../update/recoveryPreflightAdapters.js";
+import {
+  createUpdateRecoveryPreflightPorts,
+  createUpdateRuntimeCapabilities,
+} from "../../update/recoveryPreflightAdapters.js";
+import { runUpdateSuccessorTransport } from "../../update/successorExecution.js";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
-import { runUpdateCommand, type UpdateCommandDeps } from "../update.js";
+import { runUpdateCommand, runUpdateSuccessorCommand, type UpdateCommandDeps } from "../update.js";
 
 export const updateCliCommand: CliCommandNode = {
   name: "update",
@@ -60,6 +66,20 @@ export const updateCliCommand: CliCommandNode = {
 
 async function runUpdateCliCommand(context: CliCommandRunContext) {
   const loaded = loadedConfigCommandOptions(context);
+  const deps = updateDeps(context, loaded);
+  if (context.args.length === 1 && context.args[0] === "--successor") {
+    const stdin = context.options.stdin ?? (await readStdinIfAvailable({ maxBytes: 64 * 1024 }));
+    return runUpdateSuccessorCommand({
+      ...(stdin === undefined ? {} : { stdin }),
+      options: {
+        config: loaded.config,
+        cliEntryPath: context.cliEntryPath,
+        ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
+        ...(context.options.env === undefined ? {} : { env: context.options.env }),
+      },
+      deps,
+    });
+  }
   return runUpdateCommand(
     context.args,
     {
@@ -68,7 +88,7 @@ async function runUpdateCliCommand(context: CliCommandRunContext) {
       ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
       ...(context.options.env === undefined ? {} : { env: context.options.env }),
     },
-    updateDeps(context, loaded),
+    deps,
   );
 }
 
@@ -94,19 +114,12 @@ function updateDeps(
       ...(deps.commandRunner === undefined ? {} : { commandRunner: deps.commandRunner }),
     },
   );
-  if (deps.recoveryPreflight === undefined && context.args.includes("--dry-run")) {
-    const registryOptions: CreateProviderRegistryOptions = {};
-    if (loaded.configPath !== undefined) registryOptions.configPath = loaded.configPath;
-    if (loaded.providerHookIngressLauncher !== undefined) {
-      registryOptions.providerHookIngressLauncher = loaded.providerHookIngressLauncher;
-    }
-    if (loaded.providerHookArtifactOwner !== undefined) {
-      registryOptions.providerHookArtifactOwner = loaded.providerHookArtifactOwner;
-    }
+  deps.providers ??= createProviderRegistry(loaded.config, registryOptions(loaded));
+  if (deps.recoveryPreflight === undefined) {
     deps.recoveryPreflight = (input) => {
       const preflightOptions: Parameters<typeof createUpdateRecoveryPreflightPorts>[0] = {
         config: loaded.config,
-        providers: createProviderRegistry(loaded.config, registryOptions),
+        providers: deps.providers as NonNullable<UpdateCommandDeps["providers"]>,
         currentBuildInfo: input.currentBuildInfo,
       };
       if (loaded.configPath !== undefined) preflightOptions.configPath = loaded.configPath;
@@ -115,5 +128,93 @@ function updateDeps(
       return runUpdateRecoveryPreflight({ ...input, ports });
     };
   }
+  const runtimeCapabilities = createUpdateRuntimeCapabilities({
+    config: loaded.config,
+    ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
+    ...(deps.providers === undefined ? {} : { providers: deps.providers }),
+    ...(hostDeps === undefined ? {} : { hostDeps }),
+    ...(deps.convergeObserver === undefined ? {} : { convergeObserver: deps.convergeObserver }),
+    ...(deps.reconcileHook === undefined ? {} : { reconcileHook: deps.reconcileHook }),
+    ...(deps.convergeHost === undefined ? {} : { convergeHost: deps.convergeHost }),
+    ...(deps.reconcilePersisted === undefined
+      ? {}
+      : { reconcilePersisted: deps.reconcilePersisted }),
+  });
+  deps.convergeObserver ??= runtimeCapabilities.convergeObserver;
+  deps.reconcileHook ??= runtimeCapabilities.reconcileHook;
+  deps.convergeHost ??= runtimeCapabilities.convergeHost;
+  deps.reconcilePersisted ??= runtimeCapabilities.reconcilePersisted;
+  deps.runSuccessor ??= (input) => {
+    const request: UpdateSuccessorRequest = {
+      schemaVersion: 1,
+      channel: input.channel,
+      target: input.target,
+      handoff:
+        input.handoff === undefined
+          ? { action: "leave-in-place" }
+          : { action: "preserve", fidelity: input.handoff },
+      hookProviderIds: [...input.hookProviderIds],
+    };
+    return runUpdateSuccessorTransport({
+      launcher: input.launcher,
+      request,
+      ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
+      ...(deps.commandRunner === undefined ? {} : { commandRunner: deps.commandRunner }),
+    }).then((receipt) => ({
+      status: receipt.status,
+      finalInspection: receipt.finalInspection,
+      hookReconciliations: receipt.hookReconciliations,
+      steps: receipt.actions.map((action) => ({
+        id: action.id,
+        status: action.status,
+        detail: action.detail,
+      })),
+      ...(receipt.status === "failed"
+        ? {
+            recoveryCommands: [
+              retrySuccessorCommand(
+                input.launcher,
+                loaded.configPath,
+                input.channel,
+                input.handoff,
+              ),
+            ],
+          }
+        : {}),
+      ...(receipt.error === undefined ? {} : { error: receipt.error }),
+    }));
+  };
   return deps;
+}
+
+function registryOptions(
+  loaded: ReturnType<typeof loadedConfigCommandOptions>,
+): CreateProviderRegistryOptions {
+  const options: CreateProviderRegistryOptions = {};
+  if (loaded.configPath !== undefined) options.configPath = loaded.configPath;
+  if (loaded.providerHookIngressLauncher !== undefined) {
+    options.providerHookIngressLauncher = loaded.providerHookIngressLauncher;
+  }
+  if (loaded.providerHookArtifactOwner !== undefined) {
+    options.providerHookArtifactOwner = loaded.providerHookArtifactOwner;
+  }
+  return options;
+}
+
+function retrySuccessorCommand(
+  launcher: readonly [string, ...string[]],
+  configPath: string | undefined,
+  channel: UpdateSuccessorRequest["channel"],
+  handoff: "processes" | "screen" | undefined,
+): readonly [string, ...string[]] {
+  const [command, ...prefix] = launcher;
+  return [
+    command,
+    ...prefix,
+    ...(configPath === undefined ? [] : ["--config", configPath]),
+    "update",
+    "--channel",
+    channel,
+    ...(handoff === undefined ? ["--no-handoff"] : [`--handoff=${handoff}`]),
+  ];
 }

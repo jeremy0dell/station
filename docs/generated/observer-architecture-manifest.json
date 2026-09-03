@@ -15025,60 +15025,8 @@
       "declaration": "runUpdateCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Selects one owned install channel from one captured build identity. Preview validates manager intent, aggregates read-only runtime facts, and returns one canonical plan before mutation. Apply mode retains Host preservation, hook reconciliation, and runtime crossover behavior.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/commands/update/scenario.ts",
-          "declaration": "resolveUpdateScenario",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/convergencePlan.ts",
-          "declaration": "deriveUpdateConvergencePlan",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/updateInstallationIntent.ts",
-          "declaration": "resolveUpdateInstallationIntent",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/contracts/src/providerHooks.ts",
-          "declaration": "providerHookReconciliationSucceeded",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/contracts/src/updateReport.ts",
-          "declaration": "projectPublicUpdateReport",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/cli/src/commands/update/scenario.ts",
-      "declaration": "resolveUpdateScenario",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Resolves the non-dry update path and preflights default Host preservation before mutation.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/commands/host/runHostCommand.ts",
-          "declaration": "runHostCommand",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
+      "purpose": "Selects one install owner, captures one read-only aggregate, and delegates all mutating work to the ordered capability executor. The public report is projected only at this boundary.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/ingress/command.ts",
@@ -15461,6 +15409,50 @@
       "role": "USE CASE",
       "purpose": "Converges exact absence or one revalidated owner and requires an independent final proof.",
       "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+      "declaration": "createExactObserverBuildCapability",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Binds the standalone exact Observer capability to update's provider-neutral executor.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserverPreservingIncumbent",
+          "kind": "const",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+          "declaration": "convergeExactObserverBuild",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+          "declaration": "ensureExactObserverBuild",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/inspectExactObserverOwner.ts",
+          "declaration": "inspectExactObserverOwnerWithLocalAdapters",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "withExactObserverLifecycleSession",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
@@ -15907,6 +15899,22 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/convergenceExecution.ts",
+      "declaration": "executeUpdateConvergence",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Executes one ordered safe convergence. Lifecycle capabilities perform their own immediate identity revalidation; this coordinator only orders them and never authorizes reap or signal.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/providerHooks.ts",
+          "declaration": "providerHookReconciliationSucceeded",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/update/convergencePlan.ts",
       "declaration": "deriveUpdateConvergencePlan",
       "kind": "function",
@@ -16102,6 +16110,43 @@
           "declaration": "readHarnessHookHealth",
           "kind": "function",
           "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflightAdapters.ts",
+      "declaration": "createUpdateRuntimeCapabilities",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Binds the provider-neutral update executor to exact local Observer, Host, hook, and persisted state capabilities. The executor receives only these narrow calls and cannot spawn commands.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+          "declaration": "createExactObserverBuildCapability",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/persistedStateReconcile.ts",
+          "declaration": "reconcilePersistedState",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileHarnessHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]

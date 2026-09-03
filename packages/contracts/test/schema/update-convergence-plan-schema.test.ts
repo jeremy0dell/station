@@ -466,6 +466,12 @@ function preflight(overrides: Record<string, unknown> = {}) {
     host: { status: "absent" as const },
     hookProviderIds: [],
     hooks: [],
+    parkedBridges: {
+      status: "assessed" as const,
+      totalParkedCount: 0,
+      unownedParkedCount: 0,
+      adoptionRequiredCount: 0,
+    },
     terminalDispositions: [],
     evidenceComplete: false,
     ...overrides,

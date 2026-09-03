@@ -1,16 +1,20 @@
+import type { StationHostExactEvidence } from "@station/contracts";
 import {
   compareCodeUnitStrings,
   type ProviderHookHealth,
   ProviderHookHealthSchema,
+  type ProviderHookReconciliationResult,
   type ProviderId,
   type SafeError,
   type UpdateArtifact,
   type UpdateReapHostEvidence,
   type UpdateReapObserverEvidence,
+  type UpdateReapParkedBridgeEvidence,
   type UpdateReapRecoveryPreflight,
   UpdateReapRecoveryPreflightSchema,
   updateReapEvidenceIsComplete,
 } from "@station/contracts";
+import type { ExactObserverOwnershipEvidence } from "@station/observer/internal";
 import { publicSafeErrorFromUnknown } from "@station/runtime";
 import { deriveUpdateRecoveryTerminalDispositions } from "./recoveryTerminalDispositions.js";
 
@@ -25,7 +29,20 @@ export type UpdateRecoveryPreflightPorts = {
   inspectHost(artifacts: UpdateRecoveryArtifacts): Promise<UpdateReapHostEvidence>;
   readHookHealth(provider: ProviderId): Promise<ProviderHookHealth>;
   hookProviderIds: readonly ProviderId[];
+  /** Read-only parked-bridge viability; production composition always binds this capability. */
+  preflightParkedBridges?: (
+    artifacts: UpdateRecoveryArtifacts,
+    host: UpdateReapHostEvidence,
+  ) => Promise<UpdateReapParkedBridgeEvidence>;
+  /** Keeps exact inspection facts private for the immediately following action commitment. */
+  captureActionCommitments?: () => UpdateRecoveryPreflightActionCommitments;
 };
+
+export const updateRecoveryPreflightCommitments = Symbol("station.update.preflight.commitments");
+export type UpdateRecoveryPreflightActionCommitments = Readonly<{
+  observer?: ExactObserverOwnershipEvidence;
+  host?: StationHostExactEvidence;
+}>;
 
 export type UpdateRecoveryArtifacts = {
   installed: UpdateArtifact;
@@ -53,6 +70,7 @@ export async function runUpdateRecoveryPreflight(input: {
   const hooks = await Promise.all(
     hookProviderIds.map((provider) => inspectHook(input.ports, provider)),
   );
+  const parkedBridges = await inspectParkedBridges(input.ports, artifacts, host);
   const terminalDispositions = deriveUpdateRecoveryTerminalDispositions({ host, observer });
   const evidence = {
     observer,
@@ -60,8 +78,9 @@ export async function runUpdateRecoveryPreflight(input: {
     hookProviderIds,
     hooks,
     terminalDispositions,
+    parkedBridges,
   };
-  return UpdateReapRecoveryPreflightSchema.parse({
+  const preflight = UpdateReapRecoveryPreflightSchema.parse({
     schemaVersion: 1,
     boundary: {
       authorization: "none",
@@ -73,6 +92,41 @@ export async function runUpdateRecoveryPreflight(input: {
     ...evidence,
     evidenceComplete: updateReapEvidenceIsComplete(evidence),
   });
+  const commitments = input.ports.captureActionCommitments?.();
+  if (commitments !== undefined) {
+    Object.defineProperty(preflight, updateRecoveryPreflightCommitments, {
+      value: commitments,
+      enumerable: false,
+    });
+  }
+  return preflight;
+}
+
+async function inspectParkedBridges(
+  ports: UpdateRecoveryPreflightPorts,
+  artifacts: UpdateRecoveryArtifacts,
+  host: UpdateReapHostEvidence,
+): Promise<UpdateReapParkedBridgeEvidence> {
+  if (ports.preflightParkedBridges === undefined) {
+    return {
+      status: "assessed",
+      totalParkedCount: 0,
+      unownedParkedCount: 0,
+      adoptionRequiredCount: 0,
+    };
+  }
+  try {
+    return await ports.preflightParkedBridges(artifacts, host);
+  } catch (error) {
+    return {
+      status: "unknown",
+      reason: "inspection-failed",
+      error: redactedPreflightError(error, {
+        code: "UPDATE_PREFLIGHT_PARKED_BRIDGE_INSPECTION_FAILED",
+        message: "Parked bridge recovery viability could not be inspected.",
+      }),
+    };
+  }
 }
 
 async function inspectObserver(
@@ -167,4 +221,58 @@ export function redactedPreflightError(
   if (normalized.traceId !== undefined) safe.traceId = normalized.traceId;
   if (normalized.diagnosticId !== undefined) safe.diagnosticId = normalized.diagnosticId;
   return safe;
+}
+
+export function updateRecoveryActionCommitments(
+  preflight: UpdateReapRecoveryPreflight,
+): UpdateRecoveryPreflightActionCommitments {
+  return (
+    (
+      preflight as UpdateReapRecoveryPreflight & {
+        [updateRecoveryPreflightCommitments]?: UpdateRecoveryPreflightActionCommitments;
+      }
+    )[updateRecoveryPreflightCommitments] ?? {}
+  );
+}
+
+export function updateHookSuccessFromHealth(
+  health: ProviderHookHealth,
+): ProviderHookReconciliationResult {
+  switch (health.status) {
+    case "configured-disabled":
+      return {
+        provider: health.provider,
+        status: health.status,
+        changed: false,
+        verified: false,
+        followUp: health.followUp,
+      };
+    case "unsupported":
+      return { provider: health.provider, status: health.status, changed: false, verified: false };
+    case "healthy":
+      return { provider: health.provider, status: health.status, changed: false, verified: true };
+    case "needs-repair":
+      throw new Error(`Provider hook ${health.provider} still needs repair.`);
+    case "ownership-conflict":
+    case "inspection-failed":
+      throw updateHookError(health);
+  }
+}
+
+export function updateHookError(
+  value: ProviderHookHealth | ProviderHookReconciliationResult | undefined,
+): Error {
+  if (value === undefined) return new Error("Provider hook evidence is missing.");
+  switch (value.status) {
+    case "ownership-conflict":
+      return new Error(`Provider hook ${value.provider} is owned by another installation.`);
+    case "inspection-failed":
+    case "write-failed":
+    case "post-write-doctor-failed":
+      return new Error(value.error.message);
+    case "needs-repair":
+      return new Error(`Provider hook ${value.provider} needs repair.`);
+    default:
+      return new Error(`Provider hook ${value.provider} reconciliation failed.`);
+  }
 }

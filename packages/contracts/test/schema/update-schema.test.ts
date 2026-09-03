@@ -2,6 +2,7 @@ import {
   UpdateChannelIdSchema,
   UpdateCommandArgvSchema,
   UpdateCommandStepSchema,
+  UpdateSuccessorRequestSchema,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -16,6 +17,32 @@ describe("update command schemas", () => {
         status: "completed",
         detail: "Resolved builds.",
         extra: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("keeps the hidden successor request bounded to policy data", () => {
+    const request = {
+      schemaVersion: 1,
+      channel: "installer-binary" as const,
+      target: { version: "1.2.3" },
+      handoff: { action: "leave-in-place" as const },
+      hookProviderIds: ["codex" as const],
+    };
+    expect(UpdateSuccessorRequestSchema.parse(request)).toEqual(request);
+    expect(
+      UpdateSuccessorRequestSchema.safeParse({ ...request, executable: "/tmp/stn" }).success,
+    ).toBe(false);
+    expect(
+      UpdateSuccessorRequestSchema.safeParse({
+        ...request,
+        target: { version: "1.2.3", revision: undefined },
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateSuccessorRequestSchema.safeParse({
+        ...request,
+        hookProviderIds: ["codex", "codex"],
       }).success,
     ).toBe(false);
   });

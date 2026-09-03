@@ -2,6 +2,9 @@ import { type StationConfig, stationHostSocketPath } from "@station/config";
 import type {
   ObserverRecoveryAssessment,
   StationBuildIdentity,
+  StationHostConvergenceCommand,
+  StationHostExactEvidence,
+  StationHostTargetBuild,
   StationHostTerminalLifetime,
   UpdateArtifact,
   UpdateReapHostEvidence,
@@ -15,14 +18,27 @@ import {
   type ExactObserverOwnershipEvidence,
   type ProviderRegistry,
   readHarnessHookHealth,
+  reconcileHarnessHooks,
 } from "@station/observer/internal";
+import { createObserverClient } from "@station/protocol";
+import { parseStationObserverBuildVersion, type StationBuildInfo } from "@station/runtime";
 import {
-  parseStationObserverBuildVersion,
-  type StationBuildInfo,
-  stationObserverBuildVersion,
-} from "@station/runtime";
-import { type InspectStationHostDeps, inspectStationHost } from "@station/terminal";
+  convergeStationHost,
+  type InspectStationHostDeps,
+  inspectStationHost,
+  preflightParkedOrphanRecovery,
+  recoverExactStationHostOrphans,
+} from "@station/terminal";
+import type { HostCommandDeps } from "../commands/host/runHostCommand.js";
+import { resolveStationHostCommand } from "../commands/host/runHostCommand.js";
+import { createExactObserverBuildCapability } from "../observerProcess/convergeExactObserverBuild.js";
 import { inspectExactObserverOwnerWithLocalAdapters } from "../observerProcess/inspectExactObserverOwner.js";
+import { resolveObserverPaths } from "../paths.js";
+import {
+  reconcilePersistedState,
+  requireCurrentObserverIdentity,
+} from "../persistedStateReconcile.js";
+import type { UpdateConvergenceExecutionDeps } from "./convergenceExecution.js";
 import type { UpdateRecoveryPreflightPorts } from "./recoveryPreflight.js";
 import { redactedPreflightError } from "./recoveryPreflight.js";
 
@@ -33,6 +49,7 @@ export type CreateUpdateRecoveryPreflightPortsOptions = {
   inspectObserverOwner?: () => Promise<ExactObserverOwnershipEvidence>;
   providers: ProviderRegistry;
   inspectHost?: typeof inspectStationHost;
+  preflightParkedBridges?: typeof preflightParkedOrphanRecovery;
   /** Immutable identity captured once by update command composition. */
   currentBuildInfo: StationBuildInfo;
 };
@@ -47,28 +64,56 @@ export function createUpdateRecoveryPreflightPorts(
 ): UpdateRecoveryPreflightPorts {
   const providers = options.providers;
   const currentBuildIdentity = options.currentBuildInfo.buildIdentity;
-  const currentObserverBuildVersion = stationObserverBuildVersion(options.currentBuildInfo);
+  const stateDir = resolveObserverPaths(options.config).stateDir;
+  let lastObserverEvidence: ExactObserverOwnershipEvidence | undefined;
+  let lastHostEvidence: StationHostExactEvidence | undefined;
   const inspectObserverOwner =
     options.inspectObserverOwner ??
     (() =>
       inspectExactObserverOwnerWithLocalAdapters({ config: options.config, timeoutMs: 5_000 }));
+  const captureObserverOwner = async (): Promise<ExactObserverOwnershipEvidence> => {
+    lastObserverEvidence = undefined;
+    const evidence = await inspectObserverOwner();
+    lastObserverEvidence = evidence.status === "exact" ? evidence : undefined;
+    return evidence;
+  };
   return {
     inspectObserver: (artifacts) =>
       inspectObserverRecoveryEvidence({
         artifacts,
-        currentObserverBuildVersion,
-        inspectObserverOwner,
-      }),
-    inspectHost: (artifacts) =>
-      inspectHostRecoveryEvidence({
-        config: options.config,
-        artifacts,
         currentBuildIdentity,
-        inspectHost: options.inspectHost ?? inspectStationHost,
-        ...(options.hostInspectionDeps === undefined
-          ? {}
-          : { inspectionDeps: options.hostInspectionDeps }),
+        inspectObserverOwner: captureObserverOwner,
       }),
+    inspectHost: async (artifacts) => {
+      lastHostEvidence = undefined;
+      const inspection = await (options.inspectHost ?? inspectStationHost)(
+        {
+          socketPath: stationHostSocketPath(options.config),
+          expectedBuildVersion: options.currentBuildInfo.version,
+        },
+        options.hostInspectionDeps,
+      );
+      lastHostEvidence = inspection.status === "exact" ? inspection.evidence : undefined;
+      return projectHostInspection(inspection, artifacts, currentBuildIdentity);
+    },
+    preflightParkedBridges: async () => {
+      const result = await (options.preflightParkedBridges ?? preflightParkedOrphanRecovery)({
+        stateDir,
+        ...(lastHostEvidence === undefined ? {} : { currentHostEvidence: lastHostEvidence }),
+      });
+      return { status: "assessed" as const, ...result };
+    },
+    captureActionCommitments: () => {
+      const commitments: {
+        observer?: ExactObserverOwnershipEvidence;
+        host?: StationHostExactEvidence;
+      } = {};
+      if (lastObserverEvidence !== undefined) {
+        commitments.observer = lastObserverEvidence;
+      }
+      if (lastHostEvidence !== undefined) commitments.host = lastHostEvidence;
+      return commitments;
+    },
     readHookHealth: (providerId) => {
       const hookOptions: Parameters<typeof readHarnessHookHealth>[0] = { providers, providerId };
       if (options.configPath !== undefined) hookOptions.stationConfigPath = options.configPath;
@@ -78,9 +123,127 @@ export function createUpdateRecoveryPreflightPorts(
   };
 }
 
+export type CreateUpdateRuntimeCapabilitiesOptions = {
+  config: StationConfig;
+  configPath?: string;
+  providers?: ProviderRegistry;
+  hostDeps?: HostCommandDeps;
+  convergeObserver?: UpdateConvergenceExecutionDeps["convergeObserver"];
+  reconcileHook?: UpdateConvergenceExecutionDeps["reconcileHook"];
+  convergeHost?: UpdateConvergenceExecutionDeps["convergeHost"];
+  reconcilePersisted?: UpdateConvergenceExecutionDeps["reconcilePersisted"];
+};
+
+/**
+ * COMPOSITION ROOT
+ *
+ * Binds the provider-neutral update executor to exact local Observer, Host, hook, and persisted
+ * state capabilities. The executor receives only these narrow calls and cannot spawn commands.
+ */
+export function createUpdateRuntimeCapabilities(
+  options: CreateUpdateRuntimeCapabilitiesOptions,
+): Pick<
+  UpdateConvergenceExecutionDeps,
+  "convergeObserver" | "reconcileHook" | "convergeHost" | "reconcilePersisted"
+> {
+  const convergeObserver = options.convergeObserver ?? createExactObserverBuildCapability();
+  const reconcileHook =
+    options.reconcileHook ??
+    (async (provider, providers, configPath) =>
+      reconcileHarnessHooks({
+        providers,
+        providerId: provider as Parameters<typeof reconcileHarnessHooks>[0]["providerId"],
+        ...(configPath === undefined ? {} : { stationConfigPath: configPath }),
+      }));
+  const convergeHost = options.convergeHost ?? createHostConvergenceCapability(options);
+  const reconcilePersisted =
+    options.reconcilePersisted ??
+    (async (health, socketPath) => {
+      const observerIdentity = requireCurrentObserverIdentity(health, socketPath);
+      await reconcilePersistedState({ observerIdentity }, (request) => {
+        const client = createObserverClient({
+          socketPath: request.observerIdentity.socketPath,
+          expectedObserverIdentity: request.observerIdentity,
+          timeoutMs: request.timeoutMs,
+        });
+        return { reconcile: (reason) => client.reconcile(reason) };
+      });
+    });
+  return { convergeObserver, reconcileHook, convergeHost, reconcilePersisted };
+}
+
+function createHostConvergenceCapability(
+  options: CreateUpdateRuntimeCapabilitiesOptions,
+): NonNullable<UpdateConvergenceExecutionDeps["convergeHost"]> {
+  return async ({ phase, config, buildInfo, expected }) => {
+    const targetBuild: StationHostTargetBuild = {
+      buildVersion: buildInfo.version,
+      buildIdentity: buildInfo.buildIdentity,
+    };
+    const socketPath = stationHostSocketPath(config);
+    const stateDir = resolveObserverPaths(config).stateDir;
+    const hostCommand = options.hostDeps?.resolveHostCommand?.() ?? resolveStationHostCommand();
+    if (phase.action === "recover-parked") {
+      await (options.hostDeps?.recoverHostOrphans ?? recoverExactStationHostOrphans)({
+        socketPath,
+        stateDir,
+        targetBuild,
+        hostCommand,
+      });
+      return;
+    }
+    if (phase.action !== "replace-idle" && phase.action !== "handoff") {
+      throw new Error(`Host convergence action ${phase.action} is not executable.`);
+    }
+    const expectedEvidence =
+      expected ??
+      (await (async () => {
+        const inspection = await (options.hostDeps?.inspectHost ?? inspectStationHost)({
+          socketPath,
+          expectedBuildVersion: targetBuild.buildVersion,
+        });
+        if (inspection.status !== "exact") {
+          throw new Error("Host evidence changed before exact convergence.");
+        }
+        return inspection.evidence;
+      })());
+    const command: StationHostConvergenceCommand =
+      phase.action === "handoff"
+        ? {
+            action: "handoff",
+            targetBuild,
+            socketPath,
+            expected: expectedEvidence,
+            deadlineMs: Date.now() + 12_000,
+            fidelity: phase.fidelity,
+          }
+        : {
+            action: "replace-idle",
+            targetBuild,
+            socketPath,
+            expected: expectedEvidence,
+            deadlineMs: Date.now() + 12_000,
+          };
+    const result = await (options.hostDeps?.convergeHost ?? convergeStationHost)({
+      command,
+      targetBuild,
+      socketPath,
+      stateDir,
+      hostCommand,
+    });
+    if (result.status === "failed") throw result.error;
+    await (options.hostDeps?.recoverHostOrphans ?? recoverExactStationHostOrphans)({
+      socketPath,
+      stateDir,
+      targetBuild,
+      hostCommand,
+    });
+  };
+}
+
 async function inspectObserverRecoveryEvidence(input: {
   artifacts: { installed: UpdateArtifact; target: UpdateArtifact };
-  currentObserverBuildVersion: string;
+  currentBuildIdentity: string;
   inspectObserverOwner: () => Promise<ExactObserverOwnershipEvidence>;
 }): Promise<UpdateReapObserverEvidence> {
   const inspection = await input.inspectObserverOwner();
@@ -95,11 +258,8 @@ async function inspectObserverRecoveryEvidence(input: {
     buildVersion: inspection.processIdentity.version,
     relation: runtimeBuildRelation({
       runningDisplayVersion: runningObserverBuild.version,
-      runningBuildIdentity:
-        runningObserverBuild.buildIdentity === undefined
-          ? undefined
-          : inspection.processIdentity.version,
-      currentBuildIdentity: input.currentObserverBuildVersion,
+      runningBuildIdentity: runningObserverBuild.buildIdentity,
+      currentBuildIdentity: input.currentBuildIdentity,
       artifacts: input.artifacts,
     }),
     health: inspection.health.status,
@@ -157,20 +317,11 @@ function observerInspectionUnknown(
   return observerUnknown(reason, code, message, error);
 }
 
-async function inspectHostRecoveryEvidence(input: {
-  config: StationConfig;
-  artifacts: { installed: UpdateArtifact; target: UpdateArtifact };
-  currentBuildIdentity: StationBuildIdentity;
-  inspectHost: typeof inspectStationHost;
-  inspectionDeps?: InspectStationHostDeps;
-}): Promise<UpdateReapHostEvidence> {
-  const inspection = await input.inspectHost(
-    {
-      socketPath: stationHostSocketPath(input.config),
-      expectedBuildVersion: input.artifacts.target.version,
-    },
-    input.inspectionDeps,
-  );
+function projectHostInspection(
+  inspection: Awaited<ReturnType<typeof inspectStationHost>>,
+  artifacts: { installed: UpdateArtifact; target: UpdateArtifact },
+  currentBuildIdentity: StationBuildIdentity,
+): UpdateReapHostEvidence {
   if (inspection.status === "absent") return { status: "absent" };
   if (inspection.status === "stale") {
     return hostUnknown(
@@ -211,7 +362,7 @@ async function inspectHostRecoveryEvidence(input: {
       inspection.error,
     );
   }
-  const { health, buildIdentity, terminals: privateTerminals } = inspection.evidence;
+  const { health, buildIdentity, terminals } = inspection.evidence;
   return {
     status: "inspected",
     buildVersion: health.buildVersion,
@@ -220,11 +371,11 @@ async function inspectHostRecoveryEvidence(input: {
     relation: runtimeBuildRelation({
       runningDisplayVersion: health.buildVersion,
       runningBuildIdentity: buildIdentity,
-      currentBuildIdentity: input.currentBuildIdentity,
-      artifacts: input.artifacts,
+      currentBuildIdentity,
+      artifacts,
     }),
-    compatibility: health.buildVersion === input.artifacts.target.version ? "reuse" : "replace",
-    terminals: privateTerminals.map(redactedHostTerminal),
+    compatibility: health.buildVersion === artifacts.target.version ? "reuse" : "replace",
+    terminals: terminals.map(redactedHostTerminal),
   };
 }
 

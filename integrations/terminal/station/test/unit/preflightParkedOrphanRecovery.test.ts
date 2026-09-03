@@ -49,7 +49,7 @@ describe("preflightParkedOrphanRecovery", () => {
           }),
         },
       ),
-    ).resolves.toEqual({ parkedPtyCount: 1 });
+    ).resolves.toEqual({ totalParkedCount: 1, unownedParkedCount: 1, adoptionRequiredCount: 1 });
   });
 
   it("admits a bridge adopted by the fully matching current Host on a successive update", async () => {
@@ -67,7 +67,7 @@ describe("preflightParkedOrphanRecovery", () => {
           readBridgeStatus: async () => bridgeStatus(park, true),
         },
       ),
-    ).resolves.toEqual({ parkedPtyCount: 1 });
+    ).resolves.toEqual({ totalParkedCount: 1, unownedParkedCount: 0, adoptionRequiredCount: 0 });
   });
 
   it("admits an unowned park whose lifetime identities are disjoint from the current Host", async () => {
@@ -89,7 +89,7 @@ describe("preflightParkedOrphanRecovery", () => {
           readBridgeStatus: async () => bridgeStatus(park, false),
         },
       ),
-    ).resolves.toEqual({ parkedPtyCount: 1 });
+    ).resolves.toEqual({ totalParkedCount: 1, unownedParkedCount: 1, adoptionRequiredCount: 1 });
   });
 
   it.each([

@@ -3,10 +3,8 @@ import {
   parseStationHostConvergenceCommand,
   StationHostConvergenceCommandSchema,
   StationHostConvergenceResultSchema,
-  StationHostUpdateCrossoverResultSchema,
   stationHostEvidenceMatchesTargetBuild,
   stationHostTerminalsAreHandoffEligible,
-  summarizeStationHostConvergenceFailure,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -251,53 +249,5 @@ describe("Station Host convergence contracts", () => {
         },
       }).success,
     ).toBe(false);
-  });
-
-  it("bounds updater failure truth without losing phase or disposition counts", () => {
-    const terminalRecovery = Array.from({ length: 10_000 }, (_, index) => ({
-      terminalTargetId: `target-${index}-${"x".repeat(256)}`,
-      ptyId: `pty-${index}-${"x".repeat(256)}`,
-      ptyInstanceId: `instance-${index}-${"x".repeat(256)}`,
-      lastProvenDisposition: index % 2 === 0 ? ("parked" as const) : ("unknown" as const),
-    }));
-    const parsed = StationHostConvergenceResultSchema.parse({
-      status: "failed",
-      action: "handoff",
-      targetBuild,
-      phase: "adoption",
-      incumbentDisposition: "released",
-      terminalDisposition: "mixed",
-      recoveryAuthority: "none",
-      terminalRecovery,
-      error: {
-        tag: "station-host",
-        code: "HOST_HANDOFF_MANIFEST_INVALID",
-        message: "m".repeat(100_000),
-      },
-    });
-    if (parsed.status !== "failed") throw new Error("Expected failed convergence.");
-    const convergenceFailure = summarizeStationHostConvergenceFailure(parsed);
-    const crossover = StationHostUpdateCrossoverResultSchema.parse({
-      schemaVersion: 1,
-      status: "failed",
-      error: convergenceFailure.error,
-      convergenceFailure,
-    });
-    const serialized = JSON.stringify(crossover);
-
-    expect(serialized.length).toBeLessThan(16 * 1024);
-    expect(convergenceFailure).toMatchObject({
-      phase: "adoption",
-      incumbentDisposition: "released",
-      terminalDisposition: "mixed",
-      terminalCount: 10_000,
-      terminalRecoveryCounts: {
-        incumbent: 0,
-        parked: 5_000,
-        successor: 0,
-        unknown: 5_000,
-      },
-    });
-    expect(serialized).not.toContain("target-9999");
   });
 });

@@ -171,6 +171,17 @@ describe("inspectExactObserverOwner", () => {
     expectTypeOf(result.process.socketPath).toEqualTypeOf<string>();
   });
 
+  it("keeps ownership exact when mutable health status settles", async () => {
+    const readStatus = vi
+      .fn<ExactObserverInspectionPorts["readStatus"]>()
+      .mockResolvedValueOnce({ status: "running", health })
+      .mockResolvedValueOnce({ status: "running", health: { ...health, status: "degraded" } });
+
+    await expect(
+      inspectExactObserverOwner({ socketPath }, inspectionPorts({ readStatus })),
+    ).resolves.toMatchObject({ status: "exact", health: { status: "degraded" } });
+  });
+
   it.each([
     undefined,
     0,

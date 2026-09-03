@@ -1,29 +1,33 @@
 import {
-  type ObserverLifecycleFailure,
   parseUpdateCommandReport,
   projectPublicUpdateReport,
-  type SafeError,
-  type StationHostConvergenceFailureSummary,
+  type UpdateArtifact,
   type UpdateCommandArgv,
   type UpdateCommandReport,
   type UpdateCommandStep,
   type UpdateCommandStepStatus,
-  type UpdateReapRecoveryHandleResolution,
+  type UpdateConvergencePlan,
+  UpdateConvergencePlanningInputSchema,
+  type UpdateFinalInspection,
+  type UpdateReapRecoveryAssessment,
 } from "@station/contracts";
-import { publicSafeErrorFromUnknown, shellQuote } from "@station/runtime";
+import {
+  publicSafeErrorFromUnknown,
+  shellQuote,
+  stationObserverBuildVersion,
+} from "@station/runtime";
 import type { CliRunResult } from "../../cliTypes.js";
 import { escapeTerminalBytes } from "../../terminalOutput.js";
 import type { PlannedUpdateChannel } from "../../update/channelDetection.js";
+import type {
+  UpdateConvergenceExecutionDeps,
+  UpdateConvergenceExecutionInput,
+  UpdateConvergenceExecutionResult,
+} from "../../update/convergenceExecution.js";
+import { deriveUpdateConvergencePlan } from "../../update/convergencePlan.js";
 import type { UpdateRequest } from "./args.js";
-import type { HostHandoffScenario } from "./scenario.js";
 
 export type { UpdateCommandStep } from "@station/contracts";
-
-const updateFailureFallback = {
-  tag: "UpdateError",
-  code: "UPDATE_FAILED",
-  message: "Station update failed.",
-} as const;
 
 type UpdateCommandResultReport = Extract<UpdateCommandReport, { kind: "result" }>;
 type UpdateCommandPreviewReport = Extract<UpdateCommandReport, { kind: "preview" }>;
@@ -34,40 +38,20 @@ function artifact(version: string, revision: string | undefined) {
   return { version, ...(revision === undefined ? {} : { revision }) };
 }
 
-function hostHandoffDetail(hostHandoff: HostHandoffScenario): string {
-  return hostHandoff.kind === "not-requested"
-    ? "Host handoff was explicitly disabled."
-    : "No live Host handoff is needed.";
-}
-
-function updatedHostHandoffStep(hostHandoff: HostHandoffScenario): UpdateCommandStep {
-  if (hostHandoff.kind === "converge") {
-    return updateStep(
-      "host-handoff",
-      "completed",
-      `The Host completed exact ownership convergence with ${hostHandoff.fidelity} fidelity.`,
-    );
-  }
-  return updateStep("host-handoff", "skipped", hostHandoffDetail(hostHandoff));
-}
-
-function artifactText(value: UpdateCommandReport["current"]): string {
-  return value.revision === undefined
-    ? escapeTerminalBytes(value.version)
-    : `${escapeTerminalBytes(value.version)} (${escapeTerminalBytes(value.revision)})`;
-}
-
-function formatCommand(command: readonly string[]): string {
-  return command.map((value) => shellQuote(escapeTerminalBytes(value))).join(" ");
-}
-
-export function createUpdateReport(selected: PlannedUpdateChannel): UpdateCommandResultDraft {
+export function createUpdateReport(
+  selected: PlannedUpdateChannel,
+  initial: UpdateCommandResultDraft["initial"],
+  plan: UpdateCommandResultDraft["plan"],
+): UpdateCommandResultDraft {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     kind: "result",
     channel: selected.channel,
     current: artifact(selected.plan.currentVersion, selected.plan.currentRevision),
     target: artifact(selected.plan.targetVersion, selected.plan.targetRevision),
+    initial,
+    plan,
+    hookReconciliations: [],
     steps: [
       updateStep("detect", "completed", `Detected ${selected.channel} ownership.`),
       updateStep("plan", "completed", "Resolved the current and target Station builds."),
@@ -75,84 +59,6 @@ export function createUpdateReport(selected: PlannedUpdateChannel): UpdateComman
     warnings: [],
     recoveryCommands: [],
   };
-}
-
-export function currentUpdateResult(
-  report: UpdateCommandResultDraft,
-  hostHandoff: HostHandoffScenario,
-  output: UpdateRequest["output"],
-): CliRunResult {
-  report.steps.push(updatedHostHandoffStep(hostHandoff));
-  return updateCommandResult({ ...report, status: "current" }, output);
-}
-
-export function deferredUpdateResult(
-  report: UpdateCommandResultDraft,
-  managerCommand: UpdateCommandArgv | undefined,
-  output: UpdateRequest["output"],
-): CliRunResult {
-  report.steps.push(
-    updateStep(
-      "apply",
-      "deferred",
-      "The package manager owns mutation and no manager command was executed.",
-      managerCommand,
-    ),
-    updateStep("hook-reconciliation", "skipped", "No Station build was installed."),
-    updateStep("observer-restart", "skipped", "No Station build was installed."),
-    updateStep("host-handoff", "skipped", "No Station build was installed."),
-  );
-  return updateCommandResult({ ...report, status: "deferred" }, output);
-}
-
-export function updatedUpdateResult(
-  report: UpdateCommandResultDraft,
-  hostHandoff: HostHandoffScenario,
-  output: UpdateRequest["output"],
-): CliRunResult {
-  report.steps.push(updatedHostHandoffStep(hostHandoff));
-  return updateCommandResult({ ...report, status: "updated" }, output);
-}
-
-export function failedUpdateResult(
-  report: UpdateCommandResultDraft,
-  phase: UpdateCommandStep["id"],
-  error: unknown,
-  recoveryCommands: readonly UpdateCommandArgv[],
-  output: UpdateRequest["output"],
-  lifecycleFailure?: ObserverLifecycleFailure,
-  hostConvergenceFailure?: StationHostConvergenceFailureSummary,
-  hostCrossoverError?: SafeError,
-): CliRunResult {
-  const safeError = publicSafeErrorFromUnknown(error, updateFailureFallback);
-  report.error = safeError;
-  if (lifecycleFailure !== undefined) {
-    report.cause = lifecycleFailure.cause ?? lifecycleFailure.error;
-    if (lifecycleFailure.startupEvidence !== undefined) {
-      report.startupEvidence = lifecycleFailure.startupEvidence;
-    }
-  }
-  if (hostConvergenceFailure !== undefined) {
-    report.hostConvergenceFailure = hostConvergenceFailure;
-  }
-  if (hostCrossoverError !== undefined) report.cause = hostCrossoverError;
-  report.recoveryCommands.push(...recoveryCommands);
-  report.steps.push(updateStep(phase, "failed", safeError.message, recoveryCommands[0]));
-  if (phase === "apply") {
-    report.steps.push(
-      updateStep("hook-reconciliation", "skipped", "The update did not install a build."),
-      updateStep("observer-restart", "skipped", "The update did not reach runtime crossover."),
-      updateStep("host-handoff", "skipped", "The update did not reach runtime crossover."),
-    );
-  } else if (phase === "hook-reconciliation") {
-    report.steps.push(
-      updateStep("observer-restart", "skipped", "Hook reconciliation failed first."),
-      updateStep("host-handoff", "skipped", "Hook reconciliation failed first."),
-    );
-  } else if (phase === "observer-restart") {
-    report.steps.push(updateStep("host-handoff", "skipped", "Observer crossover failed first."));
-  }
-  return updateCommandResult({ ...report, status: "failed" }, output);
 }
 
 export function updateStep(
@@ -164,6 +70,74 @@ export function updateStep(
   return { id, status, detail, ...(command === undefined ? {} : { command }) };
 }
 
+export async function finalizeUpdateConvergence(
+  input: UpdateConvergenceExecutionInput,
+  deps: UpdateConvergenceExecutionDeps,
+  failure: unknown,
+  successfulExecution: boolean,
+  installed: UpdateArtifact,
+): Promise<UpdateConvergenceExecutionResult> {
+  try {
+    const final = await deps.inspect({
+      installed,
+      target: input.target,
+      currentBuildInfo: input.buildInfo,
+    });
+    if (
+      !artifactsMatch(final.installed, installed) ||
+      !artifactsMatch(final.target, input.target)
+    ) {
+      throw new Error("Final aggregate changed the selected artifact evidence.");
+    }
+    const planning = UpdateConvergencePlanningInputSchema.parse({
+      preflight: final,
+      targetRuntime: artifactsMatch(installed, input.target)
+        ? {
+            status: "known",
+            buildIdentity: input.buildInfo.buildIdentity,
+            observerSelector: stationObserverBuildVersion(input.buildInfo),
+          }
+        : { status: "not-yet-provable" },
+      installation: input.planning.installation,
+      handoff: input.planning.handoff,
+    });
+    const plan = deriveUpdateConvergencePlan(planning);
+    const inspection: UpdateFinalInspection = { status: "completed", aggregate: final, plan };
+    input.report.finalInspection = inspection;
+    input.report.steps.push(
+      updateStep(
+        "final-verification",
+        "completed",
+        `Final aggregate verification: ${plan.outcome}.`,
+      ),
+    );
+    if (failure !== undefined || !successfulExecution) {
+      return { status: "failed", finalInspection: inspection };
+    }
+    if (plan.outcome === "converged") {
+      return { status: input.artifactChanged ? "updated" : "current", finalInspection: inspection };
+    }
+    return { status: finalDisposition(plan.outcome), finalInspection: inspection };
+  } catch (error) {
+    const safeError = publicSafeErrorFromUnknown(error, {
+      tag: "UpdateError",
+      code: "UPDATE_FINAL_VERIFICATION_FAILED",
+      message: "Final update convergence inspection failed.",
+    });
+    input.report.finalInspection = { status: "failed", error: safeError };
+    input.report.steps.push(updateStep("final-verification", "failed", safeError.message));
+    return { status: "failed", finalInspection: input.report.finalInspection };
+  }
+}
+
+export function resultUpdateCommandResult(
+  report: UpdateCommandResultDraft,
+  status: UpdateCommandResultReport["status"],
+  output: UpdateRequest["output"],
+): CliRunResult {
+  return updateCommandResult({ ...report, status }, output);
+}
+
 export function updateCommandResult(
   report: UpdateCommandResultReport,
   output: UpdateRequest["output"],
@@ -173,7 +147,7 @@ export function updateCommandResult(
   ) as UpdateCommandResultReport;
   const json = output === "json";
   return {
-    code: parsed.status === "failed" ? 1 : 0,
+    code: ["current", "updated", "deferred"].includes(parsed.status) ? 0 : 1,
     output: json ? parsed : renderUpdateReport(parsed),
     ...(json ? {} : { outputFormat: "text" as const }),
   };
@@ -183,7 +157,9 @@ export function previewUpdateCommandResult(
   report: UpdateCommandPreviewReport,
   output: UpdateRequest["output"],
 ): CliRunResult {
-  const parsed = parseUpdateCommandReport(report) as UpdateCommandPreviewReport;
+  const parsed = parseUpdateCommandReport(
+    projectPublicUpdateReport(report),
+  ) as UpdateCommandPreviewReport;
   const json = output === "json";
   return {
     code: parsed.plan.outcome === "blocked" || parsed.plan.outcome === "reap-required" ? 1 : 0,
@@ -204,11 +180,17 @@ function renderUpdateReport(report: UpdateCommandResultReport): string {
     lines.push(`  ${item.id}: ${item.status} - ${escapeTerminalBytes(item.detail)}`);
     if (item.command !== undefined) lines.push(`    ${formatCommand(item.command)}`);
   }
+  for (const hook of report.hookReconciliations) {
+    lines.push(`hooks: ${escapeTerminalBytes(hook.provider)}=${escapeTerminalBytes(hook.status)}`);
+  }
+  if (report.finalInspection !== undefined) {
+    lines.push(`final: ${escapeTerminalBytes(report.finalInspection.status)}`);
+    if (report.finalInspection.status === "completed") {
+      lines.push(`final plan: ${escapeTerminalBytes(report.finalInspection.plan.outcome)}`);
+    }
+  }
   for (const warning of report.warnings)
     lines.push(`warning: ${escapeTerminalBytes(warning.message)}`);
-  if (report.hookReconciliation !== undefined) {
-    lines.push(`hooks: ${escapeTerminalBytes(report.hookReconciliation.status)}`);
-  }
   if (report.error !== undefined)
     lines.push(
       `error: ${escapeTerminalBytes(report.error.message)} (${escapeTerminalBytes(report.error.code)})`,
@@ -217,9 +199,6 @@ function renderUpdateReport(report: UpdateCommandResultReport): string {
     lines.push(
       `cause: ${escapeTerminalBytes(report.cause.message)} (${escapeTerminalBytes(report.cause.code)})`,
     );
-  if (report.startupEvidence !== undefined) {
-    lines.push(`observer boot log: ${escapeTerminalBytes(report.startupEvidence.bootLogPath)}`);
-  }
   if (report.recoveryCommands.length > 0) {
     lines.push("recovery:");
     for (const command of report.recoveryCommands) lines.push(`  ${formatCommand(command)}`);
@@ -255,11 +234,19 @@ export function renderUpdateConvergenceReportText(report: UpdateCommandPreviewRe
     phaseText("Observer", plan.phases.observerConvergence),
     hostPhaseText(plan.phases.hostConvergence),
     terminalPhaseText(plan.phases.terminalConvergence),
+    parkedBridgeText(report),
     recoveryText(report),
     phaseText("reconcile", plan.phases.persistedStateReconcile),
     phaseText("verification", plan.phases.finalVerification),
   ];
   return `${lines.join("\n")}\n`;
+}
+
+function parkedBridgeText(report: UpdateCommandPreviewReport): string {
+  const parked = report.initial.parkedBridges;
+  return parked.status === "assessed"
+    ? `parked bridges: total=${parked.totalParkedCount}; unowned=${parked.unownedParkedCount}; adoption-required=${parked.adoptionRequiredCount}`
+    : "parked bridges: unknown (inspection failed)";
 }
 
 function recoveryText(report: UpdateCommandPreviewReport): string {
@@ -287,7 +274,7 @@ function recoveryText(report: UpdateCommandPreviewReport): string {
     if (assessment.sessions.length === 0) lines.push("  sessions: none retained");
     for (const session of assessment.sessions) {
       lines.push(
-        `  session ${escapeTerminalBytes(session.sessionId)} disposition=${session.disposition} handle=${recoveryHandleText(session.handleResolution)}`,
+        `  session ${escapeTerminalBytes(session.sessionId)} disposition=${session.disposition} ${handleText(session.handleResolution)}`,
       );
       if (session.reasons.length > 0) lines.push(`    reasons: ${session.reasons.join(", ")}`);
     }
@@ -299,11 +286,27 @@ function recoveryText(report: UpdateCommandPreviewReport): string {
   return lines.join("\n");
 }
 
-function recoveryHandleText(resolution: UpdateReapRecoveryHandleResolution): string {
-  if (resolution.kind === "selected")
-    return `selected eligible=${resolution.eligibleHandleCount} rejected=${resolution.rejectedHandleCount}`;
-  if (resolution.kind === "none") return `none rejected=${resolution.rejectedHandleCount}`;
-  return `unknown (${resolution.reasons.join(", ")})`;
+function handleText(
+  handle: UpdateReapRecoveryAssessment["sessions"][number]["handleResolution"],
+): string {
+  switch (handle.kind) {
+    case "selected":
+      return `handle=selected eligible=${handle.eligibleHandleCount} rejected=${handle.rejectedHandleCount}`;
+    case "none":
+      return `handle=none rejected=${handle.rejectedHandleCount}`;
+    case "unknown":
+      return "handle=unknown";
+  }
+}
+
+function artifactText(value: UpdateCommandReport["current"]): string {
+  return value.revision === undefined
+    ? escapeTerminalBytes(value.version)
+    : `${escapeTerminalBytes(value.version)} (${escapeTerminalBytes(value.revision)})`;
+}
+
+function formatCommand(command: readonly string[]): string {
+  return command.map((value) => shellQuote(escapeTerminalBytes(value))).join(" ");
 }
 
 function phaseText(label: string, phase: { action: string; reason: string }): string {
@@ -329,12 +332,15 @@ function hostPhaseText(phase: PreviewPhases["hostConvergence"]): string {
     case "handoff":
       return `${phaseText("Host", phase)}; fidelity=${phase.fidelity}`;
     case "no-op":
+    case "recover-parked":
     case "replace-idle":
     case "await-reap":
     case "leave-in-place":
     case "reinspect":
     case "blocked":
-      return phaseText("Host", phase);
+      return phase.action === "recover-parked"
+        ? `${phaseText("Host", phase)}; count=${phase.parkedCount}`
+        : phaseText("Host", phase);
   }
 }
 
@@ -349,4 +355,18 @@ function terminalPhaseText(phase: PreviewPhases["terminalConvergence"]): string 
     case "blocked":
       return phaseText("terminals", phase);
   }
+}
+
+function finalDisposition(
+  outcome: UpdateConvergencePlan["outcome"],
+): UpdateConvergenceExecutionResult["status"] {
+  return outcome === "blocked" ||
+    outcome === "reap-required" ||
+    outcome === "intentionally-incomplete"
+    ? outcome
+    : "failed";
+}
+
+function artifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
+  return left.version === right.version && left.revision === right.revision;
 }

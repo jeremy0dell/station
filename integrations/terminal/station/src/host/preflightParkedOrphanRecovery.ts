@@ -35,7 +35,7 @@ export function preflightParkedOrphanRecovery(
     deadlineMs?: number;
   },
   deps: Partial<ParkedOrphanRecoveryPreflightPorts> = {},
-): Promise<{ parkedPtyCount: number }> {
+): Promise<ParkedOrphanRecoveryPreflightResult> {
   const now = deps.now ?? Date.now;
   const deadlineMs = options.deadlineMs ?? now() + 5_000;
   return executeParkedOrphanRecoveryPreflight(
@@ -68,11 +68,12 @@ export async function executeParkedOrphanRecoveryPreflight(
     deadlineMs: number;
   },
   ports: ParkedOrphanRecoveryPreflightPorts,
-): Promise<{ parkedPtyCount: number }> {
+): Promise<ParkedOrphanRecoveryPreflightResult> {
   const evidence = await ports.loadRecoveryEvidence(input.stateDir);
   const { deadlineMs } = input;
   const now = ports.now;
   if (now() >= deadlineMs) throw invalidParkViabilityError();
+  let unownedParkedCount = 0;
   for (const [ptyId, entry] of Object.entries(evidence.manifest)) {
     if (now() >= deadlineMs) throw invalidParkViabilityError();
     let status: PtyBridgeStatus;
@@ -92,10 +93,21 @@ export async function executeParkedOrphanRecoveryPreflight(
       status,
       input.currentHostEvidence,
     );
+    if (!status.adopted) unownedParkedCount += 1;
   }
   if (now() >= deadlineMs) throw invalidParkViabilityError();
-  return { parkedPtyCount: Object.keys(evidence.manifest).length };
+  return {
+    totalParkedCount: Object.keys(evidence.manifest).length,
+    unownedParkedCount,
+    adoptionRequiredCount: unownedParkedCount,
+  };
 }
+
+export type ParkedOrphanRecoveryPreflightResult = {
+  totalParkedCount: number;
+  unownedParkedCount: number;
+  adoptionRequiredCount: number;
+};
 
 function assertBridgeMatchesPark(
   ptyId: string,

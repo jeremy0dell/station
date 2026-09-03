@@ -25,15 +25,57 @@ function legacyReport() {
 
 function currentReport() {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     kind: "result",
     channel: "installer-binary",
-    status: "updated",
+    status: "failed",
     current: { version: "0.0.0-local" },
-    target: { version: "0.0.1-local" },
+    target: { version: "0.0.0-local" },
+    initial: {
+      schemaVersion: 1,
+      boundary: { authorization: "none", actions: "not-included", digest: "not-included" },
+      installed: { version: "0.0.0-local" },
+      target: { version: "0.0.0-local" },
+      observer: { status: "absent" },
+      host: { status: "absent" },
+      parkedBridges: {
+        status: "assessed",
+        totalParkedCount: 0,
+        unownedParkedCount: 0,
+        adoptionRequiredCount: 0,
+      },
+      hookProviderIds: [],
+      hooks: [],
+      terminalDispositions: [],
+      evidenceComplete: false,
+    },
+    plan: {
+      authorization: "none",
+      selectedTarget: {
+        artifact: { version: "0.0.0-local" },
+        runtimeBuild: { status: "not-yet-provable" },
+      },
+      outcome: "actionable",
+      phases: {
+        artifactApplication: {
+          action: "no-op",
+          reason: "selected-artifact-current",
+          before: { version: "0.0.0-local" },
+          owner: "installer-binary",
+          command: { kind: "none" },
+        },
+        hookReconciliation: { action: "no-op", reason: "healthy", providers: [] },
+        observerConvergence: { action: "start", reason: "absent" },
+        terminalConvergence: { action: "no-op", reason: "no-terminals", terminals: [] },
+        hostConvergence: { action: "no-op", reason: "absent" },
+        persistedStateReconcile: { action: "run", reason: "runtime-change" },
+        finalVerification: { action: "inspect", reason: "after-actions" },
+      },
+    },
     steps: [],
     warnings: [],
     recoveryCommands: [],
+    hookReconciliations: [],
   };
 }
 
@@ -79,7 +121,7 @@ describe("composed update report parsing", () => {
     const { parseComposedUpdateReport } = await loadReportModule();
 
     expect(() => parseComposedUpdateReport(legacyReport(), "0.0.0-local")).toThrow(
-      /Expected update report schema 4/u,
+      /Expected update report schema 5/u,
     );
     expect(() => parseComposedUpdateReport(currentReport(), "0.0.0-pre-alpha.5.16")).toThrow(
       /Expected update report schema 1/u,

@@ -142,7 +142,6 @@ export async function inspectExactObserverOwner(
   const currentHealth = currentStatus.value.health;
   if (
     !hasExactHealthEvidence(currentHealth, input.socketPath) ||
-    currentHealth.status !== health.status ||
     currentHealth.pid !== health.pid ||
     currentHealth.startedAt !== health.startedAt ||
     currentHealth.version !== health.version

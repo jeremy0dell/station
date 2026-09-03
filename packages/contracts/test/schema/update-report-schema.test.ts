@@ -21,8 +21,14 @@ const initial = {
   target,
   observer: { status: "absent" as const },
   host: { status: "absent" as const },
-  hookProviderIds: [],
-  hooks: [],
+  hookProviderIds: ["codex"],
+  hooks: [{ provider: "codex", status: "healthy" as const }],
+  parkedBridges: {
+    status: "assessed" as const,
+    totalParkedCount: 0,
+    unownedParkedCount: 0,
+    adoptionRequiredCount: 0,
+  },
   terminalDispositions: [],
   evidenceComplete: false,
 };
@@ -45,7 +51,13 @@ const plan = {
       owner: "installer-binary" as const,
       command: { kind: "none" as const },
     },
-    hookReconciliation: { action: "no-op" as const, reason: "healthy" as const, providers: [] },
+    hookReconciliation: {
+      action: "no-op" as const,
+      reason: "healthy" as const,
+      providers: [
+        { provider: "codex" as const, action: "no-op" as const, reason: "healthy" as const },
+      ],
+    },
     observerConvergence: { action: "start" as const, reason: "absent" as const },
     terminalConvergence: {
       action: "no-op" as const,
@@ -58,7 +70,7 @@ const plan = {
   },
 };
 const preview = {
-  schemaVersion: 4 as const,
+  schemaVersion: 5 as const,
   kind: "preview" as const,
   channel: "installer-binary" as const,
   current,
@@ -67,15 +79,18 @@ const preview = {
   plan,
 };
 const result = {
-  schemaVersion: 4 as const,
+  schemaVersion: 5 as const,
   kind: "result" as const,
   channel: "installer-binary" as const,
-  status: "updated" as const,
+  status: "failed" as const,
   current,
   target,
+  initial,
+  plan,
   steps: [{ id: "apply" as const, status: "completed" as const, detail: "Installed." }],
   warnings: [],
   recoveryCommands: [],
+  hookReconciliations: [],
 };
 
 describe("current update report", () => {
@@ -91,12 +106,14 @@ describe("current update report", () => {
     const failed = {
       ...result,
       status: "failed" as const,
-      hookReconciliation: {
-        provider: "codex" as const,
-        status: "healthy" as const,
-        changed: false,
-        verified: true,
-      },
+      hookReconciliations: [
+        {
+          provider: "codex" as const,
+          status: "healthy" as const,
+          changed: false,
+          verified: true,
+        },
+      ],
       error: { tag: "UpdateError", code: "UPDATE_FAILED", message: "Failed." },
       cause: { tag: "UpdateError", code: "UPDATE_CAUSE", message: "Cause." },
       startupEvidence: { bootLogPath: "/tmp/observer.log" },
@@ -106,7 +123,7 @@ describe("current update report", () => {
   });
 
   it("rejects explicit undefined for every exact optional result field", () => {
-    for (const field of ["hookReconciliation", "error", "cause", "startupEvidence"] as const) {
+    for (const field of ["finalInspection", "error", "cause", "startupEvidence"] as const) {
       expect(
         UpdateCommandReportSchema.safeParse({ ...result, [field]: undefined }).success,
         field,
@@ -326,22 +343,24 @@ describe("current update report", () => {
       warnings: [shared, shared],
       error: shared,
       cause: shared,
-      hookReconciliation: {
-        provider: "codex",
-        status: "inspection-failed",
-        changed: false,
-        verified: false,
-        error: shared,
-        followUp: { action: "run-doctor" },
-      },
+      hookReconciliations: [
+        {
+          provider: "codex",
+          status: "inspection-failed",
+          changed: false,
+          verified: false,
+          error: shared,
+          followUp: { action: "run-doctor" },
+        },
+      ],
     };
     const projected = projectPublicUpdateReport(raw);
     expect(projected.warnings[0]).toBe(projected.warnings[1]);
     expect(projected.warnings[0]).toBe(projected.error);
     expect(projected.error).toBe(projected.cause);
     expect(projected.error).toBe(
-      projected.hookReconciliation?.status === "inspection-failed"
-        ? projected.hookReconciliation.error
+      projected.hookReconciliations[0]?.status === "inspection-failed"
+        ? projected.hookReconciliations[0].error
         : undefined,
     );
     expect(projected.error?.projectId).toBe("public-project-00000001");
@@ -468,14 +487,16 @@ function resultWithAliases(): Extract<UpdateCommandReport, { kind: "result" }> {
     warnings: [{ ...publicError, code: "UPDATE_WARNING" }],
     error: { ...publicError },
     cause: { ...publicError, code: "UPDATE_CAUSE" },
-    hookReconciliation: {
-      provider: "codex",
-      status: "inspection-failed",
-      changed: false,
-      verified: false,
-      error: { ...publicError, code: "HOOK_FAILED" },
-      followUp: { action: "run-doctor" },
-    },
+    hookReconciliations: [
+      {
+        provider: "codex",
+        status: "inspection-failed",
+        changed: false,
+        verified: false,
+        error: { ...publicError, code: "HOOK_FAILED" },
+        followUp: { action: "run-doctor" },
+      },
+    ],
   };
 }
 
@@ -483,13 +504,13 @@ function resultErrors(report: Extract<UpdateCommandReport, { kind: "result" }>) 
   if (
     report.error === undefined ||
     report.cause === undefined ||
-    report.hookReconciliation?.status !== "inspection-failed"
+    report.hookReconciliations[0]?.status !== "inspection-failed"
   ) {
     throw new Error("Missing result error fixture.");
   }
   const warning = report.warnings[0];
   if (warning === undefined) throw new Error("Missing warning fixture.");
-  return [warning, report.error, report.cause, report.hookReconciliation.error];
+  return [warning, report.error, report.cause, report.hookReconciliations[0].error];
 }
 
 function previewWithAliases(): Extract<UpdateCommandReport, { kind: "preview" }> {

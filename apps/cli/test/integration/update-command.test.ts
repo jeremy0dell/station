@@ -48,7 +48,7 @@ describe("registered stn update command", () => {
     expect(result).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         kind: "preview",
         channel: "installer-binary",
         plan: { outcome: "actionable" },
@@ -69,7 +69,7 @@ describe("registered stn update command", () => {
     expect(reapResult).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         kind: "preview",
         initial: {
           boundary: {
@@ -157,6 +157,12 @@ async function emptyPreflight({
     target,
     observer: { status: "absent" as const },
     host: { status: "absent" as const },
+    parkedBridges: {
+      status: "assessed" as const,
+      totalParkedCount: 0,
+      unownedParkedCount: 0,
+      adoptionRequiredCount: 0,
+    },
     hookProviderIds: [],
     hooks: [],
     terminalDispositions: [],

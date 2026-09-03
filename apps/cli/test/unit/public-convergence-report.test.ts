@@ -93,6 +93,12 @@ describe("public convergence report projection", () => {
           followUp: { action: "run-doctor" },
         },
       ],
+      parkedBridges: {
+        status: "assessed",
+        totalParkedCount: 0,
+        unownedParkedCount: 0,
+        adoptionRequiredCount: 0,
+      },
       terminalDispositions: [
         {
           terminalTargetId: "terminal-a",
@@ -120,7 +126,7 @@ describe("public convergence report projection", () => {
       handoff: { action: "preserve", fidelity: "processes" },
     });
     const report = projectPublicUpdateReport({
-      schemaVersion: 4,
+      schemaVersion: 5,
       kind: "preview",
       channel: "npm-global",
       current,
@@ -190,13 +196,45 @@ describe("public convergence report projection", () => {
       traceId: "trace-public",
       diagnosticId: "diagnostic-public",
     };
+    const initial = UpdateReapRecoveryPreflightSchema.parse({
+      schemaVersion: 1,
+      boundary: { authorization: "none", actions: "not-included", digest: "not-included" },
+      installed: { version: "1.0.0" },
+      target: { version: "1.1.0", revision: "artifact-public" },
+      observer: { status: "absent" },
+      host: { status: "absent" },
+      hookProviderIds: ["codex"],
+      hooks: [{ provider: "codex", status: "healthy" }],
+      parkedBridges: {
+        status: "assessed",
+        totalParkedCount: 0,
+        unownedParkedCount: 0,
+        adoptionRequiredCount: 0,
+      },
+      terminalDispositions: [],
+      evidenceComplete: false,
+    });
+    const plan = deriveUpdateConvergencePlan(
+      UpdateConvergencePlanningInputSchema.parse({
+        preflight: initial,
+        targetRuntime: { status: "not-yet-provable" },
+        installation: {
+          whenRequired: "apply",
+          owner: "npm-global",
+          command: { kind: "manager", argv: ["npm", "install", "session-private"] },
+        },
+        handoff: { action: "leave-in-place" },
+      }),
+    );
     const raw = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       kind: "result",
       channel: "npm-global",
       status: "failed",
       current: { version: "1.0.0" },
       target: { version: "1.1.0", revision: "artifact-public" },
+      initial,
+      plan,
       steps: [
         {
           id: "apply",
@@ -209,14 +247,16 @@ describe("public convergence report projection", () => {
       recoveryCommands: [["stn", "debug", "trace", "trace-public"]],
       error: rawError,
       cause: { ...rawError, code: "UPDATE_CAUSE" },
-      hookReconciliation: {
-        provider: "codex",
-        status: "inspection-failed",
-        changed: false,
-        verified: false,
-        error: { ...rawError, code: "HOOK_FAILED" },
-        followUp: { action: "run-doctor" },
-      },
+      hookReconciliations: [
+        {
+          provider: "codex",
+          status: "inspection-failed",
+          changed: false,
+          verified: false,
+          error: { ...rawError, code: "HOOK_FAILED" },
+          followUp: { action: "run-doctor" },
+        },
+      ],
     } as unknown as Extract<UpdateCommandReport, { kind: "result" }>;
 
     const projected = projectPublicUpdateReport(raw);
@@ -224,8 +264,8 @@ describe("public convergence report projection", () => {
       projected.warnings[0],
       projected.error,
       projected.cause,
-      projected.hookReconciliation?.status === "inspection-failed"
-        ? projected.hookReconciliation.error
+      projected.hookReconciliations[0]?.status === "inspection-failed"
+        ? projected.hookReconciliations[0].error
         : undefined,
     ]) {
       expect(error).toMatchObject({
@@ -309,6 +349,12 @@ function unknownErrorReport(location: "observer" | "recovery" | "host") {
         : { status: "absent" },
     hookProviderIds: [],
     hooks: [],
+    parkedBridges: {
+      status: "assessed",
+      totalParkedCount: 0,
+      unownedParkedCount: 0,
+      adoptionRequiredCount: 0,
+    },
     terminalDispositions: [],
     evidenceComplete: false,
   });
@@ -325,7 +371,7 @@ function unknownErrorReport(location: "observer" | "recovery" | "host") {
     }),
   );
   return projectPublicUpdateReport({
-    schemaVersion: 4,
+    schemaVersion: 5,
     kind: "preview",
     channel: "installer-binary",
     current,

@@ -68,6 +68,12 @@ const preflight = {
   },
   hookProviderIds: ["codex"],
   hooks: [{ provider: "codex", status: "healthy" as const }],
+  parkedBridges: {
+    status: "assessed" as const,
+    totalParkedCount: 0,
+    unownedParkedCount: 0,
+    adoptionRequiredCount: 0,
+  },
   terminalDispositions: [
     {
       terminalTargetId: "terminal-a",
@@ -148,5 +154,30 @@ describe("UpdateReapRecoveryPreflightSchema", () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it("requires bounded parked-bridge counts and fails closed on unknown viability", () => {
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        parkedBridges: {
+          status: "assessed",
+          totalParkedCount: 1,
+          unownedParkedCount: 2,
+          adoptionRequiredCount: 2,
+        },
+      }).success,
+    ).toBe(false);
+    const unknown = {
+      ...preflight,
+      parkedBridges: {
+        status: "unknown" as const,
+        reason: "inspection-failed" as const,
+        error: { tag: "UpdatePreflightError", code: "PARKED_UNKNOWN", message: "Unavailable." },
+      },
+      evidenceComplete: false,
+    };
+    expect(UpdateReapRecoveryPreflightSchema.parse(unknown)).toEqual(unknown);
+    expect(updateReapEvidenceIsComplete(unknown)).toBe(false);
   });
 });

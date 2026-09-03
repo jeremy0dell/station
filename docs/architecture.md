@@ -148,6 +148,9 @@ or diagnostic evidence into a second source of truth.
   capability must not silently fall through to a second implementation that
   could duplicate work or abandon owned state.
 
+- Update orchestration remains in the CLI. It captures one read-only aggregate and derives a capability-driven plan before mutation. Same-artifact updates run ordered hook, exact Observer, Host, parked-bridge, persisted-state, and final-inspection capabilities in process; artifact-changing updates cross once into the installed target launcher through a strict hidden successor request. v5 reports retain initial and final evidence and launcher-specific recovery guidance; unknown ownership and non-preservable terminals fail closed without reap or signal authority.
+
+
 ## Conflict Rule
 
 This document is authoritative for repository ownership and allowed dependency

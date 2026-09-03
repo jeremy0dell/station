@@ -207,6 +207,9 @@ const terminalPhaseSchema = z.discriminatedUnion("action", [
 ]);
 const hostPhaseSchema = z.discriminatedUnion("action", [
   phaseVariant("no-op", z.enum(["absent", "matching-target"]), {}),
+  phaseVariant("recover-parked", z.literal("unowned-parked-bridges"), {
+    parkedCount: z.number().int().positive(),
+  }),
   phaseVariant("replace-idle", z.literal("different-idle-host"), {}),
   phaseVariant("handoff", z.literal("busy-different-host"), {
     fidelity: HostHandoffFidelitySchema,
