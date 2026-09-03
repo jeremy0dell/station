@@ -22,7 +22,7 @@ describe("ClaudeHarnessProvider", () => {
       canStop: false,
       canRunNonInteractive: true,
       canExposeApprovalState: true,
-      supportsModifiedEnterSoftNewline: false,
+      supportsModifiedEnterSoftNewline: true,
     });
   });
 
