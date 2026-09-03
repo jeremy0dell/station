@@ -60,7 +60,8 @@ export const UpdateCommandStepSchema: z.ZodType<UpdateCommandStep> = z
 
 /**
  * Strict, non-authorizing request accepted only by the one target update successor. It carries
- * selection and policy, never an executable, endpoint, process, or recovery authority.
+ * selection and policy, including an opaque installation-scope digest, never an executable
+ * command, endpoint, process, or recovery authority.
  */
 type UpdateSuccessorHandoff =
   | { action: "preserve"; fidelity: z.infer<typeof HostHandoffFidelitySchema> }
@@ -69,6 +70,7 @@ export type UpdateSuccessorRequest = {
   schemaVersion: 1;
   channel: UpdateChannelId;
   target: UpdateArtifact;
+  installedScopeDigest: string;
   handoff: UpdateSuccessorHandoff;
   hookProviderIds: z.infer<typeof ProviderIdSchema>[];
 };
@@ -78,6 +80,7 @@ const successorRequestSchema = z
     schemaVersion: z.literal(1),
     channel: UpdateChannelIdSchema,
     target: UpdateArtifactSchema,
+    installedScopeDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     handoff: z.discriminatedUnion("action", [
       z.object({ action: z.literal("preserve"), fidelity: HostHandoffFidelitySchema }).strict(),
       z.object({ action: z.literal("leave-in-place") }).strict(),

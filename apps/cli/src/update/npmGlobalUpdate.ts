@@ -62,6 +62,13 @@ export function createNpmGlobalUpdateChannel(
   return {
     id: channel,
     detect: (options = {}) => detectNpmGlobal(deps, options),
+    installedScope: (detection) => [
+      detection.npmPath,
+      detection.packageName,
+      detection.packageRoot,
+      detection.executablePath,
+      detection.entryPath,
+    ],
     async plan(detection, options = {}) {
       await requireSameDetection(detection, deps, options);
       const targetVersion = await npmLatestVersion(detection, deps.commandRunner, options);
@@ -78,6 +85,24 @@ export function createNpmGlobalUpdateChannel(
           `${detection.packageName}@${targetVersion}`,
         ],
       };
+    },
+    async inspectInstalled(plan, options = {}) {
+      const before = await detectNpmGlobal(deps, options, false);
+      const current = await detectNpmGlobal(deps, options, false);
+      if (
+        before === undefined ||
+        current === undefined ||
+        current.currentVersion !== before.currentVersion ||
+        current.entryPath !== before.entryPath ||
+        current.npmPath !== plan.npmPath ||
+        current.packageName !== plan.packageName ||
+        current.packageRoot !== plan.packageRoot ||
+        current.executablePath !== plan.executablePath ||
+        current.entryPath !== plan.entryPath
+      ) {
+        return undefined;
+      }
+      return { version: current.currentVersion };
     },
     async apply(plan, options = {}) {
       return applyPackageManagerPlan(plan, options, {

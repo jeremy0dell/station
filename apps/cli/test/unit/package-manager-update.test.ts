@@ -3,9 +3,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { afterEach, describe, expect, it } from "vitest";
+import { createUpdateChannelProbe } from "../../src/update/channelDetection.js";
 import { createHomebrewUpdateChannel } from "../../src/update/homebrewUpdate.js";
 import { createMiseUpdateChannel } from "../../src/update/miseUpdate.js";
 import { createNpmGlobalUpdateChannel } from "../../src/update/npmGlobalUpdate.js";
+import type { UpdateChannel } from "../../src/update/updateChannel.js";
 
 const cleanup: string[] = [];
 
@@ -143,6 +145,101 @@ describe("package-manager update channels", () => {
       ),
     ).rejects.toMatchObject({ code: "UPDATE_PLAN_INVALID" });
     expect(commands.some(({ args }) => args?.[0] === "upgrade")).toBe(false);
+  });
+
+  it("inspects the active mise version after an upgrade when the old install remains listed", async () => {
+    const root = await tempRoot();
+    const oldInstallPath = join(root, "mise", "installs", "station", "1.0.0");
+    const targetInstallPath = join(root, "mise", "installs", "station", "1.4.0");
+    const oldRuntimePath = await executable(join(oldInstallPath, "bin", "stn"));
+    const targetRuntimePath = await executable(join(targetInstallPath, "bin", "stn"));
+    const misePath = await executable(join(root, "bin", "mise"));
+    let activeRuntimePath = oldRuntimePath;
+    const commandRunner = async (input: ExternalCommandInput) => {
+      if (input.args?.[0] === "ls") {
+        return result(
+          input,
+          JSON.stringify({
+            station: [
+              { version: "1.0.0", install_path: oldInstallPath },
+              { version: "1.4.0", install_path: targetInstallPath },
+            ],
+          }),
+        );
+      }
+      if (input.args?.[0] === "which") return result(input, `${activeRuntimePath}\n`);
+      if (input.args?.[0] === "outdated") {
+        return result(input, JSON.stringify({ station: { current: "1.0.0", latest: "1.4.0" } }));
+      }
+      if (input.args?.[0] === "upgrade") {
+        activeRuntimePath = targetRuntimePath;
+        return result(input, "");
+      }
+      throw new Error(`Unexpected mise command: ${input.args?.join(" ")}`);
+    };
+    const channel = createMiseUpdateChannel({
+      runtimePath: oldRuntimePath,
+      pathEnv: dirname(misePath),
+      commandRunner,
+    });
+    const parentProbe = createUpdateChannelProbe(channel);
+    const selected = await parentProbe.detectAndPlan();
+    if (selected === undefined) throw new Error("expected mise plan");
+
+    await expect(selected.apply({ drivePackageManager: true })).resolves.toMatchObject({
+      status: "updated",
+      installedVersion: "1.4.0",
+    });
+    const successorProbe = createUpdateChannelProbe(
+      createMiseUpdateChannel({
+        runtimePath: targetRuntimePath,
+        pathEnv: dirname(misePath),
+        commandRunner,
+      }),
+    );
+    await expect(successorProbe.inspectInstalled(selected.installedScopeDigest)).resolves.toEqual({
+      version: "1.4.0",
+    });
+  });
+
+  it("rejects the same artifact after its stable installation scope changes", async () => {
+    type Detection = {
+      channel: "npm-global";
+      currentVersion: string;
+      packageName: string;
+    };
+    let detection: Detection = {
+      channel: "npm-global",
+      currentVersion: "1.0.0",
+      packageName: "@station/cli",
+    };
+    const channel: UpdateChannel<Detection> = {
+      id: "npm-global",
+      detect: async () => detection,
+      installedScope: (current) => [current.packageName],
+      plan: async (current) => ({
+        channel: current.channel,
+        status: "current",
+        currentVersion: current.currentVersion,
+        targetVersion: current.currentVersion,
+        currentCli: ["/opt/stn"],
+      }),
+      apply: async () => ({
+        channel: "npm-global",
+        status: "installed",
+        previousVersion: "1.0.0",
+        installedVersion: "1.0.0",
+        warnings: [],
+      }),
+      inspectInstalled: async () => ({ version: detection.currentVersion }),
+    };
+    const probe = createUpdateChannelProbe(channel);
+    const selected = await probe.detectAndPlan();
+    if (selected === undefined) throw new Error("expected npm plan");
+
+    detection = { ...detection, packageName: "unrelated-package" };
+
+    await expect(probe.inspectInstalled(selected.installedScopeDigest)).resolves.toBeUndefined();
   });
 
   it("fails visibly when an installed manager returns malformed data", async () => {

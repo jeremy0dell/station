@@ -12,6 +12,7 @@ import {
   type UpdateReapParkedBridgeEvidence,
   type UpdateReapRecoveryPreflight,
   UpdateReapRecoveryPreflightSchema,
+  type UpdateReapTerminalEvidence,
   updateReapEvidenceIsComplete,
 } from "@station/contracts";
 import type { ExactObserverOwnershipEvidence } from "@station/observer/internal";
@@ -42,6 +43,7 @@ export const updateRecoveryPreflightCommitments = Symbol("station.update.preflig
 export type UpdateRecoveryPreflightActionCommitments = Readonly<{
   observer?: ExactObserverOwnershipEvidence;
   host?: StationHostExactEvidence;
+  parkedTerminals?: readonly UpdateReapTerminalEvidence[];
 }>;
 
 export type UpdateRecoveryArtifacts = {

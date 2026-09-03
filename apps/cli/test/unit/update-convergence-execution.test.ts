@@ -44,6 +44,7 @@ describe("executeUpdateConvergence", () => {
       executionInput(state.config, initial, plan, planning, report),
       {
         inspect,
+        inspectInstalled: async () => ({ version: "1.0.0" }),
         providers,
         reconcileHook: vi.fn(async () => {
           events.push("hook");
@@ -96,6 +97,7 @@ describe("executeUpdateConvergence", () => {
       executionInput(state.config, initial, plan, planning, report),
       {
         inspect,
+        inspectInstalled: async () => ({ version: "1.0.0" }),
         providers,
         reconcileHook: vi.fn(async () => ({
           provider: "codex" as const,
@@ -115,6 +117,37 @@ describe("executeUpdateConvergence", () => {
     expect(convergeObserver).not.toHaveBeenCalled();
     expect(convergeHost).not.toHaveBeenCalled();
     expect(report.steps.at(-1)?.id).toBe("final-verification");
+  });
+
+  it("performs no runtime mutation when the selected artifact drifts after preflight", async () => {
+    const state = await createTempState();
+    const initial = preflight({
+      observer: { status: "absent" },
+      hooks: [{ provider: "codex", status: "needs-repair", reason: "missing" }],
+    });
+    const planning = planningInput(initial);
+    const plan = deriveUpdateConvergencePlan(planning);
+    const report = createUpdateReport(selectedChannel(), initial, plan);
+    const reconcileHook = vi.fn();
+    const convergeObserver = vi.fn();
+    const convergeHost = vi.fn();
+
+    const result = await executeUpdateConvergence(
+      executionInput(state.config, initial, plan, planning, report),
+      {
+        inspect: vi.fn().mockResolvedValue(initial),
+        inspectInstalled: async () => ({ version: "9.9.9" }),
+        providers,
+        reconcileHook,
+        convergeObserver,
+        convergeHost,
+      },
+    );
+
+    expect(result.status).toBe("failed");
+    expect(reconcileHook).not.toHaveBeenCalled();
+    expect(convergeObserver).not.toHaveBeenCalled();
+    expect(convergeHost).not.toHaveBeenCalled();
   });
 
   it("final-verifies the target artifact after successor transport fails", async () => {
@@ -159,10 +192,15 @@ describe("executeUpdateConvergence", () => {
       throw new Error("target launcher unavailable");
     };
 
-    const result = await executeUpdateConvergence(input, { inspect });
+    const result = await executeUpdateConvergence(input, {
+      inspect,
+      inspectInstalled: async () => target,
+    });
 
     expect(result.status).toBe("failed");
-    expect(inspect).toHaveBeenCalledWith(expect.objectContaining({ installed: target, target }));
+    expect(inspect).toHaveBeenCalledWith(
+      expect.objectContaining({ currentBuildArtifact: { version: "1.0.0" }, target }),
+    );
   });
 });
 
@@ -175,6 +213,7 @@ function executionInput(
 ): UpdateConvergenceExecutionInput {
   return {
     selectedChannel: "installer-binary",
+    installedScopeDigest: "b".repeat(64),
     installed: initial.installed,
     target: initial.target,
     buildInfo,
@@ -198,6 +237,7 @@ function executionInput(
 function selectedChannel(targetVersion = "1.0.0"): PlannedUpdateChannel {
   return {
     channel: "installer-binary",
+    installedScopeDigest: "b".repeat(64),
     plan: {
       channel: "installer-binary",
       status: "current",
@@ -206,6 +246,7 @@ function selectedChannel(targetVersion = "1.0.0"): PlannedUpdateChannel {
       currentCli: ["/opt/stn"],
     },
     apply: vi.fn(),
+    inspectInstalled: vi.fn(),
   };
 }
 

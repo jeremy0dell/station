@@ -26,6 +26,7 @@ import {
   convergeStationHost,
   type InspectStationHostDeps,
   inspectStationHost,
+  parkedOrphanTerminalEvidence,
   preflightParkedOrphanRecovery,
   recoverExactStationHostOrphans,
 } from "@station/terminal";
@@ -50,6 +51,8 @@ export type CreateUpdateRecoveryPreflightPortsOptions = {
   providers: ProviderRegistry;
   inspectHost?: typeof inspectStationHost;
   preflightParkedBridges?: typeof preflightParkedOrphanRecovery;
+  /** Artifact represented by the update command process that supplied `currentBuildInfo`. */
+  currentBuildArtifact: UpdateArtifact;
   /** Immutable identity captured once by update command composition. */
   currentBuildInfo: StationBuildInfo;
 };
@@ -63,10 +66,12 @@ export function createUpdateRecoveryPreflightPorts(
   options: CreateUpdateRecoveryPreflightPortsOptions,
 ): UpdateRecoveryPreflightPorts {
   const providers = options.providers;
+  const currentBuildArtifact = options.currentBuildArtifact;
   const currentBuildIdentity = options.currentBuildInfo.buildIdentity;
   const stateDir = resolveObserverPaths(options.config).stateDir;
   let lastObserverEvidence: ExactObserverOwnershipEvidence | undefined;
   let lastHostEvidence: StationHostExactEvidence | undefined;
+  let lastParkedTerminals: ReturnType<typeof parkedOrphanTerminalEvidence> | undefined;
   const inspectObserverOwner =
     options.inspectObserverOwner ??
     (() =>
@@ -81,6 +86,7 @@ export function createUpdateRecoveryPreflightPorts(
     inspectObserver: (artifacts) =>
       inspectObserverRecoveryEvidence({
         artifacts,
+        currentBuildArtifact,
         currentBuildIdentity,
         inspectObserverOwner: captureObserverOwner,
       }),
@@ -94,24 +100,33 @@ export function createUpdateRecoveryPreflightPorts(
         options.hostInspectionDeps,
       );
       lastHostEvidence = inspection.status === "exact" ? inspection.evidence : undefined;
-      return projectHostInspection(inspection, artifacts, currentBuildIdentity);
+      return projectHostInspection(
+        inspection,
+        artifacts,
+        currentBuildArtifact,
+        currentBuildIdentity,
+      );
     },
     preflightParkedBridges: async () => {
+      lastParkedTerminals = undefined;
       const result = await (options.preflightParkedBridges ?? preflightParkedOrphanRecovery)({
         stateDir,
         ...(lastHostEvidence === undefined ? {} : { currentHostEvidence: lastHostEvidence }),
       });
+      lastParkedTerminals = parkedOrphanTerminalEvidence(result);
       return { status: "assessed" as const, ...result };
     },
     captureActionCommitments: () => {
       const commitments: {
         observer?: ExactObserverOwnershipEvidence;
         host?: StationHostExactEvidence;
+        parkedTerminals?: ReturnType<typeof parkedOrphanTerminalEvidence>;
       } = {};
       if (lastObserverEvidence !== undefined) {
         commitments.observer = lastObserverEvidence;
       }
       if (lastHostEvidence !== undefined) commitments.host = lastHostEvidence;
+      if (lastParkedTerminals !== undefined) commitments.parkedTerminals = lastParkedTerminals;
       return commitments;
     },
     readHookHealth: (providerId) => {
@@ -243,6 +258,7 @@ function createHostConvergenceCapability(
 
 async function inspectObserverRecoveryEvidence(input: {
   artifacts: { installed: UpdateArtifact; target: UpdateArtifact };
+  currentBuildArtifact: UpdateArtifact;
   currentBuildIdentity: string;
   inspectObserverOwner: () => Promise<ExactObserverOwnershipEvidence>;
 }): Promise<UpdateReapObserverEvidence> {
@@ -259,6 +275,7 @@ async function inspectObserverRecoveryEvidence(input: {
     relation: runtimeBuildRelation({
       runningDisplayVersion: runningObserverBuild.version,
       runningBuildIdentity: runningObserverBuild.buildIdentity,
+      currentBuildArtifact: input.currentBuildArtifact,
       currentBuildIdentity: input.currentBuildIdentity,
       artifacts: input.artifacts,
     }),
@@ -320,6 +337,7 @@ function observerInspectionUnknown(
 function projectHostInspection(
   inspection: Awaited<ReturnType<typeof inspectStationHost>>,
   artifacts: { installed: UpdateArtifact; target: UpdateArtifact },
+  currentBuildArtifact: UpdateArtifact,
   currentBuildIdentity: StationBuildIdentity,
 ): UpdateReapHostEvidence {
   if (inspection.status === "absent") return { status: "absent" };
@@ -363,17 +381,19 @@ function projectHostInspection(
     );
   }
   const { health, buildIdentity, terminals } = inspection.evidence;
+  const relation = runtimeBuildRelation({
+    runningDisplayVersion: health.buildVersion,
+    runningBuildIdentity: buildIdentity,
+    currentBuildArtifact,
+    currentBuildIdentity,
+    artifacts,
+  });
   return {
     status: "inspected",
     buildVersion: health.buildVersion,
     buildIdentity,
     protocolVersion: health.protocolVersion,
-    relation: runtimeBuildRelation({
-      runningDisplayVersion: health.buildVersion,
-      runningBuildIdentity: buildIdentity,
-      currentBuildIdentity,
-      artifacts,
-    }),
+    relation,
     compatibility: health.buildVersion === artifacts.target.version ? "reuse" : "replace",
     terminals: terminals.map(redactedHostTerminal),
   };
@@ -397,12 +417,15 @@ function redactedHostTerminal(terminal: StationHostTerminalLifetime): UpdateReap
 function runtimeBuildRelation(input: {
   runningDisplayVersion: string | undefined;
   runningBuildIdentity: string | undefined;
+  currentBuildArtifact: UpdateArtifact;
   currentBuildIdentity: string;
   artifacts: { installed: UpdateArtifact; target: UpdateArtifact };
 }): "matching-target" | "different" | "unknown" {
   if (input.runningDisplayVersion === undefined) return "unknown";
   if (input.runningDisplayVersion !== input.artifacts.target.version) return "different";
   if (input.runningBuildIdentity === undefined) return "unknown";
+  if (!updateArtifactsMatch(input.currentBuildArtifact, input.artifacts.installed))
+    return "unknown";
   // Display equality never substitutes for the immutable identity of an already-installed target.
   if (input.runningBuildIdentity === input.currentBuildIdentity) {
     return updateArtifactsMatch(input.artifacts.installed, input.artifacts.target)

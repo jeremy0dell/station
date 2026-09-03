@@ -26,6 +26,7 @@ describe("update command schemas", () => {
       schemaVersion: 1,
       channel: "installer-binary" as const,
       target: { version: "1.2.3" },
+      installedScopeDigest: "a".repeat(64),
       handoff: { action: "leave-in-place" as const },
       hookProviderIds: ["codex" as const],
     };

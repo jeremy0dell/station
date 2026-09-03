@@ -73,6 +73,12 @@ export function createHomebrewUpdateChannel(
   return {
     id: channel,
     detect: (options = {}) => detectHomebrew(deps, options),
+    installedScope: (detection) => [
+      detection.kind,
+      detection.brewPath,
+      detection.packageName,
+      detection.executablePath,
+    ],
     async plan(detection, options = {}) {
       const current = await requireSameDetection(detection, deps, options);
       return {
@@ -87,6 +93,23 @@ export function createHomebrewUpdateChannel(
           current.packageName,
         ],
       };
+    },
+    async inspectInstalled(plan, options = {}) {
+      const before = await detectHomebrew(deps, options, false);
+      const current = await detectHomebrew(deps, options, false);
+      if (
+        before === undefined ||
+        current === undefined ||
+        current.currentVersion !== before.currentVersion ||
+        current.runtimePath !== before.runtimePath ||
+        current.kind !== plan.kind ||
+        current.brewPath !== plan.brewPath ||
+        current.packageName !== plan.packageName ||
+        current.executablePath !== plan.executablePath
+      ) {
+        return undefined;
+      }
+      return { version: current.currentVersion };
     },
     async apply(plan, options = {}) {
       return applyPackageManagerPlan(plan, options, {

@@ -43,17 +43,33 @@ export function createUpdateReport(
   initial: UpdateCommandResultDraft["initial"],
   plan: UpdateCommandResultDraft["plan"],
 ): UpdateCommandResultDraft {
+  return createUpdateReportForArtifacts(
+    selected.channel,
+    artifact(selected.plan.currentVersion, selected.plan.currentRevision),
+    artifact(selected.plan.targetVersion, selected.plan.targetRevision),
+    initial,
+    plan,
+  );
+}
+
+export function createUpdateReportForArtifacts(
+  channel: UpdateCommandResultDraft["channel"],
+  current: UpdateArtifact,
+  target: UpdateArtifact,
+  initial: UpdateCommandResultDraft["initial"],
+  plan: UpdateCommandResultDraft["plan"],
+): UpdateCommandResultDraft {
   return {
     schemaVersion: 5,
     kind: "result",
-    channel: selected.channel,
-    current: artifact(selected.plan.currentVersion, selected.plan.currentRevision),
-    target: artifact(selected.plan.targetVersion, selected.plan.targetRevision),
+    channel,
+    current,
+    target,
     initial,
     plan,
     hookReconciliations: [],
     steps: [
-      updateStep("detect", "completed", `Detected ${selected.channel} ownership.`),
+      updateStep("detect", "completed", `Detected ${channel} ownership.`),
       updateStep("plan", "completed", "Resolved the current and target Station builds."),
     ],
     warnings: [],
@@ -75,29 +91,26 @@ export async function finalizeUpdateConvergence(
   deps: UpdateConvergenceExecutionDeps,
   failure: unknown,
   successfulExecution: boolean,
-  installed: UpdateArtifact,
 ): Promise<UpdateConvergenceExecutionResult> {
   try {
     const final = await deps.inspect({
-      installed,
       target: input.target,
+      currentBuildArtifact: input.installed,
       currentBuildInfo: input.buildInfo,
     });
-    if (
-      !artifactsMatch(final.installed, installed) ||
-      !artifactsMatch(final.target, input.target)
-    ) {
+    if (!artifactsMatch(final.target, input.target)) {
       throw new Error("Final aggregate changed the selected artifact evidence.");
     }
     const planning = UpdateConvergencePlanningInputSchema.parse({
       preflight: final,
-      targetRuntime: artifactsMatch(installed, input.target)
-        ? {
-            status: "known",
-            buildIdentity: input.buildInfo.buildIdentity,
-            observerSelector: stationObserverBuildVersion(input.buildInfo),
-          }
-        : { status: "not-yet-provable" },
+      targetRuntime:
+        !input.artifactChanged && artifactsMatch(final.installed, input.target)
+          ? {
+              status: "known",
+              buildIdentity: input.buildInfo.buildIdentity,
+              observerSelector: stationObserverBuildVersion(input.buildInfo),
+            }
+          : { status: "not-yet-provable" },
       installation: input.planning.installation,
       handoff: input.planning.handoff,
     });

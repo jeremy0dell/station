@@ -1,4 +1,4 @@
-import type { UpdateChannelId, UpdateCommandArgv } from "@station/contracts";
+import type { UpdateArtifact, UpdateChannelId, UpdateCommandArgv } from "@station/contracts";
 import { UpdateChannelIdSchema } from "@station/contracts";
 import type { RuntimeSafeError } from "@station/runtime";
 import type { ExecutableArgv } from "../selfExec.js";
@@ -9,6 +9,7 @@ export type { UpdateChannelId, UpdateCommandArgv } from "@station/contracts";
 export type UpdateDetectionBase = {
   channel: UpdateChannelId;
   currentVersion: string;
+  currentRevision?: string;
 };
 
 export type UpdatePlanBase = {
@@ -39,7 +40,8 @@ export type UpdateOperationOptions = {
 /**
  * DRIVEN PORT
  *
- * Defines one install owner's typed detect, plan, apply, and optional adapter-owned recovery lifecycle.
+ * Defines one install owner's typed detect, plan, apply, installed-artifact inspection, and
+ * optional adapter-owned recovery lifecycle.
  */
 export interface UpdateChannel<
   Detection extends UpdateDetectionBase = UpdateDetectionBase,
@@ -48,7 +50,13 @@ export interface UpdateChannel<
 > {
   readonly id: UpdateChannelId;
   detect(options?: UpdateOperationOptions): Promise<Detection | undefined>;
+  /** Stable local installation identity fields that exclude mutable artifact contents. */
+  installedScope(detection: Detection): readonly string[];
   plan(detection: Detection, options?: UpdateOperationOptions): Promise<Plan>;
   apply(plan: Plan, options?: UpdateOperationOptions): Promise<Report>;
+  inspectInstalled(
+    plan: Plan,
+    options?: UpdateOperationOptions,
+  ): Promise<UpdateArtifact | undefined>;
   applyRecoveryCommands?(plan: Plan, error: unknown): readonly UpdateCommandArgv[] | undefined;
 }

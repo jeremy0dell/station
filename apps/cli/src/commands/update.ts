@@ -23,6 +23,7 @@ import type { CliRunResult } from "../cliTypes.js";
 import type { CliEnv } from "../env.js";
 import type { ExecutableArgv } from "../selfExec.js";
 import {
+  inspectSelectedUpdateChannel,
   type PlannedUpdateChannel,
   selectUpdateChannel,
   type UpdateChannelProbe,
@@ -33,19 +34,24 @@ import {
   type UpdateConvergenceExecutionResult,
 } from "../update/convergenceExecution.js";
 import { deriveUpdateConvergencePlan } from "../update/convergencePlan.js";
+import { updateRecoveryActionCommitments } from "../update/recoveryPreflight.js";
 import { createUpdateRuntimeCapabilities } from "../update/recoveryPreflightAdapters.js";
 import {
   type UpdateSuccessorReceipt,
   UpdateSuccessorReceiptSchema,
+  updateSuccessorEvidenceFitsOutput,
+  updateSuccessorReceiptFitsOutput,
 } from "../update/successorExecution.js";
 import { resolveUpdateInstallationIntent } from "../update/updateInstallationIntent.js";
 import type { HostCommandDeps } from "./host/index.js";
 import { parseUpdateRequest, type UpdateRequest } from "./update/args.js";
 import {
   createUpdateReport,
+  createUpdateReportForArtifacts,
   previewUpdateCommandResult,
   resultUpdateCommandResult,
   type UpdateCommandResultDraft,
+  updateStep,
 } from "./update/report.js";
 
 export type UpdateCommandOptions = {
@@ -53,12 +59,14 @@ export type UpdateCommandOptions = {
   configPath?: string;
   cliEntryPath: string;
   env?: CliEnv;
+  signal?: AbortSignal;
 };
 
 export type UpdateSuccessorRunner = (input: {
   launcher: ExecutableArgv;
   target: UpdateArtifact;
   channel: PlannedUpdateChannel["channel"];
+  installedScopeDigest: string;
   handoff: UpdateRequest["handoff"];
   hookProviderIds: readonly string[];
 }) => Promise<{
@@ -67,6 +75,7 @@ export type UpdateSuccessorRunner = (input: {
   hookReconciliations: ProviderHookReconciliationResult[];
   steps: import("@station/contracts").UpdateCommandStep[];
   recoveryCommands?: readonly UpdateCommandArgv[];
+  parkedTerminals?: UpdateSuccessorReceipt["parkedTerminals"];
   error?: unknown;
 }>;
 
@@ -89,6 +98,7 @@ export type UpdateCommandDeps = {
   recoveryPreflight?: (input: {
     installed: UpdateArtifact;
     target: UpdateArtifact;
+    currentBuildArtifact: UpdateArtifact;
     currentBuildInfo: StationBuildInfo;
   }) => Promise<UpdateReapRecoveryPreflight>;
 };
@@ -112,6 +122,7 @@ export async function runUpdateCommand(
   const selected = await selectUpdateChannel({
     probes: deps.probes,
     ...(request.channel === undefined ? {} : { requested: request.channel }),
+    ...(options.signal === undefined ? {} : { options: { signal: options.signal } }),
   });
   return runSelectedUpdate(selected, request, options, {
     ...deps,
@@ -131,13 +142,14 @@ export async function runUpdateSuccessorCommand(input: {
     if (input.deps.probes === undefined) {
       throw new Error("Update channel probes are unavailable in this CLI composition.");
     }
-    const selected = await selectUpdateChannel({
+    const selected = await inspectSelectedUpdateChannel({
       probes: input.deps.probes,
       requested: request.channel,
+      installedScopeDigest: request.installedScopeDigest,
+      ...(input.options.signal === undefined ? {} : { options: { signal: input.options.signal } }),
     });
     const target = request.target;
-    const selectedCurrent = artifact(selected.plan.currentVersion, selected.plan.currentRevision);
-    if (!artifactsMatch(selectedCurrent, target)) {
+    if (!artifactsMatch(selected.installed, target)) {
       throw new Error("The successor launcher does not own the requested target artifact.");
     }
     if (buildInfo.version !== target.version) {
@@ -149,6 +161,7 @@ export async function runUpdateSuccessorCommand(input: {
     const initial = await input.deps.recoveryPreflight({
       installed: target,
       target,
+      currentBuildArtifact: target,
       currentBuildInfo: buildInfo,
     });
     if (!artifactsMatch(initial.installed, target) || !artifactsMatch(initial.target, target)) {
@@ -164,16 +177,19 @@ export async function runUpdateSuccessorCommand(input: {
         buildIdentity: buildInfo.buildIdentity,
         observerSelector: stationObserverBuildVersion(buildInfo),
       },
-      installation: resolveUpdateInstallationIntent(selected, "defer"),
+      installation: {
+        whenRequired: "apply",
+        owner: request.channel,
+        command: { kind: "none" },
+      },
       handoff: handoffRequest(request),
     });
     const plan = deriveUpdateConvergencePlan(planning);
-    const report = createUpdateReport(selected, initial, plan);
-    report.current = target;
-    report.target = target;
+    const report = createUpdateReportForArtifacts(request.channel, target, target, initial, plan);
     const execution = await executeUpdateConvergence(
       {
         selectedChannel: request.channel,
+        installedScopeDigest: request.installedScopeDigest,
         installed: target,
         target,
         buildInfo,
@@ -186,9 +202,13 @@ export async function runUpdateSuccessorCommand(input: {
         planning,
         artifactChanged: false,
       },
-      executionDeps(input.deps, input.options),
+      executionDeps(input.deps, input.options, selected),
     );
-    return successorResult(request, report, execution.status === "current");
+    return successorResult(
+      request,
+      report,
+      execution.status === "current" || execution.status === "intentionally-incomplete",
+    );
   } catch (error) {
     return successorFailure(request, error);
   }
@@ -231,9 +251,23 @@ export async function runSelectedUpdate(
   }
 
   const report = createUpdateReport(selected, initial, plan);
+  if (
+    plan.phases.artifactApplication.action === "apply" &&
+    !updateSuccessorEvidenceFitsOutput(initial, plan)
+  ) {
+    report.error = {
+      tag: "UpdateError",
+      code: "UPDATE_SUCCESSOR_EVIDENCE_TOO_LARGE",
+      message: "Update evidence exceeds the bounded successor transport.",
+      hint: "Reduce retained terminal evidence before retrying Station.",
+    };
+    report.steps.push(updateStep("apply", "skipped", report.error.message));
+    return resultUpdateCommandResult(report, "failed", request.output);
+  }
   const result = await executeUpdateConvergence(
     {
       selectedChannel: selected.channel,
+      installedScopeDigest: selected.installedScopeDigest,
       installed: current,
       target,
       buildInfo: deps.currentBuildInfo,
@@ -247,15 +281,28 @@ export async function runSelectedUpdate(
       artifactChanged: plan.phases.artifactApplication.action === "apply",
       ...(plan.phases.artifactApplication.action === "apply"
         ? {
-            apply: () => applySelectedUpdate(selected, request),
+            apply: () => applySelectedUpdate(selected, request, options.signal),
+            ...(selected.applyRecoveryCommands === undefined
+              ? {}
+              : { applyRecoveryCommands: selected.applyRecoveryCommands }),
           }
         : {}),
       ...(deps.runSuccessor === undefined ? {} : { runSuccessor: deps.runSuccessor }),
     },
-    executionDeps(deps, options),
+    executionDeps(deps, options, selected),
   );
 
-  if (result.status !== "current" && result.status !== "updated" && result.status !== "deferred") {
+  if (result.status === "intentionally-incomplete") {
+    report.warnings.push({
+      tag: "UpdateWarning",
+      code: "UPDATE_HOST_HANDOFF_DISABLED",
+      message: "Host handoff was disabled; the next TUI may refuse the incumbent Host.",
+    });
+  } else if (
+    result.status !== "current" &&
+    result.status !== "updated" &&
+    result.status !== "deferred"
+  ) {
     addRecoveryGuidance(report, selected, request, options.configPath, result.status);
   }
   return resultUpdateCommandResult(report, result.status, request.output);
@@ -277,6 +324,7 @@ async function inspectInitial(
   const initial = await deps.recoveryPreflight({
     installed: current,
     target,
+    currentBuildArtifact: current,
     currentBuildInfo: deps.currentBuildInfo,
   });
   if (
@@ -318,8 +366,12 @@ function createPlanningInput(
 async function applySelectedUpdate(
   selected: PlannedUpdateChannel,
   request: UpdateRequest,
+  signal: AbortSignal | undefined,
 ): Promise<import("../update/updateChannel.js").UpdateApplyReportBase> {
-  const result = await selected.apply({ drivePackageManager: request.packageManager === "drive" });
+  const result = await selected.apply({
+    drivePackageManager: request.packageManager === "drive",
+    ...(signal === undefined ? {} : { signal }),
+  });
   if (result.channel !== selected.channel) {
     throw new Error("The selected install owner returned a different channel.");
   }
@@ -329,10 +381,12 @@ async function applySelectedUpdate(
 function executionDeps(
   deps: UpdateCommandDeps,
   options: UpdateCommandOptions,
+  selected: Pick<PlannedUpdateChannel, "channel" | "inspectInstalled">,
 ): UpdateConvergenceExecutionDeps {
   if (deps.recoveryPreflight === undefined) {
     throw new Error("Update recovery preflight is unavailable in this CLI composition.");
   }
+  const recoveryPreflight = deps.recoveryPreflight;
   const capabilities = createUpdateRuntimeCapabilities({
     config: options.config,
     ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
@@ -346,7 +400,31 @@ function executionDeps(
       : { reconcilePersisted: deps.reconcilePersisted }),
   });
   return {
-    inspect: deps.recoveryPreflight,
+    inspectInstalled: () =>
+      selected.inspectInstalled(options.signal === undefined ? {} : { signal: options.signal }),
+    inspect: async ({ target, currentBuildArtifact, currentBuildInfo }) => {
+      const installedBefore = await selected.inspectInstalled(
+        options.signal === undefined ? {} : { signal: options.signal },
+      );
+      if (installedBefore === undefined) {
+        throw new Error(
+          `The ${selected.channel} channel no longer owns the selected installation.`,
+        );
+      }
+      const aggregate = await recoveryPreflight({
+        installed: installedBefore,
+        target,
+        currentBuildArtifact,
+        currentBuildInfo,
+      });
+      const installedAfter = await selected.inspectInstalled(
+        options.signal === undefined ? {} : { signal: options.signal },
+      );
+      if (installedAfter === undefined || !artifactsMatch(installedBefore, installedAfter)) {
+        throw new Error(`The ${selected.channel} installation changed during final verification.`);
+      }
+      return aggregate;
+    },
     ...(deps.providers === undefined ? {} : { providers: deps.providers }),
     ...capabilities,
   };
@@ -375,6 +453,7 @@ function successorResult(
     target: request.target,
     actions: report.steps.map(actionFromStep),
     hookReconciliations: report.hookReconciliations,
+    parkedTerminals: parkedTerminalsFromInspection(report.finalInspection),
     finalInspection: receiptFinalInspection(
       report.finalInspection ?? {
         status: "failed",
@@ -387,7 +466,15 @@ function successorResult(
     ),
   };
   if (report.error !== undefined) receipt.error = report.error;
-  return { code: completed ? 0 : 1, output: UpdateSuccessorReceiptSchema.parse(receipt) };
+  if (!updateSuccessorReceiptFitsOutput(receipt)) {
+    return successorFailure(request, {
+      tag: "UpdateError",
+      code: "UPDATE_SUCCESSOR_RECEIPT_TOO_LARGE",
+      message: "The target Station successor produced more evidence than the transport accepts.",
+    });
+  }
+  const parsed = UpdateSuccessorReceiptSchema.parse(receipt);
+  return { code: completed ? 0 : 1, output: parsed };
 }
 
 function successorFailure(request: UpdateSuccessorRequest, error: unknown): CliRunResult {
@@ -403,10 +490,18 @@ function successorFailure(request: UpdateSuccessorRequest, error: unknown): CliR
     target: request.target,
     actions: [],
     hookReconciliations: [],
+    parkedTerminals: [],
     finalInspection: { status: "failed", error: safeError },
     error: safeError,
   };
   return { code: 1, output: UpdateSuccessorReceiptSchema.parse(receipt) };
+}
+
+function parkedTerminalsFromInspection(
+  inspection: UpdateFinalInspection | undefined,
+): UpdateSuccessorReceipt["parkedTerminals"] {
+  if (inspection === undefined || inspection.status === "failed") return [];
+  return [...(updateRecoveryActionCommitments(inspection.aggregate).parkedTerminals ?? [])];
 }
 
 function actionFromStep(step: UpdateCommandStep): UpdateSuccessorReceipt["actions"][number] {
@@ -462,8 +557,9 @@ function addRecoveryGuidance(
   configPath: string | undefined,
   status: UpdateConvergenceExecutionResult["status"],
 ): void {
-  if (report.recoveryCommands.length > 0) return;
-  report.recoveryCommands.push(retryUpdateCommand(selected.plan.currentCli, configPath, request));
+  if (report.recoveryCommands.length === 0) {
+    report.recoveryCommands.push(retryUpdateCommand(selected.plan.currentCli, configPath, request));
+  }
   if (status === "reap-required") return;
   const failedHook =
     report.hookReconciliations.find((entry) => !providerHookReconciliationSucceeded(entry)) ??
@@ -472,25 +568,32 @@ function addRecoveryGuidance(
     );
   if (failedHook === undefined) return;
   const followUp = "followUp" in failedHook ? failedHook.followUp.action : undefined;
+  let hookRecovery: UpdateCommandArgv | undefined;
   if (followUp === "run-explicit-takeover") {
-    report.recoveryCommands.unshift(
-      stationCommand(selected.plan.currentCli, configPath, [
-        "hooks",
-        "install",
-        failedHook.provider,
-        "--yes",
-        "--takeover",
-      ]),
-    );
+    hookRecovery = stationCommand(selected.plan.currentCli, configPath, [
+      "hooks",
+      "install",
+      failedHook.provider,
+      "--yes",
+      "--takeover",
+    ]);
   } else if (followUp === "run-doctor") {
-    report.recoveryCommands.unshift(
-      stationCommand(selected.plan.currentCli, configPath, [
-        "hooks",
-        "doctor",
-        failedHook.provider,
-      ]),
-    );
+    hookRecovery = stationCommand(selected.plan.currentCli, configPath, [
+      "hooks",
+      "doctor",
+      failedHook.provider,
+    ]);
   }
+  if (
+    hookRecovery !== undefined &&
+    !report.recoveryCommands.some((command) => sameCommand(command, hookRecovery))
+  ) {
+    report.recoveryCommands.unshift(hookRecovery);
+  }
+}
+
+function sameCommand(left: UpdateCommandArgv, right: UpdateCommandArgv): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function retryUpdateCommand(

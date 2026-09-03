@@ -1,18 +1,25 @@
 import type { StationConfig } from "@station/config";
 import {
+  HOST_PROTOCOL_VERSION,
   STATION_SCHEMA_VERSION,
+  UpdateConvergencePlanningInputSchema,
   type UpdateReapRecoveryPreflight,
   UpdateReapRecoveryPreflightSchema,
   type UpdateSuccessorRequest,
 } from "@station/contracts";
 import { type StationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
-import { createTempState } from "../../../../tests/support/temp-projects";
+import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
+import { runCli } from "../../src/cliExecution.js";
 import { runUpdateSuccessorCommand, type UpdateCommandDeps } from "../../src/commands/update.js";
 import { resolveObserverPaths } from "../../src/paths.js";
 import type { UpdateChannelProbe } from "../../src/update/channelDetection.js";
+import { deriveUpdateConvergencePlan } from "../../src/update/convergencePlan.js";
 import {
+  createUpdateSuccessorTransportKey,
   runUpdateSuccessorTransport,
+  sealUpdateSuccessorOutput,
+  UPDATE_SUCCESSOR_PRIVATE_ENV,
   type UpdateSuccessorReceipt,
   UpdateSuccessorReceiptSchema,
 } from "../../src/update/successorExecution.js";
@@ -63,6 +70,119 @@ describe("update successor boundary", () => {
     expect(JSON.stringify(receipt)).not.toContain("pid");
   });
 
+  it("converges from local installed ownership without repeating target planning", async () => {
+    const state = await createTempState();
+    const probe = targetProbe();
+    const inspectInstalled = vi.fn(async () => ({ version: "1.0.0" }));
+    const detectAndPlan = vi.fn(async () => {
+      throw new Error("target feed is offline");
+    });
+    probe.inspectInstalled = inspectInstalled;
+    probe.detectAndPlan = detectAndPlan;
+
+    const result = await runUpdateSuccessorCommand({
+      stdin: JSON.stringify(successorRequest()),
+      options: commandOptions(state),
+      deps: {
+        buildInfo: () => buildInfo,
+        probes: [probe],
+        recoveryPreflight: vi.fn(async () => targetPreflight()),
+        convergeObserver: vi.fn(async () => runningObserver(state.config)),
+      },
+    });
+
+    expect(result).toMatchObject({ code: 0, output: { status: "completed" } });
+    expect(inspectInstalled).toHaveBeenCalledTimes(4);
+    expect(detectAndPlan).not.toHaveBeenCalled();
+  });
+
+  it("runs no-handoff convergence without replacing the incumbent Host", async () => {
+    const state = await createTempState();
+    const request = successorRequest();
+    const recoveryPreflight = vi.fn(async () => noHandoffPreflight());
+    const convergeHost = vi.fn();
+
+    const result = await runUpdateSuccessorCommand({
+      stdin: JSON.stringify(request),
+      options: commandOptions(state),
+      deps: {
+        buildInfo: () => buildInfo,
+        probes: [targetProbe()],
+        recoveryPreflight,
+        convergeObserver: vi.fn(async () => runningObserver(state.config)),
+        convergeHost,
+      },
+    });
+    const receipt = UpdateSuccessorReceiptSchema.parse(result.output);
+
+    expect(result.code).toBe(0);
+    expect(receipt).toMatchObject({
+      status: "completed",
+      finalInspection: { status: "completed", plan: { outcome: "intentionally-incomplete" } },
+      actions: expect.arrayContaining([
+        expect.objectContaining({ id: "apply", status: "skipped" }),
+        expect.objectContaining({ id: "hook-reconciliation", status: "completed" }),
+        expect.objectContaining({ id: "observer-restart", status: "completed" }),
+        expect.objectContaining({ id: "host-handoff", status: "skipped" }),
+        expect.objectContaining({ id: "final-verification", status: "completed" }),
+      ]),
+    });
+    expect(recoveryPreflight).toHaveBeenCalledTimes(2);
+    expect(convergeHost).not.toHaveBeenCalled();
+  });
+
+  it("encrypts private successor stdout and consumes its one-shot environment key", async () => {
+    const state = await createTempState();
+    const configPath = await writeConfigToml(state.root, state.config);
+    const request = successorRequest();
+    const env = { [UPDATE_SUCCESSOR_PRIVATE_ENV]: createUpdateSuccessorTransportKey() };
+    const convergeObserver = vi.fn(async () => {
+      expect(env[UPDATE_SUCCESSOR_PRIVATE_ENV]).toBeUndefined();
+      return runningObserver(state.config);
+    });
+
+    const result = await runCli(["--config", configPath, "update", "--successor"], {
+      env,
+      stdin: JSON.stringify(request),
+      updateDeps: {
+        buildInfo: () => buildInfo,
+        probes: [targetProbe()],
+        recoveryPreflight: vi.fn(async () => noHandoffPreflight()),
+        convergeObserver,
+      },
+    });
+
+    const output = JSON.stringify(result.output);
+    expect(result).toMatchObject({ code: 0, output: { algorithm: "aes-256-gcm" } });
+    expect(env[UPDATE_SUCCESSOR_PRIVATE_ENV]).toBeUndefined();
+    expect(convergeObserver).toHaveBeenCalledOnce();
+    for (const privateId of ["target-1", "pty-1", "project-1", "worktree-1", "session-1"]) {
+      expect(output).not.toContain(privateId);
+    }
+  });
+
+  it("encrypts failures that occur before successor capability composition", async () => {
+    const state = await createTempState();
+    const configPath = await writeConfigToml(state.root, state.config);
+    const env = { [UPDATE_SUCCESSOR_PRIVATE_ENV]: createUpdateSuccessorTransportKey() };
+
+    const result = await runCli(["--config", configPath, "update", "--successor"], {
+      env,
+      stdin: JSON.stringify(successorRequest()),
+      updateDeps: {
+        buildInfo: () => {
+          throw new Error("private-path-/Users/example");
+        },
+      },
+    });
+
+    const output = JSON.stringify(result.output);
+    expect(result).toMatchObject({ code: 1, output: { algorithm: "aes-256-gcm" } });
+    expect(output).not.toContain("private-path");
+    expect(output).not.toContain("Users");
+    expect(env[UPDATE_SUCCESSOR_PRIVATE_ENV]).toBeUndefined();
+  });
+
   it("returns a typed failed receipt when the target build does not match the request", async () => {
     const state = await createTempState();
     const result = await runUpdateSuccessorCommand({
@@ -83,13 +203,7 @@ describe("update successor boundary", () => {
   it("accepts a correlated failed receipt with only the providers reached before failure", async () => {
     const request = successorRequest({ hookProviderIds: ["claude", "codex"] });
     const receipt = failedReceipt(request, []);
-    const commandRunner = vi.fn(async (input) => ({
-      command: input.command,
-      args: input.args ?? [],
-      stdout: JSON.stringify(receipt),
-      stderr: "",
-      exitCode: 1,
-    }));
+    const commandRunner = runnerFor(receipt, 1);
 
     await expect(
       runUpdateSuccessorTransport({
@@ -100,8 +214,125 @@ describe("update successor boundary", () => {
       }),
     ).resolves.toEqual(receipt);
     expect(commandRunner).toHaveBeenCalledWith(
-      expect.objectContaining({ args: ["--config", "/tmp/config.toml", "update", "--successor"] }),
+      expect.objectContaining({
+        args: ["--config", "/tmp/config.toml", "update", "--successor"],
+        env: {
+          [UPDATE_SUCCESSOR_PRIVATE_ENV]: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
+        },
+      }),
     );
+  });
+
+  it("rejects a completed receipt whose final aggregate drops requested providers", async () => {
+    const state = await createTempState();
+    const valid = await runUpdateSuccessorCommand({
+      stdin: JSON.stringify(successorRequest()),
+      options: commandOptions(state),
+      deps: {
+        buildInfo: () => buildInfo,
+        probes: [targetProbe()],
+        recoveryPreflight: vi.fn(async () => targetPreflight()),
+        convergeObserver: vi.fn(async () => runningObserver(state.config)),
+      },
+    });
+    const receipt = UpdateSuccessorReceiptSchema.parse(valid.output);
+    const request = successorRequest({ hookProviderIds: ["codex"] });
+    const altered = {
+      ...receipt,
+      hookReconciliations: [
+        { provider: "codex" as const, status: "healthy" as const, changed: false, verified: true },
+      ],
+    };
+
+    await expect(
+      runUpdateSuccessorTransport({
+        launcher: ["/opt/stn"],
+        request,
+        commandRunner: runnerFor(altered, 0),
+      }),
+    ).rejects.toThrow(/final aggregate/);
+  });
+
+  it("rejects a completed plan that was not derived from its final aggregate", async () => {
+    const state = await createTempState();
+    const valid = await runUpdateSuccessorCommand({
+      stdin: JSON.stringify(successorRequest()),
+      options: commandOptions(state),
+      deps: {
+        buildInfo: () => buildInfo,
+        probes: [targetProbe()],
+        recoveryPreflight: vi.fn(async () => targetPreflight()),
+        convergeObserver: vi.fn(async () => runningObserver(state.config)),
+      },
+    });
+    const receipt = UpdateSuccessorReceiptSchema.parse(valid.output);
+    if (receipt.finalInspection.status !== "completed") throw new Error("Expected final evidence.");
+    const altered = {
+      ...receipt,
+      finalInspection: {
+        ...receipt.finalInspection,
+        aggregate: {
+          ...receipt.finalInspection.aggregate,
+          observer: { status: "absent" as const },
+          evidenceComplete: false,
+        },
+      },
+    };
+
+    await expect(
+      runUpdateSuccessorTransport({
+        launcher: ["/opt/stn"],
+        request: successorRequest(),
+        commandRunner: runnerFor(altered, 0),
+      }),
+    ).rejects.toThrow(/not derived/);
+  });
+
+  it("rejects a completed no-handoff receipt with unfinished Observer convergence", async () => {
+    const state = await createTempState();
+    const request = successorRequest();
+    const valid = await runUpdateSuccessorCommand({
+      stdin: JSON.stringify(request),
+      options: commandOptions(state),
+      deps: {
+        buildInfo: () => buildInfo,
+        probes: [targetProbe()],
+        recoveryPreflight: vi.fn(async () => noHandoffPreflight()),
+        convergeObserver: vi.fn(async () => runningObserver(state.config)),
+      },
+    });
+    const receipt = UpdateSuccessorReceiptSchema.parse(valid.output);
+    if (receipt.finalInspection.status !== "completed") throw new Error("Expected final evidence.");
+    const aggregate = {
+      ...receipt.finalInspection.aggregate,
+      observer: { ...receipt.finalInspection.aggregate.observer, health: "degraded" as const },
+    };
+    const planning = UpdateConvergencePlanningInputSchema.parse({
+      preflight: aggregate,
+      targetRuntime: receipt.finalInspection.plan.selectedTarget.runtimeBuild,
+      installation: {
+        whenRequired: "apply",
+        owner: request.channel,
+        command: { kind: "none" },
+      },
+      handoff: request.handoff,
+    });
+    const altered = {
+      ...receipt,
+      finalInspection: {
+        status: "completed" as const,
+        aggregate,
+        plan: deriveUpdateConvergencePlan(planning),
+      },
+    };
+
+    await expect(
+      runUpdateSuccessorTransport({
+        launcher: ["/opt/stn"],
+        request,
+        commandRunner: runnerFor(altered, 0),
+      }),
+    ).rejects.toThrow(/leave only Host convergence incomplete/);
   });
 
   it.each([
@@ -158,7 +389,7 @@ describe("update successor boundary", () => {
       runUpdateSuccessorTransport({
         launcher: ["/opt/stn"],
         request,
-        commandRunner: runnerForText("x".repeat(256 * 1024 + 1), 1),
+        commandRunner: runnerForText("x".repeat(384 * 1024 + 1), 1),
       }),
     ).rejects.toThrow(/size limit/);
     await expect(
@@ -168,6 +399,23 @@ describe("update successor boundary", () => {
         commandRunner: runnerFor(failedReceipt(request, []), 0),
       }),
     ).rejects.toThrow(/exit status/);
+  });
+
+  it("rejects schema-valid receipt fields whose serialized receipt exceeds the transport", () => {
+    const request = successorRequest();
+    const error = {
+      tag: "UpdateError",
+      code: "UPDATE_FAILED",
+      message: "x".repeat(300 * 1024),
+    } as const;
+    const parsed = UpdateSuccessorReceiptSchema.safeParse({
+      ...failedReceipt(request, []),
+      finalInspection: { status: "failed", error },
+      error,
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) expect(parsed.error.message).toContain("size limit");
   });
 
   it("rejects a failed receipt whose completed final aggregate changes target", async () => {
@@ -217,6 +465,7 @@ function successorRequest(overrides: Partial<UpdateSuccessorRequest> = {}): Upda
     schemaVersion: 1,
     channel: "installer-binary",
     target: { version: "1.0.0" },
+    installedScopeDigest: "b".repeat(64),
     handoff: { action: "leave-in-place" },
     hookProviderIds: [],
     ...overrides,
@@ -241,9 +490,12 @@ function targetProbe(): UpdateChannelProbe {
   };
   return {
     channel: "installer-binary",
+    inspectInstalled: async () => ({ version: "1.0.0" }),
     detectAndPlan: async () => ({
       channel: "installer-binary",
+      installedScopeDigest: "b".repeat(64),
       plan,
+      inspectInstalled: async () => ({ version: "1.0.0" }),
       apply: async () => ({
         channel: "installer-binary",
         status: "installed" as const,
@@ -291,6 +543,45 @@ function targetPreflight(): UpdateReapRecoveryPreflight {
   });
 }
 
+function noHandoffPreflight(): UpdateReapRecoveryPreflight {
+  return UpdateReapRecoveryPreflightSchema.parse({
+    ...targetPreflight(),
+    host: {
+      status: "inspected",
+      buildVersion: "0.9.0",
+      buildIdentity: "b".repeat(64),
+      protocolVersion: HOST_PROTOCOL_VERSION,
+      relation: "different",
+      compatibility: "replace",
+      terminals: [
+        {
+          kind: "agent",
+          terminalTargetId: "target-1",
+          ptyId: "pty-1",
+          ptyInstanceId: "instance-1",
+          projectId: "project-1",
+          worktreeId: "worktree-1",
+          sessionId: "session-1",
+          harnessProvider: "codex",
+          alive: true,
+          handoffSupport: "bridge-releasable",
+        },
+      ],
+    },
+    terminalDispositions: [
+      {
+        terminalTargetId: "target-1",
+        ptyId: "pty-1",
+        ptyInstanceId: "instance-1",
+        sessionId: "session-1",
+        handoff: "preservable",
+        reapRecovery: "non-resumable",
+        reasons: ["retained_session_missing"],
+      },
+    ],
+  });
+}
+
 function runningObserver(config: StationConfig) {
   const paths = resolveObserverPaths(config);
   return {
@@ -320,13 +611,30 @@ function failedReceipt(
     target: request.target,
     actions: [],
     hookReconciliations,
+    parkedTerminals: [],
     finalInspection: { status: "failed", error },
     error,
   };
 }
 
 function runnerFor(receipt: unknown, exitCode: number) {
-  return runnerForText(JSON.stringify(receipt), exitCode);
+  return vi.fn(
+    async (input: {
+      command: string;
+      args?: string[];
+      env?: Record<string, string | undefined>;
+    }) => {
+      const transportKey = input.env?.[UPDATE_SUCCESSOR_PRIVATE_ENV];
+      if (transportKey === undefined) throw new Error("Expected successor transport key.");
+      return {
+        command: input.command,
+        args: input.args ?? [],
+        stdout: JSON.stringify(sealUpdateSuccessorOutput(receipt, transportKey)),
+        stderr: "",
+        exitCode,
+      };
+    },
+  );
 }
 
 function runnerForText(stdout: string, exitCode: number) {

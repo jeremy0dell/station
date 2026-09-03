@@ -15,7 +15,10 @@ import {
 } from "../../update/recoveryPreflightAdapters.js";
 import {
   runUpdateSuccessorTransport,
+  sealUpdateSuccessorOutput,
+  UPDATE_SUCCESSOR_PRIVATE_ENV,
   type UpdateSuccessorTransportInput,
+  updateSuccessorTransportKeyIsValid,
 } from "../../update/successorExecution.js";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
@@ -78,19 +81,58 @@ export const updateCliCommand: CliCommandNode = {
 };
 
 async function runUpdateCliCommand(context: CliCommandRunContext) {
+  if (isSuccessorInvocation(context.args)) {
+    const successorTransportKey = consumeSuccessorTransportKey(context);
+    try {
+      return await runProtectedUpdateSuccessor(context, successorTransportKey);
+    } catch {
+      return {
+        code: 1,
+        output: sealUpdateSuccessorOutput(
+          {
+            error: {
+              tag: "UpdateError",
+              code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED",
+              message: "The protected update successor boundary failed.",
+            },
+          },
+          successorTransportKey,
+        ),
+      };
+    }
+  }
   const loaded = loadedConfigCommandOptions(context);
   const options = updateCommandOptions(context, loaded);
   const deps = createUpdateDeps(context, loaded);
-  if (isSuccessorInvocation(context.args)) {
-    const stdin = context.options.stdin ?? (await readStdinIfAvailable({ maxBytes: 64 * 1024 }));
-    const input: Parameters<typeof runUpdateSuccessorCommand>[0] = {
-      options,
-      deps,
-    };
-    if (stdin !== undefined) input.stdin = stdin;
-    return runUpdateSuccessorCommand(input);
-  }
   return runUpdateCommand(context.args, options, deps);
+}
+
+async function runProtectedUpdateSuccessor(
+  context: CliCommandRunContext,
+  successorTransportKey: string,
+) {
+  const loaded = loadedConfigCommandOptions(context);
+  const options = updateCommandOptions(context, loaded);
+  const deps = createUpdateDeps(context, loaded);
+  const stdin = context.options.stdin ?? (await readStdinIfAvailable({ maxBytes: 64 * 1024 }));
+  const input: Parameters<typeof runUpdateSuccessorCommand>[0] = { options, deps };
+  if (stdin !== undefined) input.stdin = stdin;
+  const result = await runUpdateSuccessorCommand(input);
+  return {
+    ...result,
+    output: sealUpdateSuccessorOutput(result.output, successorTransportKey),
+  };
+}
+
+function consumeSuccessorTransportKey(context: CliCommandRunContext): string {
+  const env = context.options.env ?? process.env;
+  const transportKey = env[UPDATE_SUCCESSOR_PRIVATE_ENV];
+  delete env[UPDATE_SUCCESSOR_PRIVATE_ENV];
+  delete process.env[UPDATE_SUCCESSOR_PRIVATE_ENV];
+  if (!updateSuccessorTransportKeyIsValid(transportKey)) {
+    throw new Error("Update successor is a private transport command.");
+  }
+  return transportKey;
 }
 
 function updateCommandOptions(
@@ -172,6 +214,7 @@ function createRecoveryPreflight(
     const options: CreateUpdateRecoveryPreflightPortsOptions = {
       config: loaded.config,
       providers,
+      currentBuildArtifact: input.currentBuildArtifact,
       currentBuildInfo: input.currentBuildInfo,
     };
     if (loaded.configPath !== undefined) options.configPath = loaded.configPath;
@@ -217,6 +260,7 @@ function createSuccessorRunner(
       schemaVersion: 1,
       channel: input.channel,
       target: input.target,
+      installedScopeDigest: input.installedScopeDigest,
       handoff,
       hookProviderIds: [...input.hookProviderIds],
     };
@@ -233,6 +277,7 @@ function createSuccessorRunner(
       status: receipt.status,
       finalInspection: receipt.finalInspection,
       hookReconciliations: receipt.hookReconciliations,
+      parkedTerminals: receipt.parkedTerminals,
       steps: receipt.actions.map((action) => ({
         id: action.id,
         status: action.status,

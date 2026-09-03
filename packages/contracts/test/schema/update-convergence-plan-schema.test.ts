@@ -13,13 +13,13 @@ describe("UpdateConvergencePlanningInputSchema", () => {
     expect(UpdateConvergencePlanningInputSchema.parse(planningInput())).toEqual(planningInput());
   });
 
-  it("requires target runtime knowledge exactly when the target artifact is installed", () => {
+  it("requires the target artifact before accepting target runtime knowledge", () => {
     expect(
       UpdateConvergencePlanningInputSchema.safeParse({
         ...planningInput(),
         targetRuntime: { status: "not-yet-provable" },
       }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       UpdateConvergencePlanningInputSchema.safeParse({
         ...planningInput(),

@@ -129,6 +129,7 @@ export function createInstallerBinaryUpdateChannel(
 
   return {
     id: channel,
+    installedScope: (detection) => [detection.executablePath, detection.installDir],
     async detect(options = {}) {
       const info = buildInfo();
       const targetPlatform = nativeTarget(platform, architecture);
@@ -227,6 +228,33 @@ export function createInstallerBinaryUpdateChannel(
         targetVersion: releases.latest.version,
         currentCli: [detection.executablePath],
       };
+    },
+
+    async inspectInstalled(plan, options = {}) {
+      const before = await inspectInstallerInstallation(plan.executablePath);
+      if (
+        before === undefined ||
+        before.executablePath !== plan.executablePath ||
+        before.installDir !== plan.installDir
+      ) {
+        return undefined;
+      }
+      const version = (
+        await runExternalCommand(
+          {
+            command: before.executablePath,
+            args: ["--version"],
+            timeoutMs: 10_000,
+            maxOutputChars: childOutputMaxChars,
+            unsetEnv: strippedInstallerEnvironment,
+            ...(options.signal === undefined ? {} : { signal: options.signal }),
+          },
+          commandRunner,
+        )
+      ).stdout.trim();
+      const current = await inspectInstallerInstallation(plan.executablePath);
+      if (current === undefined || !sameInstallerInstallation(before, current)) return undefined;
+      return version.length === 0 ? undefined : { version };
     },
 
     async apply(plan, options = {}) {

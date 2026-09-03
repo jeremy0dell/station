@@ -124,6 +124,12 @@ export function createDevCheckoutUpdateChannel(
   return {
     id: channel,
     detect: (options = {}) => detectDevCheckout(deps, options),
+    installedScope: (detection) => [
+      detection.repoRoot,
+      detection.cliEntryPath,
+      detection.runtimePath,
+      detection.gitPath,
+    ],
     async plan(detection, options = {}) {
       await requireSameDetection(detection, deps, options);
       await requireCleanCheckout(detection, deps.commandRunner, options);
@@ -256,7 +262,13 @@ export function createDevCheckoutUpdateChannel(
         }
       } catch (error) {
         const cancellation = normalizeCancellationError(error);
-        if (cancellation !== undefined) throw cancellation;
+        if (cancellation !== undefined) {
+          recoveryCommandsByFailure.set(
+            cancellation,
+            preparationCommands.map(({ recoveryCommand }) => recoveryCommand),
+          );
+          throw cancellation;
+        }
         const failure = updateErrorFromUnknown(error, {
           code: "UPDATE_DEV_CHECKOUT_PREPARE_FAILED",
           message:
@@ -300,24 +312,62 @@ export function createDevCheckoutUpdateChannel(
         warnings: [],
       };
     },
+    async inspectInstalled(plan, options = {}) {
+      return inspectInstalledDevCheckout(plan, deps.commandRunner, options);
+    },
     applyRecoveryCommands(plan, error) {
-      if (
-        !isSafeError(error) ||
-        error.tag !== "UpdateError" ||
-        error.code !== "UPDATE_DEV_CHECKOUT_PREPARE_FAILED"
-      ) {
+      if (!isSafeError(error)) {
         return undefined;
       }
-      return (
-        recoveryCommandsByFailure.get(error) ??
-        (plan.pnpmPath === undefined
-          ? undefined
-          : legacyPreparationCommands(plan, plan.pnpmPath).map(
-              ({ recoveryCommand }) => recoveryCommand,
-            ))
-      );
+      const commands = recoveryCommandsByFailure.get(error);
+      if (commands !== undefined) return commands;
+      if (error.tag !== "UpdateError" || error.code !== "UPDATE_DEV_CHECKOUT_PREPARE_FAILED") {
+        return undefined;
+      }
+      return plan.pnpmPath === undefined
+        ? undefined
+        : legacyPreparationCommands(plan, plan.pnpmPath).map(
+            ({ recoveryCommand }) => recoveryCommand,
+          );
     },
   };
+}
+
+async function inspectInstalledDevCheckout(
+  plan: DevCheckoutUpdatePlan,
+  commandRunner: ExternalCommandRunner | undefined,
+  options: UpdateOperationOptions,
+) {
+  const repoRoot = await gitLine(
+    plan,
+    ["rev-parse", "--show-toplevel"],
+    commandRunner,
+    options,
+    "The development checkout root could not be verified.",
+  );
+  if (repoRoot !== plan.repoRoot) return undefined;
+  const beforeRevision = await gitLine(
+    plan,
+    ["rev-parse", "HEAD"],
+    commandRunner,
+    options,
+    "The development checkout revision could not be read.",
+  );
+  const manifest = PackageSchema.parse(
+    JSON.parse(
+      (await runGit(plan, ["show", `${beforeRevision}:package.json`], commandRunner, options))
+        .stdout,
+    ),
+  );
+  const afterRevision = await gitLine(
+    plan,
+    ["rev-parse", "HEAD"],
+    commandRunner,
+    options,
+    "The development checkout revision could not be verified.",
+  );
+  if (afterRevision !== beforeRevision) return undefined;
+  return { version: manifest.version, revision: afterRevision };
 }
 
 type DevCheckoutPreparationCommand = {
