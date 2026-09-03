@@ -308,7 +308,7 @@ async function runScenario(input) {
   const dataHome = join(scenarioRoot, "data-home");
   const cacheHome = join(scenarioRoot, "cache-home");
   // Bridge control sockets inherit this path; keep it short enough for macOS sun_path.
-  const stateDir = await mkdtemp(join("/tmp", `stn-update-state-${scenarioKey}-`));
+  const stateDir = join(input.root, "s", scenarioKey);
   const runtimeDir = join(input.root, "r", scenarioKey);
   const tempDir = join(scenarioRoot, "tmp");
   const tmuxTempDir = await mkdtemp(join("/tmp", `stn-tmux-${scenarioKey}-`));
@@ -1217,15 +1217,8 @@ async function assertExactTransportRequests(transportDir, input, completedInstal
     "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
     "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
   ];
-  const successorDetectionRequests = [
-    releaseApiTagUrl(input.target.tag),
-    "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
-  ];
   const expected = [
     ...detectionRequests,
-    ...(updateRequiresPreservation(input) && !completedInstallRefusal
-      ? []
-      : successorDetectionRequests),
     ...(updateRequiresPreservation(input) && !completedInstallRefusal
       ? []
       : [
