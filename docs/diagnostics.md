@@ -1,267 +1,137 @@
-# station Diagnostics
+# Station Diagnostics
 
-This document describes the current local diagnostic surface for observer runs, provider health, command records, debug bundles, redaction, retention, and derived evidence indexes.
+This is the reference for Station's diagnostic commands, health semantics,
+evidence bundles, redaction, and retention behavior. For symptom-first recovery,
+start with [Debugging](debugging.md).
 
-## Commands
+## Choose a diagnostic surface
 
-Existing-state lookup:
+| Need | Command | Effect |
+| --- | --- | --- |
+| Correlate a trace, command, or diagnostic ID | `stn debug trace <id>` | Reads retained bundles and logs without contacting Observer. |
+| Find the latest retained failure | `stn debug trace --latest-failure` | Reads retained bundles and logs without contacting Observer. |
+| Search component logs | `stn debug logs [query]` | Reads local JSONL logs without contacting Observer. |
+| Check the configured process and socket | `stn observer status` | Inspects live status without starting Observer. |
+| Check current runtime health | `stn doctor [--project <id>]` | May start Observer if it is absent. |
+| Read the current normalized graph | `stn snapshot --json [--include-debug]` | May start Observer if it is absent. |
+| Read the graph without starting Observer | `stn snapshot --json --require-running` | Fails if Observer is not already running. |
+| Stream current state and events | `stn observe --json --include-snapshot --duration 3s` | Contacts or starts Observer and reads live events. |
+| Inspect one command lifecycle | `stn command get <commandId>` | Contacts or starts Observer. |
+| Capture shareable evidence | `stn debug bundle --trace <traceId>` | Contacts or starts Observer and writes a redacted bundle. |
+| Check setup or hook readiness | `stn setup check --json`, `stn hooks doctor <provider>`, `stn event-hooks doctor` | Inspects local setup and provider files without applying changes. |
 
-```bash
-stn debug trace <id>
-stn debug trace --latest-failure
-stn debug logs [query]
-stn debug logs [query] --component hook
-```
+Use each command's `--help` or `--man` output for its complete current option
+set. Useful bundle filters include `--command <commandId>`,
+`--latest-failure`, `--last 30m`, and `--since <isoTimestamp>`.
 
-Live observer checks:
+`stn setup check --json` does not change configuration, provider homes, sockets,
+or durable Observer state. Its state-directory readiness check may create and
+remove a temporary probe file and can leave a new empty state directory; see
+[System dependencies](system-dependencies.md). Provider and event-hook doctor
+commands are read-only. Hook install, uninstall, and reconcile commands mutate
+external configuration, while command dispatch and project operations can
+change runtime state.
 
-```bash
-stn observer status
-stn doctor [--project <projectId>] [--deep]
-stn snapshot --json [--include-debug]
-stn observe --include-snapshot --duration 3s
-stn observe --json --include-snapshot --duration 3s
-stn observe --json --failed --limit 20
-stn observe --json --trace <traceId>
-stn observe --json --command <commandId>
-stn command get <commandId>
-```
+## Correlate and interpret evidence
 
-Evidence capture:
+`stn debug trace` correlates trace, command, and diagnostic IDs across retained
+bundles and structured logs. When available, it reports redacted external-command
+facts such as the command, working directory, exit code, duration, bounded
+stdout/stderr, and the effective `PATH` for a missing executable.
 
-```bash
-stn debug bundle
-stn debug bundle --trace <traceId>
-stn debug bundle --command <commandId>
-stn debug bundle --latest-failure
-stn debug bundle --last 30m
-stn debug bundle --since <isoTimestamp>
-```
+A matching warning, error, or outer error code proves that the recorded failure
+occurred; it does not by itself prove the underlying cause. JSON trace and log
+output separates explicit root-cause evidence from observed failure evidence in
+`causeAssessment`. Its `evidenceRoles` and `componentRole` fields also distinguish
+failure ownership from the component that happened to log the event.
 
-Setup and hook checks:
+Without a query, `stn debug logs` searches recent warning and error records from
+the Observer, CLI, TUI, and Station Host logs. A query searches all levels. Add
+`--component hook` only when provider delivery is relevant, or use
+`--all-components` for every component.
 
-```bash
-stn setup check --json
-stn setup system --check
-bun run setup:system:check
-stn hooks doctor worktrunk
-stn hooks doctor claude
-stn hooks doctor codex
-stn hooks doctor cursor
-stn hooks doctor opencode
-stn event-hooks doctor
-```
+Exact `STATION_CLI_TRACE=1` enables best-effort CLI process start and outcome
+records. These records can carry route shape, bounded process facts, and
+top-level trace or command IDs. They exclude argument values, stdin, command
+output, config paths, working directories, environment values, prompts,
+arbitrary error messages and causes, and resource payloads. Tracing never gates
+effects or changes command output or exit status.
 
-`stn debug trace` reads existing diagnostic bundles and structured logs to
-correlate trace ids, command ids, diagnostic ids, root-cause codes, redacted
-command diagnostics, and suggested next commands without contacting the observer.
-When a command error envelope includes external-command diagnostics, trace output
-can show the command, cwd, exit code, duration, bounded stdout/stderr snippets,
-and the effective `PATH` for an `ENOENT` executable lookup failure, after
-redaction. Observer lifecycle records preserve the outer `error`, a separately
-normalized `cause`, and bounded `startupEvidence`; `debug logs` and `debug trace`
-parse those fields through strict shared schemas instead of reconstructing them
-from hint text. `causeAssessment` distinguishes a correlated diagnostic-index
-root cause or strict lifecycle cause from an observed generic command/error
-failure or insufficient evidence. A generic outer error code is failure evidence,
-not proof of the mechanism beneath it.
+## Current health semantics
 
-Trace and log results expose `evidenceRoles` so consumers do not confuse the
-record's logging component with failure ownership. `operationalBoundaryEvidence`
-groups only retained operation, command type, signal kind, record summary,
-error code, and error message facts. It does not infer a subsystem or handler.
+`stn doctor` reports current config, SQLite, provider, hook-spool, snapshot,
+local-state, and retention checks. Its top-level status is determined only by
+the current checks:
 
-`stn debug logs` reads structured JSONL logs from the configured state
-directory without contacting the observer. It searches each selected component's
-active log and returns at most 500 records. By default it searches `observer`,
-`cli`, `tui`, and `station-host` logs, excludes noisy hook logs, and returns recent `warn`/`error`
-records when no query is supplied, and searches all levels when a query is
-supplied. Use `--component hook` or `--all-components` only when hook delivery
-or provider-ingress noise is relevant. Station Host's legacy `agent.*` records
-retain operational/replay metrics; typed lifecycle payloads carry UI correlation
-and detach reasons. Each record marks `componentRole` as
-`logging_location`; queried records include bounded `matchEvidence` and scalar
-`context` for direct citation. An exactly matched warning or error record can
-establish the retained event as an observed proximate failure without
-establishing a deeper cause.
+| Current checks | Top-level status |
+| --- | --- |
+| At least one `error` | `unavailable` |
+| No errors and at least one `warn` | `degraded` |
+| All checks are `ok` | `healthy` |
 
-With tracing disabled, `runCliMain` writes one `cli.process.failure` only when a
-process/input/config/routing/output failure lacks adequate Observer command
-evidence; a rejected receipt writes `cli.command.rejected`. Successful reads and
-mutations, help, version, successful local mutations, and terminal Observer
-command failures add no default process record. Existing Observer-startup lifecycle
-records are reused instead of duplicated.
+`recentErrors` is historical evidence and does not change current health by
+itself. A healthy report can therefore contain retained errors. Invalid config
+is a current error: Doctor returns an `unavailable` local report with diagnostic
+ID `config-load` and does not start Observer.
 
-Exact `STATION_CLI_TRACE=1` enables `cli.process.trace.start` and
-`cli.process.trace.outcome` records for every CLI process, including help,
-version, and reads. Query their `invocationId` with
-`stn debug logs <invocationId> --component cli`. Records contain only canonical
-route shape, bounded process facts, fixed safe failure summaries, and available
-top-level `traceId`/`commandId` correlation. They never retain argv values,
-stdin, output, config paths, cwd, environment values, prompts, arbitrary error
-messages, causes, or resource payloads. Logging is best-effort: it never gates
-effects, changes output or exit status, or emits a degradation warning.
+The `observer-singleton` check reports the cached startup inspection. A warning
+points to `stn observer reap`, but Doctor never signals a process or acquires the
+startup claim. Follow [Observer singleton lifecycle](observer-singleton.md)
+before acting on duplicate-process evidence.
 
-Lifecycle child reports and boot tails are redacted before they cross the process
-boundary. Ordinary JavaScript errors retain only their redacted first message
-line; arbitrary, cyclic, primitive, or malformed values become a stable unknown
-startup cause without interpolation or raw serialization. Stacks and untrusted
-object fields are not persisted.
+`stn snapshot --json` returns the current normalized graph.
+`--include-debug` adds the latest reconciled terminal evidence; it is not fresh
+mutation authority. `stn observe` streams the current snapshot and live events,
+and `stn command get` returns one recorded command lifecycle. Failed command
+records can reference redacted diagnostic evidence without copying provider
+payloads into ordinary live error events.
 
-`stn observer status` checks the configured observer process/socket state. It is
-non-mutating, but it is still a live status check rather than an existing-state
-log read.
+## Provider and hook health
 
-`stn doctor` connects to the observer, asks the observer for runtime health, and reports config, SQLite, provider health, hook spool, snapshot, logs, local state usage, and retention status. If the config cannot be loaded, `doctor` does not start the observer; it returns a local SafeError report with diagnostic id `config-load`.
+Hook health proves installation and delivery readiness, not current runtime
+state. Confirm current truth through Doctor, snapshots, and reconcile evidence.
+See [Harness ingress](harness-ingress.md) for admission, correlation, spooling,
+and artifact ownership; see [Harness authoring](harness-authoring.md) for the
+provider integration contract.
 
-### Doctor health semantics
+When Worktrunk is active, Doctor reports executable availability, lifecycle-hook
+expectations, and the configured automation mode. A checkout-style project root
+with local `core.bare=true` is reported as `WORKTRUNK_PROJECT_ROOT_BARE` and
+Worktrunk list, create, and remove operations are blocked before `wt` runs.
+Station does not rewrite Git configuration; follow the report's remediation to
+fix the intended checkout or correct `projects.root`.
 
-Doctor's top-level status is the worst severity among the current checks in the
-final report, including checks appended by the CLI. Retained command failures
-remain diagnostic evidence under `recentErrors`; they do not determine current
-health.
-
-| Any current `error` check? | Any current `warn` check? | Historical errors present? | Top-level status |
-| --- | --- | --- | --- |
-| Yes | Either | Either | `unavailable` |
-| No | Yes | Either | `degraded` |
-| No | No | No | `healthy` |
-| No | No | Yes | `healthy` |
-
-Invalid configuration remains `unavailable` because its current config check is
-an error. A local-state size overage remains `degraded` because the current
-retention check is a warning. The `recentErrors` field means retained historical
-evidence: Doctor can be `healthy` while that array is non-empty, and the same
-errors remain available in diagnostic snapshots and debug evidence.
-
-Doctor's `observer-singleton` check reads the cached result of the one-shot
-post-startup duplicate inspection; it does not rescan or mutate product state.
-It is `ok` when no duplicate requires action. It is `warn` for an eligible
-candidate or process/socket/pidfile/FD evidence refusal. The message points to
-`stn observer reap`; startup inspection never signals or acquires the boot claim.
-
-`stn snapshot --json` asks the observer for the current normalized graph. Use
-`--include-debug` when row-level diagnostic fields are needed for support
-evidence.
-
-`stn observe` streams the observer's current snapshot and live events. Use
-`--json` for JSONL envelopes, `--pane` for an alternate-screen terminal tail,
-`--failed` for failure-focused streams, `--trace` / `--command` for correlation
-filters, and bounded flags such as `--duration 3s` for smoke checks.
-
-`stn command get <commandId>` asks the observer for a command lifecycle record.
-Failed provider commands may include optional redacted diagnostics derived from
-the persisted command error envelope. The command record keeps live SafeError
-events lean while still making provider command failures self-diagnosing from
-the command/debug surfaces. `stn command dispatch --stdin` intentionally
-submits a command and can change runtime state.
-
-`stn debug bundle` asks the observer for a diagnostic snapshot, then writes a redacted bundle under the configured state directory. If the config cannot be loaded, it writes a local invalid-config bundle next to the failing config instead of contacting the observer.
-
-`stn setup check --json`, `stn setup system --check`, and
-`bun run setup:system:check` report local tool readiness. They are read-only.
-
-Provider hooks are diagnosed as delivery hints, not runtime truth. `stn-ingress` assigns stable event ids, tries bounded delivery to the observer, uses the standard CLI Observer lifecycle for bounded auto-start when enabled, and writes a spool record only when startup or delivery fails. Harness reports are accepted into an observer-owned ingress queue before slower persistence, projection, and reconcile work. Queue depth, coalescing, drop/failure counts, and last spool-drain stats appear in observer health and diagnostic snapshots. Hook delivery decisions are written to `logs/hooks.jsonl`; hook payload attributes are redacted before they appear in logs or debug bundles.
-
-An allow-listed provider hook that fails the sender's Station ownership or
-configured-root correlation gate writes one best-effort `info` record before
-returning an `ignored` receipt. The record contains only provider, hook ID,
-ignored status, and the closed correlation reason; it excludes event names,
-cwd, roots, Station IDs, payloads, paths, and environment data. Unsupported
-provider events remain silent and do not produce this record. Query existing
-safe evidence without contacting the Observer:
-
-```bash
-stn debug logs "Provider hook ignored before Observer delivery" --component hook
-```
-
-When `defaults.worktree_provider = "worktrunk"`, doctor also validates Worktrunk
-binary availability, lifecycle hook setup, and automation capability for the
-configured lifecycle-hook mode. Missing `wt` degrades provider health with
-`WORKTRUNK_UNAVAILABLE`, the attempted command, any resolved path, version output
-when available, and an install hint. Worktrunk lifecycle hooks are not mandatory
-for every install: `worktree.worktrunk.use_lifecycle_hooks = false` makes
-automated mutations pass `--no-hooks`, `true` makes them pass `--yes`, and unset
-uses Worktrunk's default prompt behavior. Doctor and setup report the effective
-mode and validate that the installed `wt` supports the required flag for the
-configured mode. Missing or untrusted hooks degrade the report when hooks are
-expected; explicitly disabled hooks are reported as the skip-hooks automation
-mode instead. Provider command failures from `wt` are recorded through provider
-health, command records, logs, debug traces, and debug bundle evidence.
-
-A checkout-style configured root with local `core.bare=true` is reported as
-`WORKTRUNK_PROJECT_ROOT_BARE`. `stn project doctor <projectId>` reports the
-configuration-side warning, while `stn doctor --project <projectId>` reports the
-scoped Worktrunk project check and degraded project health. Worktrunk list,
-create, and remove operations are blocked before `wt` runs. Station does not
-repair Git config automatically; use the reported commands to inspect the
-setting and either set local `core.bare=false` for the intended checkout or
-correct `projects.root`.
-
-Doctor also reports Worktrunk registrations whose working directories are
-missing or prunable. `stn doctor --project <id>` limits this scan to one project;
-the unscoped command scans configured projects with bounded concurrency and
-reports if its time budget permits only partial coverage. Inspect the exact
-prune operation before changing Git metadata, then run it without `--dry-run`:
+Doctor can also report registrations whose worktree directories are already
+missing. Inspect the exact Git metadata change before applying it:
 
 ```bash
 git -C '<project-root>' worktree prune --dry-run --verbose
 git -C '<project-root>' worktree prune --verbose
 ```
 
-Pruning removes administrative records for worktree directories that are
-already gone; it does not delete a live worktree directory.
+The second command removes stale administrative records; it does not delete a
+live worktree directory. Run it only after the dry run confirms the target.
+Provider installation and repair procedures belong to
+[System dependencies](system-dependencies.md).
 
-## Manual Smoke
+## Local evidence and bundles
 
-After building, the diagnostic surface can be checked with a throwaway fake-provider config:
-
-```bash
-tmpdir="$(mktemp -d /tmp/station-smoke-XXXXXX)"
-mkdir -p "$tmpdir/state" "$tmpdir/run"
-
-cat > "$tmpdir/config.toml" <<EOF
-schema_version = 1
-projects = []
-
-[observer]
-socket_path = "$tmpdir/run/observer.sock"
-state_dir = "$tmpdir/state"
-
-[defaults]
-worktree_provider = "fake-worktree"
-terminal = "fake-terminal"
-harness = "fake-harness"
-layout = "agent-shell"
-EOF
-
-node apps/cli/dist/main.js --config "$tmpdir/config.toml" doctor
-node apps/cli/dist/main.js --config "$tmpdir/config.toml" debug bundle
-node apps/cli/dist/main.js --config "$tmpdir/config.toml" observer stop
-```
-
-This starts the lazy observer, verifies doctor output, writes a debug bundle under `$tmpdir/state/diagnostics`, and stops the observer. It uses fake providers only and should not touch real project state. If a sandbox blocks Unix socket binding, run the smoke outside that sandbox.
-
-## Local State
-
-Default paths live under the observer state directory:
+The configured Observer state directory contains:
 
 ```text
 observer.sqlite
-logs/observer.jsonl
-logs/cli.jsonl
-logs/tui.jsonl
-logs/station-host.jsonl
-logs/hooks.jsonl
+logs/{observer,cli,tui,station-host,hooks}.jsonl
 diagnostics/
 spool/hooks/
 ```
 
-SQLite remains observer-owned runtime history. CLI and TUI use protocol APIs and do not read SQLite as runtime truth. JSONL logs and debug bundles are diagnostic evidence only.
+SQLite is Observer-owned runtime history. Logs and bundles are diagnostic
+evidence, not a second source of current runtime truth.
 
-## Bundle Sections
-
-The operational bundle includes:
+`stn debug bundle` collects a diagnostic snapshot and writes a redacted bundle
+under `diagnostics/`. If config cannot load, it writes a local invalid-config
+bundle next to the failing config without contacting Observer. An operational
+bundle contains:
 
 ```text
 manifest.json
@@ -281,23 +151,13 @@ redaction-report.json
 README.txt
 ```
 
-Command records, events, logs, and error envelopes carry `commandId`, `traceId`,
-and `spanId` where available. Failed command records can also carry optional
-redacted diagnostics such as external command, cwd, exit code, duration, and
-bounded stdout/stderr snippets. Missing-executable diagnostics additionally retain
-the effective child `PATH`; other environment variables are not recorded.
+Records carry command, trace, and span IDs where available.
+`diagnostic-index.json` is derived evidence: it correlates config, provider,
+command, event, error, spool, log, and row facts, but it is not runtime truth.
 
-`diagnostic-index.json` is derived evidence, not runtime truth. It correlates config diagnostics, SQLite health, provider health, command failures, events, error envelopes, hook spool state, logs, and row/session facts into:
+## Retention guarantees
 
-- root cause codes such as `INVALID_CONFIG`, `MISSING_WORKTRUNK_BINARY`, `WORKTRUNK_UNSUPPORTED_FLAG`, `WORKTRUNK_HOOK_APPROVAL_REQUIRED`, `WORKTRUNK_BASE_MISSING`, `STALE_TERMINAL_TARGET`, `HOOK_SPOOL_FALLBACK`, `PROVIDER_TIMEOUT`, `HARNESS_UNEXPECTED_EXIT`, and `SQLITE_WRITE_FAILURE`
-- evidence items with provider, command, trace, diagnostic, row, target, and run identifiers when available
-- row-level provider questions so common debugging can be answered from CLI JSON and bundle files without a TUI inspect panel
-
-The deterministic diagnosis oracle fixtures live under `tests/agent/scenarios/diagnosis/`. They validate evidence-index classification without invoking a real agent.
-
-## Retention Defaults
-
-Default diagnostic retention is bounded and visible through `stn doctor`:
+The default top-level and bundle limits are:
 
 ```toml
 [observability.retention]
@@ -311,119 +171,25 @@ max_bundles = 10
 max_days = 30
 ```
 
-Retention settings are currently policy and usage-limit evidence rather than a
-universal JSONL rotation, file-pruning, or SQLite-pruning mechanism. The CLI
-process writer appends only to the active `cli.jsonl`; it adds no rotation or
-pruning behavior. Provider-observation expiry and hook-spool cleanup retain their
-owner-specific semantics. SQLite over-limit status is reported, but the SQLite
-age settings do not determine Doctor's top-level status, prune command-error
-rows, or filter those rows from `recentErrors`.
+[Configuration](configuration.md)
+owns the complete field reference. Doctor and debug bundles report the resolved
+policy and local usage. Exceeding the total local-state limit produces a current
+retention warning and degrades Doctor.
 
-## Redaction
+These settings do not universally rotate or prune JSONL logs, debug bundles, or
+command/error SQLite rows. Provider-observation expiry and hook-spool cleanup
+apply their owner-specific retention rules. SQLite age settings do not remove
+retained command errors from `recentErrors` or independently determine Doctor's
+top-level status.
 
-SafeError output excludes stacks and raw provider payloads. Error envelopes,
-command diagnostics, debug traces, and debug bundles may include internal
-details only after redaction. Secret-like keys, authorization headers,
-token-looking values, and command output snippets are redacted before being
-written to logs, command records, trace output, or bundles.
+## Redaction guarantees
 
-## Worktrunk Hook Setup
+SafeError output excludes stacks and raw provider payloads. Lifecycle reports
+and boot tails are redacted before crossing the process boundary. Error
+envelopes, command diagnostics, traces, logs, and bundles redact secret-like
+keys, authorization headers, token-looking values, and captured command output
+before persistence or display.
 
-Worktrunk hooks are explicit and reversible:
-
-```bash
-station --config /path/to/config.toml worktrunk hooks plan
-station --config /path/to/config.toml worktrunk hooks install --yes
-station --config /path/to/config.toml worktrunk hooks doctor
-station --config /path/to/config.toml worktrunk hooks uninstall --yes
-```
-
-Generated hook bodies call the resolved absolute `stn-ingress` launcher with
-`--socket <observer.sock> --state-dir <state> --spool-dir <state>/spool/hooks
---config /path/to/config.toml worktrunk <event>`. They do not contain lifecycle
-logic. The installer backs up the Worktrunk config, preserves unrelated hook
-commands, repairs exact legacy bare-launcher entries to the canonical absolute
-form, and removes only generated STATION entries on uninstall. Standalone and
-full doctor validate that same composed expectation, so normal verification
-never requires repeating `--hook-bin`.
-
-Generic aliases are also available for the Worktrunk hook setup surface:
-
-```bash
-station --config /path/to/config.toml hooks plan worktrunk
-station --config /path/to/config.toml hooks doctor worktrunk
-station --config /path/to/config.toml hooks install worktrunk --yes
-station --config /path/to/config.toml hooks uninstall worktrunk --yes
-```
-
-Other provider and event hook setup surfaces use the same reversible pattern:
-
-```bash
-station --config /path/to/config.toml hooks plan claude
-station --config /path/to/config.toml hooks doctor claude
-station --config /path/to/config.toml hooks install claude --yes
-station --config /path/to/config.toml hooks uninstall claude --yes
-
-station --config /path/to/config.toml hooks plan codex
-station --config /path/to/config.toml hooks doctor codex
-station --config /path/to/config.toml hooks install codex --yes
-station --config /path/to/config.toml hooks uninstall codex --yes
-
-station --config /path/to/config.toml hooks plan cursor
-station --config /path/to/config.toml hooks doctor cursor
-station --config /path/to/config.toml hooks install cursor --yes
-station --config /path/to/config.toml hooks uninstall cursor --yes
-
-station --config /path/to/config.toml hooks plan opencode
-station --config /path/to/config.toml hooks doctor opencode
-station --config /path/to/config.toml hooks install opencode --yes
-station --config /path/to/config.toml hooks uninstall opencode --yes
-
-station --config /path/to/config.toml event-hooks doctor
-```
-
-For Codex, `hooks install codex --yes` is also the explicit bounded repair for
-Station's profile declarations, generated hook script, and planned cleanup of
-stale Station-generated declarations in the base config. After the writes
-complete, the command immediately runs the Codex-owned doctor with the same
-resolved profile, script, base-path environment, ingress launcher, Station
-config and runtime paths, and artifact owner. A successful result has
-`status: "ok"` and `verified: true`, includes the complete doctor result, and
-exits zero. If doctor still finds missing, stale, or conflicting artifacts—or
-cannot complete—the write evidence remains `installed: true`, but the result
-has `status: "warn"` and `verified: false`, retains the provider remediation or
-normalized error, returns bounded follow-up without resolved paths, scripts,
-commands, config, or provider payloads, and exits nonzero.
-
-Codex repair does not roll back completed writes after a verification warning.
-Existing write-triggered profile and base-config backups remain available for
-recovery. A verified no-op reports `changed: false` and creates no new backup.
-Artifact ownership remains fail-closed: transfer requires the separate explicit
-`--takeover` flag, and verification never transfers ownership. Manual warning
-text identifies the corrective flow without echoing resolved artifacts. Use
-`hooks plan codex` and `hooks doctor codex` to inspect provider-native detail;
-then rerun the confirmed install flow or the explicit uninstall flow.
-
-`stn hooks reconcile codex` is the machine-facing automatic surface. It emits
-only the strict provider-neutral status, `changed`/`verified` facts, bounded
-`SafeError`, and enumerated follow-up action. It never accepts `--takeover`.
-Owned missing or drifted hooks use the same plan/install/doctor writer above;
-foreign or unknown ownership fails closed and names the separate explicit
-takeover flow. A second reconciliation is a verified no-op.
-
-This verification proves only the current Station-owned Codex artifacts. It
-does not prove provider-hook delivery, Codex `/hooks` trust or approval, Codex
-authentication, or current Observer graph state. It does not start or restart
-Observer and does not restart existing Codex sessions.
-
-Hook `plan` and `doctor` commands are diagnostic/planning surfaces. Hook
-`install` and `uninstall` mutate external tool configuration and require
-explicit `--yes`.
-
-Real Worktrunk E2E coverage is opt-in:
-
-```bash
-STATION_REAL_WORKTRUNK=1 STATION_WORKTRUNK_BIN="$(command -v wt)" bun run test:e2e:worktrunk:real
-```
-
-Default test commands skip this lane because it requires a local external `wt` binary and isolated Worktrunk state.
+Redaction reduces exposure but does not make a bundle public: it can still
+contain internal paths, project identifiers, provider names, and bounded command
+evidence. Review a bundle before sharing it.
