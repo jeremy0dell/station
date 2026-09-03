@@ -570,6 +570,11 @@ export function providerProjectsFromConfig(config: StationConfig): ProviderProje
     if (project.worktrunk.includeExternal !== undefined) {
       providerProject.worktrunk.includeExternal = project.worktrunk.includeExternal;
     }
+    if (project.setup !== undefined) {
+      providerProject.setup = {
+        copyFromProjectRoot: [...project.setup.copyFromProjectRoot],
+      };
+    }
     if (project.recoveryBreadcrumbs !== undefined) {
       providerProject.recoveryBreadcrumbs = {
         location: project.recoveryBreadcrumbs.location,

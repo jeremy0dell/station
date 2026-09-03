@@ -1,4 +1,4 @@
-import { isAbsolute } from "node:path";
+import { isAbsolute, win32 } from "node:path";
 import { z } from "zod";
 import type { TerminalFocusOrigin } from "./commands/terminal.js";
 import { SafeErrorSchema } from "./errors.js";
@@ -135,6 +135,46 @@ export const ProviderProjectRecoveryBreadcrumbsSchema = z
   })
   .strict();
 
+const projectSetupRelativeFileSchema = nonEmptyStringSchema
+  .refine((path) => path.trim() === path, "Setup file paths must not have surrounding whitespace.")
+  .refine((path) => !path.includes("\0"), "Setup file paths must not contain NUL bytes.")
+  .refine((path) => !path.includes("\\"), "Setup file paths must use forward slashes.")
+  .refine(
+    (path) => !isAbsolute(path) && !win32.isAbsolute(path),
+    "Setup file paths must be relative to the project root.",
+  )
+  .refine((path) => !/^[A-Za-z]:/.test(path), "Setup file paths must not use Windows drives.")
+  .refine(
+    (path) =>
+      path
+        .split("/")
+        .every((component) => component !== "" && component !== "." && component !== ".."),
+    "Setup file paths must not contain empty or dot path components.",
+  );
+
+export const ProjectSetupConfigSchema = z
+  .object({
+    copyFromProjectRoot: z
+      .array(projectSetupRelativeFileSchema)
+      .min(1)
+      .superRefine((paths, context) => {
+        const seen = new Set<string>();
+        paths.forEach((path, index) => {
+          if (seen.has(path)) {
+            context.addIssue({
+              code: "custom",
+              message: "Setup file paths must be unique.",
+              path: [index],
+            });
+          }
+          seen.add(path);
+        });
+      }),
+  })
+  .strict();
+
+export type ProjectSetupConfig = z.infer<typeof ProjectSetupConfigSchema>;
+
 export const ProviderProjectConfigSchema = z
   .object({
     id: ProjectIdSchema,
@@ -143,6 +183,7 @@ export const ProviderProjectConfigSchema = z
     defaultBranch: nonEmptyStringSchema.optional(),
     defaults: ProviderProjectDefaultsSchema,
     worktrunk: ProviderProjectWorktrunkConfigSchema,
+    setup: ProjectSetupConfigSchema.optional(),
     recoveryBreadcrumbs: ProviderProjectRecoveryBreadcrumbsSchema.optional(),
   })
   .strict();
@@ -438,7 +479,8 @@ export type RepositoryChecksRequest = z.infer<typeof RepositoryChecksRequestSche
  *
  * Supplies fresh worktree lifecycle evidence and mutations without exposing provider mechanics.
  * Callers provide project context for mutations; removal adapters must revalidate opaque registration identity,
- * path, and branch immediately before mutation.
+ * path, and branch immediately before mutation. Create adapters complete configured project setup before
+ * returning success. A setup failure removes the exact newly created worktree or reports cleanup uncertainty.
  */
 export interface WorktreeProvider {
   id: ProviderId;

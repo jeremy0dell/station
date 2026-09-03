@@ -48,6 +48,7 @@ function projectToml(
     defaults?: string;
     localConfig?: string;
     commands?: string;
+    setup?: string;
     recoveryBreadcrumbs?: string;
     label?: string;
     worktrunk?: string;
@@ -73,6 +74,7 @@ ${options.worktrunk ?? ""}
 
 ${options.defaults ?? ""}
 ${options.commands ?? ""}
+${options.setup ?? ""}
 ${options.localConfig ?? ""}
 ${options.recoveryBreadcrumbs ?? ""}
 `;
@@ -1154,6 +1156,55 @@ enabled = true
     });
   });
 
+  it("normalizes global project setup file copies", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+    await writeProjectLocalConfig(root, 'schema_version = 1\n[defaults]\nharness = "opencode"\n');
+    const loaded = await loadConfigFromToml(
+      baseToml(
+        projectToml("web", root, {
+          setup: `
+[projects.setup]
+copy_from_project_root = [".env.local", "config/private.json"]
+`,
+          localConfig: `
+[projects.local_config]
+enabled = true
+path = ".station/config.toml"
+`,
+        }),
+      ),
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    expect(loaded.projects[0]?.setup).toEqual({
+      copyFromProjectRoot: [".env.local", "config/private.json"],
+    });
+    expect(loaded.projects[0]?.defaults.harness).toBe("opencode");
+  });
+
+  it("rejects unsafe global project setup file paths", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+
+    await expect(
+      loadConfigFromToml(
+        baseToml(
+          projectToml("web", root, {
+            setup: `
+[projects.setup]
+copy_from_project_root = ["../.env.local"]
+`,
+          }),
+        ),
+        { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+      ),
+    ).rejects.toMatchObject({
+      tag: "ConfigError",
+      code: "CONFIG_VALIDATION_FAILED",
+    });
+  });
+
   it("ignores project-local config unless explicitly enabled", async () => {
     const tempDir = await makeTempDir();
     const root = await makeProjectRoot(tempDir, "web");
@@ -1264,6 +1315,9 @@ root = "/tmp/shadow"
 [harness.codex]
 permission_mode = "yolo"
 approval_policy = "never"
+
+[setup]
+copy_from_project_root = [".env.local"]
 `,
     );
 

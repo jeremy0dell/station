@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
+import { constants } from "node:fs";
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize, resolve } from "node:path";
 import type {
@@ -83,6 +84,11 @@ type StaleRegistrationInspection =
   | { status: "completed"; check?: ProviderDoctorCheck }
   | { status: "failed"; check: ProviderDoctorCheck };
 
+type ProjectSetupPlan = {
+  projectRoot: string;
+  relativePaths: string[];
+};
+
 /**
  * ADAPTER
  *
@@ -93,7 +99,9 @@ type StaleRegistrationInspection =
  * before Worktrunk runs. Concurrent creates share only an in-flight managed-path identity probe and retain
  * their common-case mutation overlap. Reads and removals drain active creates; the exact nested Git
  * sibling-registration race does the same before Worktrunk resumes its half-created branch. Removal freshly
- * revalidates native Git identity, path, and branch before mutation.
+ * revalidates native Git identity, path, and branch before mutation. Create validates and copies configured
+ * project-root files after any working-tree seed. Copy failure removes the exact new worktree or reports
+ * cleanup uncertainty.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -326,6 +334,7 @@ export class WorktrunkProvider implements WorktreeProvider {
 
   async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
     await this.#assertProjectRootUsable(request.project);
+    const setup = await this.#preflightProjectSetup(request.project);
     const base = request.base ?? request.project.worktrunk.base;
     const pathEnv = worktreePathEnv(request.project, request.branch, request.path);
     const managedPathArgs = await this.#managedWorktreePathArgs(request.project, pathEnv);
@@ -429,7 +438,40 @@ export class WorktrunkProvider implements WorktreeProvider {
         }).catch(() => {});
         throw seedError;
       }
-      // Re-list so the caller sees the post-seed dirty state.
+    }
+    if (setup !== undefined) {
+      try {
+        await this.#copyProjectSetup(request.project, setup, found.path);
+      } catch (copyError) {
+        try {
+          const cleanup = await this.removeWorktree({
+            project: request.project,
+            worktreeId: found.id,
+            expectedPath: found.path,
+            expectedBranch: found.branch,
+            expectedRegistrationIdentity: found.registrationIdentity,
+            force: true,
+          });
+          if (!cleanup.removed) {
+            throw new Error("Worktrunk did not confirm removal.");
+          }
+        } catch (cleanupError) {
+          throw new WorktrunkProviderError(
+            "WORKTRUNK_SETUP_CLEANUP_FAILED",
+            "Station could not confirm cleanup after project setup failed.",
+            {
+              projectId: request.project.id,
+              worktreeId: found.id,
+              hint: `Inspect ${found.path} before retrying worktree creation.`,
+              cause: cleanupError,
+            },
+          );
+        }
+        throw copyError;
+      }
+    }
+    if (request.seedFrom !== undefined || setup !== undefined) {
+      // Re-list so the caller sees the post-setup dirty state.
       const refreshed = (await this.listWorktrees(request.project)).find(
         (observation) => observation.id === found.id,
       );
@@ -438,6 +480,110 @@ export class WorktrunkProvider implements WorktreeProvider {
       }
     }
     return found;
+  }
+
+  async #preflightProjectSetup(
+    project: ProviderProjectConfig,
+  ): Promise<ProjectSetupPlan | undefined> {
+    if (project.setup === undefined) {
+      return undefined;
+    }
+    let projectRoot: string;
+    try {
+      projectRoot = await realpath(project.root);
+    } catch (cause) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_SETUP_SOURCE_INVALID",
+        "Station could not resolve the project root for configured setup files.",
+        { projectId: project.id, cause },
+      );
+    }
+    for (const relativePath of project.setup.copyFromProjectRoot) {
+      await this.#validateSetupSource(project, projectRoot, relativePath);
+    }
+    return {
+      projectRoot,
+      relativePaths: [...project.setup.copyFromProjectRoot],
+    };
+  }
+
+  async #validateSetupSource(
+    project: ProviderProjectConfig,
+    projectRoot: string,
+    relativePath: string,
+  ): Promise<{ path: string; mode: number }> {
+    const sourcePath = resolve(projectRoot, relativePath);
+    try {
+      const [metadata, resolvedPath] = await Promise.all([lstat(sourcePath), realpath(sourcePath)]);
+      if (
+        metadata.isSymbolicLink() ||
+        !metadata.isFile() ||
+        !isPathInside(resolvedPath, projectRoot, this.#platform)
+      ) {
+        throw new Error("The setup source is not a regular file inside the project root.");
+      }
+      return { path: sourcePath, mode: metadata.mode };
+    } catch (cause) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_SETUP_SOURCE_INVALID",
+        `Configured setup file is unavailable or unsafe: ${relativePath}.`,
+        { projectId: project.id, cause },
+      );
+    }
+  }
+
+  async #copyProjectSetup(
+    project: ProviderProjectConfig,
+    setup: ProjectSetupPlan,
+    worktreePath: string,
+  ): Promise<void> {
+    let worktreeRoot: string;
+    try {
+      worktreeRoot = await realpath(worktreePath);
+    } catch (cause) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_SETUP_COPY_FAILED",
+        "Station could not resolve the created worktree for project setup.",
+        { projectId: project.id, cause },
+      );
+    }
+    for (const relativePath of setup.relativePaths) {
+      try {
+        const source = await this.#validateSetupSource(project, setup.projectRoot, relativePath);
+        const components = relativePath.split("/");
+        const fileName = components.pop();
+        if (fileName === undefined) {
+          throw new Error("The setup destination has no file name.");
+        }
+        let parentPath = worktreeRoot;
+        for (const component of components) {
+          parentPath = join(parentPath, component);
+          await ensureSetupDirectory(parentPath);
+        }
+        const resolvedParent = await realpath(parentPath);
+        if (!isPathInside(resolvedParent, worktreeRoot, this.#platform)) {
+          throw new Error("The setup destination resolves outside the worktree.");
+        }
+        const destinationPath = join(resolvedParent, fileName);
+        if (await isExistingRegularFile(destinationPath)) {
+          continue;
+        }
+        await copyFile(source.path, destinationPath, constants.COPYFILE_EXCL);
+        await chmod(destinationPath, source.mode & 0o777);
+      } catch (cause) {
+        if (
+          cause instanceof WorktrunkProviderError &&
+          cause.code === "WORKTRUNK_SETUP_SOURCE_INVALID"
+        ) {
+          throw cause;
+        }
+        throw new WorktrunkProviderError(
+          "WORKTRUNK_SETUP_COPY_FAILED",
+          `Station could not copy configured setup file: ${relativePath}.`,
+          { projectId: project.id, cause },
+        );
+      }
+    }
   }
 
   async #withRegistrationIdentity(observation: WorktreeObservation): Promise<WorktreeObservation> {
@@ -1092,6 +1238,46 @@ function resolveManagedRoot(project: ProviderProjectConfig): string | undefined 
     return undefined;
   }
   return normalize(isAbsolute(configured) ? configured : resolve(project.root, configured));
+}
+
+async function ensureSetupDirectory(path: string): Promise<void> {
+  try {
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+      throw new Error("A setup destination parent is not a directory.");
+    }
+    return;
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw cause;
+    }
+  }
+  try {
+    await mkdir(path);
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw cause;
+    }
+  }
+  const metadata = await lstat(path);
+  if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+    throw new Error("A setup destination parent is not a directory.");
+  }
+}
+
+async function isExistingRegularFile(path: string): Promise<boolean> {
+  try {
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink() || !metadata.isFile()) {
+      throw new Error("A setup destination exists but is not a regular file.");
+    }
+    return true;
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw cause;
+  }
 }
 
 function isPathInside(path: string, root: string, platform: NodeJS.Platform): boolean {

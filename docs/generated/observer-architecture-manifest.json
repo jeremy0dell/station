@@ -18795,7 +18795,7 @@
       "declaration": "WorktrunkProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated before Worktrunk runs. Concurrent creates share only an in-flight managed-path identity probe and retain their common-case mutation overlap. Reads and removals drain active creates; the exact nested Git sibling-registration race does the same before Worktrunk resumes its half-created branch. Removal freshly revalidates native Git identity, path, and branch before mutation.",
+      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated before Worktrunk runs. Concurrent creates share only an in-flight managed-path identity probe and retain their common-case mutation overlap. Reads and removals drain active creates; the exact nested Git sibling-registration race does the same before Worktrunk resumes its half-created branch. Removal freshly revalidates native Git identity, path, and branch before mutation. Create validates and copies configured project-root files after any working-tree seed. Copy failure removes the exact new worktree or reports cleanup uncertainty.",
       "dependencies": [
         {
           "path": "packages/contracts/src/observedPaths.ts",
@@ -18952,7 +18952,7 @@
       "declaration": "WorktreeProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies fresh worktree lifecycle evidence and mutations without exposing provider mechanics. Callers provide project context for mutations; removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.",
+      "purpose": "Supplies fresh worktree lifecycle evidence and mutations without exposing provider mechanics. Callers provide project context for mutations; removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation. Create adapters complete configured project setup before returning success. A setup failure removes the exact newly created worktree or reports cleanup uncertainty.",
       "dependencies": []
     },
     {

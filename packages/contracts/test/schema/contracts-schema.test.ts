@@ -39,6 +39,7 @@ import {
   ObserverStopReceiptSchema,
   type ProjectId,
   ProjectIdSchema,
+  ProjectSetupConfigSchema,
   ProviderHealthSchema,
   ProviderHookArtifactOwnershipSchema,
   ProviderHookEventSchema,
@@ -2851,12 +2852,45 @@ describe("contract schemas", () => {
           enabled: true,
           base: "main",
         },
+        setup: {
+          copyFromProjectRoot: [".env.local", "config/private.json"],
+        },
         recoveryBreadcrumbs: {
           location: "worktree",
           path: ".station/recovery-breadcrumb.json",
         },
       },
       "provider project config",
+    );
+    expectParses(
+      ProjectSetupConfigSchema,
+      { copyFromProjectRoot: [".env.local", "config/private.json"] },
+      "project setup config",
+    );
+    for (const copyFromProjectRoot of [
+      [],
+      [".env.local", ".env.local"],
+      ["/tmp/.env"],
+      ["C:\\private\\.env"],
+      ["C:private.env"],
+      ["../.env"],
+      ["config/../.env"],
+      ["config//.env"],
+      ["config/"],
+      [" config/.env"],
+      ["config\\.env"],
+      ["config/\0.env"],
+    ]) {
+      expectFails(
+        ProjectSetupConfigSchema,
+        { copyFromProjectRoot },
+        `unsafe project setup path list ${JSON.stringify(copyFromProjectRoot)}`,
+      );
+    }
+    expectFails(
+      ProjectSetupConfigSchema,
+      { copyFromProjectRoot: [".env.local"], command: "pnpm install" },
+      "project setup config with unsupported field",
     );
     expectParses(
       RecoveryBreadcrumbSchema,

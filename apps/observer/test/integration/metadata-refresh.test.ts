@@ -73,6 +73,23 @@ const config: StationConfig = {
 };
 
 describe("observer worktree metadata refresh use case", () => {
+  it("passes global project setup to provider project configuration", () => {
+    const project = config.projects[0];
+    expect(project).toBeDefined();
+    if (project === undefined) throw new Error("Expected the web project fixture.");
+    const [providerProject] = providerProjectsFromConfig({
+      ...config,
+      projects: [
+        {
+          ...project,
+          setup: { copyFromProjectRoot: [".env.local"] },
+        },
+      ],
+    });
+
+    expect(providerProject?.setup).toEqual({ copyFromProjectRoot: [".env.local"] });
+  });
+
   it("merges cached pull request and checks metadata into hot snapshots, including stale rows", async () => {
     const fixture = createFixture();
     await fixture.persistence.upsertWorktreeMetadataCurrent({

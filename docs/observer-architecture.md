@@ -333,6 +333,13 @@ identity-checked snapshot projection; projection failure preserves the external
 success and falls back to reconciliation rather than publishing speculative
 state.
 
+A worktree provider completes configured project setup before it reports create
+success. The Worktrunk adapter validates project-root copy sources before
+creation, applies them after any fork seed, and returns only after copying
+finishes. A post-create setup failure removes the exact verified worktree or
+reports cleanup uncertainty with that worktree identity. Observer commands do
+not launch an agent from a partially configured worktree.
+
 Managed terminal attachments and release authority stay opaque. Cleanup may
 remove only the exact session and binding generation owned by the attempt; a
 delayed exit or failed rollback must not remove a replacement binding. An

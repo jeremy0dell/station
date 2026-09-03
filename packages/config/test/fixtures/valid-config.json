@@ -109,6 +109,9 @@
       "env": {
         "NODE_ENV": "development"
       },
+      "setup": {
+        "copyFromProjectRoot": [".env.local"]
+      },
       "display": {
         "group": "work",
         "sortOrder": 10
