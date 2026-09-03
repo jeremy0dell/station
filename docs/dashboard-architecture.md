@@ -1,372 +1,205 @@
 # Dashboard Architecture
 
-`@station/dashboard-core` (`packages/dashboard-core`) owns the shared,
-render-framework-free dashboard behavior: search/filter state, screens, focus,
-collapse, optimistic rows, toasts, widget editing, and the flow machines behind
-the New Session and Add Project sheets. It contains no renderer, no terminal
-provider code, and no Observer authority.
+Status: current living architecture for `@station/dashboard-core`.
 
-## Renderer compositions
+`packages/dashboard-core` owns renderer-independent dashboard semantics. It
+projects canonical Station client state into a semantic UI model and coordinates
+typed user intent without owning an Observer, renderer, terminal, filesystem, or
+configuration store.
 
-The CLI selects two sibling renderer compositions, and both render the same
-dashboard surface:
+This document owns dashboard-core boundaries, authority, lifecycle, identity,
+and dependency direction. [TUI Development](tui.md) owns visible interaction and
+OpenTUI behavior, [Configuration](configuration.md) owns `[tui]` fields and
+persistence, and [Testing](../tests/README.md) owns verification lanes.
 
-- **native workspace renderer** — `station/src/main.tsx`, which also owns the
-  workspace runtime (panes, overlays, native focus, context menus);
-- **standalone dashboard renderer** — `station/src/dashboardRenderer/main.tsx`,
-  used by the popup and fullscreen dashboard launches.
+## Runtime Boundary
 
-Each composition creates exactly one `DashboardRuntime` over an externally
-supplied canonical client source. The runtime never constructs its own client
-and never infers native versus standalone execution from UI state:
+The native workspace and standalone dashboard are sibling Station renderer
+compositions. Each constructs one `DashboardRuntime` over an externally supplied
+Station client source and supplies the capabilities needed by that renderer:
 
 ```text
-StationClientRuntime (canonical observer state and commands)
-        |                              |
-        |                              +--> workspace runtime (native only)
-        v                                   panes / overlays / native focus
+Observer snapshot and commands
+            |
+            v
+@station/client
+  canonical in-process state and command completion
+            |
+            v
 DashboardRuntime
-  read-only state source
-  named dashboard actions
-  owned lifecycle/effects
-        |
-        +--> semantic capabilities selected at composition
+  readonly projection state
+  closed semantic actions
+  owned effects and lifecycle
+            |
+            v
+Station renderer capabilities
+  OpenTUI, panes, focus, shell, dismissal, and terminal settlement
 ```
 
-The runtime shape is:
+Dashboard-core must not infer native versus standalone execution from UI state.
+Composition supplies the client source, Observer-facing service, folder service,
+semantic visibility sources, and renderer capabilities. Core supplies no
+filesystem, terminal, or capability fallback.
 
-```ts
-type DashboardRuntime = {
-  state: DashboardStateSource; // getState / getInitialState / subscribe
-  actions: DashboardActions;   // sole external mutation authority
-  start(): void;               // one-shot subscription and polling activation
-  dispose(): Promise<void>;    // repeat-safe; settles in-flight work first
-};
-```
+The runtime exposes only a deeply readonly state source, a closed action surface,
+and `start`/`dispose` lifecycle methods. Mutable Zustand state remains private.
+`start` activates subscriptions and polling at most once. `dispose` is
+repeat-safe: it closes new effect admission synchronously, removes owned
+subscriptions and timers, waits for admitted work to settle, and prevents late
+state writes.
 
-`DashboardStateSource` is structurally compatible with the read-only Zustand
-`useStore` contract, but the Zustand store itself is private to the runtime
-implementation and its focused tests. Public state views are identity-preserving
-deep-readonly projections; mutable `DashboardState` never crosses the package
-surface.
+## Authority And State Ownership
 
-## State ownership
+Authority is scoped rather than global:
 
 | Owner | Authority |
 | --- | --- |
-| `@station/client` | Canonical observer snapshot, connection posture, refresh/reconcile, and command-completion convergence |
-| Dashboard runtime | Search/filter state, collapse, semantic cursor/selection, screens, dashboard-local optimistic rows, toasts, and live widget editing state |
-| Workspace runtime/store | Panes, active overlay, native focus, context menu, workspace toast, and pane-return coordination (native composition only) |
-| Config adapter | Durable `[tui]` preferences and widget persistence |
-| PTY registry / Station Host | Processes, terminal buffers, replay, attachment, and terminal lifecycle |
+| Observer | Durable sessions, Groups, commands, provider observations, and the normalized snapshot contract |
+| `@station/client` | Canonical in-process snapshot, connection state, refresh/reconcile, and command completion |
+| Dashboard runtime | Local projection state and effects |
+| Station renderer composition | Physical layout, native UI state, and renderer-owned capabilities |
+| `@station/config` adapter | Durable `[tui]` preferences and widget persistence |
+| Station Host and PTY owners | Process lifetime, terminal buffers, replay, attachment, and terminal lifecycle |
 
-The dashboard holds a source-driven reference to the canonical snapshot because
-its pure selectors combine observer truth with local projection state. That
-reference is a projection, never a second authority: only the injected client
-source advances it. Native consumers needing only observer truth read a
-client-owned source; dashboard queries are reserved for reads where local
-filter, focus, screen, or optimistic state participates.
+The dashboard keeps the canonical snapshot reference supplied by
+`@station/client`; it does not copy or advance canonical state independently.
+Snapshot replacement may reconcile local focus, screens, drafts, and optimistic
+rows, but local projections never become Observer evidence.
 
-Semantic execution enters through capabilities selected at composition
-(activation, managed sessions, created-session UI policy, worktree removal, dismissal, shell), never through state
-replacement or synthetic key replay. Observer-backed worktree removal first
-obtains authoritative validation and an opaque worktree reservation, then invokes
-optional renderer PTY settlement, dispatches the reservation-qualified command,
-and finalizes renderer layout only after command success; preparation or renderer
-failure performs no command mutation and cancels the unused reservation. The
-runtime owns subscriptions, timers, operation bookkeeping, and cancellation;
-disposal is idempotent and testable.
+`snapshot.sessionGroups` is the exclusive Group-membership authority. Optimistic
+placement may display pending intent, but it must not synthesize durable
+membership, rewrite canonical arrays, or survive contradictory canonical state.
+Group mutations carry stable Group identity plus the expected version or current
+assignment required by the command contract. Drift is a conflict to surface, not
+permission to retry against a different Group or session.
 
-New Session owns one bounded review flow shared by native and standalone
-renderers. `flows/newSession/` names its model, actions, transitions, validation,
-name generation, and snapshot reconciliation owners directly, without a barrel.
-Its Group field selects Ungrouped, a current same-project root Group
-by stable ID, or a trimmed inline-create draft. Snapshot replacement preserves
-the stable selection through rename and resets missing, cross-project, or newly
-nested Groups to Ungrouped. Submission retains and disables the sheet until the
-single operation settles; success closes the sheet before applying the renderer-resolved
-post-create focus/dismiss policy, while failure restores Group or Create focus and reports one bounded toast.
-Native deliberate creation waits for the first canonical snapshot carrying the
-requested Group relationship and performs one explicit load after timeout. If
-launch succeeded but visibility remains uncertain—or safe cleanup retained the
-fresh worktree—the operation closes with a warning instead of permitting a
-duplicate branch submission.
+## Capability And Mutation Boundary
 
-Successful managed creation may return one dashboard-local
-`createdSession.applyUiPolicy` command containing exact canonical Project,
-worktree, session, branch, and terminal-provider identity plus resolved booleans.
-It is data-only UI state, never a protocol command or durable result. The central
-operation runner settles the sheet or optimistic row before invoking one
-renderer capability. Focus precedes dismissal when both are enabled; disposal
-discards a late command. A focus or dismissal failure reports one error without
-turning the successful create into a retryable operation.
+Renderers read dashboard state and submit named actions. They do not receive the
+mutable store, call `setState`, replay synthetic keys, or implement dashboard
+workflow state machines. Dashboard-core turns accepted actions into semantic
+requests for these renderer-selected capability groups:
 
-Quick Session in Group defers that exact command through its version-checked
-membership update. It removes the targeted row and selects the canonical member
-before applying UI policy. Correlation, Group disappearance, membership, or
-final-convergence failure preserves surviving canonical data and discards the
-UI command; post-create UI failure never rolls back creation or membership.
+- canonical session activation;
+- managed session creation and fork;
+- post-create focus and dismissal;
+- reservation-qualified worktree removal;
+- shell opening; and
+- dashboard dismissal or renderer exit.
 
-Group Settings is one stable-ID screen per canonical Group, with General,
-Sessions, and Remove Group sections. Activating the Group `[▾]` control opens a
-stable-ID Group menu anchored to that cell. Quick Session and preselected New
-Session reuse their existing workflows; Group Settings… opens General and
-Remove Group… opens Remove without the menu owning settings state. General
-captures the Group version for one `sessionGroup.rename`. Sessions captures that version plus each Project
-session's expected current Group, stages desired membership locally, and emits
-one atomic `sessionGroup.updateMembership` add/remove delta; selecting a member
-of another Group is an expected move, and an empty desired set is valid. Remove
-requires `delete <Group name>` and emits only `sessionGroup.delete`, so member
-sessions and runtime resources remain open and become ungrouped.
+Capabilities receive stable product identities and values, never dashboard
+state. Pure state transitions commit before capability invocation. Async results
+may settle optimistic UI or produce bounded feedback only while the runtime
+remains open.
 
-Completed rename and membership commands reseed their editor from canonical
-client state while retaining the settings screen and Group identity. Ordinary
-failure retains the draft or staged intent and returns focus to the initiating
-Save control; assignment/version conflicts are never retried. Snapshot
-replacement preserves the active draft, prunes sessions that cease to be
-canonical, and uses ordinary screen/focus reconciliation when the Group or
-Project disappears. Successful deletion closes settings and focuses the owning
-Project header. Pending settings mutations intercept keys and pointer input and
-add no generic pending, disconnected, failure, or disappearance screen.
+Observer-backed capabilities must revalidate the selected Project, Group,
+session, worktree, branch, and terminal identity against current client state
+immediately before mutation. A missing, ambiguous, changed, hidden, or stale
+target must fail closed or become inert; it must never be retargeted by list
+position. An advertised capability failure must not silently fall through to a
+second implementation that could duplicate work.
 
-## Dashboard hierarchy, focus, and rendered layout
+Destructive worktree removal additionally requires verified registration
+identity and an Observer-issued reservation for the exact worktree. Required
+renderer terminal settlement occurs before command dispatch, renderer cleanup
+occurs only after command success, and an unused reservation is cancelled when
+preparation fails. A retained Station session without a live agent or recovery
+handle requires explicit fresh-start confirmation before launch.
 
-Dashboard structure has one projection path:
+Post-create focus and dismissal are a data-only dashboard effect tied to the
+exact canonical create result. They are neither an Observer command nor durable
+state. Failure after creation must not make the successful create retryable or
+roll back a surviving canonical session.
+
+## Semantic Identity And Layout
+
+Dashboard-core projects one nested semantic tree from canonical state and local
+projection state:
 
 ```text
 canonical snapshot + dashboard-local state
-        |
-        v
-selectDashboardTree
-  branded row IDs, typed payloads, ordered cells, nested branches
-        |
-        +--> pure tree-grid focus/collapse/filter projection
-        |
-        v
-Station Project/Group/leaf components
-  containers own children, frames, padding, gaps, and indentation
-        |
-        v
-OpenTUI flex/intrinsic layout
-        |
-        v
-SemanticScrollViewport
-  identity <-> measured box coordinates, clipping, focus-follow
-        |
-        +--> visible semantic IDs -> slot and overflow projection only
+                  |
+                  v
+semantic Project / Group / session tree
+  stable row IDs, cell IDs, hierarchy, focus, and actions
+                  |
+                  v
+Station renderer
+  measured boxes, clipping, scrolling, hit testing, and painting
 ```
 
-`selectors/dashboardTree.ts` is the sole dashboard hierarchy adapter. It joins
-canonical sessions to worktree metadata, merges optimistic creates, applies
-filter and collapse state, and projects Project roots whose semantic children are
-direct Group branches and project-root session/action leaves. A Group branch owns
-its direct members. Borders, indentation, padding, and inter-Project gaps are not
-tree rows and never acquire focus, slots, or actions. `snapshot.sessionGroups` is
-the exclusive membership authority; optional parent links are deliberately
-flattened. Ordinary optimistic create rows remain at the Project root. A Quick
-Group launch may temporarily target one pending row at its new Group and suppress
-the exact matching ungrouped canonical row while the expected membership command
-converges. That placement is renderer-local intent, never inferred or durable
-membership, and is pruned as soon as canonical truth places the session or removes
-its target.
-Quick Session and explicitly Ungrouped Fork place optimistic create rows at the project root until
-canonical replacement. A Group-inheriting Fork targets its optimistic row at the source Group ID;
-a source move, deletion, or canonical replacement prunes that hint without synthesizing membership
-or exposing a duplicate root row. Deliberate New Session retains its sheet and never creates such a
-row.
-The renderer-local `GroupOrderingMode` is `"groups-first" | "alphabetical-interleaved"`.
-Groups-first is the default and places alphabetized Group blocks before project-root sessions.
-Alphabetical interleaving compares Group names with root-session display titles while keeping each
-Group branch intact. Neither mode changes canonical
-arrays, collapse state, filtering, or the continuous slots assigned only to rendered sessions; no
-public config currently selects the mode.
-The internal `treeGrid.ts` controller knows only immutable nodes, ordered cells,
-visibility, and a supplied eligibility policy; it has no dashboard or terminal
-knowledge and is not a package entrypoint.
+Project and Group nodes own their semantic descendants. Frames, indentation,
+padding, separators, and gaps are presentation and never become rows, identity,
+or mutation targets. Renderers consume the nested tree and branded row/cell IDs;
+they must not construct or parse those IDs, reconstruct ancestry from a flat
+list, or use array position as identity.
 
-Project and Group collapse sets remain renderer-local and survive snapshot
-replacement, Observer restart, and warm popup dismissal/reopen even when an ID is temporarily
-absent. Filtering and ordering never mutate either collapse set; resize and scroll changes retain
-stable focus identity while the renderer follows its measured box. Persistent filtering admits
-session rows through one candidate projection while retaining durable Project
-and Group containers; Group-name matches provide member text context, member
-matches retain their Group header, and container match ranges remain semantic
-renderer inputs. Group payload counts distinguish canonical direct membership
-from filter-admitted renderable members before collapse and renderer clipping.
+Focus is a stable row-and-cell identity. Snapshot replacement and collapse may
+reconcile that identity to a deterministic semantic neighbor or ancestor, but
+resize and scroll never change semantic state merely because coordinates moved.
+Keyboard and pointer activation converge on the same currently visible semantic
+cell. Stale, filtered, collapsed, disabled, pending, or otherwise invalid targets
+are inert.
 
-Dashboard state owns one stable `{ rowId, cellId }` cursor. Named policies bind
-the generic controller to ordinary dashboard traversal, canonical-session-only
-chooser traversal, and needs-attention traversal. Reconciliation preserves the
-exact row and cell when possible, moves a collapse-hidden child to its visible
-collapsed ancestor, and otherwise uses deterministic next/previous fallback.
-Project rows use `identity`, `shell`, `quickSession`, and `menu`; the Project
-menu owns Quick Group, New Group, default-agent, and settings transitions.
-Group rows always use `identity` and show `quickSession` and `menu` by default.
-Runtime composition may independently omit either optional action; omitted cells
-are not rendered, focusable, or activatable. This visibility seam has no public
-config key yet. Identity toggles collapse, the responsive `[qs]`/`[quick session]` action launches
-an ordinary Quick Session followed by one expected membership update, and `[▾]` opens the
-Q/N/S/R Group menu. Group Quick Session expands
-a collapsed Group for its optimistic row.
-The row remains Group-framed only as a convergence bridge; canonical placement
-still comes exclusively from `snapshot.sessionGroups`. A focused direct visible member decorates its Group with
-`containsFocusedRow`, leaving color and ring presentation to the renderer.
+Dashboard-core owns complete semantic content, focus, collapse, filtering,
+selection, and actions. Station owns terminal dimensions, measured coordinates,
+scroll offsets, clipping, focus-follow, anchored placement, and pointer hit
+testing. Core may receive only the stable semantic IDs visible through that
+renderer boundary; it must not receive coordinates, viewport dimensions,
+assumed item heights, or pre-sliced component trees.
 
-The selectors entrypoint exposes branded dashboard row IDs, dashboard cell IDs,
-decorated tree rows, their exact `rowById` lookup, and nested `roots`. Renderers do
-not construct or parse row IDs and do not reconstruct ancestry from a flat list.
-`DashboardTreeView` owns recursive Project and Group traversal; its private
-`ProjectBranchView` owns its header and descendants, while `GroupBranchView` owns
-one `GroupFrameView` containing the Group header and every direct child.
-`DashboardLeafView` owns session, local-create, and empty-Project leaves. The Group
-border is therefore part of the tree rather than painted line records or per-child
-rails, and compact leaves resolve against their actual container widths. Quiet
-frames use the hairline role, a focused Group header uses the working role, and
-member focus dims that working frame while the member keeps ordinary keyboard-focus
-or hover treatment.
+The narrow terminal-cell exception is renderer-neutral text and compact-leaf
+negotiation exposed through the `text` and selector roles. It may measure and
+clip grapheme-safe cell content, but it must not choose parent geometry, scrolling,
+focus visibility, or OpenTUI composition.
 
-Station mounts the complete semantic component tree in one OpenTUI scroll box.
-`station/view/layout/scroll/scrollViewport.ts` is the sole dashboard translation between
-stable identities and measured `y`/`height` cell geometry. It follows focus by
-identity, scrolls and clips by box coordinates, treats partially intersecting and
-oversized boxes correctly, and reports only intersecting semantic IDs back to
-dashboard-core. Core uses those IDs for visible slot assignment and session
-overflow counts; it receives no coordinates, terminal height, item-height
-assumption, or scroll offset, and it never pre-slices the component tree. The renderer indexes
-semantic IDs to their OpenTUI boxes with one bounded tree traversal when those boxes mount or are
-replaced. Steady-state ordered visibility lookup is logarithmic in total items plus the
-intersecting boxes, so ordinary scroll synchronization does not recursively rescan the dashboard
-for every geometry probe.
+## Public Package Surface
 
-Pointer targets identify one `dashboardCell`. In dashboard mode both pointer
-activation and focused Enter resolve that cell through the current visible tree
-and dispatch the same `dashboard.cell.activate` transition. The anchored Group
-menu and native Group-header context menu resolve Q/N/S/R through one validated
-stable-ID action path; native presentation does not own workflow behavior.
-Invalid, hidden, filtered, or stale cell targets are inert. Chooser modes accept
-only canonical session identity cells and retain their existing slot semantics.
-Semantic picker lists likewise retain every item in cursor order. `1-9/a-z`
-keys are optional accelerators on the first 35 choices, not a membership cap;
-later choices remain renderable, focusable, scroll-followed, Enter-activatable,
-and pointer-activatable by stable item ID through the same registered-list commit.
+The package publishes five role entrypoints and no root barrel or wildcard
+subpaths:
 
-## Adjacent layout surfaces
-
-Sheets, settings panels, Help, filter conditions, dashboard menus, and context
-menus use the same `SemanticScrollRegion` contract: callers provide stable item
-IDs and complete intrinsic content; the scroll container owns clipping and follows
-the selected identity through measured coordinates. A bottom sheet owns semantic
-title/context/body/actions/footer slots and one stable preferred box for the lifetime
-of a workflow; it shrinks only at the terminal edge and scrolls only its body.
-Settings containers own their navigation/detail nesting and use one centered
-preferred box across sections and pickers, with focused content driving the shared
-scroll region. Help uses the same split of responsibility: dashboard-core stores
-only the focused Help entry ID and resolves ordered keyboard movement, while
-Station follows that ID through measured boxes in a bounded panel and derives its
-continuation cue from the identities intersecting the viewport. These preferred dimensions are Station renderer-boundary policy;
-dashboard-core neither observes them nor changes semantic state in response.
-Anchored surfaces
-measure their owner, anchor, intrinsic content, border, and viewport after OpenTUI
-layout; feature state owns neither offsets nor visible-index windows.
-An anchored popover may change intrinsic height when its semantic option set changes,
-but its anchor and width stay stable, and the owner boundary clamps both stages to the
-same available height at a short terminal edge. Stable workflow sizing remains the
-responsibility of sheets and settings panels rather than unrelated popovers.
-Context-menu focus, pointer hits, and activation cross renderer/input boundaries
-as `ContextMenuItemId`; ordered keyboard movement resolves a new ID without
-persisting an array position.
-
-`DashboardRoot` composes a flexible notice region above intrinsic dashboard controls.
-The divider and footer are ordinary children of `DashboardControlsView`;
-the toast owns an intrinsic action header and a semantic scroll body inside that
-region, growing upward without reserving footer rows or stretching to fill
-unused space. Its vertical frame keeps copy and dismiss reachable when there is no
-room for top/bottom border cells, and copying still exposes the complete notice when
-the body is clipped. Optional table headers and overflow indicators are absent when
-they have no semantic content; blank renderables never reserve their space.
-Active screens share one overlay layer and do not force the dashboard to reflow.
-Native and standalone renderers use this same composition.
-
-`SessionPickerSheetView` owns the visible chooser chrome shared by Delete, Fork,
-Move, and Rename while dashboard-core retains session traversal and commit behavior.
-Its optional `next` element is an exclusive stage replacement: before selection it
-renders the common title, chooser instructions, and cancel footer; after selection it
-returns only the action's downstream sheet. Direct context-menu actions continue to
-open that downstream stage without replaying the chooser.
-
-## Intentional terminal-cell boundaries
-
-Physical geometry is permitted only after semantic state and has these owners:
-
-- `station/view/layout/*`, including `layout/scroll/*`, and the context-menu placement adapter translate
-  OpenTUI renderables into measured coordinates, bounded heights, pointer hits,
-  and scroll deltas. The Station import-boundary test inventories these modules.
-- Group/sheet frame helpers subtract their two vertical border cells only to
-  resolve the renderer-owned child content box. Containers, not core state,
-  still own the border and descendants.
-- `packages/dashboard-core/src/components/WorktreeRow/*` owns terminal-cell
-  negotiation for the session row-grid, while Station's
-  `station/src/station/view/dashboardRowGridProjection.ts` invokes and caches
-  that compact leaf projection. Renderer-visible shortcut labels are
-  applied after width negotiation, so scrolling does not remeasure the complete
-  semantic tree; semantic-tree or width changes invalidate the bounded cache.
-  The row-grid, dividers, footer controls, and similar compact leaves may
-  deliberately paint one cell high. They are leaf presentations and do not set
-  parent composition, focus visibility, or scroll state.
-- `StationOverlay` converts terminal/config percentages to the outer popup box
-  and its border interior. `stationButton/layout.ts` owns fixed target cells for
-  its isolated top-right morph so the hover target stays stationary; both are
-  tested renderer boundaries and export no dashboard feature state.
-- PTY sizing, VT buffers, terminal emulation, and pane cell grids are inherently
-  physical and remain outside this dashboard migration.
-
-## Package surface
-
-The `exports` map publishes five role entrypoints; there is no root
-barrel and no wildcard subpath access:
-
-| Entrypoint | Role |
+| Entrypoint | Owns |
 | --- | --- |
-| `@station/dashboard-core/runtime` | Runtime construction and lifecycle: `createDashboardRuntime`, capability factories, `dashboardExecution`, and the injected service contracts |
-| `@station/dashboard-core/state` | Read-only state views, key/action handling, screen transitions, toasts, and the new-session/add-project flow machines |
-| `@station/dashboard-core/selectors` | Pure semantic tree, visible-slot/overflow, header/footer/filter models, and compact leaf-layout projections |
-| `@station/dashboard-core/text` | Narrow grapheme segmentation and terminal-cell measurement/clipping shared by compact renderer-neutral leaves |
-| `@station/dashboard-core/widgets` | Widget config shapes (owned by `@station/contracts`), widget resolution, and the widget hook runtime |
+| `@station/dashboard-core/runtime` | Runtime, readonly state/actions, lifecycle, capabilities, and injected services |
+| `@station/dashboard-core/state` | State views, semantic input/actions, screens, transitions, drafts, and flows |
+| `@station/dashboard-core/selectors` | Pure semantic trees, view models, visibility slots, and compact leaves |
+| `@station/dashboard-core/text` | Grapheme-safe terminal-cell measurement, clipping, and truncation |
+| `@station/dashboard-core/widgets` | Widget configuration views, resolution, and renderer-independent widget runtime |
 
-Directory layout keeps ownership visible: `selectors/keyedChoices.ts` owns the
-shortcut grammar, `projectChoices.ts` owns Project projections,
-`sessionGroupChoices.ts` owns New Session and Move-to-Group projections, and
-`harnessChoices.ts` owns harness options and optimistic defaults.
-`state/screens/*` owns pure screen transitions,
-`state/commandBuilders.ts` for typed observer command construction,
-`state/sourceBridge.ts` for mirroring canonical client state into the
-projection, `state/runtimeEffectScope.ts` for private effect admission and
-settlement, `state/capabilities/*` for semantic renderer authority,
-`state/operations/*` for scope-bound command flow (including durable Group
-creation before optional Quick Session launch and expected membership), and
-`components/`/`widgets/` for shared layout and content logic, and `text/` for the
-narrow grapheme/cell contract. Dashboard-core owns renderer-neutral settings
-content; Station owns responsive OpenTUI settings shells and scrolling, while each settings screen
-retains its navigation policy, detail controls, drafts, and mutation lifecycle. The `[tui]` config shapes
-live in `@station/contracts`; `@station/config` retains load/persist authority.
-Folder browsing follows the same boundary: dashboard-core owns the `TuiFolderService`
-port, chooser transitions, operations, and polling lifecycle, while each Station renderer
-composition supplies the Station-local Node filesystem adapter.
+Consumers import through the role matching their responsibility. Private mutable
+models, generic tree-grid mechanics, operation runners, and internal module paths
+must not cross the package boundary.
 
-## Dependency direction and enforcement
+## Dependency Direction
 
-- Station compositions depend on dashboard-core through the role entrypoints;
-  dashboard-core never imports Station, workspace, or terminal-provider code.
-- `station/src/client` carries no dashboard-core dependency; operation
-  convergence lives behind `@station/client`.
-- `station/src/station/importBoundaries.test.ts` freezes the coupling surface:
-  it rejects private mutable dashboard model imports and direct mutation, pins
-  `DashboardRuntime` imports to the two composition files, and requires every
-  production dashboard-core import to use a role entrypoint.
-- `packages/dashboard-core/test/unit/declaredDependencies.test.ts` guards the
-  emitted declarations: production sources may import only declared
-  dependencies, since type imports become declaration references, and rejects
-  Node filesystem, OS, and path modules from production core.
-- `packages/dashboard-core/test/unit/state/readonlyStateSource.typecheck.test.ts`
-  and the runtime boundary test protect identity-preserving recursive readonly
-  views.
+- Station compositions depend on dashboard-core through its role entrypoints;
+  dashboard-core never imports Station, OpenTUI, workspace, terminal-provider,
+  integration, or provider implementation code.
+- `@station/client` remains independent of dashboard-core. Core consumes its
+  readonly source and command-completion contracts rather than creating another
+  client or graph.
+- Dashboard-core may depend on provider-neutral contracts and shared runtime
+  mechanics. It must not read Observer persistence, parse provider-private data,
+  or invoke provider and repository tools directly.
+- Node filesystem policy stays in Station composition behind the injected folder
+  service. Production dashboard-core does not import Node filesystem, OS, or path
+  modules.
+- `[tui]` schema ownership stays in `@station/contracts`; loading and persistence
+  stay in `@station/config`. Dashboard-core may edit renderer-neutral drafts but
+  does not become configuration authority.
+
+Package exports, declaration checks, and Station import-boundary tests enforce
+these directions. Follow [Development](development.md) and
+[Testing](../tests/README.md) for current commands rather than copying test-file
+inventories into this architecture.
+
+## Conflict Rule
+
+This document is authoritative for dashboard-core ownership and durable
+boundaries. Current code, schemas, and tests establish implementation behavior;
+[TUI Development](tui.md) owns user-visible interaction contracts, and
+[Configuration](configuration.md) owns configuration behavior.
+
+When they disagree, identify the stale owner and correct it in the same change.
+Plans, milestones, migration status, TODOs, acceptance evidence, and historical
+implementation narratives are not dashboard architecture.
