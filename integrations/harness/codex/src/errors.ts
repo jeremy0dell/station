@@ -16,7 +16,6 @@ const codexErrors: HarnessProviderErrors<CodexHarnessErrorCode> = defineHarnessP
   provider: "codex",
 });
 
-// Annotated so declaration emit names the class type instead of a deep package path.
 export const CodexHarnessProviderError: HarnessProviderErrorClass<CodexHarnessErrorCode> =
   codexErrors.ErrorClass;
 export const codexHarnessError: HarnessProviderErrors<CodexHarnessErrorCode>["create"] =

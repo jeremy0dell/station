@@ -7,8 +7,8 @@ export type HookSetupErrorClass<TCode extends string> = new (
   options?: { cause?: unknown },
 ) => Error & { readonly tag: string; readonly code: TCode; readonly provider: string };
 
-/** One provider's hook-setup error class. `tag` doubles as the non-enumerable `name`, and the
- * message is not code-prefixed, unlike the harness provider errors. */
+/** `tag` doubles as the non-enumerable `name`, and the message is not code-prefixed, unlike
+ * the harness provider errors. */
 export function hookSetupErrorClass<TCode extends string>(input: {
   tag: string;
   provider: string;
@@ -29,8 +29,8 @@ export function hookSetupErrorClass<TCode extends string>(input: {
   };
 }
 
-/** File ops whose failures carry the provider's own codes and wording. `removeTarget` exists
- * because Claude removes a settings artifact where Codex and Cursor remove only the script. */
+/** `removeTarget` exists because Claude removes a settings artifact where Codex and Cursor
+ * remove only the script. */
 export function hookSetupFileOpsFor<TCode extends string>(
   ErrorClass: HookSetupErrorClass<TCode>,
   codes: { unreadable: TCode; writeFailed: TCode },
@@ -61,7 +61,6 @@ export function hookSetupFileOpsFor<TCode extends string>(
   });
 }
 
-/** True when the artifact is owned by another launcher, or by an owner Station cannot read. */
 export function isHookOwnershipConflict(
   ownership: ProviderHookArtifactOwnership | undefined,
 ): ownership is Extract<

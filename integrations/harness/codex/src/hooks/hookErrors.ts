@@ -10,7 +10,6 @@ export type CodexHookSetupErrorCode =
   | "CODEX_HOOK_RECONCILIATION_LOCK_RELEASE_FAILED"
   | "CODEX_HOOK_WRITE_FAILED";
 
-// Annotated so declaration emit names the class type instead of a deep package path.
 export const CodexHookSetupError: HookSetupErrorClass<CodexHookSetupErrorCode> =
   hookSetupErrorClass({
     tag: "CodexHookSetupError",

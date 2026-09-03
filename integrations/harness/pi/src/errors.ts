@@ -17,7 +17,6 @@ const piErrors: HarnessProviderErrors<PiHarnessErrorCode> = defineHarnessProvide
   provider: "pi",
 });
 
-// Annotated so declaration emit names the class type instead of a deep package path.
 export const PiHarnessProviderError: HarnessProviderErrorClass<PiHarnessErrorCode> =
   piErrors.ErrorClass;
 export const piHarnessError: HarnessProviderErrors<PiHarnessErrorCode>["create"] = piErrors.create;

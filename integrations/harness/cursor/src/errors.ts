@@ -16,7 +16,6 @@ const cursorErrors: HarnessProviderErrors<CursorHarnessErrorCode> = defineHarnes
   provider: "cursor",
 });
 
-// Annotated so declaration emit names the class type instead of a deep package path.
 export const CursorHarnessProviderError: HarnessProviderErrorClass<CursorHarnessErrorCode> =
   cursorErrors.ErrorClass;
 export const cursorHarnessError: HarnessProviderErrors<CursorHarnessErrorCode>["create"] =

@@ -16,7 +16,6 @@ const claudeErrors: HarnessProviderErrors<ClaudeHarnessErrorCode> = defineHarnes
   provider: "claude",
 });
 
-// Annotated so declaration emit names the class type instead of a deep package path.
 export const ClaudeHarnessProviderError: HarnessProviderErrorClass<ClaudeHarnessErrorCode> =
   claudeErrors.ErrorClass;
 export const claudeHarnessError: HarnessProviderErrors<ClaudeHarnessErrorCode>["create"] =

@@ -82,7 +82,6 @@ export type HarnessProviderErrors<TCode extends string> = {
   ) => HarnessProviderError<TCode>;
 };
 
-// One provider's error class plus its two constructors, so each integration declares only codes.
 export function defineHarnessProviderErrors<TCode extends string>(input: {
   name: string;
   provider: string;
