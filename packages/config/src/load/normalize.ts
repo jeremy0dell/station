@@ -296,6 +296,7 @@ function normalizeProjectConfig(value: unknown): unknown {
       worktrunk: normalizeProjectWorktrunkConfig,
       commands: preserveRecordKeys,
       env: preserveRecordKeys,
+      setup: normalizeProjectSetupConfig,
       display: normalizeDisplayConfig,
       localConfig: normalizeProjectLocalConfigRef,
       recoveryBreadcrumbs: normalizeProjectRecoveryBreadcrumbsConfig,
@@ -309,6 +310,12 @@ function normalizeProjectDefaults(value: unknown): unknown {
 
 function normalizeProjectWorktrunkConfig(value: unknown): unknown {
   return normalizeObject(value);
+}
+
+function normalizeProjectSetupConfig(value: unknown): unknown {
+  return normalizeObject(value, {
+    copy_from_project_root: "copyFromProjectRoot",
+  });
 }
 
 function normalizeDisplayConfig(value: unknown): unknown {

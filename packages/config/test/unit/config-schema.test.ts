@@ -33,6 +33,9 @@ describe("config schemas", () => {
     expect(parsed.projects[0]?.recoveryBreadcrumbs).toEqual({
       location: "external",
     });
+    expect(parsed.projects[0]?.setup).toEqual({
+      copyFromProjectRoot: [".env.local"],
+    });
     expect(parsed.terminal?.tmux?.workbenchSocketPath).toBe("~/.local/state/station/tmux.sock");
   });
 
@@ -62,6 +65,12 @@ describe("config schemas", () => {
       ProjectLocalConfigSchema.safeParse({
         schemaVersion: 1,
         projects: [{ id: "web" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ProjectLocalConfigSchema.safeParse({
+        schemaVersion: 1,
+        setup: { copyFromProjectRoot: [".env.local"] },
       }).success,
     ).toBe(false);
   });

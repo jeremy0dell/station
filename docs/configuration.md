@@ -196,6 +196,7 @@ be unique, and each `root` must exist when the config loads.
 | `worktrunk.base` | string | Overrides the global Worktrunk base. |
 | `worktrunk.managed_root` | string | Relative paths resolve from `project.root`; omitted global roots get a unique project child. |
 | `worktrunk.include_main` / `worktrunk.include_external` | bool | Override the matching global listing policy. |
+| `setup.copy_from_project_root` | string[] | Required regular files copied to the same relative paths in each new worktree before launch. |
 | `recovery_breadcrumbs.location` | enum | Overrides the global breadcrumb location. |
 | `recovery_breadcrumbs.path` | string | Optional breadcrumb path. |
 | `local_config.enabled` | bool | Required in the table; only `true` reads the local file. |
@@ -208,6 +209,23 @@ config file.
 A checkout-style project root with local `core.bare=true` is rejected by
 `stn project add`; Station does not rewrite that Git setting. Use the
 project doctor and [Diagnostics](diagnostics.md) for repair guidance.
+
+Project setup can copy local files that Git does not place in a new worktree:
+
+```toml
+[projects.setup]
+copy_from_project_root = [".env.local", "config/private.json"]
+```
+
+Each entry uses forward-slash relative syntax. Absolute paths, dot path
+components, backslashes, duplicate entries, directories, and symbolic links
+are rejected. The source must resolve inside `project.root` and exist as a
+regular file before Worktrunk creates the worktree. Station copies the files in
+the configured order after fork seeding and before agent launch. Missing parent
+directories are created inside the worktree. An existing regular destination
+is preserved; any other destination type fails setup. A copy failure removes
+the exact newly created worktree. A failed removal reports the worktree identity
+and requires inspection before retrying.
 
 ### `[workspace]` — native Station UI behavior (optional, best-effort)
 
@@ -353,7 +371,7 @@ Only these overrides are accepted:
 | `[commands]` | any command labels | table<string,string> | Additive only; collisions keep the global value and emit `CONFIG_LOCAL_COMMAND_OVERRIDE`. |
 | `[display]` | `group`, `sort_order` | string / int | Shallow merge; local values win. |
 
-`env` cannot be set locally. A missing, unreadable, invalid, or schema-invalid
+`env` and `setup` cannot be set locally. A missing, unreadable, invalid, or schema-invalid
 enabled file leaves the global project block in effect and records a diagnostic;
 the core runtime config remains a hard-failure boundary.
 
@@ -442,6 +460,7 @@ are internal context, not user-facing relocation settings.
 | Change default harness/terminal/layout | `config.toml` | `[defaults]` |
 | Set a project harness or layout | Local config or `config.toml` | `[defaults]` / `[projects.defaults]` |
 | Add project commands | `config.toml` or local config | `[projects.commands]` / `[commands]` |
+| Copy required local files into new worktrees | `config.toml` | `[projects.setup]` |
 | Tune the Observer | `config.toml` | `[observer]` |
 | React to Observer events | `config.toml` | `[[hooks.event]]` |
 | Change native scroll, welcome, or automations | `config.toml` | `[workspace]` |

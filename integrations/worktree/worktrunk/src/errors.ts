@@ -1,4 +1,4 @@
-import type { DiagnosticDetail, SafeError } from "@station/contracts";
+import type { DiagnosticDetail, SafeError, WorktreeId } from "@station/contracts";
 
 export type WorktrunkProviderErrorCode =
   | "WORKTRUNK_BRANCH_EXISTS"
@@ -9,6 +9,9 @@ export type WorktrunkProviderErrorCode =
   | "WORKTRUNK_BASE_MISSING"
   | "WORKTRUNK_PROJECT_ROOT_BARE"
   | "WORKTRUNK_SEED_FAILED"
+  | "WORKTRUNK_SETUP_CLEANUP_FAILED"
+  | "WORKTRUNK_SETUP_COPY_FAILED"
+  | "WORKTRUNK_SETUP_SOURCE_INVALID"
   | "WORKTRUNK_TIMEOUT"
   | "WORKTRUNK_UNAVAILABLE"
   | "WORKTRUNK_UNSUPPORTED_FLAG"
@@ -22,6 +25,7 @@ export class WorktrunkProviderError extends Error implements SafeError {
   readonly code: WorktrunkProviderErrorCode;
   readonly hint?: string;
   readonly projectId?: string;
+  readonly worktreeId?: WorktreeId;
   readonly diagnosticDetails?: DiagnosticDetail[];
 
   constructor(
@@ -30,6 +34,7 @@ export class WorktrunkProviderError extends Error implements SafeError {
     options: {
       hint?: string;
       projectId?: string;
+      worktreeId?: WorktreeId;
       cause?: unknown;
       diagnosticDetails?: DiagnosticDetail[];
     } = {},
@@ -46,6 +51,9 @@ export class WorktrunkProviderError extends Error implements SafeError {
     }
     if (options.projectId !== undefined) {
       this.projectId = options.projectId;
+    }
+    if (options.worktreeId !== undefined) {
+      this.worktreeId = options.worktreeId;
     }
     if (options.diagnosticDetails !== undefined) {
       this.diagnosticDetails = options.diagnosticDetails;

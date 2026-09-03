@@ -2,6 +2,7 @@ import {
   FeatureFlagConfigSchema,
   HarnessPermissionModeSchema,
   ObserverEventHookConfigSchema,
+  ProjectSetupConfigSchema,
   TuiConfigSchema,
 } from "@station/contracts";
 import { z } from "zod";
@@ -79,6 +80,7 @@ export const ProjectConfigSchema = z
     worktrunk: ProjectWorktrunkConfigSchema,
     commands: z.record(nonEmptyStringSchema, nonEmptyStringSchema).optional(),
     env: z.record(nonEmptyStringSchema, z.string()).optional(),
+    setup: ProjectSetupConfigSchema.optional(),
     display: ProjectDisplayConfigSchema.optional(),
     localConfig: ProjectLocalConfigRefSchema.optional(),
     recoveryBreadcrumbs: ProjectRecoveryBreadcrumbsSchema.optional(),

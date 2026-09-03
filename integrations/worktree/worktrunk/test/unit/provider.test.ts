@@ -1,4 +1,14 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderProjectConfig } from "@station/contracts";
@@ -643,6 +653,167 @@ describe("WorktrunkProvider", () => {
         "--format=json",
       ],
     ]);
+  });
+
+  it("copies configured project-root files and preserves an existing regular destination", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wt-setup-copy-"));
+    const projectRoot = join(root, "project");
+    const worktreePath = join(root, "feature");
+    await mkdir(join(projectRoot, "config"), { recursive: true });
+    await mkdir(join(projectRoot, "nested"), { recursive: true });
+    await writeFile(join(projectRoot, ".env.local"), "source-secret");
+    await chmod(join(projectRoot, ".env.local"), 0o640);
+    await writeFile(join(projectRoot, "config", "private.json"), "source-private");
+    await writeFile(join(projectRoot, "nested", "generated.json"), "nested-source");
+    const configuredProject: ProviderProjectConfig = {
+      ...project,
+      root: projectRoot,
+      setup: {
+        copyFromProjectRoot: [".env.local", "config/private.json", "nested/generated.json"],
+      },
+    };
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.args?.[0] === "switch") {
+          await mkdir(join(worktreePath, "config"), { recursive: true });
+          await writeFile(join(worktreePath, "config", "private.json"), "existing-private");
+        }
+        return result(
+          input,
+          JSON.stringify([{ path: worktreePath, branch: "feature", dirty: true }]),
+        );
+      },
+    });
+
+    try {
+      await expect(
+        provider.createWorktree({ project: configuredProject, branch: "feature" }),
+      ).resolves.toMatchObject({ branch: "feature", dirty: true });
+      expect(await readFile(join(worktreePath, ".env.local"), "utf8")).toBe("source-secret");
+      expect((await lstat(join(worktreePath, ".env.local"))).mode & 0o777).toBe(0o640);
+      expect(await readFile(join(worktreePath, "config", "private.json"), "utf8")).toBe(
+        "existing-private",
+      );
+      expect(await readFile(join(worktreePath, "nested", "generated.json"), "utf8")).toBe(
+        "nested-source",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects missing and symlinked setup sources before Worktrunk creates a worktree", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wt-setup-source-"));
+    const projectRoot = join(root, "project");
+    const outsideRoot = join(root, "outside");
+    await mkdir(projectRoot, { recursive: true });
+    await mkdir(outsideRoot, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const provider = testProvider({
+      runner: async (input) => {
+        calls.push(input);
+        return result(input, "[]");
+      },
+    });
+    const configuredProject: ProviderProjectConfig = {
+      ...project,
+      root: projectRoot,
+      setup: { copyFromProjectRoot: [".env.local"] },
+    };
+
+    try {
+      await expect(
+        provider.createWorktree({ project: configuredProject, branch: "missing" }),
+      ).rejects.toMatchObject({ code: "WORKTRUNK_SETUP_SOURCE_INVALID" });
+      await writeFile(join(outsideRoot, ".env.local"), "outside-secret");
+      await symlink(join(outsideRoot, ".env.local"), join(projectRoot, ".env.local"));
+      await expect(
+        provider.createWorktree({ project: configuredProject, branch: "symlink" }),
+      ).rejects.toMatchObject({ code: "WORKTRUNK_SETUP_SOURCE_INVALID" });
+      expect(calls).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("removes the exact new worktree when a later setup destination is unsafe", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wt-setup-rollback-"));
+    const projectRoot = join(root, "project");
+    const outsideRoot = join(root, "outside");
+    const worktreePath = join(root, "feature");
+    await mkdir(join(projectRoot, "nested"), { recursive: true });
+    await mkdir(outsideRoot, { recursive: true });
+    await writeFile(join(projectRoot, ".env.local"), "source-secret");
+    await writeFile(join(projectRoot, "nested", "private.json"), "source-private");
+    const configuredProject: ProviderProjectConfig = {
+      ...project,
+      root: projectRoot,
+      setup: { copyFromProjectRoot: [".env.local", "nested/private.json"] },
+    };
+    const calls: ExternalCommandInput[] = [];
+    const provider = testProvider({
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.[0] === "switch") {
+          await mkdir(worktreePath, { recursive: true });
+          await symlink(outsideRoot, join(worktreePath, "nested"));
+        }
+        if (input.args?.includes("remove")) {
+          await rm(worktreePath, { recursive: true, force: true });
+          return result(input, "{}");
+        }
+        return result(input, JSON.stringify([{ path: worktreePath, branch: "feature" }]));
+      },
+    });
+
+    try {
+      await expect(
+        provider.createWorktree({ project: configuredProject, branch: "feature" }),
+      ).rejects.toMatchObject({ code: "WORKTRUNK_SETUP_COPY_FAILED" });
+      expect(calls.some((call) => call.args?.includes("remove"))).toBe(true);
+      await expect(lstat(worktreePath)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the worktree identity when setup rollback cannot be confirmed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wt-setup-cleanup-"));
+    const projectRoot = join(root, "project");
+    const worktreePath = join(root, "feature");
+    await mkdir(projectRoot, { recursive: true });
+    await writeFile(join(projectRoot, "blocked"), "source");
+    const configuredProject: ProviderProjectConfig = {
+      ...project,
+      root: projectRoot,
+      setup: { copyFromProjectRoot: ["blocked"] },
+    };
+    const provider = testProvider({
+      runner: async (input) => {
+        if (input.args?.[0] === "switch") {
+          await mkdir(join(worktreePath, "blocked"), { recursive: true });
+        }
+        if (input.args?.includes("remove")) {
+          throw Object.assign(new Error("remove failed"), { code: "EACCES" });
+        }
+        return result(input, JSON.stringify([{ path: worktreePath, branch: "feature" }]));
+      },
+    });
+
+    try {
+      await expect(
+        provider.createWorktree({ project: configuredProject, branch: "feature" }),
+      ).rejects.toMatchObject({
+        code: "WORKTRUNK_SETUP_CLEANUP_FAILED",
+        worktreeId: expect.stringMatching(/^wt_web_feature_/),
+        hint: expect.stringContaining(worktreePath),
+      });
+      await expect(lstat(worktreePath)).resolves.toBeDefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("drains concurrent creates before resuming a branch left by Git registry initialization", async () => {

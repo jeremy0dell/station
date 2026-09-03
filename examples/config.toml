@@ -138,6 +138,9 @@ aliases = ["app"]
 root = "~/projects/mobile"
 repo = "github.com/my-org/mobile"
 
+[projects.setup]
+copy_from_project_root = [".env.local"]
+
 [projects.defaults]
 harness = "opencode"
 
