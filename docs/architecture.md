@@ -137,7 +137,7 @@ or diagnostic evidence into a second source of truth.
 - CLI composition owns native update discovery as one process-local, read-only
   check with no persistent cache. Only a completed version-changing result can
   become a TUI notice; [Install Station](install.md#automatic-update-ownership)
-  and [TUI Development](tui.md#renderer-and-entry-points) own its behavior.
+  and [TUI Development](tui.md#renderers-and-entry-points) own its behavior.
 - Observer and Station Host sockets are same-user local control planes. Access
   to their protected endpoints admits privileged operations; PID, version, and
   build metadata provide identity or compatibility evidence, not authentication.
