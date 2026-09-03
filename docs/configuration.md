@@ -1,213 +1,126 @@
 # Configuration
 
-STATION is configured by a single file: `~/.config/station/config.toml`. A project
-may optionally carry a second, narrow file (`.station/config.toml`) for per-project
-overrides. This page is the single reference for both: what each controls, who
-reads it, where it lives, and how to relocate it.
+Station uses one global TOML file, `~/.config/station/config.toml`, plus an
+optional project-local override at `.station/config.toml`. This page is the
+field-by-field reference for both files and for user-set environment variables.
 
-If you only ever edit one thing, it is `~/.config/station/config.toml`.
-
-If that default file does not exist yet, `stn` and its `tui`/`popup` launch
-routes use in-memory first-run defaults, ensure the observer, and show the
-existing empty-state UI. They do not create a config file; `stn setup` remains
-the writer. Setup writes `projects = []` and never infers a project from its
-working directory; use the empty dashboard's **Add your first project** flow to
-choose an existing Git repository explicitly. Setup validates generated or
-source-preserving edited TOML before writing, revalidates the planned source bytes
-at the serialized commit boundary, refuses concurrent creates, writes a timestamped
-backup for updates, and atomically replaces the target through a private mode-`0600`
-temporary file. After every successful guided or non-interactive setup config
-write, setup starts or restarts the observer and waits for it to become healthy
-with the updated configuration. Only after activation succeeds does setup
-install remaining tracking artifacts in-process and perform a final read-only
-re-probe. If activation fails, setup retains the config, exits
-nonzero, and prints both `stn observer restart` and the setup command that must
-follow it. This exception applies only to the implicit default
-path: a missing explicit `--config`, an unreadable file, malformed TOML, or
-invalid config still stops launch with an error.
-
-The generated zero-project config leaves `[defaults].default_branch` and
-`[worktree.worktrunk].base` unset because setup has no selected repository from
-which to verify them. When a Git project is explicitly added, Station persists
-both per-project values only from a committed `origin/HEAD` for a configured
-origin, the committed symbolic HEAD of exactly one other configured remote, or
-exactly one committed local branch. With ambiguous, malformed, unborn, or
-unreadable Git evidence, both remain unset; Station omits Worktrunk's `--base`,
-and destructive worktree removal fails closed until the protected default
-branch is configured.
-
-> The annotated `examples/config.toml` is the copy-paste starting point;
-> `examples/project-local-config.toml` shows the project-local file. This page is
-> the field-by-field reference.
+The annotated [`examples/config.toml`](../examples/config.toml) is the
+copy-paste starting point. [`examples/project-local-config.toml`](../examples/project-local-config.toml)
+shows the local file.
 
 ## At a glance
 
 | File | Path (default) | What it controls | Read by | Relocate with |
 | --- | --- | --- | --- | --- |
-| **Runtime config** | `~/.config/station/config.toml` | Everything: projects, defaults, the observer daemon, providers (worktree/terminal/harness), event hooks, retention, feature flags, the `[tui]` widgets, and the `[workspace]` native-UI behavior | observer, `stn` CLI, native and standalone/tmux TUIs | `STATION_CONFIG_PATH` or `stn --config <path>` |
-| **Project-local config** | `<project.root>/.station/config.toml` | Opt-in per-project overrides: harness/layout defaults, extra commands, display | config loader (merged into the project) | set its `path` in `[projects.local_config]` |
+| **Runtime config** | `~/.config/station/config.toml` | Projects, defaults, the Observer, providers, hooks, retention, feature flags, and TUI/workspace behavior | Observer, `stn`, and the TUI renderers | `STATION_CONFIG_PATH` or `stn --config <path>` |
+| **Project-local config** | `<project.root>/.station/config.toml` | Opt-in per-project harness/layout defaults, additive commands, and display overrides | Config loader | `[projects.local_config]` |
 
-Not config, but adjacent:
-
-| Directory | Path (default) | Holds | Relocate with |
-| --- | --- | --- | --- |
-| **State dir** | `~/.local/state/station/` | SQLite DB, logs, diagnostics, hook spool, and default runtime paths | `observer.state_dir`; sockets and the boot claim follow `observer.socket_path` or `XDG_RUNTIME_DIR` when set |
-
-The state dir is **not** a config file — never edit anything under
-`~/.local/state/station` by hand. See [debugging.md](./debugging.md).
-
----
+The state directory is adjacent runtime state, not configuration. It contains
+the database, logs, diagnostics, hook spool, and runtime paths. Do not edit it
+by hand; see [Debugging](debugging.md) and [Diagnostics](diagnostics.md).
 
 ## Runtime config (`config.toml`)
 
-The one file, owned by the `@station/config` package. It is parsed (TOML), keys are
-normalized snake_case → camelCase, and validated against a **strict Zod schema**.
-Every key below is shown in the TOML spelling.
-
-- **Unknown/misspelled top-level or section keys fail the whole load** with
-  `CONFIG_VALIDATION_FAILED` — a typo aborts startup. Exceptions: `[harness.*]`
-  (accepts arbitrary harness ids) and the two TUI-only sections below.
-- **`[tui]` and `[workspace]` are best-effort.** A bad value in either section does
-  **not** abort the load (which would take down the observer over a cosmetic typo);
-  the section degrades to defaults and records a warn-level diagnostic, visible via
-  `stn doctor` and `stn setup check`.
-- `schema_version` is **required** and must be exactly `1`.
-
-`[defaults]` and `[[projects]]` are the only **required** sections (an empty
-`projects = []` is valid but the key must be present). Everything else is optional.
+The runtime file is parsed as TOML and validated against a strict schema.
+`schema_version = 1`, `[defaults]`, and `projects = []` are
+required. Unknown top-level or core-section keys fail the load with
+`CONFIG_VALIDATION_FAILED`. `[harness.<id>]` accepts arbitrary
+provider IDs. `[workspace]` and `[tui]` are best-effort: invalid
+values fall back to defaults and produce a diagnostic instead of taking down the
+Observer.
 
 ### `[observer]` — daemon tuning (optional)
 
 | Key | Type | Notes |
 | --- | --- | --- |
-| `auto_start` | bool | Auto-start the observer daemon. |
+| `auto_start` | bool | Auto-start the Observer daemon. |
 | `auto_start_from_hooks` | bool | Auto-start when a provider hook fires. |
 | `idle_shutdown_minutes` | int > 0 | Shut down after N idle minutes. |
-| `reconcile_interval_ms` | int > 0 | Reconcile loop interval. |
-| `socket_path` | string | Observer IPC socket. `~` expands at load time. |
-| `state_dir` | string | State/log/db root. Defaults to `~/.local/state/station`; `~` expands at load time. |
+| `reconcile_interval_ms` | int > 0 | Reconcile-loop interval. |
+| `socket_path` | string | Observer IPC socket; `~` expands at load time. |
+| `state_dir` | string | State, log, and database root; defaults to `~/.local/state/station`. |
 
-### `[defaults]` — global defaults (REQUIRED)
+### `[defaults]` — global defaults (required)
 
-A project omitting a field inherits the global value.
-
-| Key | Type | Notes |
-| --- | --- | --- |
-| `worktree_provider` | string | e.g. `"worktrunk"`. Free-form; **not** validated against known providers. |
-| `terminal` | string | e.g. `"tmux"`. Free-form. |
-| `harness` | string | e.g. `"codex"`. Free-form; **not** cross-checked against `[harness.*]`. |
-| `layout` | string | e.g. `"agent-build-shell"`. Free-form. |
-| `default_branch` | string (optional) | e.g. `"main"`. Destructive worktree removal fails closed when neither this value nor the Worktrunk base identifies the protected default branch. |
-| `harness_permission_mode` | `standard` \| `yolo` (optional) | **`auto` is rejected here** — it is Claude-only (see `[harness.*]`). |
-
-`worktree_provider`, `terminal`, `harness`, and `layout` are **required**. Values are
-validated only as non-empty strings — a typo passes config validation and fails
-later at runtime.
-
-Currently meaningful provider ids include `worktrunk` / `noop-worktree`,
-`tmux` / `noop-terminal`, and harness ids such as `claude`, `codex`, `cursor`,
-`opencode`, `pi`, `scripted`, and `noop-harness`. Unknown ids are
-accepted by config validation but become unavailable providers at runtime.
-
-### `[worktree.worktrunk]` — worktree provider (optional)
+A project that omits a value inherits the global value.
 
 | Key | Type | Notes |
 | --- | --- | --- |
-| `command` | string | Worktrunk CLI, e.g. `"wt"`. Overrides `STATION_WORKTRUNK_BIN`; fallback is `wt`. |
-| `config_path` | string | Path to worktrunk's own config. `~` expands at load time. |
-| `managed_root` | string | Authoritative root for Station-created worktrees, e.g. `~/.worktrees`; `~` expands at load time. Station overrides Worktrunk global and project-specific path templates for managed creates without rewriting Worktrunk's config. |
-| `base` | string (optional) | Default base branch for Worktrunk project listings and new worktrees. Project entries inherit this unless `[projects.worktrunk].base` is set; when neither is configured, Station omits `--base`. |
-| `include_main` | bool | Default include-main policy for Worktrunk project listings. Project entries inherit this unless overridden. |
-| `include_external` | bool | Default include-external policy for Worktrunk project listings. Project entries inherit this unless overridden. |
-| `use_lifecycle_hooks` | bool | Worktrunk automation mode. `false` makes automated mutations pass `--no-hooks`; `true` passes `--yes`; unset uses Worktrunk defaults. |
-| `hook_mode` | `required-for-mvp` \| `disabled` | Worktrunk lifecycle hook setup expectation. |
-| `breadcrumb_location` | `external` \| `worktree` \| `provider-native` \| `disabled` | Default recovery breadcrumb location. |
+| `worktree_provider` | string | Required non-empty provider ID; common value: `worktrunk`. |
+| `terminal` | string | Required non-empty terminal provider ID; common value: `tmux`. |
+| `harness` | string | Required non-empty harness provider ID; common value: `codex`. |
+| `layout` | string | Required non-empty layout ID. |
+| `default_branch` | string (optional) | Protected default branch used by destructive worktree operations. |
+| `harness_permission_mode` | `standard or yolo` (optional) | `auto` is valid only under `[harness.claude]`. |
 
-Changing `managed_root` affects future Station creates only. Existing linked
-worktrees stay at their registered paths; do not move or delete a worktree that
-still owns a session. Close its sessions, remove it through Station or
-Worktrunk, and recreate it under the managed root.
+Provider IDs are not cross-checked during config validation. Unknown IDs remain
+unavailable at runtime. Meaningful IDs include `worktrunk` and
+`noop-worktree`, `tmux` and `noop-terminal`, and
+the harness IDs documented in the harness guides.
 
-### `[terminal.tmux]` — terminal provider (optional)
-
-Recorded `session.create` and `session.fork` commands must name a terminal and
-carry an explicit placement request. The first-class CLI exposes that contract
-as exactly one of `--from-current` or `--terminal tmux`: the former obtains an
-unexpired source from `stn session current` for sibling placement, while the
-latter is source-free and creates an unselected tmux window in the configured
-workbench. The CLI never infers a terminal from project defaults. Omitted
-harness uses the project default for create or the source session's provider for
-fork; omitted layout uses the exact project default. `--from-current` uses the
-provider carried by the freshly proved source, so callers inside tmux create a
-tmux sibling and callers inside a native Station pane create an inactive native
-root. A placement provider ID selects a composed capability, not a physical
-provider instance. Clients cannot name a tmux endpoint, workbench session,
-renderer ID, or socket path in a placement request. Source-free placement relies
-on Observer composition and the tmux adapter's fresh validation of the configured
-server endpoint and workbench. Native placement has no configuration key, Station
-Host ownership does not select a renderer, and the ordinary renderer-managed
-launch path remains separate.
+### `[worktree.worktrunk]` — Worktrunk provider (optional)
 
 | Key | Type | Notes |
 | --- | --- | --- |
-| `command` | string | tmux binary path/name. Overrides `STATION_TMUX_BIN`; fallback is `tmux`. |
-| `session_prefix` | string | |
-| `topology` | `workbench` | Single-value enum. |
-| `workbench_session` | string | |
-| `workbench_socket_path` | string | Optional fixed tmux socket endpoint. `~` and relative paths resolve against the directory containing the global `config.toml`. When set, all tmux terminal operations use `tmux -S`; caller `TMUX` values remain evidence only. Popup ownership stays on the invoking tmux server and ignores this setting. |
-| `window_naming` | `project-branch` | Single-value enum. |
-| `primary_agent_pane` | bool | |
-| `popup_width` / `popup_height` / `popup_position` | string | Free-form, e.g. `"50%"`, `"C"`. Baked into the fast popup binding; rerun `stn setup` after changing them so the regenerated binding carries the new geometry. |
-| `popup_status_bar` | bool | Show the persistent popup's nested tmux status bar. Defaults to `false`; this never changes the invoking tmux session's status bar. Baked into the fast popup binding; rerun `stn setup` after changing it so the regenerated binding carries the new value. |
-| `popup_scope` | `server` \| `client` | Popup ownership scope. Defaults to `server`, preserving one popup and warm renderer per tmux server and transferring it between clients. `client` creates an independent popup and warm renderer for each tmux client, and is the only popup setting that keeps the config-aware (non-fast) launch path, because its ownership names are per-client runtime hashes. Close existing popups before changing this value, then rerun `stn setup` to refresh an installed popup binding; an open renderer retains the scope it started with until dismissed. |
+| `command` | string | Worktrunk executable; overrides `STATION_WORKTRUNK_BIN`, default `wt`. |
+| `config_path` | string | Worktrunk config path; `~` expands at load time. |
+| `managed_root` | string | Authoritative root for Station-created worktrees; `~` expands at load time. |
+| `base` (optional) | string | Default base branch for listings and new worktrees. |
+| `include_main` | bool | Include the main worktree in listings by default. |
+| `include_external` | bool | Include external worktrees in listings by default. |
+| `use_lifecycle_hooks` | bool | `false` uses Worktrunk `--no-hooks`, `true` uses `--yes`, and unset uses Worktrunk defaults. |
+| `hook_mode` | `required-for-mvp` or `disabled` | Worktrunk lifecycle-hook expectation. |
+| `breadcrumb_location` | `external`, `worktree`, `provider-native`, or `disabled` | Default recovery-breadcrumb location. |
 
-### `[harness.<id>]` — agent harnesses (optional)
+Changing `managed_root` affects future creates only. Existing linked worktrees
+remain at their registered paths; do not move or delete one that still owns a
+session.
 
-The only loosely-typed provider table: `[harness.claude]` is known, and any other id
-(`codex`, `opencode`, …) is accepted via a catchall — so a **misspelled harness id
-is silently accepted** as an unused harness.
+### `[terminal.tmux]` — tmux provider (optional)
 
-Multiple `[harness.<id>]` tables may be configured at once. `[defaults].harness`
-remains the single default used when a project does not override it; the other
-configured harnesses remain available for explicit selection.
+Dashboard and CLI session creation use explicit placement requests. See
+[TUI development](tui.md) for the placement and renderer contract.
 
 | Key | Type | Notes |
 | --- | --- | --- |
-| `enabled` | bool | |
-| `command` | string | e.g. `"claude"`, `"codex"`. Overrides provider-specific `STATION_*_BIN` fallbacks. |
-| `profile` | string | Named profile passed to the harness. |
-| `permission_mode` | `standard` \| `yolo` | **`auto` is accepted only under `[harness.claude]`.** |
-| `sandbox_mode` | string | Free-form, e.g. codex `"workspace-write"`. |
-| `approval_policy` | string | Free-form, e.g. codex `"on-request"`. |
-| `install_hooks` | bool | Declarative Station intent to install and require its tracking artifacts for this harness. Supported providers reconcile owned missing or drifted artifacts during setup, update, Observer startup, managed launch, and resume, then verify successful writes with provider doctor. It does not prove that the provider executed or approved the hooks. |
-| `resume` | bool | Whether to resume sessions. |
+| `command` | string | tmux executable; overrides `STATION_TMUX_BIN`, default `tmux`. |
+| `session_prefix` | string | Prefix for managed tmux sessions. |
+| `topology` | `workbench` | Single-value topology. |
+| `workbench_session` | string | Managed tmux workbench session. |
+| `workbench_socket_path` | string | Optional fixed tmux socket; `~` and relative paths resolve from the global config directory. |
+| `window_naming` | `project-branch` | Single-value window-naming policy. |
+| `primary_agent_pane` | bool | Whether the primary agent gets a dedicated pane. |
+| `popup_width` / `popup_height` / `popup_position` | string | Popup geometry, such as `50%` or `C`. |
+| `popup_status_bar` | bool | Show the persistent popup's nested status bar; default `false`. |
+| `popup_scope` | `server` or `client` | Share one popup per tmux server (`server`, default) or create one per client (`client`). |
 
-Setup requires the effective global default harness, plus any harness explicitly
-selected in the current guided run, to be runnable. For Claude, Codex, Cursor,
-and OpenCode, preparation also requires `install_hooks = true` and a successful
-read-only probe of the current Station-owned artifacts. Other configured
-non-default harnesses remain visible but do not block global setup. Pi loads its
-Station extension in process and has no equivalent external hook artifact; Station passes the
-canonical `stn-ingress` launcher through `STATION_INGRESS_BIN` on each Pi launch so event delivery
-is not dependent on the pane or tmux server `PATH`.
+Popup geometry and status-bar settings are captured by the generated popup
+binding; rerun `stn setup` after changing them. Close existing popups
+before changing `popup_scope`.
 
-When setup updates an existing config, it replaces a selected harness's exact
-canonical bare command (for example, `pi`) with the different absolute executable
-that setup resolved. Custom aliases, authored paths, unselected harnesses, and
-unresolved commands remain byte-for-byte unchanged.
+### `[harness.<id>]` — agent harness (optional)
 
-Artifact preparation is not runtime delivery proof. In particular, Codex may
-still require review of Station's current hook definition through `/hooks`.
-Setup neither bypasses nor verifies that review.
+Multiple harness tables may be configured. `[defaults].harness` is the
+default; other configured harnesses remain available for explicit selection.
 
-For Codex, `install_hooks = true` fails closed when the configured artifacts are
-foreign-owned, cannot be written, or do not pass the post-write doctor check.
-Automatic paths never transfer ownership; use the explicit hook-install
-takeover flow only after inspecting the existing owner. `install_hooks = false`
-is a configured-disabled result and does not authorize automatic hook writes or
-removal.
+| Key | Type | Notes |
+| --- | --- | --- |
+| `enabled` | bool | Enable this harness. |
+| `command` | string | Harness executable; overrides its `STATION_*_BIN` fallback. |
+| `profile` | string | Provider profile passed to the harness. |
+| `permission_mode` | `standard` or `yolo` | `auto` is accepted only for Claude. |
+| `sandbox_mode` | string | Provider-specific sandbox mode. |
+| `approval_policy` | string | Provider-specific approval policy. |
+| `install_hooks` | bool | Require Station-owned tracking artifacts for this harness. |
+| `resume` | bool | Resume provider sessions when supported. |
 
-Harness command fallback env vars:
+Setup requires the effective default harness and any harness explicitly selected
+in the current guided run to be runnable. For Claude, Codex, Cursor, and
+OpenCode, required tracking artifacts must be prepared when `install_hooks`
+is true. Preparation does not prove provider delivery, trust, or authentication;
+see [Diagnostics](diagnostics.md) and [Harness authoring](harness-authoring.md).
+
+Harness command fallbacks:
 
 | Harness | Env var | Default command |
 | --- | --- | --- |
@@ -217,21 +130,21 @@ Harness command fallback env vars:
 | OpenCode | `STATION_OPENCODE_BIN` | `opencode` |
 | Pi | `STATION_PI_BIN` | `pi` |
 
-### `[[hooks.event]]` — observer event hooks (optional, repeatable)
+### `[[hooks.event]]` — Observer event hooks (optional, repeatable)
 
-Run a command when an **observer** event fires. Distinct from provider *delivery*
-hooks (how harnesses report events in — see [harness-ingress.md](./harness-ingress.md)).
+An Observer event hook runs a command when a `StationEvent` matches. This is
+distinct from provider delivery hooks; see [Harness ingress](harness-ingress.md).
 
 | Key | Type | Notes |
 | --- | --- | --- |
-| `id` | string | **Required.** Hook identifier. |
-| `events` | string[] (≥1) | **Required.** Event types to match. |
-| `command` | string | **Required.** e.g. `"stn"`. |
-| `args` | string[] | Command args. |
-| `timeout_ms` | int > 0 | |
-| `filter` | table | Optional narrowing (`agent_state`, `harness`, `change_source`, `harness_event_type`). |
+| `id` | string | Required hook identifier. |
+| `events` | string[] (≥1) | Required event types to match. |
+| `command` | string | Required command, such as `stn`. |
+| `args` | string[] | Command arguments. |
+| `timeout_ms` | int > 0 | Hook timeout. |
+| `filter` | table | Optional `agent_state`, `harness`, `change_source`, or `harness_event_type` narrowing. |
 
-`events` must contain one or more `StationEvent` types:
+`events` accepts these current `StationEvent` types:
 
 ```text
 observer.started
@@ -256,130 +169,92 @@ harness.eventReported
 providerHook.spoolDrained
 ```
 
-`filter` accepts:
+| Filter | Type | Meaning |
+| --- | --- | --- |
+| `agent_state` | `none`, `starting`, `idle`, `working`, `needs_attention`, `stuck`, `exited`, or `unknown` | Observed agent state on `worktree.agentStateChanged`. |
+| `harness` | string | Harness provider ID. |
+| `change_source` | `harness_event_report` or `reconcile` | Source of an agent-state change. |
+| `harness_event_type` | string | Native harness event type, when present. |
+
+### `[[projects]]` — managed projects (required array)
+The array may be empty. Project IDs, aliases, and Worktrunk managed roots must
+be unique, and each `root` must exist when the config loads.
 
 | Key | Type | Notes |
 | --- | --- | --- |
-| `agent_state` | `none` \| `starting` \| `idle` \| `working` \| `needs_attention` \| `stuck` \| `exited` \| `unknown` | Matches observed agent state on `worktree.agentStateChanged` events. |
-| `harness` | string | Harness provider id. |
-| `change_source` | `harness_event_report` \| `reconcile` | Where an agent-state change came from. |
-| `harness_event_type` | string | Native harness event type, when the event carried one. |
-
-### `[[projects]]` — managed projects (REQUIRED array)
-
-One entry per git-rooted project STATION manages. The array is required; an empty
-array is valid. Cross-field rules: unique `id`s, no alias/id collisions, no duplicate
-aliases, unique worktrunk managed roots, and **each `root` must exist at load time**.
-
-| Key | Type | Notes |
-| --- | --- | --- |
-| `id` | string | **Required**, unique. Derived from root basename on `stn project add` if omitted. |
-| `label` | string | **Required.** Display label. |
-| `root` | string | **Required**, must be an existing dir. `~/` and relative paths resolve against the config dir. |
-| `aliases` | string[] | Alternate names (validated for uniqueness). |
-| `repo` | string | e.g. `"github.com/org/web"`. |
+| `id` | string | Required and unique; `stn project add` derives it from the root basename when omitted. |
+| `label` | string | Required display label. |
+| `root` | string | Required existing directory; `~` and relative paths resolve from the config directory. |
+| `aliases` | string[] | Alternate names, unique across projects. |
+| `repo` | string | Optional repository metadata, such as `github.com/org/web`. |
 | `default_branch` | string | Inherits `[defaults].default_branch`. |
-| `env` | table<string,string> | Per-project env vars. **Not** overridable by project-local config. |
-| `[projects.defaults]` | table | `harness` / `terminal` / `layout` — each inherits `[defaults]`. |
-| `[projects.commands]` | table<string,string> | Named commands (`dev`, `test`, …). |
-| `[projects.display]` | table | `group`, `sort_order`. |
-| `[projects.worktrunk]` | table | Per-project worktrunk overrides; `enabled` defaults to `true`. |
-| `[projects.recovery_breadcrumbs]` | table | `location` (same enum as `breadcrumb_location`), `path`. |
-| `[projects.local_config]` | table | Opt-in pointer to a project-local config file — see below. |
+| `env` | table<string,string> | Project launch environment; not overridable locally. |
+| `defaults.harness` / `defaults.terminal` / `defaults.layout` | string | Per-project values override the matching global defaults; `terminal` is not locally overridable. |
+| `commands.<label>` | string | Named project command; labels are preserved as authored. |
+| `display.group` / `display.sort_order` | string / int | Static project grouping and optional display order. |
+| `worktrunk.enabled` | bool | Defaults to `true`. |
+| `worktrunk.base` | string | Overrides the global Worktrunk base. |
+| `worktrunk.managed_root` | string | Relative paths resolve from `project.root`; omitted global roots get a unique project child. |
+| `worktrunk.include_main` / `worktrunk.include_external` | bool | Override the matching global listing policy. |
+| `recovery_breadcrumbs.location` | enum | Overrides the global breadcrumb location. |
+| `recovery_breadcrumbs.path` | string | Optional breadcrumb path. |
+| `local_config.enabled` | bool | Required in the table; only `true` reads the local file. |
+| `local_config.path` | string | `~/` expands from `$HOME`; other paths resolve from `project.root`. |
 
-Nested project tables:
+`[projects.display].group` is a static project label. Dynamic Session Groups
+are Observer-owned state and are changed by recorded operations, not by either
+config file.
 
-| Table | Key | Type | Notes |
-| --- | --- | --- | --- |
-| `[projects.defaults]` | `harness` | string | Per-project harness provider id. |
-| `[projects.defaults]` | `terminal` | string | Per-project terminal provider id. Not overridable by project-local config. |
-| `[projects.defaults]` | `layout` | string | Per-project layout id. |
-| `[projects.commands]` | any label | string | Label-to-command map. Labels are preserved as authored. |
-| `[projects.env]` | any key | string | Extra env for project launches; local overlays cannot set it. |
-| `[projects.display]` | `group` | string | Optional grouping label. |
-| `[projects.display]` | `sort_order` | int | Optional sort order. |
-| `[projects.worktrunk]` | `enabled` | bool | Defaults to `true` when omitted. |
-| `[projects.worktrunk]` | `base` | string | Overrides `[worktree.worktrunk].base` for this project. |
-| `[projects.worktrunk]` | `managed_root` | string | Per-project authoritative managed root; relative paths resolve against `project.root`. If omitted and global `managed_root` is set, STATION derives a unique project child directory. |
-| `[projects.worktrunk]` | `include_main` | bool | Overrides global `include_main`. |
-| `[projects.worktrunk]` | `include_external` | bool | Overrides global `include_external`. |
-| `[projects.recovery_breadcrumbs]` | `location` | `external` \| `worktree` \| `provider-native` \| `disabled` | Overrides global breadcrumb location. |
-| `[projects.recovery_breadcrumbs]` | `path` | string | Optional breadcrumb path. |
-| `[projects.local_config]` | `enabled` | bool | Required inside the table; only `true` reads the project-local file. |
-| `[projects.local_config]` | `path` | string | Required inside the table; `~/` expands against `$HOME`, anything else resolves against `project.root`. |
-
-`[projects.display].group` is a static label for organizing whole projects. It is unrelated to
-dynamic Session Groups, which are Observer-owned state stored in SQLite and projected through
-`StationSnapshot.sessionGroups`. Session Groups are not configured under `[workspace]`, `[tui]`,
-the runtime `config.toml`, or project-local `.station/config.toml`. They change only through
-Observer-owned operations, including recorded `sessionGroup.*` commands and atomic session
-seed/placement; config is never Group state.
-
-`stn project add` refuses both a first add and an idempotent re-add when the
-checkout-style `root` has local `core.bare=true`; the failed mutation leaves the
-TOML unchanged. Existing config remains loadable so `stn project doctor <id>`
-and `stn doctor --project <id>` can report the damaged checkout. Station never
-rewrites this Git setting automatically. Inspect and repair an intended checkout
-manually, or correct `projects.root` when it points at the wrong repository:
-
-```bash
-git -C '<project-root>' config --show-origin --get core.bare
-git -C '<project-root>' config --local core.bare false
-```
+A checkout-style project root with local `core.bare=true` is rejected by
+`stn project add`; Station does not rewrite that Git setting. Use the
+project doctor and [Diagnostics](diagnostics.md) for repair guidance.
 
 ### `[workspace]` — native Station UI behavior (optional, best-effort)
 
-Read **only by the native Station TUI** (the observer and CLI ignore it). A bad value
-degrades to defaults plus a diagnostic — it never crashes the daemon.
+Only the native Station TUI reads this section. Invalid values fall back to
+defaults and produce a diagnostic.
 
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `scroll_on_output` | `freeze` \| `shift` \| `follow` | `freeze` | Scroll behavior while scrolled up. `freeze` preserves visible lines; `shift` preserves distance from bottom; `follow` snaps to live. At the bottom, all modes track live. |
-| `scrollback_lines` | int 0-10000 | `10000` | Normal-buffer history retained by each native pane. Lower values reduce per-pane memory and resize-reflow work; `0` disables pane scrollback. Existing screens keep their current depth; changes apply to newly created screens. |
-| `overlay_width_percent` | int 10-100 | `60` | Width of the native Station overlay as a percentage of the terminal width, still clamped to the minimum dashboard size and available space. |
-| `overlay_height_percent` | int 10-100 | `60` | Height of the native Station overlay as a percentage of the terminal height, still clamped to the minimum dashboard size and available space. |
-| `welcome_on_boot` | bool | `true` | Show the welcome screen over the restored layout on cold boot. `false` boots straight in. |
-| `automations` | `Automation[]` | one `see-diff` automation | Named, user-triggerable pane layouts in the pane context menu. Omit the key to keep the built-in `see-diff`; set `automations = []` to disable it. Automation ids must be unique. |
+| `scroll_on_output` | `freeze`, `shift`, or `follow` | `freeze` | Behavior while scrolled up; all modes track live output at the bottom. |
+| `scrollback_lines` | int 0-10000 | `10000` | Normal-buffer history per native pane; changes apply to new screens. |
+| `overlay_width_percent` | int 10-100 | `60` | Native overlay width, clamped to available space. |
+| `overlay_height_percent` | int 10-100 | `60` | Native overlay height, clamped to available space. |
+| `welcome_on_boot` | bool | `true` | Show the welcome screen over the restored layout on cold boot. |
+| `automations` | `Automation[]` | built-in `see-diff` | Omit to keep the built-in automation; use `[]` to disable it. |
 
-Station Host separately uses a 256 KiB raw-output replay budget for warm
-reattachment, so a reattached pane may recover less history than an uninterrupted
-screen. The Host retains whole PTY data events, so an unusually large newest event
-may exceed that nominal budget. Alternate-screen output does not enter normal
-scrollback.
+An `Automation` is `{ id, label, enabled?, steps[] }`. Each step is
+`{ command, split?, anchor?, run?, focus? }`; automations are authored as
+`[[workspace.automations]]` tables:
 
-Each `Automation` is `{ id, label, enabled?, steps[] }`; each step under
-`[[workspace.automations.steps]]` is `{ command, split?, anchor?, run?, focus? }`:
+```toml
+[[workspace.automations]]
+id = "triage"
+label = "Triage"
+
+  [[workspace.automations.steps]]
+  command = "git status"
+```
 
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `command` | string | **required** | Command to write or execute in the new pane. |
-| `split` | `right` \| `below` | `right` | Direction to split the new pane. |
-| `anchor` | `origin` \| `previous` | `previous` | Split from the origin pane or the previously created pane. |
-| `run` | `execute` \| `write` | `execute` | `execute` runs the command; `write` only types it. |
-| `focus` | bool | `false` | Whether to focus the new pane. |
-| (automation) `id` / `label` | string | **required** | Unique menu-row key / display label. |
-| (automation) `enabled` | bool | `true` | `false` hides it from the menu. |
-| (automation) `steps` | `AutomationStep[]` | **required** | One or more steps. |
-
-The built-in **See diff** automation runs Hunk against the `origin/main` merge
-base, watches working-tree changes, and includes untracked files. Explicit
-`automations` are user-owned, including `automations = []`; Station does not
-rewrite a custom legacy `diffnav` command. To migrate one, replace its command
-with:
-
-```toml
-command = 'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; hunk diff "$base" --watch --no-exclude-untracked'
-```
+| `command` | string | required | Command to write or execute in the new pane. |
+| `split` | `right` or `below` | `right` | Split direction. |
+| `anchor` | `origin` or `previous` | `previous` | Pane used as the split anchor. |
+| `run` | `execute` or `write` | `execute` | Execute the command or only type it. |
+| `focus` | bool | `false` | Focus the new pane. |
+| `id` / `label` | string | required | Unique menu key and display label. |
+| `enabled` | bool | `true` | Hide the automation when `false`. |
+| `steps` | `AutomationStep[]` | required | One or more steps. |
 
 ### `[tui]` — shared dashboard behavior and widgets (optional, best-effort)
 
-`[tui]` applies to both the native Station overlay and standalone/fullscreen/tmux
-dashboards. `[workspace]` remains native-only pane and overlay behavior.
+`[tui]` applies to the native overlay and standalone/fullscreen/tmux
+dashboards. `[workspace]` is native-only.
 
-`[tui.session_create]` controls what the renderer does after any dashboard-driven
-New Session, Quick Session, or Quick Group creation succeeds. Both global values
-default to `true`. A terminal table inherits any omitted value from the resolved
-global policy:
+`[tui.session_create]` controls the renderer after dashboard-driven New Session,
+Quick Session, or Quick Group creation. Both global values default to `true`;
+terminal-specific values inherit omitted global values:
 
 ```toml
 [tui.session_create]
@@ -388,122 +263,76 @@ dismiss_dashboard = true
 
 [tui.session_create.terminals.tmux]
 dismiss_dashboard = false
-
-[tui.session_create.terminals.native]
-focus_created_session = true
-dismiss_dashboard = true
 ```
 
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `focus_created_session` | bool | `true` | Focus the exact canonical session created by the completed dashboard operation. |
-| `dismiss_dashboard` | bool | `true` | Dismiss only after focus succeeds when focus is enabled; otherwise dismiss immediately after creation settles. |
+| `focus_created_session` | bool | `true` | Focus the exact canonical session created by the operation. |
+| `dismiss_dashboard` | bool | `true` | Dismiss after focus succeeds when focus is enabled. |
 
-Terminal keys are Station terminal provider IDs such as `tmux` and `native`, not
-terminal-emulator brands. Unknown provider IDs are accepted for future adapters.
-The config is resolved once when a renderer starts; an open renderer does not
-live-reload policy changes. As with the rest of `[tui]`, an unknown field or
-non-boolean policy value invalidates the complete best-effort section, emits the
-`[tui]` warning, and uses the default `true`/`true` policy.
+Terminal keys are provider IDs such as `tmux` and `native`. The policy
+resolves when a renderer starts; an open renderer does not live-reload it. An
+invalid `[tui]` policy falls back to section defaults and records a warning.
 
-`[tui].widgets` configures the shared title strip in both the native Station
-overlay and the standalone dashboard used by fullscreen and tmux popup launches.
-It is an array discriminated on `type`. Every widget accepts an optional `enabled`
-(bool; default true — `false` keeps the entry in config but hides it). Array order
-is display order, left to right:
+`[tui].widgets` is an ordered array for the shared title strip. Each widget
+accepts optional `enabled` (default `true`):
 
-- **`type = "time"`** — optional `time_format` (`12h` \| `24h`).
-- **`type = "weather"`** — required `city`; optional `label`, `temperature_unit`
-  (`fahrenheit` \| `celsius`), `refresh_interval_minutes` (int > 0).
-- **`type = "fleet"`** — live-agent count, derived from the observer snapshot.
-- **`type = "prs"`** — open-PR count across sessions, derived from the snapshot.
-- **`type = "tz"`** — a timezone pair; required `zones` (1–2 of
-  `{ label, time_zone }`, IANA names — an unknown zone renders `--:--`);
-  optional `time_format` (`12h` \| `24h`).
-- **`type = "moon"`** — current moon phase.
+- `time`: optional `time_format` (`12h` or `24h`);
+- `weather`: required `city`, with optional `label`, `temperature_unit` (`fahrenheit` or `celsius`), and positive `refresh_interval_minutes`;
+- `fleet`: live-agent count from the Observer snapshot;
+- `prs`: open-PR count from the snapshot;
+- `tz`: one or two `{ label, time_zone }` IANA zones plus optional `time_format`;
+- `moon`: current moon phase.
 
-`[tui.island]` — display modes for the floating Station island (top-right
-button). `rest_counts` and `project_rollup` default off; the red `!N` needs-you
-lane (sessions asking for the user) paints in the collapsed and hovered island
-regardless of these settings, and the alert `!` frame stays quiet once you
-click it or open the dashboard:
-
-| Key | Type | Notes |
-| --- | --- | --- |
-| `rest_counts` | bool | Collapsed island also shows active working/ready counts; idle and zero lanes are hidden. |
-| `project_rollup` | bool | Hovering the island lists each project's worst agent status instead of the working/idle totals. |
-
-### `[repository.github]` — repository metadata provider (optional)
-
-Enabled by default when omitted. Set `enabled = false` to disable GitHub metadata.
-
-| Key | Type | Notes |
-| --- | --- | --- |
-| `enabled` | bool | `false` disables the GitHub provider entirely. |
-| `command` | string | GitHub CLI path/name. Overrides `STATION_GH_BIN`; fallback is `gh`. |
-| `timeout_ms` | int > 0 | Provider command timeout. Default is 3000 ms. |
-
-### `[observability.retention]` — log, DB, bundle, and spool caps (optional)
-
-Top-level retention caps:
-
-| Key | Type | Notes |
-| --- | --- | --- |
-| `max_days` | int > 0 | Default age cap for retained files. |
-| `max_total_mb` | int > 0 | Total local-state size cap. |
-| `max_file_mb` | int > 0 | Per-file size cap. |
-| `max_files_per_component` | int > 0 | Per-component log count cap. |
-
-Nested retention tables:
-
-| Table | Key | Type | Notes |
-| --- | --- | --- | --- |
-| `[observability.retention.components]` | `observer_max_mb` | int > 0 | Observer log cap. |
-| `[observability.retention.components]` | `cli_max_mb` | int > 0 | CLI log cap. |
-| `[observability.retention.components]` | `tui_max_mb` | int > 0 | TUI log cap. |
-| `[observability.retention.components]` | `hook_runner_max_mb` | int > 0 | Hook-runner log cap. |
-| `[observability.retention.components]` | `provider_max_mb` | int > 0 | Provider log cap. |
-| `[observability.retention.sqlite]` | `events_max_days` | int > 0 | SQLite event-row age cap/reporting threshold. |
-| `[observability.retention.sqlite]` | `commands_max_days` | int > 0 | SQLite command-row age cap/reporting threshold. |
-| `[observability.retention.sqlite]` | `errors_max_days` | int > 0 | SQLite error-row age cap/reporting threshold. |
-| `[observability.retention.sqlite]` | `provider_observations_max_days` | int > 0 | SQLite provider-observation age cap/reporting threshold. |
-| `[observability.retention.debug_bundles]` | `max_bundles` | int > 0 | Debug bundle count cap. |
-| `[observability.retention.debug_bundles]` | `max_days` | int > 0 | Debug bundle age cap. |
-| `[observability.retention.hook_spool]` | `delivered_delete_immediately` | bool | Delete successfully delivered spool records immediately. |
-| `[observability.retention.hook_spool]` | `failed_max_days` | int > 0 | Failed spool age cap. |
-| `[observability.retention.hook_spool]` | `failed_max_items` | int > 0 | Failed spool item-count cap. |
-
-See [diagnostics.md](./diagnostics.md) for current enforcement notes; some SQLite
-limits are reported through diagnostics before pruning is implemented.
-
-CLI process diagnostics add no configuration key. A route that already requires
-config writes any best-effort process record under the successfully loaded
-Observer state directory. Help, version, global parsing, unknown routes, and
-config-load failures use the documented default state directory without loading
-config for diagnostics. An unavailable configured sink never falls back to
-another directory, and logging failure does not change command behavior.
-
-### `[feature_flags]` — temporary behavior gates (optional)
-
-Strict boolean record. Unknown flag names are rejected.
+`[tui.island]` controls the floating Station island:
 
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `session_resume_agent` | bool | `false` | Enable resuming lost provider-native agent sessions. Session migration requires this to already be enabled in the running target Observer; migration never edits the config. |
-| `station_persistent_agents` | bool | `false` | Host Station agents in the standalone `station-station-host` daemon so they survive UI close and can reattach. Session migration requires the running target to report persistent native launch capability. |
+| `rest_counts` | bool | `false` | Show active working/ready counts in the collapsed island. |
+| `project_rollup` | bool | `false` | Show each project's worst agent status on hover. |
 
----
+The needs-you `!N` lane remains visible regardless of these settings.
+
+### `[repository.github]` — repository metadata provider (optional)
+
+Enabled by default when omitted.
+
+| Key | Type | Notes |
+| --- | --- | --- |
+| `enabled` | bool | `false` disables GitHub metadata. |
+| `command` | string | GitHub CLI; overrides `STATION_GH_BIN`, default `gh`. |
+| `timeout_ms` | int > 0 | Provider command timeout; default 3000 ms. |
+
+### `[observability.retention]` — local evidence caps (optional)
+
+| Key | Type | Notes |
+| --- | --- | --- |
+| `max_days` | int > 0 | Default retained-file age cap. |
+| `max_total_mb` | int > 0 | Total local-state size cap. |
+| `max_file_mb` | int > 0 | Per-file size cap. |
+| `max_files_per_component` | int > 0 | Per-component log count cap. |
+| `[observability.retention.components]` | `observer_max_mb`, `cli_max_mb`, `tui_max_mb`, `hook_runner_max_mb`, `provider_max_mb` | int > 0 | Per-component log caps. |
+| `[observability.retention.sqlite]` | `events_max_days`, `commands_max_days`, `errors_max_days`, `provider_observations_max_days` | int > 0 | SQLite age/reporting thresholds. |
+| `[observability.retention.debug_bundles]` | `max_bundles`, `max_days` | int > 0 | Bundle count and age caps. |
+| `[observability.retention.hook_spool]` | `delivered_delete_immediately` | bool | Delete successfully delivered spool records immediately. |
+| `[observability.retention.hook_spool]` | `failed_max_days`, `failed_max_items` | int > 0 | Failed spool age and item caps. |
+
+See [Diagnostics](diagnostics.md) for which limits are enforced versus reported.
+
+### `[feature_flags]` — behavior gates (optional)
+
+Strict boolean record; unknown flag names are rejected.
+
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `session_resume_agent` | bool | `false` | Enable resuming provider-native agent sessions. |
+| `station_persistent_agents` | bool | `false` | Keep Station Host agents alive across UI close and reattach. |
 
 ## Project-local config (`.station/config.toml`)
 
-An **opt-in** TOML file inside a project (conventionally
-`<project.root>/.station/config.toml`) carrying a narrow set of overrides. It is
-**hand-authored** — no command writes or scaffolds it. It has its **own required
-`schema_version = 1`**.
-
-### Enabling it
-
-Point to it from the project's entry in the runtime config:
+This hand-authored file is read only when enabled by the matching
+`[projects.local_config]` entry. It has its own required
+`schema_version = 1`.
 
 ```toml
 [projects.local_config]
@@ -511,183 +340,97 @@ enabled = true
 path = ".station/config.toml"
 ```
 
-- **`enabled` is the only gate.** The file is read and merged **only** when
-  `enabled = true`. Absent or `false` → ignored entirely.
-- **`path`** resolves specially: `~/`-prefixed paths expand against `$HOME`;
-  **everything else (including absolute-looking paths) resolves against
-  `project.root`**, not the cwd. There is no encoded default — `.station/config.toml`
-  is convention only.
+`enabled` is the only gate. An absent or false value ignores the file. `~/`
+paths expand against `$HOME`; all other paths, including absolute-looking
+ones, resolve against `project.root`.
 
-### What it can override
-
-Only these keys are accepted (strict — anything else makes the **whole local file**
-fail to load and emits a diagnostic, falling back to the bare project block):
+Only these overrides are accepted:
 
 | Section | Allowed | Type | Merge rule |
 | --- | --- | --- | --- |
-| root | `schema_version` | exactly `1` | Required in every local file. |
-| `[defaults]` | `harness`, `layout` **only** | string | Local **wins** over the project block. `terminal` is intentionally **not** overridable locally. |
-| `[commands]` | any command labels | table<string,string> | **Additive only.** A label that already exists globally is **rejected** (kept at the global value, emits `CONFIG_LOCAL_COMMAND_OVERRIDE`). New labels are added. |
-| `[display]` | `group`, `sort_order` | string / int | Shallow merge; local keys **win**. |
+| root | `schema_version` | exactly `1` | Required. |
+| `[defaults]` | `harness`, `layout` | string | Local value wins; `terminal` cannot be overridden. |
+| `[commands]` | any command labels | table<string,string> | Additive only; collisions keep the global value and emit `CONFIG_LOCAL_COMMAND_OVERRIDE`. |
+| `[display]` | `group`, `sort_order` | string / int | Shallow merge; local values win. |
 
-`env` cannot be set locally.
+`env` cannot be set locally. A missing, unreadable, invalid, or schema-invalid
+enabled file leaves the global project block in effect and records a diagnostic;
+the core runtime config remains a hard-failure boundary.
 
-### Failure behavior
+## Locations and environment variables
 
-If `enabled = true` but the file is missing, unreadable, invalid TOML, or
-schema-invalid, the load **still succeeds**: STATION records an error-severity
-diagnostic and uses the global-only project block. This is the opposite of a bad core
-section in `config.toml`, which aborts the load. Surface project-local problems with
-`stn doctor` or `stn setup check` (which reports them as a warning, not a clean OK).
+### Runtime paths
 
----
-
-## Locations & environment variables
-
-Runtime path and socket overrides:
-
-| Variable | Relocates / selects | Notes |
+| Variable | Selects or relocates | Notes |
 | --- | --- | --- |
-| `STATION_CONFIG_PATH` | the entire `config.toml` (incl. `[workspace]` and `[tui]`) | `stn --config <path>` is the CLI equivalent. One knob now moves all config — there is no separate workspace file to relocate. |
-| `XDG_RUNTIME_DIR` | observer + station-host **sockets** | When set, sockets move to `$XDG_RUNTIME_DIR/station/`. Does **not** move SQLite, logs, diagnostics, or hook spool. |
-| `STATION_OBSERVER_SOCKET_PATH` | observer socket the **TUI/harness connects to** | Connection-side override; parallel to `observer.socket_path` in config. |
-| `STATION_HOST_SOCKET_PATH` | native Station host socket | TUI-side override for warm reattach/listing. Otherwise it sits beside the observer socket. The observer's own host controller derives the host socket from config. |
-| `STATION_LAYOUT_PATH` | native Station layout snapshot | Overrides the TUI layout snapshot path. Without it, the TUI uses `$XDG_STATE_HOME/station/station/layout.json` or `~/.local/state/station/station/layout.json`. |
-| `XDG_STATE_HOME` | native Station layout default | Used only by the TUI layout resolver when `STATION_LAYOUT_PATH` is absent. |
-| `HOME` | the `~` anchor for every default path | `config.toml` (`~/.config`), state dir, sockets, provider home defaults. |
+| `STATION_CONFIG_PATH` | Global config file | Equivalent to `stn --config <path>`. |
+| `XDG_RUNTIME_DIR` | Observer and Station Host sockets | Sockets use `$XDG_RUNTIME_DIR/station/`; state files stay under `state_dir`. |
+| `STATION_OBSERVER_SOCKET_PATH` | TUI/harness Observer connection | Connection-side override. |
+| `STATION_HOST_SOCKET_PATH` | Native Station Host socket | TUI-side override for Host reattachment/listing. |
+| `STATION_LAYOUT_PATH` | Native layout snapshot | Overrides the layout path. |
+| `XDG_STATE_HOME` | Native layout default | Used when `STATION_LAYOUT_PATH` is absent. |
+| `HOME` | `~` expansion | Anchors default config, state, socket, and provider-home paths. |
 
-Provider command overrides, used when the matching config `command` field is absent:
+### Provider executables
 
-| Variable | Provider | Fallback without env |
+These are used when the corresponding config `command` field is absent:
+
+| Variable | Provider | Default |
 | --- | --- | --- |
 | `STATION_WORKTRUNK_BIN` | Worktrunk | `wt` |
 | `STATION_TMUX_BIN` | tmux | `tmux` |
-| `STATION_GH_BIN` | GitHub repository provider | `gh` |
-| `STATION_CLAUDE_BIN` | Claude Code harness | `claude` |
-| `STATION_CODEX_BIN` | Codex harness | `codex` |
-| `STATION_CURSOR_AGENT_BIN` | Cursor Agent harness | `agent` |
-| `STATION_OPENCODE_BIN` | OpenCode harness | `opencode` |
-| `STATION_PI_BIN` | Pi harness | `pi` |
+| `STATION_GH_BIN` | GitHub provider | `gh` |
+| `STATION_CLAUDE_BIN` | Claude Code | `claude` |
+| `STATION_CODEX_BIN` | Codex | `codex` |
+| `STATION_CURSOR_AGENT_BIN` | Cursor Agent | `agent` |
+| `STATION_OPENCODE_BIN` | OpenCode | `opencode` |
+| `STATION_PI_BIN` | Pi | `pi` |
 
-Provider config/home overrides:
+### Provider homes
 
-| Variable | Used by | Notes |
-| --- | --- | --- |
-| `CODEX_HOME` | Codex hooks + launched Codex agents | Overrides the Codex config home. |
-| `CLAUDE_CONFIG_DIR` | Claude hooks + launched Claude agents | Overrides Claude settings/config dir. |
-| `STATION_CURSOR_HOME` | Cursor hooks + launched Cursor agents | Used as the isolated Cursor home; launch maps it to `HOME` for the agent process. |
-| `STATION_CURSOR_HOOKS_PATH` | Cursor hook setup | Directly overrides the Cursor hooks file path. |
-| `OPENCODE_CONFIG_DIR` | OpenCode plugin + launched OpenCode agents | Overrides OpenCode config dir. |
+| Variable | Used by |
+| --- | --- |
+| `CODEX_HOME` | Codex hooks and launched agents. |
+| `CLAUDE_CONFIG_DIR` | Claude hooks and launched agents. |
+| `STATION_CURSOR_HOME` | Cursor hooks and launched agents. |
+| `STATION_CURSOR_HOOKS_PATH` | Cursor hook setup. |
+| `OPENCODE_CONFIG_DIR` | OpenCode plugin and launched agents. |
 
-Advanced development/demo overrides:
+### Development selectors
 
-| Variable | Used by | Accepted values / notes |
-| --- | --- | --- |
-| `STATION_SOURCE` | Native Station TUI data source | unset/empty/`observer` for live observer, `mock` for fixture data. |
-| `STATION_SCENARIO` | Native Station mock data | Fixture scenario name when `STATION_SOURCE=mock`; defaults to `baseline`. |
-| `STATION_PTY_IMPL` | Station local and persistent-host PTYs | Source mode defaults to `bridge`; a compiled binary defaults to `bun`. Explicit `bun` uses `Bun.Terminal` through the controlling-terminal helper; `bun-nocctty` starts the payload directly without job-control or orphan-cleanup guarantees. `bridge` is source-only. |
-| `STATION_NODE` | Station local PTY bridge | Node executable path/name; fallback is `node`. |
-| `STATION_PTY_ORPHAN_TTL_MS` | Host PTY orphan-bridge park lifetime | Positive integer of milliseconds an unadopted parked bridge keeps its PTY alive before self-reaping. Defaults to 24 hours; an unparsable or non-positive value falls back to the default. |
-| `STATION_BUN` | Source/development Station host launches | Bun executable path/name for source/development host launches; fallback is `bun`. |
-| `STATION_HOST_ENTRY` | Source/development Station host launches | Non-standard source/development override for the host entry file. Usually leave unset. |
-| `STATION_HOST_HANDOFF` | Native Station TUI exact Host convergence | Only exact `1` switches launch from display-compatible reuse to exact `{ buildVersion, buildIdentity }` ownership. An exact pair is reused; a nonexact empty Host is replaced; an eligible live bridge-backed registry is handed off with fixed `processes` fidelity and warm reattach. Noncanonical or incomplete evidence refuses without fallback. There is no prompt, launcher flag, or config key; absent, empty, `true`, and every other value preserve compatibility behavior. |
-| `STATION_CLI_TRACE` | `stn` process diagnostics | Only exact `1` enables one best-effort start/outcome trace pair for each `runCliMain` process. Unset, empty, `true`, and every other value leave tracing disabled. |
-| `STATION_INGRESS_BIN` | Generated Pi/OpenCode hook transport | Station sets this to the canonical absolute `stn-ingress` launcher for Pi launches and generated hook/plugin artifacts; manual extension/plugin runs fall back to the PATH name `stn-ingress`. |
-| `STATION_DASHBOARD_COMMAND` | CLI TUI launcher | Explicit command override for the observer-backed, command-capable, pane-free dashboard renderer. Development/testing only. |
-| `STATION_TUI_COMMAND` / `STATION_TUI_SESSION_NAME` | tmux popup registry | Development popup routing overrides. |
-| `STATION_SHELL_AUTOCLOSE` | Native Station TUI | `1`/`true` or `0`/`false`; auto-close overlay when a `+sh` shell opens. |
-| `STATION_PROFILE` | Native Station TUI | `1`/`true` or `0`/`false`; enables dev render profiling. |
+These are opt-in development/runtime selectors, not generated launch context:
 
-Source installs using `STATION_PTY_IMPL=bun` must first run
-`cd station && bun run build:ctty-helper`. A missing, non-executable, or
-`noexec`-blocked helper is a visible error; Station never falls back
-automatically to `bun-nocctty`. Any other selector value is also an error.
-An existing station host keeps the implementation setting it inherited at
-startup, so stop and start the host when changing this variable.
+| Variable | Meaning |
+| --- | --- |
+| `STATION_SOURCE` | Native TUI source: `observer` (default) or `mock`. |
+| `STATION_SCENARIO` | Mock fixture name; default `baseline`. |
+| `STATION_PTY_IMPL` | PTY implementation: source `bridge`, compiled `bun`, or explicit degraded `bun-nocctty`; no silent fallback. |
+| `STATION_NODE` | Node executable for the source PTY bridge; default `node`. |
+| `STATION_PTY_ORPHAN_TTL_MS` | Positive lifetime of an unadopted parked Host bridge; default 24 hours. |
+| `STATION_BUN` | Bun executable for source/development Host launches; default `bun`. |
+| `STATION_HOST_ENTRY` | Non-standard source Host entry; usually unset. |
+| `STATION_HOST_HANDOFF` | Exact `1` opts into exact Host build convergence; other values keep compatibility behavior. |
+| `STATION_CLI_TRACE` | Exact `1` enables best-effort per-process CLI trace records. |
+| `STATION_DASHBOARD_COMMAND` | Development override for the command-capable dashboard renderer. |
+| `STATION_TUI_COMMAND` / `STATION_TUI_SESSION_NAME` | Development popup routing overrides. |
+| `STATION_SHELL_AUTOCLOSE` | Native overlay auto-close for a `+sh` shell; `1`/`true` or `0`/`false`. |
+| `STATION_PROFILE` | Native development render profiling; `1`/`true` or `0`/`false`. |
 
-Compiled binaries embed the helper and materialize it under
-`<state_dir>/run/assets/ctty/` with private permissions, integrity checks, and a
-process lease so a newer TUI does not prune a helper still needed by an older
-host. The bundled Pi extension is materialized under
-`<state_dir>/run/assets/pi/` and retained because a live Pi process may reload
-its extension path. If `state_dir` is mounted `noexec`, compiled Bun PTYs fail
-with a diagnostic naming the path; move `[observer].state_dir` to an executable
-filesystem or explicitly select the degraded `bun-nocctty` mode. There is no
-automatic no-ctty fallback.
+The PTY helper, compiled asset extraction, child environment, generated launch
+context, and `STATION_INGRESS_BIN` are runtime behavior rather than
+hand-authored configuration. See [TUI development](tui.md),
+[Single-binary Station](single-binary.md), [Harness ingress](harness-ingress.md),
+and [System dependencies](system-dependencies.md).
 
-Default state paths (all under `state_dir`, default `~/.local/state/station`):
+Default state paths follow `[observer].state_dir`:
 
-- `observer.sqlite`, `logs/`, `diagnostics/`, `spool/hooks/` follow `state_dir`.
-- `run/observer.sock` and sibling `run/station-host.sock` sit under a `run/` subdir of
-  `state_dir`, **unless** `XDG_RUNTIME_DIR` is set (then `$XDG_RUNTIME_DIR/station/`).
-- `observer.claim.sqlite` sits beside the resolved Observer socket. It is a
-  persistent boot-serialization database, not Observer application state:
-  file existence is never ownership, and startup never removes or replaces it.
-  The socket directory is mode `0700`; the claim and any SQLite sidecars are
-  regular non-symlink files at mode `0600`. Different sockets in one directory
-  share startup serialization while retaining separate sockets and pidfiles.
-  A configured socket filename cannot be `observer.claim.sqlite` or one of its
-  `-journal`, `-wal`, or `-shm` sidecars.
+- `observer.sqlite`, `logs/`, `diagnostics/`, and `spool/hooks/` remain there;
+- Observer and Host sockets use its `run/` directory unless `XDG_RUNTIME_DIR` relocates them; and
+- the claim and pidfile follow the resolved Observer socket.
 
-Generated launch/hook env vars are internal context, not hand-authored config:
-`STATION_PROJECT_ID`, `STATION_WORKTREE_ID`, `STATION_WORKTREE_PATH`,
-`STATION_WORKTREE_MANAGED_ROOT`,
-`STATION_SESSION_ID`, `STATION_HARNESS_PROVIDER`, `STATION_TERMINAL_PROVIDER`,
-`STATION_TERMINAL_TARGET_ID`, `STATION_OBSERVER_STATE_DIR`, `STATION_STATE_DIR`,
-`STATION_HOOK_SPOOL_DIR`, `STATION_CLIENT_BUILD_VERSION`,
-`STATION_OBSERVER_BUILD_VERSION`, `STATION_UI_RUN_ID`, `STATION_PANE`, `STATION_OUTER_TMUX`,
-`STATION_OUTER_TMUX_PANE`, `STATION_TUI_POPUP`,
-`STATION_TUI_PERSISTENT`,
-`STATION_FOCUS_PROVIDER`, and `STATION_FOCUS_CLIENT_ID`. The CLI supplies the two
-build variables as a pair: the first identifies the renderer artifact and the
-second pins it to the exact Observer selector the CLI accepted. These values
-must match exactly for native or popup Station UI launch; the CLI refuses before
-UI effects rather than emitting a mixed pair. The launcher
-also mints `STATION_UI_RUN_ID` as content-free correlation for one renderer
-child; a direct source renderer mints and preserves its own ID across Bun HMR.
-A directly launched source renderer falls back to its own verified built selector. The
-renderer fixes that selector when it creates its Observer client; each later
-operation checks the socket owner on the same connection without running Git or
-hashing source from the UI. Generic Station Host startup separately compares Host protocol and
-Station display build version rather than the Observer's immutable selector. Exact gated or CLI
-convergence additionally requires the immutable Host build identity read from recovery evidence. The
-CLI sets `STATION_TUI_PERSISTENT=1` when the
-renderer requires its lifecycle-control IPC channel; it is not a standalone
-launch mode. Native Station child PTYs also receive standard terminal values
-`TERM=xterm-256color`, `COLORTERM=truecolor`, and `TERM_PROGRAM=Station` after
-inherited and per-launch environment merging. Outer-renderer identity and feature
-hints, including inherited hyperlink overrides, are removed at that boundary.
-Station does not advertise OSC 8 until both a coordinated child detector and an
-outer-terminal capability gate are available, while ordinary locale,
-authentication, provider, project, worktree, and user environment passes
-through. This includes functional values such as Git askpass configuration.
-Local PTYs preserve inherited `NO_COLOR` / `FORCE_COLOR` preferences, while
-persistent Host PTYs discard daemon-inherited copies and preserve only values
-carried by the explicit launch request; a Host may have been auto-started from a
-headless provider hook rather than a user terminal. These terminal values are
-generated behavior, not hand-authored configuration.
-
-Native Station removes `TMUX` and `TMUX_PANE` from its children because they are
-widely interpreted as direct-terminal capability evidence. For a local PTY owned
-by the current renderer, Station exposes a complete outer pair as
-`STATION_OUTER_TMUX` and `STATION_OUTER_TMUX_PANE` for deliberate tmux commands
-without misidentifying the child renderer. Persistent Host PTYs expose neither
-pair: the Host can outlive and reattach through different renderers, so its own
-environment and launch-plan values are not authoritative outer-terminal
-provenance. Station-owned PTYs use
-`STATION_PANE=1`, so launch input cannot clear or replace Station ownership. If a
-new tmux server is started inside one, its real server-and-pane context differs
-from that marker and cannot leak Station ownership into later panes. There is no
-persistent nesting override; `stn tui --allow-nested` applies to one launch.
-Tmux launchers use
-`STATION_TUI_POPUP=1` as routing provenance for their renderer child, not as
-authentication. These variables are not hand-authored overrides. Hook scripts
-and launched agents receive the other context so they can report back to the
-right observer/session. `STATION_STATE_DIR` is a hook-script fallback for
-`stn-ingress --state-dir`; it is **not** a global observer relocation knob. Use
-`observer.state_dir` in config for isolation.
-
----
+See [Observer singleton lifecycle](observer-singleton.md) for ownership and
+permissions. `STATION_STATE_DIR` and other generated launch/hook variables
+are internal context, not user-facing relocation settings.
 
 ## Gotchas / FAQ
 
@@ -695,48 +438,30 @@ right observer/session. `STATION_STATE_DIR` is a hook-script fallback for
 
 | I want to… | File | Section |
 | --- | --- | --- |
-| Add/remove a managed project | `config.toml` | `[[projects]]` (or `stn project add/remove`) |
-| Change the default harness/terminal/layout | `config.toml` | `[defaults]` |
-| Set a per-project harness or layout | project-local `.station/config.toml` (or `config.toml` `[projects.defaults]`) | `[defaults]` |
-| Add project commands (dev/test/…) | `config.toml` `[projects.commands]`, or additively in project-local `[commands]` | |
-| Tune the observer daemon | `config.toml` | `[observer]` |
-| React to observer events with a command | `config.toml` | `[[hooks.event]]` |
-| Change scrollback depth, scroll behavior, the welcome screen, or pane automations | `config.toml` | `[workspace]` |
-| Configure dashboard post-create focus/dismissal | `config.toml` | `[tui.session_create]` |
-| Add a clock/weather widget | `config.toml` | `[tui].widgets` |
-| Set log/DB retention caps | `config.toml` | `[observability.retention]` |
-| Toggle a feature flag | `config.toml` | `[feature_flags]` |
+| Add or remove a project | `config.toml` | `[[projects]]` or `stn project add/remove` |
+| Change default harness/terminal/layout | `config.toml` | `[defaults]` |
+| Set a project harness or layout | Local config or `config.toml` | `[defaults]` / `[projects.defaults]` |
+| Add project commands | `config.toml` or local config | `[projects.commands]` / `[commands]` |
+| Tune the Observer | `config.toml` | `[observer]` |
+| React to Observer events | `config.toml` | `[[hooks.event]]` |
+| Change native scroll, welcome, or automations | `config.toml` | `[workspace]` |
+| Configure dashboard focus/dismissal or widgets | `config.toml` | `[tui]` |
+| Set evidence caps | `config.toml` | `[observability.retention]` |
+| Toggle a behavior gate | `config.toml` | `[feature_flags]` |
 
-**Why did my whole config fail to load over one typo?** `config.toml` is strict — any
-unknown key aborts the load. The exceptions are `[harness.<id>]` (any id is accepted)
-and the best-effort `[tui]`/`[workspace]` sections (a bad value there degrades to
-defaults and a diagnostic instead of failing).
+**Why did my whole config fail over one typo?** Core config is strict. The
+`[tui]` and `[workspace]` sections degrade to defaults with a
+diagnostic, and arbitrary `[harness.<id>]` tables are accepted.
 
-**What happens to `[workspace]` when another runtime section is invalid?** The native
-TUI reads `[workspace]` through the full runtime config loader. If an unrelated core
-section hard-fails validation, the TUI keeps running with workspace defaults and prints
-a warning before rendering. Fix the core config error to restore custom scroll,
-welcome, and automation settings.
+**Why did my project-local command not override the global command?** Local
+`[commands]` is additive-only; a collision keeps the global value and
+records `CONFIG_LOCAL_COMMAND_OVERRIDE`.
 
-**`[tui]` vs `[workspace]`?** `[tui]` owns dashboard behavior shared by the
-native overlay and standalone/fullscreen/tmux dashboards, including post-create
-policy and title widgets. `[workspace]` is native-UI-only interaction behavior
-(scroll/welcome/automations). Both live in `config.toml`; only the TUI consumes
-their display and interaction behavior.
+**Why did my project-local file not take effect?** Confirm
+`[projects.local_config].enabled = true`. A broken enabled file falls back
+to the global project block and reports a diagnostic.
 
-**Why is `permission_mode = "auto"` rejected?** `auto` is Claude-only — valid only
-under `[harness.claude]`, never as a global default or for other harnesses.
-
-**Why doesn't my project-local `test` command override the global one?** Project-local
-`[commands]` are additive-only; collisions keep the global value and emit a
-`CONFIG_LOCAL_COMMAND_OVERRIDE` diagnostic.
-
-**Why didn't my project-local file take effect?** Confirm
-`[projects.local_config].enabled = true`. If it is enabled but broken, the project
-loads global-only and the failure is a diagnostic (see `stn doctor`), not a hard error.
-
-**Are `~` paths expanded?** Mostly. The config file path, `project.root`,
-project-local paths, `observer.socket_path`, `observer.state_dir`,
-`worktree.worktrunk.config_path`, and `worktree.worktrunk.managed_root` expand `~` at
-load time. Other provider-specific path-like strings may be stored as authored unless
-their provider documents otherwise.
+**Are `~` paths expanded?** Yes for the config path, project roots and local
+paths, Observer socket/state paths, and Worktrunk config/managed-root paths.
+Other provider-specific path-like values remain authored unless their provider
+defines expansion.
