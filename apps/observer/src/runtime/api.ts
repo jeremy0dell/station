@@ -228,6 +228,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     eventBus: options.eventBus,
     clock,
     requestReconcile: reconcileScheduler.request,
+    requestProjectedReconcile: reconcileScheduler.requestAfterQuiet,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   };
   if (providerHealthCache !== undefined) {
