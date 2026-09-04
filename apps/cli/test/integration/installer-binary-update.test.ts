@@ -33,7 +33,7 @@ afterEach(async () => {
 });
 
 describe("installer-binary channel with the real installer", () => {
-  it("replaces the binary through install.sh while preserving launchers and receipt", async () => {
+  it("replaces both binaries through install.sh while preserving popup and receipt", async () => {
     const fixture = await realInstallerFixture();
     const beforeReceipt = await lstat(fixture.receiptPath, { bigint: true });
     const beforeIngress = await lstat(join(fixture.installDir, "stn-ingress"), { bigint: true });
@@ -52,13 +52,18 @@ describe("installer-binary channel with the real installer", () => {
       warnings: [],
     });
     expect(await executableVersion(fixture.executablePath)).toBe(TARGET_TAG.slice(1));
-    expect(await readlink(join(fixture.installDir, "stn-ingress"))).toBe("stn");
+    expect(await executableVersion(join(fixture.installDir, "stn-ingress"))).toBe(
+      TARGET_TAG.slice(1),
+    );
     expect(await readlink(join(fixture.installDir, "stn-tmux-popup"))).toBe("stn");
     expect(await readFile(fixture.receiptPath, "utf8")).toBe(RECEIPT);
     const afterReceipt = await lstat(fixture.receiptPath, { bigint: true });
     const afterIngress = await lstat(join(fixture.installDir, "stn-ingress"), { bigint: true });
     expect([afterReceipt.dev, afterReceipt.ino]).toEqual([beforeReceipt.dev, beforeReceipt.ino]);
-    expect([afterIngress.dev, afterIngress.ino]).toEqual([beforeIngress.dev, beforeIngress.ino]);
+    expect([afterIngress.dev, afterIngress.ino]).not.toEqual([
+      beforeIngress.dev,
+      beforeIngress.ino,
+    ]);
   });
 
   it("refuses an installation replaced at the invocation boundary", async () => {
@@ -93,16 +98,16 @@ async function realInstallerFixture(options: { replaceIngressBeforeInstaller?: b
   const executablePath = join(installDir, "stn");
   const receiptPath = join(installDir, ".station-install-receipt");
   await writeExecutable(executablePath, versionScript(CURRENT_TAG.slice(1)));
+  await writeExecutable(join(installDir, "stn-ingress"), versionScript(CURRENT_TAG.slice(1)));
   await Promise.all([
-    symlink("stn", join(installDir, "stn-ingress")),
     symlink("stn", join(installDir, "stn-tmux-popup")),
     writeFile(receiptPath, RECEIPT, { mode: 0o600 }),
     writeFile(join(dataHome, "station", "LICENSE"), "old license\n", { mode: 0o644 }),
   ]);
 
   await writeExecutable(join(archiveSource, "stn"), versionScript(TARGET_TAG.slice(1)));
+  await writeExecutable(join(archiveSource, "stn-ingress"), versionScript(TARGET_TAG.slice(1)));
   await Promise.all([
-    symlink("stn", join(archiveSource, "stn-ingress")),
     symlink("stn", join(archiveSource, "stn-tmux-popup")),
     writeFile(join(archiveSource, "LICENSE"), "target license\n", { mode: 0o644 }),
   ]);

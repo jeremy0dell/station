@@ -264,6 +264,24 @@ describe("reconcile scheduler", () => {
     expect(reasons).toEqual(["scheduled:batch(2)"]);
   });
 
+  it("keeps the default quiet window longer than a normal provider scan", async () => {
+    vi.useFakeTimers();
+    const reasons: string[] = [];
+    const scheduler = createReconcileScheduler({
+      reconcile: async (reason) => {
+        reasons.push(reason);
+      },
+    });
+
+    scheduler.requestAfterQuiet("harness-report:codex:PreToolUse");
+    await vi.advanceTimersByTimeAsync(749);
+    expect(reasons).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    await drainMicrotasks();
+
+    expect(reasons).toEqual(["harness-report:codex:PreToolUse"]);
+  });
+
   it("does not let quiet work postpone an ordinary reconcile", async () => {
     vi.useFakeTimers();
     const reasons: string[] = [];

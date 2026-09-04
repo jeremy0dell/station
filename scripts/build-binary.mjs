@@ -2,6 +2,7 @@
 import { cp, mkdir, readFile, rm, symlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { STATION_SCHEMA_VERSION } from "../packages/contracts/src/ids.ts";
 import { readBuildIdentity, verifyBuildIdentity } from "./build-identity.mjs";
 import {
   assertBunVersion,
@@ -112,6 +113,7 @@ async function main() {
   const { version } = parseArgs(process.argv.slice(2));
   const outputDir = join(stationRoot, "dist", "bin");
   const outputPath = join(outputDir, "stn");
+  const ingressOutputPath = join(outputDir, "stn-ingress");
   const piBundlePath = join(stationRoot, "dist", "piExtension.mjs");
   let bunRuntime;
   try {
@@ -121,7 +123,7 @@ async function main() {
   }
 
   const buildIdentity = await removeBinaryOutputAfterSourceAdmission(outputPath, async () => {
-    await runWithBunExecutable(bunRuntime, ["run", "build"], repoRoot);
+    await run(bunRuntime.executable, ["run", "--shell=system", "build"], repoRoot);
     let identity;
     try {
       identity = await readBuildIdentity(repoRoot);
@@ -169,18 +171,38 @@ async function main() {
         STATION_BUILD_COMPILED: "true",
         STATION_BUILD_IDENTITY: JSON.stringify(buildIdentity),
         STATION_BUILD_OPENCODE_PLUGIN_BODY: JSON.stringify(openCodePluginBody),
+        STATION_PROTOCOL_SCHEMA_VERSION: JSON.stringify(STATION_SCHEMA_VERSION),
       },
     },
     "Station binary compile",
   );
+  await rm(ingressOutputPath, { force: true });
+  const observerVersionSeparator = version.includes("+") ? "." : "+";
+  const observerVersion = `${version}${observerVersionSeparator}station.${buildIdentity}`;
+  await run(
+    "cc",
+    [
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-O2",
+      `-DSTATION_PROTOCOL_SCHEMA_VERSION=${JSON.stringify(STATION_SCHEMA_VERSION)}`,
+      `-DSTATION_OBSERVER_VERSION=${JSON.stringify(observerVersion)}`,
+      "-o",
+      ingressOutputPath,
+      join(stationRoot, "src", "ingress", "station-ingress-fast.c"),
+    ],
+    repoRoot,
+  );
   if (!(await verifyBuildIdentity(buildIdentity, repoRoot))) {
     await rm(outputPath, { force: true });
+    await rm(ingressOutputPath, { force: true });
     fail(
       "Station build inputs or published identity changed during binary compilation; rebuild from a stable checkout.",
     );
   }
 
-  await replaceSymlink(join(outputDir, "stn-ingress"), "stn");
   await replaceSymlink(join(outputDir, "stn-tmux-popup"), "stn");
   await cp(join(repoRoot, "LICENSE"), join(outputDir, "LICENSE"));
   process.stdout.write(`Built ${outputPath} (${nativeTarget()}, ${version}).\n`);

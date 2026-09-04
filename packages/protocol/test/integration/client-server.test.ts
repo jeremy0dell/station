@@ -1800,6 +1800,62 @@ describe("protocol client/server", () => {
       await server.close();
     }
   });
+
+  it("rejects a fast ingress build mismatch before mutating Observer state", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const ingestProviderHookEvent = vi.fn(createFakeObserverApi().ingestProviderHookEvent);
+    const server = await startProtocolServer({
+      socketPath,
+      api: createFakeObserverApi({
+        health: async () => ({
+          schemaVersion: STATION_SCHEMA_VERSION,
+          status: "healthy",
+          pid: 1234,
+          startedAt: protocolTestNow,
+          version: "0.0.0+station.exact",
+        }),
+        ingestProviderHookEvent,
+      }),
+    });
+    const event: ProviderHookEvent = {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "hook_build_guard",
+      provider: "codex",
+      kind: "harness",
+      event: "Stop",
+      receivedAt: protocolTestNow,
+      payload: { hook_event_name: "Stop" },
+    };
+
+    try {
+      await expect(
+        sendRawRequest(socketPath, {
+          schemaVersion: STATION_SCHEMA_VERSION,
+          jsonrpc: "2.0",
+          id: "mismatch",
+          method: "observer.ingestProviderHookEvent",
+          params: { event, expectedBuildVersion: "0.0.0+station.other" },
+        }),
+      ).resolves.toMatchObject({
+        id: "mismatch",
+        error: { code: "OBSERVER_BUILD_MISMATCH" },
+      });
+      expect(ingestProviderHookEvent).not.toHaveBeenCalled();
+
+      await expect(
+        sendRawRequest(socketPath, {
+          schemaVersion: STATION_SCHEMA_VERSION,
+          jsonrpc: "2.0",
+          id: "exact",
+          method: "observer.ingestProviderHookEvent",
+          params: { event, expectedBuildVersion: "0.0.0+station.exact" },
+        }),
+      ).resolves.toMatchObject({ id: "exact", result: { status: "accepted" } });
+      expect(ingestProviderHookEvent).toHaveBeenCalledOnce();
+    } finally {
+      await server.close();
+    }
+  });
 });
 
 async function sendRawRequest(socketPath: string, request: unknown): Promise<unknown> {

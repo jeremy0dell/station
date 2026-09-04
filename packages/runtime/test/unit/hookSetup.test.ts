@@ -114,9 +114,17 @@ describe("runtime hookSetup", () => {
 
     it("reproduces each provider's exact redirect/suffix shape", () => {
       const plain = expectedProviderHookScript({ provider: "codex" });
+      expect(plain.startsWith("#!/bin/bash\n")).toBe(true);
       expect(plain).toContain(`stn-ingress \${SOCKET_ARG[@]+"\${SOCKET_ARG[@]}"}`);
+      expect(plain).toContain("exec stn-ingress");
       expect(plain).toContain("codex > /dev/null\n");
       expect(plain).not.toContain("|| true");
+
+      const forwarding = expectedProviderHookScript({
+        provider: "codex",
+        forwardScriptArgs: true,
+      });
+      expect(forwarding).toContain('codex "$@" > /dev/null\n');
 
       const ignoreAndRedirect = expectedProviderHookScript({
         provider: "claude",

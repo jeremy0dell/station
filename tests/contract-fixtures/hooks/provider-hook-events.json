@@ -21,7 +21,11 @@
     "receivedAt": "2026-05-20T12:03:00.000Z",
     "projectId": "web",
     "worktreeId": "wt_web_feature_auth",
+    "worktreePath": "/workspace/web/feature-auth",
+    "worktreeManagedRoot": "/workspace/web/.worktrees",
     "sessionId": "ses_web_feature_auth",
+    "terminalProvider": "tmux",
+    "terminalTargetId": "tmux:server:$1:@2:%3",
     "payload": {
       "state": "idle"
     }

@@ -205,6 +205,16 @@ async function routeSingleResponseRequest(
       }
       case "observer.ingestProviderHookEvent": {
         const params = ProviderHookIngestParamsSchema.parse(request.params);
+        if (params.expectedBuildVersion !== undefined) {
+          const health = await api.health();
+          if (health.version !== params.expectedBuildVersion) {
+            throw protocolSafeError({
+              code: "OBSERVER_BUILD_MISMATCH",
+              message: `Observer build mismatch: this ingress expects "${params.expectedBuildVersion}", but the socket owner reports "${health.version ?? "missing"}".`,
+              hint: "Retry through canonical ingress so Station can hand off to the current Observer.",
+            });
+          }
+        }
         return await api.ingestProviderHookEvent(params.event);
       }
       case "observer.harnessEvent.report": {
