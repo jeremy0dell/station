@@ -1,7 +1,7 @@
 # Install Station
 
 Station is experimental pre-alpha software. The current public version is
-`v0.0.0-pre-alpha.14.3`.
+`v0.0.0-pre-alpha.14.4`.
 
 ## Binary Requirements
 
@@ -33,7 +33,7 @@ setup, update, and recovery reference.
 From any directory, run:
 
 ```bash
-curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.3/install.sh | sh
+curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.4/install.sh | sh
 ```
 
 The installer downloads only the stamped tag's matching native archive and
@@ -81,7 +81,7 @@ names in a new shell.
 Pass an absolute or home-relative path through the exact installer:
 
 ```bash
-curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.3/install.sh | \
+curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.4/install.sh | \
   sh -s -- --install-dir "$HOME/bin"
 ```
 

@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       manual_acceptance:
-        description: Confirm macOS partial crossover preserved old Host output and the target native UI visibly refused it
+        description: Confirm documented native/tmux acceptance, current-target convergence, and preserved refusal
         required: true
         type: boolean
 

@@ -20,12 +20,34 @@ The tag starts `.github/workflows/release.yml`. That workflow runs standard CI,
 builds the four native targets, creates a six-asset draft, exercises the stamped
 draft installer, binds the exact numeric asset IDs and shared target build
 identity, and records an immutable `accepted-release-candidate-*` artifact. The
-macOS candidate lane selects the newest complete immutable predecessor and
-runs the full scenario set: compiled predecessors must preserve and visibly
-refuse busy Hosts whose in-process PTYs cannot hand off, while the no-Host
-scenario must complete the version change. Post-promotion public update checks
-repeat the no-Host discovery, download, and installation proof. The tag
-workflow never publishes the draft automatically.
+macOS candidate lane selects the newest complete immutable predecessor and runs
+seven staged cases. The predecessor artifact runs external and tmux busy
+compiled-Host refusals plus one tmux no-Host update. The refusal cases preserve
+the old Host, PTY, and output, while the no-Host case completes the version
+change. Four more cases start the compiled predecessor runtime, install the
+exact candidate, and then run the candidate CLI against the current artifact:
+no Host, an idle compiled Host, a busy exact-tag source-bridge Host, and a busy
+compiled Bun Host. The compiled predecessor explicitly rejects its source-only
+bridge implementation. The workflow therefore checks out the exact predecessor
+tag, installs its frozen dependencies, builds it, and launches that source Host
+without identity overrides. The runner verifies the source Host and immutable
+compiled Observer against their independently derived build identities because
+the source and release builds can have different output identities. This case
+proves bridge handoff across the exact predecessor source revision, while the
+other cases retain compiled-artifact packaging proof. The first three converge
+the candidate runtime; the busy compiled Bun case returns
+`reap-required` without signaling or changing the installed candidate or old
+runtime.
+
+Every v5 preview and result uses correlated `public-*` aliases instead of local
+project, worktree, session, terminal-target, PTY, and PTY-instance identifiers.
+Successful results include a completed final inspection whose newly derived
+plan is `converged`. `bun run test:ci:binary` runs the same seven cases against
+deterministic same-source binaries; its source bridge uses the current checkout
+with an explicit test identity override. Only the tagged staged lane proves the
+immutable predecessor-to-candidate release boundary. Post-promotion public update
+checks continue to repeat the exact-tag no-Host discovery, download, and
+installation proof. The tag workflow never publishes the draft automatically.
 
 Do not begin manual acceptance until the workflow succeeds. Treat the workflow,
 not this prose, as the source of truth for artifact names, checksums, and target

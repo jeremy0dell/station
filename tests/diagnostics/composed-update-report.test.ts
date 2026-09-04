@@ -79,7 +79,68 @@ function currentReport() {
   };
 }
 
+function predecessorV4Report() {
+  const current = { version: "0.0.0-pre-alpha.14.3" };
+  const target = { version: "0.0.0-pre-alpha.14.4" };
+  return {
+    schemaVersion: 4,
+    kind: "preview",
+    channel: "installer-binary",
+    current,
+    target,
+    initial: {
+      schemaVersion: 1,
+      boundary: { authorization: "none", actions: "not-included", digest: "not-included" },
+      installed: current,
+      target,
+      observer: { status: "absent" },
+      host: { status: "absent" },
+      hookProviderIds: [],
+      hooks: [],
+      terminalDispositions: [],
+      evidenceComplete: false,
+    },
+    plan: {
+      authorization: "none",
+      selectedTarget: { artifact: target, runtimeBuild: { status: "not-yet-provable" } },
+      outcome: "actionable",
+      phases: {
+        artifactApplication: {
+          action: "apply",
+          reason: "selected-artifact-different",
+          before: current,
+          owner: "installer-binary",
+          command: { kind: "none" },
+        },
+        hookReconciliation: { action: "no-op", reason: "healthy", providers: [] },
+        observerConvergence: { action: "reinspect", reason: "target-build-not-yet-provable" },
+        terminalConvergence: {
+          action: "reinspect",
+          reason: "target-build-not-yet-provable",
+          terminals: [],
+        },
+        hostConvergence: { action: "reinspect", reason: "target-build-not-yet-provable" },
+        persistedStateReconcile: {
+          action: "await-artifact",
+          reason: "target-build-not-yet-provable",
+        },
+        finalVerification: { action: "inspect", reason: "after-actions" },
+      },
+    },
+  };
+}
+
 describe("composed update report parsing", () => {
+  it("maps each emitter generation to its exact report schema", async () => {
+    const { updateReportSchemaVersionForEmitter } = await loadReportModule();
+
+    expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.5.16")).toBe(1);
+    expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.14.3")).toBe(4);
+    expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.14.4")).toBe(5);
+    expect(updateReportSchemaVersionForEmitter("0.0.0-local")).toBe(5);
+    expect(updateReportSchemaVersionForEmitter("0.0.1-local")).toBe(5);
+  });
+
   it("accepts the strict published-predecessor report", async () => {
     const { parseComposedUpdateReport } = await loadReportModule();
     const report = legacyReport();
@@ -109,6 +170,30 @@ describe("composed update report parsing", () => {
     ).toThrow();
   });
 
+  it("accepts the frozen schema-v4 predecessor contract", async () => {
+    const { parseComposedUpdateReport } = await loadReportModule();
+    const report = predecessorV4Report();
+
+    expect(parseComposedUpdateReport(report, "0.0.0-pre-alpha.14.3")).toEqual(report);
+    expect(() =>
+      parseComposedUpdateReport(
+        {
+          ...report,
+          initial: {
+            ...report.initial,
+            parkedBridges: {
+              status: "assessed",
+              totalParkedCount: 0,
+              unownedParkedCount: 0,
+              adoptionRequiredCount: 0,
+            },
+          },
+        },
+        "0.0.0-pre-alpha.14.3",
+      ),
+    ).toThrow();
+  });
+
   it.each([2, 3])("rejects unsupported report schema %i", async (schemaVersion) => {
     const { parseComposedUpdateReport } = await loadReportModule();
 
@@ -125,6 +210,12 @@ describe("composed update report parsing", () => {
     );
     expect(() => parseComposedUpdateReport(currentReport(), "0.0.0-pre-alpha.5.16")).toThrow(
       /Expected update report schema 1/u,
+    );
+    expect(() => parseComposedUpdateReport(predecessorV4Report(), "0.0.0-local")).toThrow(
+      /Expected update report schema 5/u,
+    );
+    expect(() => parseComposedUpdateReport(currentReport(), "0.0.0-pre-alpha.14.3")).toThrow(
+      /Expected update report schema 4/u,
     );
   });
 });

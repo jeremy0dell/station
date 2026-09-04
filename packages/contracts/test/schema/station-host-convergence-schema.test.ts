@@ -3,6 +3,7 @@ import {
   parseStationHostConvergenceCommand,
   StationHostConvergenceCommandSchema,
   StationHostConvergenceResultSchema,
+  StationHostUpdateCrossoverResultSchema,
   stationHostEvidenceMatchesTargetBuild,
   stationHostTerminalsAreHandoffEligible,
 } from "@station/contracts";
@@ -247,6 +248,27 @@ describe("Station Host convergence contracts", () => {
           source: "command-expectation",
           evidence: expected,
         },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("retains the bounded update crossover result", () => {
+    expect(
+      StationHostUpdateCrossoverResultSchema.parse({
+        schemaVersion: 1,
+        status: "failed",
+        error: {
+          tag: "TerminalProviderError",
+          code: "HOST_UPGRADE_BLOCKED",
+          message: "Host terminals cannot cross this release boundary.",
+        },
+      }),
+    ).toMatchObject({ schemaVersion: 1, status: "failed" });
+    expect(
+      StationHostUpdateCrossoverResultSchema.safeParse({
+        schemaVersion: 1,
+        status: "completed",
+        terminalIds: ["private-terminal-id"],
       }).success,
     ).toBe(false);
   });

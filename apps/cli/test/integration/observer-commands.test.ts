@@ -1,7 +1,7 @@
 import { chmod, lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { runCli } from "@station/cli";
-import { runObserverCommand } from "@station/cli/internal";
+import { observerCommandSummary, runObserverCommand } from "@station/cli/internal";
 import { listenUnixSocket } from "@station/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
@@ -12,6 +12,41 @@ const requestedBuildIdentity = "a".repeat(64);
 const requestedBuildVersion = `1.2.3+station.${requestedBuildIdentity}`;
 
 describe("CLI observer commands", () => {
+  it("omits additive health fields from the restart result parsed across update crossover", () => {
+    const health = {
+      schemaVersion: "0.13.0" as const,
+      status: "healthy" as const,
+      pid: 1234,
+      startedAt: now,
+      version: requestedBuildVersion,
+      eventBus: {
+        activeSubscribers: 0,
+        queuedEvents: 0,
+        subscriberCapacity: 1024,
+        highWaterQueuedEvents: 0,
+        overflowCount: 0,
+        disconnectCount: 0,
+        resyncRequiredCount: 0,
+      },
+    };
+    const result = { status: "running" as const, paths: fixturePaths(), health };
+
+    expect(observerCommandSummary(result, "restart")).toEqual({
+      status: "running",
+      socketPath: result.paths.socketPath,
+      health: {
+        schemaVersion: "0.13.0",
+        status: "healthy",
+        pid: 1234,
+        startedAt: now,
+        version: requestedBuildVersion,
+      },
+    });
+    expect(observerCommandSummary(result, "status")).toMatchObject({
+      health: { eventBus: health.eventBus },
+    });
+  });
+
   it("starts, reports status, stops, and restarts through injected process/protocol boundaries", async () => {
     const fixture = await createTempState();
     let running = false;
@@ -417,3 +452,14 @@ describe("CLI observer commands", () => {
     }
   });
 });
+
+function fixturePaths() {
+  return {
+    stateDir: "/state",
+    socketPath: "/runtime/observer.sock",
+    dbPath: "/state/observer.sqlite",
+    logDir: "/state/logs",
+    diagnosticsDir: "/state/diagnostics",
+    hookSpoolDir: "/state/spool/hooks",
+  };
+}

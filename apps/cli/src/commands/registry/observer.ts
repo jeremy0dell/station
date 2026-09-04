@@ -88,5 +88,5 @@ async function runObserverCliCommand(context: CliCommandRunContext) {
     (action === "start" || action === "restart" || action === "ensure-exact-build") &&
     "status" in result &&
     result.status !== "running";
-  return { code: failedStart ? 1 : 0, output: observerCommandSummary(result) };
+  return { code: failedStart ? 1 : 0, output: observerCommandSummary(result, action) };
 }

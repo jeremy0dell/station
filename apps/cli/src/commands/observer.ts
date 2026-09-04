@@ -140,7 +140,7 @@ function takeTimeoutOption(
   };
 }
 
-export function observerCommandSummary(result: ObserverCommandResult): unknown {
+export function observerCommandSummary(result: ObserverCommandResult, action?: string): unknown {
   if ("plan" in result) {
     const { plan, applied } = result;
     return {
@@ -169,7 +169,9 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
     const health =
       "restartResultSchema" in result && result.restartResultSchema === "0.12.0"
         ? previousObserverHealth(result.health)
-        : result.health;
+        : action === "restart"
+          ? updateCrossoverObserverHealth(result.health)
+          : result.health;
     return {
       status: result.status,
       socketPath: result.paths.socketPath,
@@ -181,6 +183,28 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
     return result;
   }
   return result satisfies ObserverStopReceipt;
+}
+
+function updateCrossoverObserverHealth(health: ObserverHealth): Omit<ObserverHealth, "eventBus"> {
+  // Update callers strictly parse restart results, so additive health fields stay excluded.
+  const result: Omit<ObserverHealth, "eventBus"> = {
+    schemaVersion: health.schemaVersion,
+    status: health.status,
+  };
+  if (health.pid !== undefined) result.pid = health.pid;
+  if (health.startedAt !== undefined) result.startedAt = health.startedAt;
+  if (health.version !== undefined) result.version = health.version;
+  if (health.socketPath !== undefined) result.socketPath = health.socketPath;
+  if (health.stateDir !== undefined) result.stateDir = health.stateDir;
+  if (health.uptimeMs !== undefined) result.uptimeMs = health.uptimeMs;
+  if (health.hookSpoolDepth !== undefined) result.hookSpoolDepth = health.hookSpoolDepth;
+  if (health.harnessIngressQueue !== undefined) {
+    result.harnessIngressQueue = health.harnessIngressQueue;
+  }
+  if (health.providerHealth !== undefined) result.providerHealth = health.providerHealth;
+  if (health.sqlite !== undefined) result.sqlite = health.sqlite;
+  if (health.lastReconcile !== undefined) result.lastReconcile = health.lastReconcile;
+  return result;
 }
 
 type PreviousObserverHealth = Omit<ObserverHealth, "schemaVersion" | "providerHealth"> & {

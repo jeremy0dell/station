@@ -409,6 +409,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
           ref: ${{ needs.validate.outputs.commit }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -443,11 +444,10 @@ jobs:
           /bin/sh -n "$installer"
           grep -Fx "embedded_version=\"$TAG\"" "$installer"
           chmod 0700 "$installer"
-      - name: Fetch staged update assets and exact predecessor
+      - name: Fetch staged update assets
         if: runner.os == 'macOS'
         env:
           GH_TOKEN: ${{ github.token }}
-          PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
           RELEASE_ID: ${{ needs['create-draft'].outputs.release_id }}
           TAG: ${{ needs.validate.outputs.tag }}
           TARGET: ${{ matrix.target }}
@@ -469,13 +469,17 @@ jobs:
             grep -E "  (install\\.sh|stn-v$target_version-$TARGET\\.tar\\.gz)$" SHA256SUMS |
               sha256sum -c -
           )
-
+      - name: Prepare exact predecessor
+        if: runner.os == 'macOS'
+        env:
+          PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
+        run: |
+          unset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN
           predecessor_installer="$RUNNER_TEMP/previous-install.sh"
-          env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN \
-            curl --disable --fail --silent --show-error --location \
-              --proto '=https' --proto-redir '=https' --tlsv1.2 \
-              --output "$predecessor_installer" \
-              "https://github.com/$GITHUB_REPOSITORY/releases/download/$PREVIOUS_TAG/install.sh"
+          curl --disable --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --output "$predecessor_installer" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$PREVIOUS_TAG/install.sh"
           grep -Fx "embedded_version=\"$PREVIOUS_TAG\"" "$predecessor_installer"
           previous_home="$RUNNER_TEMP/update-incumbent-home"
           previous_bin="$RUNNER_TEMP/update-incumbent/bin"
@@ -484,6 +488,19 @@ jobs:
             XDG_DATA_HOME="$previous_home/.local/share" \
             /bin/sh "$predecessor_installer" --install-dir "$previous_bin"
           test "$("$previous_bin/stn" --version)" = "${PREVIOUS_TAG#v}"
+
+          predecessor_source="$RUNNER_TEMP/update-predecessor-source"
+          predecessor_commit="$(git rev-parse "$PREVIOUS_TAG^{commit}")"
+          git worktree add --detach "$predecessor_source" "$predecessor_commit"
+          (
+            cd "$predecessor_source"
+            test "$(node -p 'require("./package.json").version')" = "${PREVIOUS_TAG#v}"
+            bun install --frozen-lockfile
+            bun run build
+            bun run --cwd station repair:node-pty
+            test -f station/node_modules/node-pty/package.json
+            test -s packages/runtime/dist/station-build-id
+          )
       - name: Seed existing installation
         run: |
           install_home="$RUNNER_TEMP/install-home"
@@ -572,7 +589,8 @@ jobs:
             --target-release-dir "$RUNNER_TEMP/update-release" \
             --target-tag "$TAG" \
             --target-build-identity "$target_build_identity" \
-            --scenarios full \
+            --predecessor-source-dir "$RUNNER_TEMP/update-predecessor-source" \
+            --scenarios release \
             --busy-host-outcome preserved-refusal
       - name: Verify lock refusal and same-version retry
         env:
