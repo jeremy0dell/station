@@ -176,7 +176,10 @@ fold over signals shared by live projection and reconcile.
   observation; `status.updatedAt` timestamps the status evidence it carries.
 - Live path: `projectHarnessEventReportOntoSnapshot`
   (`apps/observer/src/reconcile/statusProjection.ts`) applies a report to the
-  current snapshot.
+  current snapshot. After successful immediate projection, canonical reconcile is
+  coalesced until 250 ms of report quiet so clients can expose the projected state
+  before provider scanning. Ordinary or interactive reconcile work may
+  advance that pass.
 - Reconcile path: `applyHarnessEventStatusOverlays`
   (`apps/observer/src/reconcile/harnessEventStatus.ts`) rebuilds from persisted
   observations; the latest correlated overlay wins over the discovered run

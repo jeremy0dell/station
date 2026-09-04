@@ -2,6 +2,8 @@ import { Effect } from "@station/runtime";
 
 export type ReconcileScheduler = {
   request(reason: string): void;
+  /** Coalesces already-projected work until the configured quiet interval elapses. */
+  requestAfterQuiet(reason: string): void;
   requestInteractive(reason: string): void;
   requestWhenReady(reason: string, readiness: ReconcileReadiness): void;
   requestInteractiveWhenReady(reason: string, readiness: ReconcileReadiness): void;
@@ -18,6 +20,8 @@ export type CreateReconcileSchedulerOptions = {
   debounceMs?: number;
   backlogDebounceMs?: number;
   interactiveDebounceMs?: number;
+  /** Quiet interval for convergence work whose user-visible projection is already applied. */
+  quietDebounceMs?: number;
   onError?: (error: unknown) => Promise<void> | void;
   onFlushFinish?: (profile: ReconcileSchedulerFlushProfile) => Promise<void> | void;
 };
@@ -34,11 +38,13 @@ export type ReconcileSchedulerFlushProfile = {
 const defaultDebounceMs = 100;
 const defaultBacklogDebounceMs = 1000;
 const defaultInteractiveDebounceMs = 25;
+const defaultQuietDebounceMs = 250;
 
 type QueuedReconcileRequest = {
   reason: string;
   queuedAt: number;
   interactive: boolean;
+  quiet: boolean;
   readiness?: ReconcileReadiness;
 };
 
@@ -48,6 +54,7 @@ export function createReconcileScheduler(
   const debounceMs = options.debounceMs ?? defaultDebounceMs;
   const backlogDebounceMs = options.backlogDebounceMs ?? defaultBacklogDebounceMs;
   const interactiveDebounceMs = options.interactiveDebounceMs ?? defaultInteractiveDebounceMs;
+  const quietDebounceMs = options.quietDebounceMs ?? defaultQuietDebounceMs;
   let running = false;
   let timerScheduled = false;
   let stopped = false;
@@ -59,12 +66,16 @@ export function createReconcileScheduler(
   const queuedRequests: QueuedReconcileRequest[] = [];
 
   return {
-    request: (reason) => request({ reason, queuedAt: Date.now(), interactive: false }),
-    requestInteractive: (reason) => request({ reason, queuedAt: Date.now(), interactive: true }),
+    request: (reason) =>
+      request({ reason, queuedAt: Date.now(), interactive: false, quiet: false }),
+    requestAfterQuiet: (reason) =>
+      request({ reason, queuedAt: Date.now(), interactive: false, quiet: true }),
+    requestInteractive: (reason) =>
+      request({ reason, queuedAt: Date.now(), interactive: true, quiet: false }),
     requestWhenReady: (reason, readiness) =>
-      request({ reason, queuedAt: Date.now(), interactive: false, readiness }),
+      request({ reason, queuedAt: Date.now(), interactive: false, quiet: false, readiness }),
     requestInteractiveWhenReady: (reason, readiness) =>
-      request({ reason, queuedAt: Date.now(), interactive: true, readiness }),
+      request({ reason, queuedAt: Date.now(), interactive: true, quiet: false, readiness }),
     shutdown: async () => {
       stopped = true;
       queuedRequests.length = 0;
@@ -82,10 +93,18 @@ export function createReconcileScheduler(
       armReadinessWait();
       return;
     }
-    const delayMs = queued.interactive ? interactiveDebounceMs : debounceMs;
+    const delayMs = queued.interactive
+      ? interactiveDebounceMs
+      : queued.quiet
+        ? quietDebounceMs
+        : debounceMs;
     if (timerScheduled) {
       const requestedFor = queued.queuedAt + delayMs;
-      if (queued.interactive && (scheduledFor === undefined || requestedFor < scheduledFor)) {
+      if (!queued.quiet && (scheduledFor === undefined || requestedFor < scheduledFor)) {
+        scheduleFlush(delayMs);
+      } else if (queued.quiet && !hasReadyImmediateRequest()) {
+        // Already-projected event streams need one canonical pass after they
+        // become quiet, not a competing provider scan between visible states.
         scheduleFlush(delayMs);
       }
       return;
@@ -174,6 +193,12 @@ export function createReconcileScheduler(
     return queuedRequests.some(
       (queued) =>
         queued.interactive && (queued.readiness === undefined || queued.readiness.isReady()),
+    );
+  }
+
+  function hasReadyImmediateRequest(): boolean {
+    return queuedRequests.some(
+      (queued) => !queued.quiet && (queued.readiness === undefined || queued.readiness.isReady()),
     );
   }
 

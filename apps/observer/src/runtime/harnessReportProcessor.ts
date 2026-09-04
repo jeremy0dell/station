@@ -15,7 +15,10 @@ export type HarnessReportProcessorDeps = {
   core: ObserverCore;
   eventBus: ObserverEventBus;
   clock: RuntimeClock;
+  /** Requests canonical convergence when immediate projection cannot establish visible state. */
   requestReconcile: (reason: string) => void;
+  /** Requests quiet-period convergence after immediate projection establishes visible state. */
+  requestProjectedReconcile: (reason: string) => void;
   refreshProviderHealth?: (providerId: string) => Promise<void>;
   logger?: StationLogger;
 };
@@ -123,6 +126,10 @@ export async function processHarnessIngressReport(
         .catch(() => undefined),
     );
   }
-  deps.requestReconcile(reconcileReason);
+  if (projection.value.projected) {
+    deps.requestProjectedReconcile(reconcileReason);
+  } else {
+    deps.requestReconcile(reconcileReason);
+  }
   return receipt;
 }
