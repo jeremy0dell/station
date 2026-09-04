@@ -49,8 +49,8 @@ export type SessionRecoveryEligibilityInput = {
  *
  * Admits one opaque recovery handle only when its provider-neutral identity, open Station
  * lifecycle, registered harness capability, and cwd evidence authorize the exact worktree.
- * A deliberately selected imported handle may proceed without a local lifecycle row, but local
- * legacy, ended, or contradictory identity always wins over that compatibility path.
+ * A deliberately selected imported handle may proceed without a local lifecycle row when the handle
+ * itself matches any expected identity. Local legacy, ended, or contradictory identity always wins.
  */
 export function sessionRecoveryEligibility(
   input: SessionRecoveryEligibilityInput,
@@ -65,7 +65,6 @@ export function sessionRecoveryEligibility(
   if (handle.sessionId === undefined) {
     return { kind: "ineligible", reason: "station_session_missing" };
   }
-
   const registeredHarness = input.registeredHarness;
   if (registeredHarness === undefined || registeredHarness.id !== handle.provider) {
     return { kind: "ineligible", reason: "harness_provider_missing" };
@@ -73,10 +72,16 @@ export function sessionRecoveryEligibility(
   if (!registeredHarness.canResume) {
     return { kind: "ineligible", reason: "harness_resume_unsupported" };
   }
+  if (input.expectedSession !== undefined && handle.sessionId !== input.expectedSession.id) {
+    return { kind: "ineligible", reason: "station_session_mismatch" };
+  }
+  if (input.expectedSession !== undefined && handle.provider !== input.expectedSession.harness) {
+    return { kind: "ineligible", reason: "harness_mismatch" };
+  }
 
   const stationSession = sessionForRecovery(input);
   if (stationSession === undefined) {
-    if (input.expectedSession !== undefined || !input.allowNoLocalSession) {
+    if (!input.allowNoLocalSession) {
       return { kind: "ineligible", reason: "station_session_missing" };
     }
   } else {

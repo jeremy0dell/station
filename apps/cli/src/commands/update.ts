@@ -7,7 +7,9 @@ import {
   type UpdateCommandStep,
   UpdateConvergencePlanningInputSchema,
   type UpdateFinalInspection,
+  type UpdateReapJournal,
   type UpdateReapRecoveryPreflight,
+  type UpdateReapRecoveryResult,
   type UpdateSuccessorRequest,
   UpdateSuccessorRequestSchema,
 } from "@station/contracts";
@@ -32,8 +34,24 @@ import {
   executeUpdateConvergence,
   type UpdateConvergenceExecutionDeps,
   type UpdateConvergenceExecutionResult,
+  type UpdateReapRuntimeContext,
 } from "../update/convergenceExecution.js";
 import { deriveUpdateConvergencePlan } from "../update/convergencePlan.js";
+import {
+  executeUpdateReap,
+  markUpdateReapPhase,
+  refusedRecoveryFromUpdateReapPreflight,
+  refusedRecoveryFromUpdateReapTargets,
+  UpdateReapAuthorizationRefusedError,
+} from "../update/reapExecution.js";
+import { type UpdateReapJournalPort, updateReapJournalHasReached } from "../update/reapJournal.js";
+import type { UpdateReapAuthorization } from "../update/reapPlan.js";
+import {
+  UpdateReapAuthorizationEvidenceError,
+  updateReapIncumbentHostIsEmpty,
+} from "../update/reapPlan.js";
+import type { UpdateReapProcessGroupPort } from "../update/reapProcessGroups.js";
+import type { UpdateReapSessionResumePort } from "../update/reapSessionResume.js";
 import { updateRecoveryActionCommitments } from "../update/recoveryPreflight.js";
 import { createUpdateRuntimeCapabilities } from "../update/recoveryPreflightAdapters.js";
 import {
@@ -69,6 +87,8 @@ export type UpdateSuccessorRunner = (input: {
   installedScopeDigest: string;
   handoff: UpdateRequest["handoff"];
   hookProviderIds: readonly string[];
+  reapContinuation?: { journalId: string };
+  reapLockTransferToken?: string;
 }) => Promise<{
   status: "completed" | "failed";
   finalInspection: import("@station/contracts").UpdateFinalInspection;
@@ -77,6 +97,7 @@ export type UpdateSuccessorRunner = (input: {
   recoveryCommands?: readonly UpdateCommandArgv[];
   parkedTerminals?: UpdateSuccessorReceipt["parkedTerminals"];
   error?: unknown;
+  reapRecovery?: UpdateReapRecoveryResult;
 }>;
 
 type UpdateCommandArgv = readonly [string, ...string[]];
@@ -94,6 +115,17 @@ export type UpdateCommandDeps = {
   convergeHost?: UpdateConvergenceExecutionDeps["convergeHost"];
   reconcilePersisted?: UpdateConvergenceExecutionDeps["reconcilePersisted"];
   runSuccessor?: UpdateSuccessorRunner;
+  reapJournal?: UpdateReapJournalPort;
+  reapProcessGroups?: UpdateReapProcessGroupPort;
+  reapSessionResume?: UpdateReapSessionResumePort;
+  deriveReapAuthorization?: (input: {
+    channel: PlannedUpdateChannel["channel"];
+    selectedArtifact: UpdateArtifact;
+    installedScopeDigest: string;
+    preflight: UpdateReapRecoveryPreflight;
+    plan: import("@station/contracts").UpdateConvergencePlan;
+    signal?: AbortSignal;
+  }) => Promise<UpdateReapAuthorization>;
   /** Runs the composed read-only assessment required by every update invocation. */
   recoveryPreflight?: (input: {
     installed: UpdateArtifact;
@@ -130,85 +162,114 @@ export async function runUpdateCommand(
   });
 }
 
-/** Runs the validated hidden successor request without re-entering the public update command. */
+/**
+ * Runs the validated hidden successor request without re-entering the public update command. Its
+ * optional journal ID continues an authorized transaction but contains no process authority.
+ */
 export async function runUpdateSuccessorCommand(input: {
   stdin?: string;
   options: UpdateCommandOptions;
   deps: UpdateCommandDeps;
+  reapLockTransferToken?: string;
 }): Promise<CliRunResult> {
   const request = parseSuccessorInput(input.stdin);
-  try {
-    const buildInfo = input.deps.currentBuildInfo ?? (input.deps.buildInfo ?? stationBuildInfo)();
-    if (input.deps.probes === undefined) {
-      throw new Error("Update channel probes are unavailable in this CLI composition.");
-    }
-    const selected = await inspectSelectedUpdateChannel({
-      probes: input.deps.probes,
-      requested: request.channel,
-      installedScopeDigest: request.installedScopeDigest,
-      ...(input.options.signal === undefined ? {} : { options: { signal: input.options.signal } }),
-    });
-    const target = request.target;
-    if (!artifactsMatch(selected.installed, target)) {
-      throw new Error("The successor launcher does not own the requested target artifact.");
-    }
-    if (buildInfo.version !== target.version) {
-      throw new Error("The successor launcher build does not match the requested target artifact.");
-    }
-    if (input.deps.recoveryPreflight === undefined) {
-      throw new Error("Update recovery preflight is unavailable in this CLI composition.");
-    }
-    const initial = await input.deps.recoveryPreflight({
-      installed: target,
-      target,
-      currentBuildArtifact: target,
-      currentBuildInfo: buildInfo,
-    });
-    if (!artifactsMatch(initial.installed, target) || !artifactsMatch(initial.target, target)) {
-      throw new Error("Successor preflight did not confirm the requested target artifact.");
-    }
-    if (!sameProviders(initial.hookProviderIds, request.hookProviderIds)) {
-      throw new Error("Successor hook providers changed across the launcher boundary.");
-    }
-    const planning = UpdateConvergencePlanningInputSchema.parse({
-      preflight: initial,
-      targetRuntime: {
-        status: "known",
-        buildIdentity: buildInfo.buildIdentity,
-        observerSelector: stationObserverBuildVersion(buildInfo),
-      },
-      installation: {
-        whenRequired: "apply",
-        owner: request.channel,
-        command: { kind: "none" },
-      },
-      handoff: handoffRequest(request),
-    });
-    const plan = deriveUpdateConvergencePlan(planning);
-    const report = createUpdateReportForArtifacts(request.channel, target, target, initial, plan);
-    const execution = await executeUpdateConvergence(
-      {
-        selectedChannel: request.channel,
+  const run = async (): Promise<CliRunResult> => {
+    try {
+      const buildInfo = input.deps.currentBuildInfo ?? (input.deps.buildInfo ?? stationBuildInfo)();
+      if (input.deps.probes === undefined) {
+        throw new Error("Update channel probes are unavailable in this CLI composition.");
+      }
+      const selected = await inspectSelectedUpdateChannel({
+        probes: input.deps.probes,
+        requested: request.channel,
         installedScopeDigest: request.installedScopeDigest,
+        ...(input.options.signal === undefined
+          ? {}
+          : { options: { signal: input.options.signal } }),
+      });
+      const target = request.target;
+      if (!artifactsMatch(selected.installed, target)) {
+        throw new Error("The successor launcher does not own the requested target artifact.");
+      }
+      if (buildInfo.version !== target.version) {
+        throw new Error(
+          "The successor launcher build does not match the requested target artifact.",
+        );
+      }
+      if (input.deps.recoveryPreflight === undefined) {
+        throw new Error("Update recovery preflight is unavailable in this CLI composition.");
+      }
+      const initial = await input.deps.recoveryPreflight({
         installed: target,
         target,
-        buildInfo,
-        config: input.options.config,
-        ...(input.options.configPath === undefined ? {} : { configPath: input.options.configPath }),
-        request: successorRequestToUpdateRequest(request),
+        currentBuildArtifact: target,
+        currentBuildInfo: buildInfo,
+      });
+      if (!artifactsMatch(initial.installed, target) || !artifactsMatch(initial.target, target)) {
+        throw new Error("Successor preflight did not confirm the requested target artifact.");
+      }
+      if (!sameProviders(initial.hookProviderIds, request.hookProviderIds)) {
+        throw new Error("Successor hook providers changed across the launcher boundary.");
+      }
+      const planning = UpdateConvergencePlanningInputSchema.parse({
+        preflight: initial,
+        targetRuntime: {
+          status: "known",
+          buildIdentity: buildInfo.buildIdentity,
+          observerSelector: stationObserverBuildVersion(buildInfo),
+        },
+        installation: {
+          whenRequired: "apply",
+          owner: request.channel,
+          command: { kind: "none" },
+        },
+        handoff: handoffRequest(request),
+      });
+      const plan = deriveUpdateConvergencePlan(planning);
+      const report = createUpdateReportForArtifacts(request.channel, target, target, initial, plan);
+      const reap =
+        request.reapContinuation === undefined
+          ? undefined
+          : await successorReapContext(request, input.deps);
+      const execution = await executeUpdateConvergence(
+        {
+          selectedChannel: request.channel,
+          installedScopeDigest: request.installedScopeDigest,
+          installed: target,
+          target,
+          buildInfo,
+          config: input.options.config,
+          ...(input.options.configPath === undefined
+            ? {}
+            : { configPath: input.options.configPath }),
+          request: successorRequestToUpdateRequest(request),
+          report,
+          initial,
+          plan,
+          planning,
+          artifactChanged: false,
+          ...(reap === undefined ? {} : { reap }),
+        },
+        executionDeps(input.deps, input.options, selected),
+      );
+      return successorResult(
+        request,
         report,
-        initial,
-        plan,
-        planning,
-        artifactChanged: false,
-      },
-      executionDeps(input.deps, input.options, selected),
-    );
-    return successorResult(
-      request,
-      report,
-      execution.status === "current" || execution.status === "intentionally-incomplete",
-    );
+        execution.status === "current" || execution.status === "intentionally-incomplete",
+      );
+    } catch (error) {
+      return successorFailure(request, error);
+    }
+  };
+  if (request.reapContinuation === undefined) return run();
+  if (input.deps.reapJournal === undefined) {
+    return successorFailure(request, new Error("Update reap journal capability is unavailable."));
+  }
+  if (input.reapLockTransferToken === undefined) {
+    return successorFailure(request, new Error("Update reap lock transfer is unavailable."));
+  }
+  try {
+    return await input.deps.reapJournal.takeOverLock(input.reapLockTransferToken, run);
   } catch (error) {
     return successorFailure(request, error);
   }
@@ -238,7 +299,7 @@ export async function runSelectedUpdate(
   if (request.mode === "preview") {
     return previewUpdateCommandResult(
       {
-        schemaVersion: 5,
+        schemaVersion: 6,
         kind: "preview",
         channel: selected.channel,
         current,
@@ -251,6 +312,56 @@ export async function runSelectedUpdate(
   }
 
   const report = createUpdateReport(selected, initial, plan);
+  const incompleteJournal = await deps.reapJournal?.findIncomplete();
+  if (incompleteJournal !== undefined && !request.reap) {
+    report.error = {
+      tag: "UpdateError",
+      code: "UPDATE_REAP_CONTINUATION_REQUIRED",
+      message: "An incomplete terminal-reap transaction must be continued explicitly.",
+      hint: "Run `stn update --reap` to continue the exact private journal.",
+    };
+    report.recoveryCommands.push(["stn", "update", "--reap"]);
+    report.steps.push(updateStep("recovery-preparation", "failed", report.error.message));
+    return resultUpdateCommandResult(report, "failed", request.output);
+  }
+  if (request.reap && (plan.outcome === "reap-required" || incompleteJournal !== undefined)) {
+    return runReapUpdate({
+      selected,
+      request,
+      options,
+      deps,
+      initial,
+      planning,
+      plan,
+      report,
+    });
+  }
+  return executeSelectedPlan({
+    selected,
+    request,
+    options,
+    deps,
+    initial,
+    planning,
+    plan,
+    report,
+  });
+}
+
+async function executeSelectedPlan(input: {
+  selected: PlannedUpdateChannel;
+  request: UpdateRequest;
+  options: UpdateCommandOptions;
+  deps: UpdateCommandDeps & { currentBuildInfo: StationBuildInfo };
+  initial: UpdateReapRecoveryPreflight;
+  planning: import("@station/contracts").UpdateConvergencePlanningInput;
+  plan: import("@station/contracts").UpdateConvergencePlan;
+  report: UpdateCommandResultDraft;
+  reap?: UpdateReapRuntimeContext;
+}): Promise<CliRunResult> {
+  const { selected, request, options, deps, initial, planning, plan, report } = input;
+  const current = artifact(selected.plan.currentVersion, selected.plan.currentRevision);
+  const target = artifact(selected.plan.targetVersion, selected.plan.targetRevision);
   if (
     plan.phases.artifactApplication.action === "apply" &&
     !updateSuccessorEvidenceFitsOutput(initial, plan)
@@ -288,6 +399,7 @@ export async function runSelectedUpdate(
           }
         : {}),
       ...(deps.runSuccessor === undefined ? {} : { runSuccessor: deps.runSuccessor }),
+      ...(input.reap === undefined ? {} : { reap: input.reap }),
     },
     executionDeps(deps, options, selected),
   );
@@ -306,6 +418,198 @@ export async function runSelectedUpdate(
     addRecoveryGuidance(report, selected, request, options.configPath, result.status);
   }
   return resultUpdateCommandResult(report, result.status, request.output);
+}
+
+async function runReapUpdate(input: {
+  selected: PlannedUpdateChannel;
+  request: UpdateRequest;
+  options: UpdateCommandOptions;
+  deps: UpdateCommandDeps & { currentBuildInfo: StationBuildInfo };
+  initial: UpdateReapRecoveryPreflight;
+  planning: import("@station/contracts").UpdateConvergencePlanningInput;
+  plan: import("@station/contracts").UpdateConvergencePlan;
+  report: UpdateCommandResultDraft;
+}): Promise<CliRunResult> {
+  const { selected, request, options, deps, report } = input;
+  if (
+    deps.reapJournal === undefined ||
+    deps.reapProcessGroups === undefined ||
+    deps.reapSessionResume === undefined ||
+    deps.deriveReapAuthorization === undefined
+  ) {
+    report.error = {
+      tag: "UpdateError",
+      code: "UPDATE_REAP_CAPABILITY_UNAVAILABLE",
+      message: "Terminal-reap execution capabilities are unavailable.",
+    };
+    report.steps.push(updateStep("recovery-preparation", "failed", report.error.message));
+    return resultUpdateCommandResult(report, "failed", request.output);
+  }
+  const journalPort = deps.reapJournal;
+  const processGroups = deps.reapProcessGroups;
+  const resumePort = deps.reapSessionResume;
+  const deriveAuthorization = deps.deriveReapAuthorization;
+  return journalPort.withLock(async (lock) => {
+    let initialAuthorization: UpdateReapAuthorization | undefined;
+    let continuation: UpdateReapJournal | undefined;
+    try {
+      continuation = await journalPort.findIncomplete();
+      const authorize = async (
+        preflight: UpdateReapRecoveryPreflight,
+        plan: import("@station/contracts").UpdateConvergencePlan,
+      ) =>
+        deriveAuthorization({
+          channel: selected.channel,
+          selectedArtifact: artifact(selected.plan.targetVersion, selected.plan.targetRevision),
+          installedScopeDigest: selected.installedScopeDigest,
+          preflight,
+          plan,
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+        });
+      if (input.plan.outcome === "reap-required") {
+        try {
+          initialAuthorization = await authorize(input.initial, input.plan);
+        } catch (error) {
+          throw new UpdateReapAuthorizationRefusedError(
+            error instanceof UpdateReapAuthorizationEvidenceError
+              ? error.message
+              : "Initial update reap evidence could not be verified.",
+          );
+        }
+      }
+      const reauthorize = async () => {
+        const current = artifact(selected.plan.currentVersion, selected.plan.currentRevision);
+        const target = artifact(selected.plan.targetVersion, selected.plan.targetRevision);
+        const repeated = await inspectInitial(selected, current, target, deps);
+        const repeatedPlanning = createPlanningInput(
+          repeated,
+          current,
+          target,
+          resolveUpdateInstallationIntent(selected, request.packageManager),
+          request,
+          deps.currentBuildInfo,
+        );
+        return authorize(repeated, deriveUpdateConvergencePlan(repeatedPlanning));
+      };
+      const prepared = await executeUpdateReap({
+        expected: {
+          channel: selected.channel,
+          selectedArtifact: artifact(selected.plan.targetVersion, selected.plan.targetRevision),
+          installedScopeDigest: selected.installedScopeDigest,
+        },
+        ...(initialAuthorization === undefined ? {} : { authorization: initialAuthorization }),
+        ...(initialAuthorization === undefined ? {} : { reauthorize }),
+        journal: journalPort,
+        processGroups,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      });
+      report.steps.push(
+        updateStep(
+          "recovery-preparation",
+          "completed",
+          "Locked preflight matched the private terminal-reap authorization.",
+        ),
+        updateStep(
+          "terminal-reap",
+          prepared.recovery.unresolved ? "failed" : "completed",
+          prepared.recovery.unresolved
+            ? "One or more exact terminal process groups remain unresolved."
+            : "Exact terminal process groups reached a terminal outcome.",
+        ),
+      );
+      report.reapRecovery = prepared.recovery;
+      if (prepared.recovery.unresolved) {
+        report.recoveryCommands.push(...prepared.recovery.recoveryCommands);
+        report.error = {
+          tag: "UpdateError",
+          code: "UPDATE_REAP_UNRESOLVED",
+          message: "Terminal reaping did not reach a verified result for every target.",
+        };
+        return resultUpdateCommandResult(report, "failed", request.output);
+      }
+
+      let journal = prepared.journal;
+      const current = artifact(selected.plan.currentVersion, selected.plan.currentRevision);
+      const target = artifact(selected.plan.targetVersion, selected.plan.targetRevision);
+      let postReap = await inspectInitial(selected, current, target, deps);
+      if (!updateReapJournalHasReached(journal, "incumbent-host-empty")) {
+        if (
+          !updateReapIncumbentHostIsEmpty(
+            journal,
+            postReap,
+            updateRecoveryActionCommitments(postReap),
+          )
+        ) {
+          throw new Error("The incumbent Host did not report an exact zero-PTY inventory.");
+        }
+        journal = await markUpdateReapPhase(journal, "incumbent-host-empty", journalPort);
+        postReap = await inspectInitial(selected, current, target, deps);
+      }
+      const postPlanning = createPlanningInput(
+        postReap,
+        current,
+        target,
+        resolveUpdateInstallationIntent(selected, request.packageManager),
+        request,
+        deps.currentBuildInfo,
+      );
+      const postPlan = deriveUpdateConvergencePlan(postPlanning);
+      if (postPlan.outcome === "reap-required" || postPlan.outcome === "blocked") {
+        throw new Error("The post-reap convergence plan was not actionable.");
+      }
+      return executeSelectedPlan({
+        selected,
+        request,
+        options,
+        deps,
+        initial: postReap,
+        planning: postPlanning,
+        plan: postPlan,
+        report,
+        reap: {
+          journal,
+          journalPort,
+          resumePort,
+          prepareLockTransfer: lock.prepareTransfer,
+        },
+      });
+    } catch (error) {
+      const refusalSource = initialAuthorization ?? continuation;
+      if (error instanceof UpdateReapAuthorizationRefusedError) {
+        report.error = {
+          tag: "UpdateError",
+          code: "UPDATE_REAP_AUTHORIZATION_REFUSED",
+          message: error.message,
+        };
+        report.steps.push(
+          updateStep("recovery-preparation", "failed", error.message),
+          updateStep(
+            "terminal-reap",
+            "skipped",
+            "No terminal signal was sent because locked preflight did not match authorization.",
+          ),
+          updateStep(
+            "session-resume",
+            "skipped",
+            "No session was resumed because terminal reaping did not start.",
+          ),
+        );
+        report.reapRecovery =
+          refusalSource === undefined
+            ? refusedRecoveryFromUpdateReapPreflight(input.initial)
+            : refusedRecoveryFromUpdateReapTargets(refusalSource);
+        report.recoveryCommands.push(...report.reapRecovery.recoveryCommands);
+        return resultUpdateCommandResult(report, "failed", request.output);
+      }
+      report.error = publicSafeErrorFromUnknown(error, {
+        tag: "UpdateError",
+        code: "UPDATE_REAP_EXECUTION_FAILED",
+        message: "Station could not complete the authorized terminal-reap transaction.",
+      });
+      report.recoveryCommands.push(["stn", "update", "--reap"]);
+      return resultUpdateCommandResult(report, "failed", request.output);
+    }
+  });
 }
 
 async function inspectInitial(
@@ -464,6 +768,7 @@ function successorResult(
         },
       },
     ),
+    ...(report.reapRecovery === undefined ? {} : { reapRecovery: report.reapRecovery }),
   };
   if (report.error !== undefined) receipt.error = report.error;
   if (!updateSuccessorReceiptFitsOutput(receipt)) {
@@ -505,7 +810,11 @@ function parkedTerminalsFromInspection(
 }
 
 function actionFromStep(step: UpdateCommandStep): UpdateSuccessorReceipt["actions"][number] {
-  return { id: step.id, status: step.status, detail: step.detail.slice(0, 512) };
+  return {
+    id: step.id,
+    status: step.status,
+    detail: step.detail.slice(0, 512),
+  };
 }
 
 function receiptFinalInspection(inspection: UpdateFinalInspection): UpdateFinalInspection {
@@ -535,8 +844,37 @@ function successorRequestToUpdateRequest(request: UpdateSuccessorRequest): Updat
     mode: "apply",
     output: "json",
     packageManager: "defer",
-    reap: false,
+    reap: request.reapContinuation !== undefined,
     ...(request.handoff.action === "preserve" ? { handoff: request.handoff.fidelity } : {}),
+  };
+}
+
+async function successorReapContext(
+  request: UpdateSuccessorRequest,
+  deps: UpdateCommandDeps,
+): Promise<UpdateReapRuntimeContext> {
+  if (
+    request.reapContinuation === undefined ||
+    deps.reapJournal === undefined ||
+    deps.reapSessionResume === undefined
+  ) {
+    throw new Error("Update reap continuation capabilities are unavailable.");
+  }
+  const journal = await deps.reapJournal.read(request.reapContinuation.journalId);
+  if (
+    journal.channel !== request.channel ||
+    journal.selectedArtifact.version !== request.target.version ||
+    journal.selectedArtifact.revision !== request.target.revision ||
+    journal.installedScopeDigest !== request.installedScopeDigest ||
+    !updateReapJournalHasReached(journal, "artifact-applied") ||
+    updateReapJournalHasReached(journal, "completed")
+  ) {
+    throw new Error("The protected successor request did not match its update reap journal.");
+  }
+  return {
+    journal,
+    journalPort: deps.reapJournal,
+    resumePort: deps.reapSessionResume,
   };
 }
 

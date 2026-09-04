@@ -12,8 +12,10 @@ import {
   UpdateCommandReportSchema,
   UpdateCommandStepSchema,
   UpdateConvergencePlanSchema,
+  UpdateFinalInspectionSchema,
   UpdateReapHostEvidenceSchema,
   UpdateReapObserverEvidenceSchema,
+  UpdateReapRecoveryPreflightSchema,
   UpdateReapTerminalDispositionSchema,
 } from "../../packages/contracts/dist/index.js";
 
@@ -151,13 +153,56 @@ const predecessorV4UpdateCommandReportSchema = z.union([
   predecessorV4PreviewSchema,
   predecessorV4ResultSchema,
 ]);
+const predecessorV5Common = {
+  schemaVersion: z.literal(5),
+  channel: UpdateChannelIdSchema,
+  current: UpdateArtifactSchema,
+  target: UpdateArtifactSchema,
+};
+const predecessorV5UpdateCommandReportSchema = z.union([
+  z
+    .object({
+      ...predecessorV5Common,
+      kind: z.literal("preview"),
+      initial: UpdateReapRecoveryPreflightSchema,
+      plan: UpdateConvergencePlanSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...predecessorV5Common,
+      kind: z.literal("result"),
+      status: z.enum([
+        "current",
+        "updated",
+        "deferred",
+        "blocked",
+        "reap-required",
+        "intentionally-incomplete",
+        "failed",
+      ]),
+      initial: UpdateReapRecoveryPreflightSchema,
+      plan: UpdateConvergencePlanSchema,
+      finalInspection: UpdateFinalInspectionSchema.optional(),
+      steps: z.array(UpdateCommandStepSchema),
+      warnings: z.array(SafeErrorSchema),
+      recoveryCommands: z.array(UpdateCommandArgvSchema),
+      hookReconciliations: z.array(ProviderHookReconciliationResultSchema),
+      error: SafeErrorSchema.optional(),
+      cause: SafeErrorSchema.optional(),
+      startupEvidence: ObserverStartupEvidenceSchema.optional(),
+    })
+    .strict(),
+]);
 const legacyV1IncumbentVersion = "0.0.0-pre-alpha.5.16";
 const predecessorV4EmitterVersion = "0.0.0-pre-alpha.14.3";
+const predecessorV5EmitterVersion = "0.0.0-pre-alpha.14.5";
 
 export function updateReportSchemaVersionForEmitter(version) {
   if (version === legacyV1IncumbentVersion) return 1;
   if (version === predecessorV4EmitterVersion) return 4;
-  return 5;
+  if (version === predecessorV5EmitterVersion) return 5;
+  return 6;
 }
 
 export function parseComposedUpdateReport(value, emitterVersion) {
@@ -167,7 +212,9 @@ export function parseComposedUpdateReport(value, emitterVersion) {
       ? legacyV1UpdateCommandReportSchema
       : schemaVersion === 4
         ? predecessorV4UpdateCommandReportSchema
-        : UpdateCommandReportSchema;
+        : schemaVersion === 5
+          ? predecessorV5UpdateCommandReportSchema
+          : UpdateCommandReportSchema;
   return parseExpectedReport(schema, value, emitterVersion, schemaVersion);
 }
 

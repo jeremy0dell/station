@@ -126,7 +126,7 @@ describe("public convergence report projection", () => {
       handoff: { action: "preserve", fidelity: "processes" },
     });
     const report = projectPublicUpdateReport({
-      schemaVersion: 5,
+      schemaVersion: 6,
       kind: "preview",
       channel: "npm-global",
       current,
@@ -227,7 +227,7 @@ describe("public convergence report projection", () => {
       }),
     );
     const raw = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       kind: "result",
       channel: "npm-global",
       status: "failed",
@@ -245,6 +245,24 @@ describe("public convergence report projection", () => {
       ],
       warnings: [{ ...rawError, code: "UPDATE_WARNING" }],
       recoveryCommands: [["stn", "debug", "trace", "trace-public"]],
+      reapRecovery: {
+        status: "completed",
+        terminals: [
+          {
+            terminalTargetId: "terminal-private",
+            ptyId: "pty-private",
+            ptyInstanceId: "pty-instance-private",
+            sessionId: "session-private",
+            terminationOutcome: "terminated",
+            escalationUsed: false,
+            resumeDisposition: "retained",
+            unresolved: false,
+            recoveryCommands: [],
+          },
+        ],
+        unresolved: false,
+        recoveryCommands: [],
+      },
       error: rawError,
       cause: { ...rawError, code: "UPDATE_CAUSE" },
       hookReconciliations: [
@@ -278,6 +296,14 @@ describe("public convergence report projection", () => {
         diagnosticId: "diagnostic-public",
       });
     }
+    expect(projected.reapRecovery?.terminals[0]).toMatchObject({
+      terminalTargetId: "public-terminal-target-00000001",
+      ptyId: "public-pty-00000001",
+      ptyInstanceId: "public-pty-instance-00000001",
+      sessionId: "public-session-00000001",
+      terminationOutcome: "terminated",
+      resumeDisposition: "retained",
+    });
     expect(projected.steps[0]?.command).toEqual(["npm", "install", "session-private"]);
     expect(projected.target.revision).toBe("artifact-public");
 
@@ -288,6 +314,9 @@ describe("public convergence report projection", () => {
       expect(serialized).not.toContain('"projectId":"project-private"');
       expect(serialized).not.toContain('"worktreeId":"worktree-private"');
       expect(serialized).not.toContain('"sessionId":"session-private"');
+      expect(serialized).not.toContain("terminal-private");
+      expect(serialized).not.toContain("pty-private");
+      expect(serialized).not.toContain("pty-instance-private");
     }
   });
 
@@ -371,7 +400,7 @@ function unknownErrorReport(location: "observer" | "recovery" | "host") {
     }),
   );
   return projectPublicUpdateReport({
-    schemaVersion: 5,
+    schemaVersion: 6,
     kind: "preview",
     channel: "installer-binary",
     current,

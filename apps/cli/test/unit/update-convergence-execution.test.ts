@@ -3,6 +3,7 @@ import {
   HOST_PROTOCOL_VERSION,
   STATION_SCHEMA_VERSION,
   UpdateConvergencePlanningInputSchema,
+  type UpdateReapJournal,
   type UpdateReapRecoveryPreflight,
   UpdateReapRecoveryPreflightSchema,
   updateReapEvidenceIsComplete,
@@ -19,6 +20,7 @@ import {
   type UpdateConvergenceExecutionInput,
 } from "../../src/update/convergenceExecution.js";
 import { deriveUpdateConvergencePlan } from "../../src/update/convergencePlan.js";
+import type { UpdateReapJournalPort } from "../../src/update/reapJournal.js";
 
 const buildInfo: StationBuildInfo = {
   compiled: false,
@@ -202,7 +204,121 @@ describe("executeUpdateConvergence", () => {
       expect.objectContaining({ currentBuildArtifact: { version: "1.0.0" }, target }),
     );
   });
+
+  it.each([
+    ["incumbent-host-empty", "after Host exit"],
+    ["artifact-applied", "during hook repair"],
+    ["observer-converged", "after Observer crossover"],
+    ["host-converged", "during final reconcile"],
+    ["sessions-resumed", "during final verification"],
+  ] as const)("continues a reap journal %s (%s)", async (phase) => {
+    const state = await createTempState();
+    const initial = preflight({ observer: { status: "absent" }, host: { status: "absent" } });
+    const final = preflight({ observer: matchingObserver(), host: matchingHost() });
+    const planning = planningInput(initial);
+    const plan = deriveUpdateConvergencePlan(planning);
+    const report = createUpdateReport(selectedChannel(), initial, plan);
+    const journalPort = memoryJournal(journalAt(phase));
+    const input = executionInput(state.config, initial, plan, planning, report);
+    input.request.reap = true;
+    input.reap = {
+      journal: journalAt(phase),
+      journalPort,
+      resumePort: {
+        inspect: vi.fn(async () => "resumed"),
+        resume: vi.fn(async () => undefined),
+      },
+    };
+
+    const result = await executeUpdateConvergence(input, {
+      inspect: vi.fn().mockResolvedValue(final),
+      inspectInstalled: async () => ({ version: "1.0.0" }),
+      convergeObserver: vi.fn(async () => runningObserver(state.config)),
+      reconcilePersisted: vi.fn(async () => undefined),
+    });
+
+    expect(result.status).toBe("current");
+    expect(journalPort.current().phase).toBe("completed");
+    expect(report.reapRecovery).toMatchObject({ status: "completed", unresolved: false });
+  });
 });
+
+function journalAt(phase: UpdateReapJournal["phase"]): UpdateReapJournal {
+  return {
+    schemaVersion: 1,
+    id: "00000000-0000-4000-8000-000000000001",
+    authorizationDigest: "c".repeat(64),
+    phase,
+    channel: "installer-binary",
+    selectedArtifact: { version: "1.0.0" },
+    installedScopeDigest: "b".repeat(64),
+    host: {
+      socketPath: "/state/host.sock",
+      inode: "1",
+      birthtimeNs: "2",
+      buildVersion: "0.9.0",
+      buildIdentity: "d".repeat(64),
+      process: { pid: 100, startToken: "host-start" },
+    },
+    targets: [
+      {
+        terminal: {
+          kind: "aux",
+          terminalTargetId: "terminal-1",
+          ptyId: "pty-1",
+          ptyInstanceId: "pty-instance-1",
+          projectId: "project-1",
+          worktreeId: "worktree-1",
+          sessionId: "session-1",
+          harnessProvider: "codex",
+          pid: 200,
+        },
+        processGroup: {
+          leader: { pid: 200, parentPid: 100, pgid: 200, startToken: "terminal-start" },
+          members: [{ pid: 200, parentPid: 100, pgid: 200, startToken: "terminal-start" }],
+        },
+        recovery: { kind: "non-resumable" },
+        result: {
+          terminalTargetId: "terminal-1",
+          ptyId: "pty-1",
+          ptyInstanceId: "pty-instance-1",
+          sessionId: "session-1",
+          terminationOutcome: "terminated",
+          escalationUsed: false,
+          resumeDisposition: "non-resumable",
+          unresolved: false,
+          recoveryCommands: [],
+        },
+      },
+    ],
+    createdAt: "2026-09-04T12:00:00.000Z",
+    updatedAt: "2026-09-04T12:00:00.000Z",
+  };
+}
+
+function memoryJournal(initial: UpdateReapJournal): UpdateReapJournalPort & {
+  current(): UpdateReapJournal;
+} {
+  let stored = structuredClone(initial);
+  return {
+    current: () => stored,
+    findIncomplete: async () => stored,
+    read: async () => stored,
+    write: async (journal) => {
+      stored = structuredClone(journal);
+    },
+    withLock: async (run) =>
+      run({
+        prepareTransfer: async () => "00000000-0000-4000-8000-000000000099",
+        release: async () => undefined,
+      }),
+    takeOverLock: async (_transferToken, run) =>
+      run({
+        prepareTransfer: async () => "00000000-0000-4000-8000-000000000098",
+        release: async () => undefined,
+      }),
+  };
+}
 
 function executionInput(
   config: StationConfig,

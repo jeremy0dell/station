@@ -2592,12 +2592,29 @@ describe("session command vertical slice", () => {
     });
     if (handle === undefined) throw new Error("Expected imported recovery handle.");
 
+    const refused = await fixture.queue.dispatch({
+      type: "session.resumeAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: existing.id,
+        recoveryHandleId: handle.id,
+        expected: { sessionId: "ses_other", provider: "fake-harness" },
+      },
+    });
+    await fixture.queue.drain();
+    await expect(fixture.persistence.getCommand(refused.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "SESSION_RECOVERY_HANDLE_MISMATCH" },
+    });
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
+
     const resumed = await fixture.queue.dispatch({
       type: "session.resumeAgent",
       payload: {
         projectId: "web",
         worktreeId: existing.id,
         recoveryHandleId: handle.id,
+        expected: { sessionId: "ses_imported_resume", provider: "fake-harness" },
       },
     });
     await fixture.queue.drain();

@@ -279,6 +279,8 @@ describe("release readiness docs", () => {
     expect(install).toContain("## Update Station");
     expect(install).toContain("stn update --dry-run --json");
     expect(install).toContain("stn update --drive-package-manager");
+    expect(install).toContain("stn update --reap");
+    expect(install).toContain("older than the first release that supports `--reap`");
     expect(install).toContain("default to preserving");
     expect(install).toContain("--no-handoff");
     expect(releasing).toMatch(/never publishes the draft automatically/);
@@ -297,8 +299,9 @@ describe("release readiness docs", () => {
     ]) {
       expect(normalizedReleasing).toContain(scenario);
     }
-    expect(releasing).toContain("seven staged cases");
-    expect(releasing).toContain("Every v5 preview and result");
+    expect(releasing).toContain("eight staged cases");
+    expect(releasing).toContain("Every v6 preview and result");
+    expect(releasing).toContain("same eight cases");
     expect(releasing).toContain("correlated `public-*` aliases");
     expect(releasing).toContain("completed final inspection");
     expect(releasing).toContain("plan is `converged`");

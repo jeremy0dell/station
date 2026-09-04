@@ -1948,7 +1948,7 @@
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Failed cleanup discards only a session seeded by this command."
+          "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates the optional expected session/provider identity and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Failed cleanup discards only a session seeded by this command."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -13930,7 +13930,7 @@
           "name": "sessionRecoveryEligibility",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Admits one opaque recovery handle only when its provider-neutral identity, open Station lifecycle, registered harness capability, and cwd evidence authorize the exact worktree. A deliberately selected imported handle may proceed without a local lifecycle row, but local legacy, ended, or contradictory identity always wins over that compatibility path."
+          "purpose": "Admits one opaque recovery handle only when its provider-neutral identity, open Station lifecycle, registered harness capability, and cwd evidence authorize the exact worktree. A deliberately selected imported handle may proceed without a local lifecycle row when the handle itself matches any expected identity. Local legacy, ended, or contradictory identity always wins."
         },
         {
           "name": "SessionRecoveryEligibility",
@@ -15903,7 +15903,7 @@
       "declaration": "executeUpdateConvergence",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Executes one ordered safe convergence. Lifecycle capabilities perform their own immediate identity revalidation, and final inspection redetects the installed artifact. This coordinator only orders those capabilities and never authorizes reap or signal.",
+      "purpose": "Executes one ordered safe convergence. Lifecycle capabilities perform their own immediate identity revalidation, and final inspection redetects the installed artifact. This coordinator orders those capabilities and continues an already-authorized opaque reap journal without granting signal authority to the public plan.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providerHooks.ts",
@@ -16054,6 +16054,108 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/reapExecution.ts",
+      "declaration": "executeUpdateReap",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Repeats authorization under the update lock, commits the private restart journal before any signal, and drains only exact journaled process groups through the fixed TERM/KILL policy.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/reapJournal.ts",
+          "declaration": "UpdateReapJournalPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/cli/src/update/reapProcessGroups.ts",
+          "declaration": "UpdateReapProcessGroupPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/reapJournal.ts",
+      "declaration": "createFilesystemUpdateReapJournalPort",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Uses an owner-only state-directory lock and atomic mode-0600 journal replacement. A successor replaces the live owner only with its private transfer token. An exclusive claimant file serializes transfer, stale recovery, and atomic release after exact process revalidation.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/reapJournal.ts",
+          "declaration": "UpdateReapJournalPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/reapJournal.ts",
+      "declaration": "UpdateReapJournalPort",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Serializes update recovery and persists its strict private restart journal.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/reapPlan.ts",
+      "declaration": "deriveUpdateReapAuthorization",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Derives private SHA-256 authority only for one complete canonical reap-required plan whose exact Host child groups and selected recovery handles remain correlated to the private preflight.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/reapProcessGroups.ts",
+      "declaration": "createPosixUpdateReapProcessGroupPort",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Reads the complete POSIX process table and signals one negative PGID only after policy has accepted its exact identity.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/reapProcessGroups.ts",
+          "declaration": "UpdateReapProcessGroupPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/reapProcessGroups.ts",
+      "declaration": "UpdateReapProcessGroupPort",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies exact POSIX process-group evidence and the only signal capability used by update reap.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/reapSessionResume.ts",
+      "declaration": "createObserverUpdateReapSessionResumePort",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Observes the exact Station session around one identity-bound `session.resumeAgent` command.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/command.ts",
+          "declaration": "executeTypedObserverCommand",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/update/recoveryPreflight.ts",
       "declaration": "runUpdateRecoveryPreflight",
       "kind": "function",
@@ -16152,6 +16254,36 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/recoveryPreflightAdapters.ts",
+      "declaration": "deriveLocalUpdateReapAuthorization",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Captures the exact Host socket owner and every live terminal process group for one private reap authorization. The returned SHA-256 digest does not enter the public convergence plan.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/reapPlan.ts",
+          "declaration": "deriveUpdateReapAuthorization",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/reapProcessGroups.ts",
+          "declaration": "UpdateReapProcessGroupPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "readUnixSocketHolderPidsAsync",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/update/recoveryTerminalDispositions.ts",
       "declaration": "deriveUpdateRecoveryTerminalDispositions",
       "kind": "function",
@@ -16164,7 +16296,7 @@
       "declaration": "runUpdateSuccessorTransport",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Crosses once through a protected bounded request and accepts only a correlated strict receipt.",
+      "purpose": "Crosses once through a protected bounded request and accepts only a correlated strict receipt. The request carries an opaque journal continuation without signal or process authority. A separate one-shot private environment token transfers only the held journal lock.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/convergencePlan.ts",
@@ -16514,7 +16646,7 @@
       "declaration": "createSessionResumeAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Failed cleanup discards only a session seeded by this command.",
+      "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates the optional expected session/provider identity and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Failed cleanup discards only a session seeded by this command.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",
@@ -17984,7 +18116,7 @@
       "declaration": "sessionRecoveryEligibility",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Admits one opaque recovery handle only when its provider-neutral identity, open Station lifecycle, registered harness capability, and cwd evidence authorize the exact worktree. A deliberately selected imported handle may proceed without a local lifecycle row, but local legacy, ended, or contradictory identity always wins over that compatibility path.",
+      "purpose": "Admits one opaque recovery handle only when its provider-neutral identity, open Station lifecycle, registered harness capability, and cwd evidence authorize the exact worktree. A deliberately selected imported handle may proceed without a local lifecycle row when the handle itself matches any expected identity. Local legacy, ended, or contradictory identity always wins.",
       "dependencies": []
     },
     {

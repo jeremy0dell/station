@@ -70,7 +70,7 @@ const plan = {
   },
 };
 const preview = {
-  schemaVersion: 5 as const,
+  schemaVersion: 6 as const,
   kind: "preview" as const,
   channel: "installer-binary" as const,
   current,
@@ -79,7 +79,7 @@ const preview = {
   plan,
 };
 const result = {
-  schemaVersion: 5 as const,
+  schemaVersion: 6 as const,
   kind: "result" as const,
   channel: "installer-binary" as const,
   status: "failed" as const,
@@ -117,13 +117,25 @@ describe("current update report", () => {
       error: { tag: "UpdateError", code: "UPDATE_FAILED", message: "Failed." },
       cause: { tag: "UpdateError", code: "UPDATE_CAUSE", message: "Cause." },
       startupEvidence: { bootLogPath: "/tmp/observer.log" },
+      reapRecovery: {
+        status: "completed" as const,
+        terminals: [],
+        unresolved: false,
+        recoveryCommands: [],
+      },
     };
     expect(parseUpdateCommandReport(failed)).toEqual(failed);
     expect(parseUpdateCommandReport(result)).not.toHaveProperty("error");
   });
 
   it("rejects explicit undefined for every exact optional result field", () => {
-    for (const field of ["finalInspection", "error", "cause", "startupEvidence"] as const) {
+    for (const field of [
+      "finalInspection",
+      "reapRecovery",
+      "error",
+      "cause",
+      "startupEvidence",
+    ] as const) {
       expect(
         UpdateCommandReportSchema.safeParse({ ...result, [field]: undefined }).success,
         field,
@@ -259,7 +271,7 @@ describe("current update report", () => {
   });
 
   it("rejects old discriminators, nested envelopes, and contradictory ownership shapes", () => {
-    for (const schemaVersion of [1, 2, 3]) {
+    for (const schemaVersion of [1, 2, 3, 4, 5]) {
       expect(UpdateCommandReportSchema.safeParse({ ...result, schemaVersion }).success).toBe(false);
     }
     for (const extra of [

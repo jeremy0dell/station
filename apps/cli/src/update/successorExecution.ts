@@ -14,6 +14,7 @@ import {
   UpdateConvergencePlanningInputSchema,
   UpdateFinalInspectionSchema,
   type UpdateReapRecoveryPreflight,
+  UpdateReapRecoveryResultSchema,
   UpdateReapTerminalEvidenceSchema,
   type UpdateSuccessorRequest,
   UpdateSuccessorRequestSchema,
@@ -30,7 +31,9 @@ const successorOutputLimit = 256 * 1024;
 const successorTransportOutputLimit = 384 * 1024;
 const successorOutputEvidenceReserve = 64 * 1024;
 export const UPDATE_SUCCESSOR_PRIVATE_ENV = "STATION_UPDATE_SUCCESSOR_PRIVATE";
+export const UPDATE_SUCCESSOR_REAP_LOCK_ENV = "STATION_UPDATE_SUCCESSOR_REAP_LOCK";
 const successorTransportKeySchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/u);
+const successorReapLockTransferTokenSchema = z.string().uuid();
 const successorTransportEnvelopeSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -54,10 +57,13 @@ const successorActionOrder = [
   "detect",
   "plan",
   "apply",
+  "recovery-preparation",
+  "terminal-reap",
   "hook-reconciliation",
   "observer-restart",
   "host-handoff",
   "persisted-state-reconcile",
+  "session-resume",
   "final-verification",
 ] as const;
 
@@ -74,6 +80,7 @@ const successorReceiptSchema = z
       .array(successorParkedTerminalSchema)
       .max(1_024)
       .refine(stationHostTerminalLifetimeIdentitiesAreCanonical),
+    reapRecovery: UpdateReapRecoveryResultSchema.optional(),
     finalInspection: UpdateFinalInspectionSchema,
     error: SafeErrorSchema.optional(),
   })
@@ -140,6 +147,13 @@ const successorReceiptSchema = z
         message: "Completed successor receipts cannot contain a failure.",
       });
     }
+    if (receipt.reapRecovery?.status === "refused") {
+      context.addIssue({
+        code: "custom",
+        path: ["reapRecovery"],
+        message: "A successor receipt cannot report an unstarted reap refusal.",
+      });
+    }
     if (
       receipt.finalInspection.status === "completed" &&
       receipt.finalInspection.plan.phases.artifactApplication.command.kind !== "none"
@@ -183,6 +197,7 @@ export type UpdateSuccessorTransportInput = {
   launcher: ExecutableArgv;
   configPath?: string;
   request: UpdateSuccessorRequest;
+  reapLockTransferToken?: string;
   commandRunner?: ExternalCommandRunner;
 };
 
@@ -190,6 +205,8 @@ export type UpdateSuccessorTransportInput = {
  * ADAPTER
  *
  * Crosses once through a protected bounded request and accepts only a correlated strict receipt.
+ * The request carries an opaque journal continuation without signal or process authority. A separate
+ * one-shot private environment token transfers only the held journal lock.
  */
 export async function runUpdateSuccessorTransport(
   input: UpdateSuccessorTransportInput,
@@ -213,7 +230,16 @@ export async function runUpdateSuccessorTransport(
       timeoutMs: 120_000,
       maxOutputChars: successorTransportOutputLimit,
       stdin,
-      env: { [UPDATE_SUCCESSOR_PRIVATE_ENV]: transportKey },
+      env: {
+        [UPDATE_SUCCESSOR_PRIVATE_ENV]: transportKey,
+        ...(input.reapLockTransferToken === undefined
+          ? {}
+          : {
+              [UPDATE_SUCCESSOR_REAP_LOCK_ENV]: successorReapLockTransferTokenSchema.parse(
+                input.reapLockTransferToken,
+              ),
+            }),
+      },
       allowedExitCodes: [1],
     },
     input.commandRunner,
@@ -235,6 +261,12 @@ export function createUpdateSuccessorTransportKey(): string {
 
 export function updateSuccessorTransportKeyIsValid(value: string | undefined): value is string {
   return successorTransportKeySchema.safeParse(value).success;
+}
+
+export function updateSuccessorReapLockTransferTokenIsValid(
+  value: string | undefined,
+): value is string {
+  return successorReapLockTransferTokenSchema.safeParse(value).success;
 }
 
 export function sealUpdateSuccessorOutput(value: unknown, transportKey: string): unknown {
@@ -281,6 +313,7 @@ function parseSuccessorReceipt(
     receipt.channel !== request.channel ||
     receipt.target.version !== target.version ||
     receipt.target.revision !== target.revision ||
+    (receipt.reapRecovery !== undefined) !== (request.reapContinuation !== undefined) ||
     !providersSorted ||
     providers.some((provider) => !request.hookProviderIds.includes(provider)) ||
     (receipt.status === "completed" &&
@@ -305,6 +338,12 @@ function validateCompletedReceipt(
   }
   if (!sameProviders(receipt.finalInspection.aggregate.hookProviderIds, request.hookProviderIds)) {
     throw new Error("The successor final aggregate changed the requested hook providers.");
+  }
+  if (
+    request.reapContinuation !== undefined &&
+    (receipt.reapRecovery?.status !== "completed" || receipt.reapRecovery.unresolved)
+  ) {
+    throw new Error("The completed successor did not finish its reap continuation.");
   }
   const planning = UpdateConvergencePlanningInputSchema.parse({
     preflight: receipt.finalInspection.aggregate,

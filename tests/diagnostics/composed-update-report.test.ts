@@ -25,7 +25,7 @@ function legacyReport() {
 
 function currentReport() {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     kind: "result",
     channel: "installer-binary",
     status: "failed",
@@ -130,6 +130,10 @@ function predecessorV4Report() {
   };
 }
 
+function predecessorV5Report() {
+  return { ...currentReport(), schemaVersion: 5 };
+}
+
 describe("composed update report parsing", () => {
   it("maps each emitter generation to its exact report schema", async () => {
     const { updateReportSchemaVersionForEmitter } = await loadReportModule();
@@ -137,8 +141,8 @@ describe("composed update report parsing", () => {
     expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.5.16")).toBe(1);
     expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.14.3")).toBe(4);
     expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.14.5")).toBe(5);
-    expect(updateReportSchemaVersionForEmitter("0.0.0-local")).toBe(5);
-    expect(updateReportSchemaVersionForEmitter("0.0.1-local")).toBe(5);
+    expect(updateReportSchemaVersionForEmitter("0.0.0-local")).toBe(6);
+    expect(updateReportSchemaVersionForEmitter("0.0.1-local")).toBe(6);
   });
 
   it("accepts the strict published-predecessor report", async () => {
@@ -194,6 +198,16 @@ describe("composed update report parsing", () => {
     ).toThrow();
   });
 
+  it("accepts the frozen schema-v5 release-boundary contract", async () => {
+    const { parseComposedUpdateReport } = await loadReportModule();
+    const report = predecessorV5Report();
+
+    expect(parseComposedUpdateReport(report, "0.0.0-pre-alpha.14.5")).toEqual(report);
+    expect(() =>
+      parseComposedUpdateReport({ ...report, reapRecovery: {} }, "0.0.0-pre-alpha.14.5"),
+    ).toThrow();
+  });
+
   it.each([2, 3])("rejects unsupported report schema %i", async (schemaVersion) => {
     const { parseComposedUpdateReport } = await loadReportModule();
 
@@ -206,13 +220,13 @@ describe("composed update report parsing", () => {
     const { parseComposedUpdateReport } = await loadReportModule();
 
     expect(() => parseComposedUpdateReport(legacyReport(), "0.0.0-local")).toThrow(
-      /Expected update report schema 5/u,
+      /Expected update report schema 6/u,
     );
     expect(() => parseComposedUpdateReport(currentReport(), "0.0.0-pre-alpha.5.16")).toThrow(
       /Expected update report schema 1/u,
     );
     expect(() => parseComposedUpdateReport(predecessorV4Report(), "0.0.0-local")).toThrow(
-      /Expected update report schema 5/u,
+      /Expected update report schema 6/u,
     );
     expect(() => parseComposedUpdateReport(currentReport(), "0.0.0-pre-alpha.14.3")).toThrow(
       /Expected update report schema 4/u,

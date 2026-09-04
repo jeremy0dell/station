@@ -126,6 +126,13 @@ export const ResumeAgentPayloadSchema = z
     projectId: ProjectIdSchema,
     worktreeId: WorktreeIdSchema,
     recoveryHandleId: nonEmptyStringSchema.optional(),
+    expected: z
+      .object({
+        sessionId: SessionIdSchema,
+        provider: ProviderIdSchema,
+      })
+      .strict()
+      .optional(),
     terminal: TerminalCommandOptionsSchema.partial().optional(),
     initialPrompt: nonEmptyStringSchema.optional(),
   })

@@ -23,10 +23,13 @@ export const UpdateCommandStepIdSchema = z.enum([
   "detect",
   "plan",
   "apply",
+  "recovery-preparation",
+  "terminal-reap",
   "hook-reconciliation",
   "observer-restart",
   "host-handoff",
   "persisted-state-reconcile",
+  "session-resume",
   "final-verification",
 ]);
 
@@ -73,7 +76,12 @@ export type UpdateSuccessorRequest = {
   installedScopeDigest: string;
   handoff: UpdateSuccessorHandoff;
   hookProviderIds: z.infer<typeof ProviderIdSchema>[];
+  reapContinuation?: UpdateReapContinuation;
 };
+
+/** Opaque reference to one private update-reap journal in the configured state directory. */
+export const UpdateReapContinuationSchema = z.object({ journalId: z.string().uuid() }).strict();
+export type UpdateReapContinuation = z.infer<typeof UpdateReapContinuationSchema>;
 
 const successorRequestSchema = z
   .object({
@@ -86,6 +94,7 @@ const successorRequestSchema = z
       z.object({ action: z.literal("leave-in-place") }).strict(),
     ]),
     hookProviderIds: z.array(ProviderIdSchema).max(32),
+    reapContinuation: UpdateReapContinuationSchema.optional(),
   })
   .strict()
   .superRefine((request, context) => {
@@ -108,7 +117,17 @@ const successorRequestSchema = z
       version: request.target.version,
       ...(request.target.revision === undefined ? {} : { revision: request.target.revision }),
     };
-    return { ...request, target };
+    return {
+      schemaVersion: request.schemaVersion,
+      channel: request.channel,
+      target,
+      installedScopeDigest: request.installedScopeDigest,
+      handoff: request.handoff,
+      hookProviderIds: request.hookProviderIds,
+      ...(request.reapContinuation === undefined
+        ? {}
+        : { reapContinuation: request.reapContinuation }),
+    };
   });
 
 export const UpdateSuccessorRequestSchema = z
