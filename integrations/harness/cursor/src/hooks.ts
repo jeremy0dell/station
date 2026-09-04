@@ -6,6 +6,7 @@ import {
   generatedHookScriptPath,
   hookSetupFileOpsFor,
   isHookOwnershipConflict,
+  sameOwnerOwnership,
 } from "@station/harness-shared";
 import {
   assertProviderHookArtifactOwnership,
@@ -292,11 +293,7 @@ export async function installCursorHooks(
   });
   const result: CursorHookInstallResult = { ...plan, installed: true };
   if (options.artifactOwner !== undefined) {
-    result.ownership = {
-      status: "same-owner",
-      requested: options.artifactOwner,
-      currentLauncher: options.artifactOwner.launcher,
-    };
+    result.ownership = sameOwnerOwnership(options.artifactOwner);
   }
   assignBackupPaths(result, [backupPath]);
   return result;

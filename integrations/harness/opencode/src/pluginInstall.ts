@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
-import { isHookOwnershipConflict } from "@station/harness-shared";
+import { isHookOwnershipConflict, sameOwnerOwnership } from "@station/harness-shared";
 import {
   assertProviderHookArtifactOwnership,
   classifyProviderHookArtifactOwnership,
@@ -96,11 +96,7 @@ export async function installOpenCodePlugin(
     installed: true,
   };
   if (options.artifactOwner !== undefined) {
-    result.ownership = {
-      status: "same-owner",
-      requested: options.artifactOwner,
-      currentLauncher: options.artifactOwner.launcher,
-    };
+    result.ownership = sameOwnerOwnership(options.artifactOwner);
   }
   if (backupPath !== undefined) {
     result.backupPath = backupPath;

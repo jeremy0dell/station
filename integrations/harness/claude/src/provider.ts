@@ -10,7 +10,7 @@ import type {
 import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
-  harnessCommand,
+  harnessCommandResolver,
   harnessHealth,
   harnessHookDoctorOptions,
   harnessHooksStatusFrom,
@@ -95,13 +95,7 @@ const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>
   version: { latestPackage: "@anthropic-ai/claude-code" },
 };
 
-function command(options: ClaudeHarnessProviderOptions): string {
-  return harnessCommand(
-    options,
-    claudeHarnessCommandDefinition.commandEnvVar,
-    claudeHarnessCommandDefinition.commandFallback,
-  );
-}
+const command = harnessCommandResolver(claudeHarnessCommandDefinition);
 
 function hookPathOptions(
   options: ClaudeHarnessProviderOptions,

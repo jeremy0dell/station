@@ -11,7 +11,7 @@ import type {
 import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
-  harnessCommand,
+  harnessCommandResolver,
   harnessHealth,
   healthDoctorCheck,
   hookDoctorCheck,
@@ -77,13 +77,7 @@ const openCodeSpec: TerminalBoundHarnessProviderSpec<OpenCodeHarnessProviderOpti
   hooksStatus,
 };
 
-function command(options: OpenCodeHarnessProviderOptions): string {
-  return harnessCommand(
-    options,
-    openCodeHarnessCommandDefinition.commandEnvVar,
-    openCodeHarnessCommandDefinition.commandFallback,
-  );
-}
+const command = harnessCommandResolver(openCodeHarnessCommandDefinition);
 
 function buildLaunch(
   options: OpenCodeHarnessProviderOptions,

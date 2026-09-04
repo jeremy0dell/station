@@ -8,6 +8,7 @@ import {
   type HarnessEventReportInput,
   harnessEventStatus,
   reportCorrelation,
+  stationIdentityCorrelation,
 } from "@station/harness-shared";
 import { piHarnessError } from "../errors.js";
 import { normalizePiEventType, type PiCompactEvent, parsePiCompactEvent } from "./compactEvent.js";
@@ -85,14 +86,7 @@ function reportCorrelationFromPiEvent(
 ): HarnessEventReport["correlation"] | undefined {
   return reportCorrelation({
     cwd: event.cwd,
-    projectId: event.station_project_id,
-    worktreeId: event.station_worktree_id,
-    sessionId: event.station_session_id,
-    terminalTargetId: event.station_terminal_target_id,
-    harnessRunId:
-      event.station_terminal_target_id === undefined
-        ? undefined
-        : `pi:${event.station_terminal_target_id}`,
+    ...stationIdentityCorrelation("pi", event),
     nativeSessionFile: event.pi_session_file,
     nativeSessionId: event.pi_session_file === undefined ? event.pi_session_id : undefined,
     pid: event.pid,

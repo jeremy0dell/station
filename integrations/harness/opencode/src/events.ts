@@ -7,6 +7,7 @@ import {
   type HarnessEventReportInput,
   harnessEventStatus,
   reportCorrelation,
+  stationIdentityCorrelation,
   stationIdentityProviderData,
 } from "@station/harness-shared";
 import { openCodeHarnessError } from "./errors.js";
@@ -238,14 +239,7 @@ function reportCorrelationFromOpenCodeEvent(
     cwd: event.cwd,
     nativeSessionId: event.opencode_session_id,
     pid: event.pid,
-    projectId: event.station_project_id,
-    worktreeId: event.station_worktree_id,
-    sessionId: event.station_session_id,
-    terminalTargetId: event.station_terminal_target_id,
-    harnessRunId:
-      event.station_terminal_target_id === undefined
-        ? undefined
-        : `opencode:${event.station_terminal_target_id}`,
+    ...stationIdentityCorrelation("opencode", event),
   });
 }
 

@@ -1,4 +1,4 @@
-import type { ProviderHookArtifactOwnership } from "@station/contracts";
+import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
 import {
   createHookSetupFileOps,
   type HookSetupErrorFactory,
@@ -64,6 +64,13 @@ export function hookSetupFileOpsFor<TCode extends string>(
     const failure = failures[operation];
     return new ErrorClass(failure.code, failure.message, { cause });
   });
+}
+
+/** Records this runtime as the artifact owner after a successful write. */
+export function sameOwnerOwnership(
+  owner: ProviderHookArtifactOwner,
+): ProviderHookArtifactOwnership {
+  return { status: "same-owner", requested: owner, currentLauncher: owner.launcher };
 }
 
 export function isHookOwnershipConflict(

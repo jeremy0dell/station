@@ -14,7 +14,7 @@ import type {
 import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
-  harnessCommand,
+  harnessCommandResolver,
   harnessHealth,
   harnessHookDoctorOptions,
   harnessHookReconciliationOptions,
@@ -90,13 +90,7 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
   version: { latestPackage: "@openai/codex" },
 };
 
-function command(options: CodexHarnessProviderOptions): string {
-  return harnessCommand(
-    options,
-    codexHarnessCommandDefinition.commandEnvVar,
-    codexHarnessCommandDefinition.commandFallback,
-  );
-}
+const command = harnessCommandResolver(codexHarnessCommandDefinition);
 
 function buildLaunch(
   options: CodexHarnessProviderOptions,

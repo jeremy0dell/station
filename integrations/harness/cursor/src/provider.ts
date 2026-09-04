@@ -10,7 +10,7 @@ import type {
 import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
-  harnessCommand,
+  harnessCommandResolver,
   harnessHookDoctorOptions,
   harnessHooksStatusFrom,
   hookDoctorCheck,
@@ -85,13 +85,7 @@ const cursorSpec: TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions>
   hooksStatus,
 };
 
-function command(options: CursorHarnessProviderOptions): string {
-  return harnessCommand(
-    options,
-    cursorHarnessCommandDefinition.commandEnvVar,
-    cursorHarnessCommandDefinition.commandFallback,
-  );
-}
+const command = harnessCommandResolver(cursorHarnessCommandDefinition);
 
 function buildLaunch(
   options: CursorHarnessProviderOptions,
