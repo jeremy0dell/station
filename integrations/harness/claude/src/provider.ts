@@ -51,7 +51,7 @@ const baseCapabilities: HarnessCapabilities = {
   canStop: false,
   canRunNonInteractive: true,
   canExposeApprovalState: true,
-  supportsModifiedEnterSoftNewline: false,
+  supportsModifiedEnterSoftNewline: true,
 };
 
 export const claudeHarnessCommandDefinition = {
