@@ -99,7 +99,7 @@ export function isCompiledBinary(): boolean {
 
 function stationBuildVersion(): string {
   return typeof STATION_BUILD_VERSION === "undefined"
-    ? "0.0.0-pre-alpha.14.5"
+    ? "0.0.0-pre-alpha.14.6"
     : STATION_BUILD_VERSION;
 }
 
