@@ -71,7 +71,7 @@ describe("classifyObserverBuildPrecedence", () => {
   });
 
   it("orders the public pre-alpha after the internal preview version line", () => {
-    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.14.5", higherBuildIdentity);
+    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.14.6", higherBuildIdentity);
     const internalPreview = observerBuildVersion("0.7.1-rc.8", lowerBuildIdentity);
 
     expect(precedenceFor(publicPreAlpha, internalPreview)).toEqual({
@@ -83,7 +83,7 @@ describe("classifyObserverBuildPrecedence", () => {
   });
 
   it("orders the next public pre-alpha epoch after the prior release", () => {
-    const nextEpoch = observerBuildVersion("0.0.0-pre-alpha.14.5", higherBuildIdentity);
+    const nextEpoch = observerBuildVersion("0.0.0-pre-alpha.14.6", higherBuildIdentity);
     const priorRelease = observerBuildVersion("0.0.0-pre-alpha.7", lowerBuildIdentity);
 
     expect(precedenceFor(nextEpoch, priorRelease)).toEqual({

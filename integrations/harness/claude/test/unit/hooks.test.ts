@@ -392,7 +392,7 @@ function artifactOwner(
     schemaVersion: 1,
     launcher,
     runtimeKind,
-    version: runtimeKind === "compiled" ? "0.7.1" : "0.0.0-pre-alpha.14.5",
+    version: runtimeKind === "compiled" ? "0.7.1" : "0.0.0-pre-alpha.14.6",
     buildIdentity: digit.repeat(64),
   };
 }
