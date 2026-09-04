@@ -5,6 +5,7 @@ const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
 const processLine = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/u;
 
 export type UpdateReapProcess = UpdateReapJournalTarget["processGroup"]["leader"];
+type PosixProcessTableEntry = Omit<UpdateReapProcess, "pgid"> & Readonly<{ pgid: number }>;
 export type UpdateReapProcessGroup = UpdateReapJournalTarget["processGroup"];
 export type UpdateReapProcessGroupObservation = Readonly<{
   leader?: UpdateReapProcess;
@@ -26,8 +27,8 @@ export interface UpdateReapProcessGroupPort {
   wait(milliseconds: number): Promise<void>;
 }
 
-/** Parses the fixed `ps pid,ppid,pgid,lstart` format used for process-group authorization. */
-export function parseUpdateReapProcessLine(line: string): UpdateReapProcess {
+/** Parses the fixed `ps pid,ppid,pgid,lstart` format, including unrelated Linux PGID 0 rows. */
+export function parseUpdateReapProcessLine(line: string): PosixProcessTableEntry {
   const match = processLine.exec(line);
   const pid = Number(match?.[1]);
   const parentPid = Number(match?.[2]);
@@ -39,7 +40,7 @@ export function parseUpdateReapProcessLine(line: string): UpdateReapProcess {
     !Number.isSafeInteger(parentPid) ||
     parentPid < 0 ||
     !Number.isSafeInteger(pgid) ||
-    pgid <= 0 ||
+    pgid < 0 ||
     startToken.length === 0
   ) {
     throw new Error("Process-group evidence was malformed.");
@@ -152,7 +153,7 @@ export function createPosixUpdateReapProcessGroupPort(
           "The process-group evidence command returned noncanonical line endings.",
         );
       }
-      let processes: UpdateReapProcess[];
+      let processes: PosixProcessTableEntry[];
       try {
         processes = stdout
           .split("\n")
@@ -165,6 +166,7 @@ export function createPosixUpdateReapProcessGroupPort(
       }
       const members = processes
         .filter((entry) => entry.pgid === pgid)
+        .map((entry): UpdateReapProcess => ({ ...entry, pgid }))
         .sort((left, right) => left.pid - right.pid);
       const leader = members.find((entry) => entry.pid === pgid);
       return { ...(leader === undefined ? {} : { leader }), members };

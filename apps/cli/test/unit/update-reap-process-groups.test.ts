@@ -46,7 +46,14 @@ describe("update reap process groups", () => {
 
   it("parses the exact POSIX process evidence format", () => {
     expect(parseUpdateReapProcessLine(" 200 100 200 Mon Jan  1 00:00:00 2024")).toEqual(leader);
+    expect(parseUpdateReapProcessLine(" 2 0 0 Mon Jan  1 00:00:00 2024")).toEqual({
+      pid: 2,
+      parentPid: 0,
+      pgid: 0,
+      startToken: "Mon Jan  1 00:00:00 2024",
+    });
     expect(() => parseUpdateReapProcessLine("200 100 not-a-pgid token")).toThrow();
+    expect(() => parseUpdateReapProcessLine("200 100 -1 token")).toThrow();
   });
 
   it("requires the leader and complete ordered membership to remain exact", () => {
