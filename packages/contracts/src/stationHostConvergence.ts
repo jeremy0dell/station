@@ -180,3 +180,40 @@ export const StationHostConvergenceResultSchema = z.union([
   failed,
 ]);
 export type StationHostConvergenceResult = z.infer<typeof StationHostConvergenceResultSchema>;
+
+const stationHostUpdateCrossoverErrorSchema = z
+  .object({
+    tag: z.string().min(1).max(128),
+    code: z.string().min(1).max(128),
+    message: z.string().min(1).max(4_096),
+    hint: z.string().min(1).max(4_096).optional(),
+  })
+  .strict();
+
+/** Strict private result returned to an update caller after Host crossover. */
+export const StationHostUpdateCrossoverResultSchema = z.discriminatedUnion("status", [
+  z.object({ schemaVersion: z.literal(1), status: z.literal("completed") }).strict(),
+  z
+    .object({
+      schemaVersion: z.literal(1),
+      status: z.literal("failed"),
+      error: stationHostUpdateCrossoverErrorSchema,
+    })
+    .strict(),
+]);
+export type StationHostUpdateCrossoverResult = z.infer<
+  typeof StationHostUpdateCrossoverResultSchema
+>;
+
+/** Bounds the SafeError subset accepted across the update crossover process boundary. */
+export function projectStationHostUpdateCrossoverError(
+  error: z.infer<typeof SafeErrorSchema>,
+): z.infer<typeof stationHostUpdateCrossoverErrorSchema> {
+  const projected: z.infer<typeof stationHostUpdateCrossoverErrorSchema> = {
+    tag: error.tag.slice(0, 128),
+    code: error.code.slice(0, 128),
+    message: error.message.slice(0, 4_096),
+  };
+  if (error.hint !== undefined) projected.hint = error.hint.slice(0, 4_096);
+  return projected;
+}

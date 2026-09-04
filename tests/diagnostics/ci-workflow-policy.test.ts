@@ -37,7 +37,10 @@ interface WorkflowStep {
 
 function workflowFiles(): readonly WorkflowFile[] {
   return [".github/workflows", ".github/actions"].flatMap((directory) =>
-    readdirSync(new URL(directory, root), { recursive: true, withFileTypes: true })
+    readdirSync(new URL(directory, root), {
+      recursive: true,
+      withFileTypes: true,
+    })
       .filter((entry) => entry.isFile() && /\.ya?ml$/.test(entry.name))
       .map((entry) => {
         const path = `${directory}/${entry.parentPath.slice(
@@ -63,6 +66,14 @@ function workflowSteps(file: WorkflowFile): readonly WorkflowStep[] {
       text: file.lines.slice(index, next?.index ?? file.lines.length).join("\n"),
     };
   });
+}
+
+function namedWorkflowStep(document: string, name: string): string {
+  const steps = workflowSteps({ path: "", document, lines: document.split("\n") }).filter(
+    (step) => step.text.split("\n")[0]?.trim() === `- name: ${name}`,
+  );
+  expect(steps, `workflow step named ${name}`).toHaveLength(1);
+  return steps[0]?.text ?? "";
 }
 
 function workflowJobNames(document: string): readonly string[] {
@@ -350,7 +361,10 @@ describe("hosted CI policy", () => {
       },
       {
         name: "contradictory documentation selectors",
-        environment: { ...documentationCiEnvironment, SHELL_MATRIX_SELECTED: "true" },
+        environment: {
+          ...documentationCiEnvironment,
+          SHELL_MATRIX_SELECTED: "true",
+        },
       },
     ]) {
       const result = runAggregatePolicy(testCase.environment);
@@ -407,7 +421,10 @@ describe("hosted CI policy", () => {
       { ...newer, published_at: "not-a-date" },
       { ...newer, tag_name: "v01.2.4" },
       { ...newer, id: 0 },
-      { ...newer, assets: newer.assets.map((asset, index) => ({ ...asset, id: index })) },
+      {
+        ...newer,
+        assets: newer.assets.map((asset, index) => ({ ...asset, id: index })),
+      },
       {
         ...newer,
         assets: newer.assets.map((asset, index) => ({
@@ -439,10 +456,12 @@ describe("hosted CI policy", () => {
     }
   });
 
-  it("binds staged and public update acceptance to one exact predecessor", () => {
+  it("keeps staged predecessor, current-target, and public update acceptance", () => {
     const release = read(".github/workflows/release.yml");
     const promotion = read(".github/workflows/promote-release.yml");
+    const updateSmoke = read("scripts/test-runners/run-update-smoke.mjs");
     const installDraft = workflowJob(release, "install-draft");
+    const preparePredecessor = namedWorkflowStep(installDraft, "Prepare exact predecessor");
     const createDraft = workflowJob(release, "create-draft");
     const accepted = workflowJob(release, "record-accepted-candidate");
     const promote = workflowJob(promotion, "promote");
@@ -457,15 +476,76 @@ describe("hosted CI policy", () => {
       createDraft.indexOf("release-candidate-input-"),
     );
     expect(createDraft).toContain("targetBuildIdentity: $targetBuildIdentity");
-    expect(installDraft).toContain("Fetch staged update assets and exact predecessor");
+    expect(installDraft).toContain("Fetch staged update assets");
+    expect(installDraft).toContain("fetch-depth: 0");
     expect(installDraft).toContain("actions/download-artifact@");
     expect(installDraft).toContain('awk -F= -v name="$name"');
     expect(installDraft).toContain('cmp candidate/SHA256SUMS "$release_dir/SHA256SUMS"');
     expect(installDraft).not.toContain("select(.name == $name)");
     expect(installDraft).toContain('--target-release-dir "$RUNNER_TEMP/update-release"');
     expect(installDraft).toContain('--target-build-identity "$target_build_identity"');
-    expect(installDraft).toContain("--scenarios full");
+    expect(installDraft).toContain('git worktree add --detach "$predecessor_source"');
+    expect(installDraft).toContain("bun install --frozen-lockfile");
+    expect(installDraft).toContain("bun run --cwd station repair:node-pty");
+    expect(preparePredecessor).toContain(
+      `env:\n          PREVIOUS_TAG: ${actionsExpression("needs.validate.outputs.previous_tag")}\n        run:`,
+    );
+    expect(preparePredecessor).not.toContain(actionsExpression("github.token"));
+    const credentialRemoval = preparePredecessor.indexOf(
+      "unset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN",
+    );
+    expect(credentialRemoval).toBeGreaterThanOrEqual(0);
+    for (const command of [
+      "curl --disable",
+      '/bin/sh "$predecessor_installer"',
+      "bun install --frozen-lockfile",
+      "bun run build",
+      "bun run --cwd station repair:node-pty",
+    ]) {
+      expect(credentialRemoval, command).toBeLessThan(preparePredecessor.indexOf(command));
+    }
+    expect(installDraft).toContain(
+      '--predecessor-source-dir "$RUNNER_TEMP/update-predecessor-source"',
+    );
+    expect(installDraft).toContain("--scenarios release");
     expect(installDraft).toContain("--busy-host-outcome preserved-refusal");
+    expect(updateSmoke).toMatch(
+      /options\.scenarios === "release"\s*\? \[\.\.\.predecessorScenarios, \.\.\.currentArtifactScenarios\]/u,
+    );
+    for (const scenario of [
+      "external-busy-host",
+      "tmux-busy-host",
+      "tmux-no-host",
+      "current-no-host",
+      "current-idle-host",
+      "current-busy-source-bridge-host",
+      "current-busy-non-bridge-host",
+    ]) {
+      expect(updateSmoke).toContain(`name: "${scenario}"`);
+    }
+    for (const [scenario, socketKey] of [
+      ["external-busy-host", "e"],
+      ["tmux-busy-host", "b"],
+      ["tmux-no-host", "n"],
+      ["current-no-host", "cn"],
+      ["current-idle-host", "ci"],
+      ["current-busy-source-bridge-host", "cb"],
+      ["current-busy-non-bridge-host", "cx"],
+    ]) {
+      expect(updateSmoke).toContain(`name: "${scenario}",\n      socketKey: "${socketKey}"`);
+    }
+    expect(updateSmoke).toContain('hostState: "busy-source-bridge"');
+    expect(updateSmoke).not.toContain('hostState: "busy-compiled-bridge"');
+    expect(updateSmoke).toContain(
+      '"--scenarios release requires --busy-host-outcome preserved-refusal."',
+    );
+    expect(updateSmoke).toContain(
+      '"--scenarios release requires snapshotted source or staged target assets."',
+    );
+    expect(updateSmoke).toContain('"--predecessor-source-dir is not valid for public targets."');
+    expect(updateSmoke).toContain('"Staged release scenarios require --predecessor-source-dir."');
+    expect(updateSmoke).toContain("serialized.includes(expectedRaw)");
+    expect(updateSmoke).not.toContain("serialized.includes(JSON.stringify(expectedRaw))");
     expect(accepted).toContain('test "$current_ids" = "$(cat candidate/asset-ids.txt)"');
     expect(accepted).not.toContain(": > candidate/asset-ids.txt");
 
@@ -482,13 +562,15 @@ describe("hosted CI policy", () => {
     expect(publicInstall).toContain('--target-build-identity "$TARGET_BUILD_IDENTITY"');
     expect(publicInstall).toContain("--scenarios no-host");
     expect(promotion).toContain(
-      "Confirm macOS partial crossover preserved old Host output and the target native UI visibly refused it",
+      "Confirm documented native/tmux acceptance, current-target convergence, and preserved refusal",
     );
   });
 
   it("keeps binary handoff stress manual, capped, and failure-artifact-only", () => {
     const stress = read(".github/workflows/binary-handoff-stress.yml");
-    const packageJson = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
+    const packageJson = JSON.parse(read("package.json")) as {
+      scripts: Record<string, string>;
+    };
 
     expect(stress).toContain("workflow_dispatch:");
     expect(stress).not.toContain("schedule:");
@@ -546,6 +628,10 @@ describe("hosted CI policy", () => {
     );
     expect(packageJson.scripts["test:ci:binary"]).toContain(
       "bun run smoke:update -- --incumbent-binary station/dist/bin/stn",
+    );
+    expect(packageJson.scripts["test:ci:binary"]).toContain("--scenarios release");
+    expect(packageJson.scripts["test:ci:binary"]).toContain(
+      "--busy-host-outcome preserved-refusal",
     );
     expect(packageJson.scripts["test:ci:station"]).toContain("test:pty:bun");
     expect(lefthook).toContain(

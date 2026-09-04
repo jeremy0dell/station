@@ -79,9 +79,9 @@ describe("release readiness docs", () => {
       "let your agent install and validate station",
     );
     expect(prompt).toContain(
-      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.3/install.sh",
+      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.4/install.sh",
     );
-    expect(prompt).toContain("v0.0.0-pre-alpha.14.3");
+    expect(prompt).toContain("v0.0.0-pre-alpha.14.4");
     expect(prompt).toContain("stn setup check --json");
     expect(prompt).toContain("stn doctor");
     expect(prompt).toContain("summary.requiredOk: true");
@@ -101,7 +101,7 @@ describe("release readiness docs", () => {
     expect(normalizedPrompt).toContain("verify all three launchers in a new shell");
     expect(normalizedPrompt).toContain("do not claim success");
     expect(install).toContain("../README.md#let-your-agent-install-and-validate-station");
-    expect(install).not.toContain("Install experimental Station v0.0.0-pre-alpha.14.3");
+    expect(install).not.toContain("Install experimental Station v0.0.0-pre-alpha.14.4");
   });
 
   it("keeps the Node.js 24.2+ development requirement consistent", async () => {
@@ -232,9 +232,10 @@ describe("release readiness docs", () => {
       ].map(read),
     );
     const packageJson = await readPackageManifest();
-    const exactVersion = "v0.0.0-pre-alpha.14.3";
+    const normalizedReleasing = releasing.replace(/\s+/g, " ");
+    const exactVersion = "v0.0.0-pre-alpha.14.4";
     const exactInstallerUrl =
-      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.3/install.sh";
+      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.4/install.sh";
 
     for (const [path, document] of [
       ["README.md", readme],
@@ -286,8 +287,28 @@ describe("release readiness docs", () => {
     expect(releasing).toContain("repository-wide publication lock");
     expect(releasing).toContain("`full-handoff`");
     expect(releasing).toContain("`preserved-refusal`");
-    expect(releasing).toContain("compiled predecessors must preserve and visibly");
-    expect(releasing).toContain("scenario must complete the version change");
+    for (const scenario of [
+      "external and tmux busy",
+      "tmux no-Host update",
+      "no Host",
+      "an idle compiled Host",
+      "a busy exact-tag source-bridge Host",
+      "a busy compiled Bun Host",
+    ]) {
+      expect(normalizedReleasing).toContain(scenario);
+    }
+    expect(releasing).toContain("seven staged cases");
+    expect(releasing).toContain("Every v5 preview and result");
+    expect(releasing).toContain("correlated `public-*` aliases");
+    expect(releasing).toContain("completed final inspection");
+    expect(releasing).toContain("plan is `converged`");
+    expect(normalizedReleasing).toContain("proves bridge handoff across");
+    expect(normalizedReleasing).toContain("without identity overrides");
+    expect(normalizedReleasing).toContain(
+      "source Host and immutable compiled Observer against their independently derived build identities",
+    );
+    expect(normalizedReleasing).toContain("Only the tagged staged lane proves");
+    expect(releasing).toContain("exact-tag no-Host");
     expect(releasing).not.toContain(exactVersion);
     expect(homebrew).toContain("Homebrew installation is not currently supported");
     expect(homebrew).toContain("This distribution policy is separate from first-run dependencies");
@@ -365,7 +386,7 @@ describe("release readiness docs", () => {
       expect(promote).toContain(target);
     }
 
-    expect(packageJson.version).toBe("0.0.0-pre-alpha.14.3");
+    expect(packageJson.version).toBe("0.0.0-pre-alpha.14.4");
     expect(packageJson.scripts["smoke:install"]).toBe(
       "node scripts/test-runners/run-install-smoke.mjs",
     );
