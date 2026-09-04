@@ -208,6 +208,7 @@ function expectedClaudeHookScript(input: ClaudeHookScriptOptions): string {
     options: input,
     ignoreFailure: true,
     redirectStderr: true,
+    forwardScriptArgs: true,
   });
 }
 

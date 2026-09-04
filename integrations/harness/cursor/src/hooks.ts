@@ -2,13 +2,14 @@
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
 import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
+import { generatedHookScriptPath } from "@station/harness-shared";
 import {
   assertProviderHookArtifactOwnership,
   assignBackupPaths,
   classifyProviderHookArtifactOwnership,
+  commandLine,
   createHookSetupFileOps,
   expectedProviderHookScript,
-  hookCommandsForEvents,
   installConfigScriptHook,
   type ProviderHookScriptOptions,
   planConfigScriptHook,
@@ -25,7 +26,11 @@ import {
   removeGeneratedCursorHookCommands,
   stringifyJsonDocument,
 } from "./hooks/hookConfigEditor.js";
-import { CURSOR_HOOK_EVENT_NAMES, type CursorHookEventName } from "./hooks/hookConstants.js";
+import {
+  CURSOR_HOOK_EVENT_NAMES,
+  type CursorHookEventName,
+  GENERATED_HOOK_SCRIPT_NAME,
+} from "./hooks/hookConstants.js";
 import { CursorHookSetupError } from "./hooks/hookErrors.js";
 import { resolveCursorHookScriptPath, resolveCursorHooksPath } from "./hooks/hookPaths.js";
 
@@ -121,11 +126,20 @@ function missingDescription(plan: CursorHookPlan): string {
 function expectedCursorHookCommands(input: {
   hookScriptPath: string;
 }): Record<CursorHookEventName, string> {
-  return hookCommandsForEvents(CURSOR_HOOK_EVENT_NAMES, input.hookScriptPath);
+  return Object.fromEntries(
+    CURSOR_HOOK_EVENT_NAMES.map((eventName) => [
+      eventName,
+      commandLine([input.hookScriptPath, "--fast", eventName]),
+    ]),
+  ) as Record<CursorHookEventName, string>;
 }
 
 function expectedCursorHookScript(input: CursorHookScriptOptions): string {
-  return expectedProviderHookScript({ provider: "cursor", options: input });
+  return expectedProviderHookScript({
+    provider: "cursor",
+    options: input,
+    forwardScriptArgs: true,
+  });
 }
 
 async function sharedGeneratedHookPlan(
@@ -133,8 +147,17 @@ async function sharedGeneratedHookPlan(
   options: CursorHookPlanOptions,
 ): Promise<CursorHookDoctorResult | undefined> {
   const document = parseJsonDocument(source);
-  const hookScriptPath = sharedGeneratedHookScriptPath(generatedCursorHookCommands(document));
+  const configuredCommands = generatedCursorHookCommands(document);
+  const hookScriptPath = sharedGeneratedHookScriptPath(configuredCommands);
   if (hookScriptPath === undefined) {
+    return undefined;
+  }
+  const expectedCommands = expectedCursorHookCommands({ hookScriptPath });
+  if (
+    CURSOR_HOOK_EVENT_NAMES.some(
+      (eventName) => configuredCommands[eventName][0] !== expectedCommands[eventName],
+    )
+  ) {
     return undefined;
   }
 
@@ -144,7 +167,8 @@ async function sharedGeneratedHookPlan(
   );
   if (
     scriptBefore !== expectedScript &&
-    !providerHookScriptRoutesByStationEnv(scriptBefore, "cursor")
+    (!providerHookScriptRoutesByStationEnv(scriptBefore, "cursor") ||
+      !scriptBefore.includes('cursor "$@"'))
   ) {
     return undefined;
   }
@@ -166,7 +190,7 @@ async function sharedGeneratedHookPlan(
     status: ownershipConflict ? "warn" : "ok",
     installed: !ownershipConflict,
     missing: [],
-    commands: expectedCursorHookCommands({ hookScriptPath }),
+    commands: expectedCommands,
     message: ownershipConflict
       ? "Cursor hook artifact ownership conflicts with this Station runtime; run `stn hooks install cursor --yes --takeover` only to transfer it."
       : "Cursor hooks are installed.",
@@ -187,9 +211,13 @@ function sharedGeneratedHookScriptPath(
     if (command === undefined) {
       return undefined;
     }
+    const hookScriptPath = generatedHookScriptPath(command, GENERATED_HOOK_SCRIPT_NAME);
+    if (hookScriptPath === undefined) {
+      return undefined;
+    }
     if (shared === undefined) {
-      shared = command;
-    } else if (shared !== command) {
+      shared = hookScriptPath;
+    } else if (shared !== hookScriptPath) {
       return undefined;
     }
   }

@@ -93,14 +93,15 @@ hooks. A virtual compiled module path and filesystem root `/` are never accepted
 as ownership roots.
 
 The native ingress launcher does not own provider parsing or lifecycle policy.
-Only provider integrations opt configured events into `--fast`; the Observer
-performs strict normalization, and canonical ingress retains validation,
-auto-start, spooling, and error behavior for every non-accepted result. The
-native launcher recognizes only the exact validated accepted receipt emitted by
-the matching build; all other responses re-enter canonical ingress. Accepted
-fast delivery remains visible in the Observer's report-processing log. The
-initial socket request names the exact Observer build and is rejected before
-mutation on mismatch.
+Only provider integrations opt configured events into `--fast`; Claude and
+Cursor select every generated hook event, while Codex keeps
+`PermissionRequest` canonical. The Observer performs strict normalization, and
+canonical ingress retains validation, auto-start, spooling, and error behavior
+for every non-accepted result. The native launcher recognizes only the exact
+validated accepted receipt emitted by the matching build; all other responses
+re-enter canonical ingress. Accepted fast delivery remains visible in the
+Observer's report-processing log. The initial socket request names the exact
+Observer build and is rejected before mutation on mismatch.
 
 ## Runtime boundaries
 

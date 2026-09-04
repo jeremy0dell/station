@@ -1,6 +1,8 @@
+import { claudeHookAdapter } from "@station/claude";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { HarnessEventReportReceipt, ProviderHookAdapter } from "@station/contracts";
 import { enrichStationHookIdentityPayload, STATION_SCHEMA_VERSION } from "@station/contracts";
+import { cursorHookAdapter } from "@station/cursor";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import {
@@ -298,6 +300,86 @@ describe("observer provider hook ingress", () => {
     expect(enrichedSessionId).toBe("session-fast");
     await reports.return?.();
     sqlite.close();
+  });
+
+  it.each([
+    {
+      provider: "claude",
+      adapter: claudeHookAdapter,
+      event: "PreToolUse",
+      payload: {
+        session_id: "claude_native_fast",
+        cwd: "/tmp/station/web/task",
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "pnpm test" },
+        tool_use_id: "tool_claude_native_fast",
+      },
+    },
+    {
+      provider: "cursor",
+      adapter: cursorHookAdapter,
+      event: "beforeShellExecution",
+      payload: {
+        session_id: "cursor_native_fast",
+        cwd: "/tmp/station/web/task",
+        hook_event_name: "beforeShellExecution",
+        tool_name: "Shell",
+        tool_use_id: "tool_cursor_native_fast",
+      },
+    },
+  ] as const)("normalizes $provider native fast ingress through its provider adapter", async ({
+    provider,
+    adapter,
+    event,
+    payload,
+  }) => {
+    const clock = { now: () => new Date(now) };
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+      hookAdapters: [adapter],
+    });
+    const { sqlite, persistence, api } = createTestObserver({ config, providers, clock });
+
+    try {
+      const receipt = await api.ingestProviderHookEvent({
+        schemaVersion: STATION_SCHEMA_VERSION,
+        hookId: `hook_${provider}_native_fast`,
+        provider,
+        kind: "harness",
+        event,
+        receivedAt: now,
+        projectId: "web",
+        worktreeId: "wt_web_task",
+        worktreePath: "/tmp/station/web/task",
+        sessionId: "ses_web_task",
+        terminalProvider: "tmux",
+        terminalTargetId: "tmux:station:@1:%2",
+        payload,
+      });
+
+      expect(receipt).toMatchObject({ status: "accepted", provider, event });
+      await expect(
+        persistence.listProviderObservations({ entityKind: "harness_event" }),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          provider,
+          payload: expect.objectContaining({
+            provider,
+            eventType: event,
+            projectId: "web",
+            worktreeId: "wt_web_task",
+            sessionId: "ses_web_task",
+            terminalTargetId: "tmux:station:@1:%2",
+            status: expect.objectContaining({ value: "working" }),
+          }),
+        }),
+      ]);
+    } finally {
+      sqlite.close();
+    }
   });
 
   it("rejects a declared transport event that disagrees with provider normalization", async () => {

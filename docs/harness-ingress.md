@@ -47,17 +47,18 @@ bypasses that adapter. There is no secondary `HarnessProvider` raw-ingestion
 path: an accepted hook without a report-producing adapter is durable evidence
 to schedule reconcile, not a source of synthesized harness observations.
 
-Compiled Codex hook entries pass an explicit `--fast` marker and declared event
-to the generated script, except `PermissionRequest`, whose review semantics stay
-on canonical ingress. With Station session and worktree identity and an explicit
-Observer socket, the native launcher stamps one hook ID and sends the raw payload
-with an exact-build guard. The Observer rejects a build mismatch before mutation,
-enriches the provider payload from provider-neutral transport identity, and
-rejects disagreement between the declared event and the strictly parsed provider
-event. A byte-exact accepted receipt from that matching build completes in the
-native launcher and remains visible in the Observer report-processing log. Any
-other response or transport failure executes `stn __ingress` with the same hook
-ID for canonical validation, logging, spooling, startup, and error behavior.
+Generated Claude and Cursor hook entries pass an explicit `--fast` marker and
+declared event to their scripts. Codex does the same except for
+`PermissionRequest`, whose review semantics stay on canonical ingress. With
+Station session and worktree identity and an explicit Observer socket, the
+native launcher stamps one hook ID and sends the raw payload with an exact-build
+guard. The Observer rejects a build mismatch before mutation, enriches the
+provider payload from provider-neutral transport identity, and rejects
+disagreement between the declared event and the strictly parsed provider event.
+A byte-exact accepted receipt from that matching build completes in the native
+launcher and remains visible in the Observer report-processing log. Any other
+response or transport failure executes `stn __ingress` with the same hook ID for
+canonical validation, logging, spooling, startup, and error behavior.
 
 Station-generated Codex, Claude, and Cursor scripts, the OpenCode plugin, and
 Worktrunk lifecycle commands carry a strict artifact-owner marker. The canonical
@@ -97,10 +98,10 @@ Only an admitted, correlated event proceeds to shared event validation, Observer
 readiness and optional startup, delivery, compatibility handling, ordinary
 transport-failure spooling, and the existing final-receipt log.
 
-The explicit compiled Codex fast transport moves delivery ahead of canonical
-parsing only for event types selected by the Codex integration. Provider rules
-and the Observer-side adapter remain authoritative; no provider-specific payload
-logic is implemented in the native transport.
+The explicit compiled fast transport moves delivery ahead of canonical parsing
+only for event types selected by the Claude, Codex, or Cursor integration.
+Provider rules and the Observer-side adapter remain authoritative; no
+provider-specific payload logic is implemented in the native transport.
 
 ## Rollout
 
