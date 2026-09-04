@@ -449,6 +449,7 @@ describe("observer protocol server", () => {
               }),
             processEvidence,
             buildVersion: `0.0.1+station.${"b".repeat(64)}`,
+            exit: vi.fn(),
             incumbentLifecycle: {
               health: () => fixture.api.health(),
               stop,
@@ -521,6 +522,7 @@ describe("observer protocol server", () => {
             harnesses: [harness],
           }),
         buildVersion: observerBuildVersion,
+        exit: vi.fn(),
       },
     );
     const client = createObserverClient({ socketPath, requestId: ids("hook-reconcile") });
@@ -604,7 +606,7 @@ describe("observer protocol server", () => {
     );
     const runtime = runObserverMain(
       ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "2000"],
-      { providerRegistryFactory, buildVersion: observerBuildVersion },
+      { providerRegistryFactory, buildVersion: observerBuildVersion, exit: vi.fn() },
     );
     const client = createObserverClient({ socketPath, requestId: ids("runtime-path") });
 
@@ -695,7 +697,7 @@ describe("observer protocol server", () => {
         terminal: new FakeTerminalProvider({ now }),
         harnesses: [new FakeHarnessProvider({ now })],
       });
-    const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const exit = vi.fn();
     const runtime = runObserverMain(
       [
         "--socket",
@@ -709,7 +711,12 @@ describe("observer protocol server", () => {
         "--process-token",
         processToken,
       ],
-      { providerRegistryFactory, buildVersion: observerBuildVersion, duplicateProcessEvidence },
+      {
+        providerRegistryFactory,
+        buildVersion: observerBuildVersion,
+        duplicateProcessEvidence,
+        exit,
+      },
     );
     const client = createObserverClient({ socketPath, requestId: ids("report-only") });
 
@@ -739,7 +746,8 @@ describe("observer protocol server", () => {
       await client.stop().catch(() => undefined);
       await runtime.catch(() => undefined);
       await new Promise((resolve) => setTimeout(resolve, 2100));
-      exit.mockRestore();
+      expect(exit).toHaveBeenCalledOnce();
+      expect(exit).toHaveBeenCalledWith(0);
       await rm(dir, { recursive: true, force: true });
     }
   }, 16_000);
@@ -767,6 +775,7 @@ describe("observer protocol server", () => {
           }),
         buildVersion: observerBuildVersion,
         startupReadinessSink,
+        exit: vi.fn(),
       },
     );
     const client = createObserverClient({ socketPath, requestId: ids("startup-context") });
