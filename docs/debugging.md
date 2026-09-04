@@ -225,6 +225,41 @@ after signaling starts.
 `--no-handoff` is `intentionally-incomplete`. `current` and
 `updated` require a completed final aggregate whose plan is `converged`.
 
+## Exceptional repair
+
+Start with `stn repair inventory --json`. It reads the runtime and recovery
+inventories without starting Observer or changing processes, persistence,
+backups, audits, or journals. Preview the exact action next:
+
+```bash
+stn repair terminal reap --terminal <terminalTargetId> --json
+stn repair observer cleanup --json
+stn repair recovery resume --handle <recoveryHandleId> --json
+stn repair recovery prune --handle <recoveryHandleId> --json
+```
+
+Apply only the previewed target with both consent fields:
+
+```bash
+stn repair recovery resume --handle <recoveryHandleId> \
+  --yes --expect-plan <sha256-from-preview> --json
+```
+
+Apply repeats the complete inventory under the repair lock and refuses a
+changed plan. Terminal repair also takes the update-reap lock and uses its exact
+process-group checks. Recovery resume and prune, and terminal repair because it
+can affect recovery state, create and verify a SQLite-consistent backup before
+mutation. Recovery resume and prune also require the Observer to verify the
+active private journal and audit against that backup. Resume resolves the same
+canonical handle again immediately before terminal creation. Recovery resume
+and prune require `feature_flags.session_resume_agent` because they use the
+existing recovery eligibility and selection policy. Results expose only opaque
+backup, journal, and audit IDs. Private
+mode-0600 records live below the configured state directory. Rerun the same
+digest-bound recovery command after an interruption; the journal continues an idempotent action or
+returns `recovery-required` when another resume could launch duplicate work.
+Use `stn repair inventory --json` to verify the final state.
+
 ## Detailed references
 
 - [Diagnostics](diagnostics.md) — commands, bundles, redaction, retention, and hooks.

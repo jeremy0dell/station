@@ -7,6 +7,7 @@ import type {
 import { resolveHarnessProviderOrThrow } from "../commands/providers.js";
 import { commandValidationError } from "../commands/session/shared.js";
 import type { SessionStore } from "../persistence/index.js";
+import type { ObserverRecoveryInventoryPersistenceSnapshot } from "../persistence/types.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import {
   type SessionRecoveryEligibility,
@@ -33,7 +34,8 @@ type ResolvedSessionRecovery = {
  * Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting
  * the newest automatic candidate deterministically, then returns only typed resume authority for
  * that provider. Explicit selection retains imported-handle compatibility only when no
- * contradictory local Station lifecycle exists.
+ * contradictory local Station lifecycle exists. Repair callers may also require the canonical
+ * newest eligible handle from their coherent snapshot.
  */
 export async function resolveSessionRecovery(input: {
   persistence: SessionStore;
@@ -43,8 +45,10 @@ export async function resolveSessionRecovery(input: {
   worktree: WorktreeObservation;
   recoveryHandleId?: string | undefined;
   expected?: SessionRecoveryExpectation | undefined;
+  repairSnapshot?: ObserverRecoveryInventoryPersistenceSnapshot | undefined;
+  requireCanonicalSelection?: boolean | undefined;
 }): Promise<ResolvedSessionRecovery> {
-  const sessions = await input.persistence.listSessions();
+  const sessions = input.repairSnapshot?.sessions ?? (await input.persistence.listSessions());
   const selected = await resolveRecoveryHandle(input, sessions);
   const handle = selected.handle;
   const harness = resolveHarnessProviderOrThrow(input.providers, handle.provider);
@@ -67,6 +71,8 @@ async function resolveRecoveryHandle(
     worktree: WorktreeObservation;
     recoveryHandleId?: string | undefined;
     expected?: SessionRecoveryExpectation | undefined;
+    repairSnapshot?: ObserverRecoveryInventoryPersistenceSnapshot | undefined;
+    requireCanonicalSelection?: boolean | undefined;
   },
   sessions: Awaited<ReturnType<SessionStore["listSessions"]>>,
 ): Promise<{
@@ -74,7 +80,13 @@ async function resolveRecoveryHandle(
   eligibility: Extract<SessionRecoveryEligibility, { kind: "eligible" }>;
 }> {
   if (input.recoveryHandleId !== undefined) {
-    const handle = await input.persistence.getSessionRecoveryHandle(input.recoveryHandleId);
+    const handle =
+      input.repairSnapshot?.recoveryHandles.find(
+        (candidate) => candidate.id === input.recoveryHandleId,
+      ) ??
+      (input.repairSnapshot === undefined
+        ? await input.persistence.getSessionRecoveryHandle(input.recoveryHandleId)
+        : undefined);
     if (handle === undefined) {
       throw commandValidationError({
         code: "SESSION_RECOVERY_HANDLE_NOT_FOUND",
@@ -87,13 +99,48 @@ async function resolveRecoveryHandle(
     if (eligibility.kind === "ineligible") {
       throwSelectedHandleError(input, handle, eligibility.reason);
     }
+    if (input.requireCanonicalSelection === true) {
+      const candidates =
+        input.repairSnapshot?.recoveryHandles.filter(
+          (candidate) =>
+            candidate.projectId === input.projectId && candidate.worktreeId === input.worktreeId,
+        ) ??
+        (await input.persistence.listSessionRecoveryHandles({
+          projectId: input.projectId,
+          worktreeId: input.worktreeId,
+        }));
+      const eligible = candidates.flatMap((candidate) => {
+        const candidateEligibility = evaluateHandle(
+          input,
+          sessions,
+          candidate,
+          candidate.id === handle.id || matchesExpectedSession(candidate, input.expected),
+        );
+        return candidateEligibility.kind === "eligible"
+          ? [{ handle: candidate, eligibility: candidateEligibility }]
+          : [];
+      });
+      if (selectNewestSessionRecoveryCandidate(eligible)?.handle.id !== handle.id) {
+        throw commandValidationError({
+          code: "SESSION_RECOVERY_HANDLE_NOT_SELECTED",
+          message: "Repair requires the selected eligible recovery handle.",
+          projectId: input.projectId,
+          worktreeId: input.worktreeId,
+          sessionId: handle.sessionId,
+        });
+      }
+    }
     return { handle, eligibility };
   }
 
-  const candidates = await input.persistence.listSessionRecoveryHandles({
-    projectId: input.projectId,
-    worktreeId: input.worktreeId,
-  });
+  const candidates =
+    input.repairSnapshot?.recoveryHandles.filter(
+      (handle) => handle.projectId === input.projectId && handle.worktreeId === input.worktreeId,
+    ) ??
+    (await input.persistence.listSessionRecoveryHandles({
+      projectId: input.projectId,
+      worktreeId: input.worktreeId,
+    }));
   const eligible = candidates.flatMap((handle) => {
     const eligibility = evaluateHandle(input, sessions, handle, false);
     return eligibility.kind === "eligible" ? [{ handle, eligibility }] : [];
@@ -108,6 +155,17 @@ async function resolveRecoveryHandle(
     projectId: input.projectId,
     worktreeId: input.worktreeId,
   });
+}
+
+function matchesExpectedSession(
+  handle: SessionRecoveryHandle,
+  expected: SessionRecoveryExpectation | undefined,
+): boolean {
+  return (
+    expected !== undefined &&
+    handle.sessionId === expected.sessionId &&
+    handle.provider === expected.provider
+  );
 }
 
 function evaluateHandle(

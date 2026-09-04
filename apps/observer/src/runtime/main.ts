@@ -40,7 +40,11 @@ import {
   type ObserverEventHookRuntime,
 } from "../hooks/observerEventHooks.js";
 import { providerIngressSpoolDir } from "../hooks/spool.js";
-import { createSqliteObserverPersistence } from "../persistence/index.js";
+import {
+  createFilesystemRecoveryRepairAuthorizationPort,
+  createSqliteObserverPersistence,
+  createSqliteRecoveryBackupPort,
+} from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { createObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
 import { openObserverSqlite } from "../sqlite.js";
@@ -495,11 +499,17 @@ async function runClaimedObserverRuntime(input: {
   });
   throwIfAborted(startupSignals.signal);
 
+  const databasePath = join(stateDir, "observer.sqlite");
   const sqlite = openObserverSqlite({
-    path: join(stateDir, "observer.sqlite"),
+    path: databasePath,
     clock: systemClock,
   });
   const persistence = createSqliteObserverPersistence({ sqlite, clock: systemClock });
+  const recoveryBackup = createSqliteRecoveryBackupPort({ databasePath, stateDir });
+  const repairRecoveryAuthorization = createFilesystemRecoveryRepairAuthorizationPort({
+    stateDir,
+    backup: recoveryBackup,
+  });
   const eventBus = createObserverEventBus();
   const logger = createObserverLogger({ stateDir, clock: systemClock });
   if (evidenceRepair.pidfile === "removed") {
@@ -563,6 +573,7 @@ async function runClaimedObserverRuntime(input: {
     launchPreflight,
     worktreeMutations,
     worktreeCreates,
+    repairRecoveryAuthorization,
   });
   const eventHooks = createConfiguredEventHooks(config, eventBus, logger);
   const duplicateProcessEvidence =

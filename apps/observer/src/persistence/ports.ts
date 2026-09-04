@@ -156,7 +156,9 @@ export interface ReconcileStore {
  * recovery reconciles. Exact session lookup lets serialized launch projection consume current
  * durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory
  * reads sessions and handles from one snapshot without classifying eligibility, so one result never
- * combines different persistence lifetimes.
+ * combines different persistence lifetimes. Digest-guarded repair composes this session lifecycle
+ * with `RecoveryRepairStore`, which owns coherent snapshots and exact-handle pruning after the
+ * command boundary verifies its private repair proof.
  * Provider-native recovery keys permanently bind project and worktree, may fill Station session
  * identity once, and reject contradictory identity before mutable evidence can refresh.
  */
@@ -245,6 +247,28 @@ export interface SessionStore {
 /**
  * DRIVEN PORT
  *
+ * Reads and mutates recovery handles against one coherent private snapshot and its public digest.
+ */
+export interface RecoveryRepairStore {
+  readRecoveryRepairSnapshot(): Promise<{
+    snapshot: ObserverRecoveryInventoryPersistenceSnapshot;
+    recoveryInventoryDigest: string;
+  }>;
+  pruneSessionRecoveryHandle(input: {
+    recoveryHandleId: string;
+    expectedRecoveryInventoryDigest: string;
+    expected: {
+      projectId: string;
+      worktreeId: string;
+      sessionId: string;
+      provider: string;
+    };
+  }): Promise<{ deleted: boolean; recoveryInventoryDigest: string }>;
+}
+
+/**
+ * DRIVEN PORT
+ *
  * Maintains recorded project-local Group mutation and atomic reconcile repair of definitions,
  * exclusive membership, and parentage. Reconcile must name the projects whose complete provider
  * evidence authorizes absent-member pruning; identity and parent corruption repair remains
@@ -320,6 +344,7 @@ export type ObserverPersistenceBundle = CommandJournal &
   ObservationStore &
   ReconcileStore &
   SessionStore &
+  RecoveryRepairStore &
   SessionGroupStore &
   WorktreeMetadataStore;
 

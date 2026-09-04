@@ -66,6 +66,7 @@ type EnsureAgentWorkspaceInput = {
   origin?: TerminalFocusOrigin | undefined;
   initialPrompt?: string | undefined;
   resume?: HarnessResumeOptions | undefined;
+  revalidateResume?: (() => Promise<HarnessResumeOptions>) | undefined;
 } & TerminalOperationRuntime;
 
 /**
@@ -95,6 +96,8 @@ export async function ensureAgentWorkspace(
     signal: input.context.signal,
     beginMutation: input.context.beginCommit,
   });
+  const resume =
+    input.revalidateResume === undefined ? input.resume : await input.revalidateResume();
   const runtime = operationRuntime(input);
   let opened: OpenWorkspaceResult | OpenPlacedWorkspaceResult | undefined;
   let placedOpened: OpenPlacedWorkspaceResult | undefined;
@@ -157,7 +160,7 @@ export async function ensureAgentWorkspace(
           provider: input.harness.id,
         },
       },
-      () => input.harness.buildLaunch(buildLaunchRequest(input, terminalTarget)),
+      () => input.harness.buildLaunch(buildLaunchRequest({ ...input, resume }, terminalTarget)),
     );
     throwIfAborted(input.context.signal);
 

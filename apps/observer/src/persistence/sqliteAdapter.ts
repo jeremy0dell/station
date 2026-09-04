@@ -1,5 +1,6 @@
 import { StationEventSchema } from "@station/contracts";
 import { Effect, type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
+import { recoveryInventoryDigest } from "../sessionRecovery/inventoryDigest.js";
 import type { SqlDatabase } from "../sqlite/driver.js";
 import { type ObserverSqliteHandle, runSqliteTransactionEffect } from "../sqlite.js";
 import * as commandStore from "./commands.js";
@@ -44,7 +45,10 @@ function compareIdentity(left: { id: string }, right: { id: string }): number {
 /**
  * ADAPTER
  *
- * Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and transactions at the storage boundary.
+ * Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and
+ * transactions at the storage boundary. It owns coherent recovery digests and exact transactional
+ * pruning; the separate SQLite backup adapter owns pre-mutation repair copies and verifies the
+ * copy named by the command boundary's private repair proof.
  */
 export function createSqliteObserverPersistence(
   options: CreateSqliteObserverPersistenceOptions,
@@ -72,17 +76,59 @@ export function createSqliteObserverPersistence(
       }
       return mutation.result;
     });
+  const recoverySnapshot = (database: SqlDatabase) => ({
+    sessions: correlationStore.listSessions(database).sort(compareIdentity),
+    recoveryHandles: sessionRecoveryHandleStore
+      .listSessionRecoveryHandles(database, {})
+      .sort(compareIdentity),
+  });
 
   return {
     health: () => options.sqlite.health(),
 
-    readRecoveryInventory: () =>
+    readRecoveryInventory: () => readTransaction(recoverySnapshot),
+
+    readRecoveryRepairSnapshot: () =>
       readTransaction((database) => {
-        const sessions = correlationStore.listSessions(database).sort(compareIdentity);
-        const recoveryHandles = sessionRecoveryHandleStore
-          .listSessionRecoveryHandles(database, {})
-          .sort(compareIdentity);
-        return { sessions, recoveryHandles };
+        const snapshot = recoverySnapshot(database);
+        return {
+          snapshot,
+          recoveryInventoryDigest: recoveryInventoryDigest(snapshot),
+        };
+      }),
+
+    pruneSessionRecoveryHandle: (input) =>
+      transaction((database) => {
+        const before = recoverySnapshot(database);
+        if (recoveryInventoryDigest(before) !== input.expectedRecoveryInventoryDigest) {
+          throw new Error("Recovery inventory changed before handle pruning.");
+        }
+        const selected = before.recoveryHandles.find(
+          (handle) => handle.id === input.recoveryHandleId,
+        );
+        if (
+          selected === undefined ||
+          selected.projectId !== input.expected.projectId ||
+          selected.worktreeId !== input.expected.worktreeId ||
+          selected.sessionId !== input.expected.sessionId ||
+          selected.provider !== input.expected.provider
+        ) {
+          throw new Error("Recovery handle identity changed before pruning.");
+        }
+        const unrelated = before.recoveryHandles.filter((handle) => handle.id !== selected.id);
+        const deleted = sessionRecoveryHandleStore.deleteSessionRecoveryHandle(
+          database,
+          selected.id,
+        );
+        if (deleted !== 1) throw new Error("The exact recovery handle was not pruned.");
+        const after = recoverySnapshot(database);
+        if (JSON.stringify(after.recoveryHandles) !== JSON.stringify(unrelated)) {
+          throw new Error("Unrelated recovery handles changed during pruning.");
+        }
+        return {
+          deleted: true,
+          recoveryInventoryDigest: recoveryInventoryDigest(after),
+        };
       }),
 
     recordCommandAccepted: (input) =>

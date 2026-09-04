@@ -101,6 +101,11 @@ export function deleteSessionRecoveryHandles(
     .run(input.provider, input.sessionId).changes;
 }
 
+export function deleteSessionRecoveryHandle(database: SqlDatabase, handleId: string): number {
+  return database.prepare("DELETE FROM session_recovery_handles WHERE id = ?").run(handleId)
+    .changes;
+}
+
 export function getSessionRecoveryHandle(
   database: SqlDatabase,
   handleId: string,

@@ -1181,6 +1181,12 @@
           "bindings": ["createSessionImportRecoveryHandleHandler"]
         },
         {
+          "specifier": "./session/pruneRecoveryHandle.js",
+          "resolvedPath": "apps/observer/src/commands/session/pruneRecoveryHandle.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createPruneRecoveryHandleHandler"]
+        },
+        {
           "specifier": "./session/rename.js",
           "resolvedPath": "apps/observer/src/commands/session/rename.ts",
           "edgeKind": "runtime",
@@ -1256,7 +1262,13 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionGroupStore", "SessionStore"]
+          "bindings": ["EventJournal", "RecoveryRepairStore", "SessionGroupStore", "SessionStore"]
+        },
+        {
+          "specifier": "../persistence/recoveryBackup.js",
+          "resolvedPath": "apps/observer/src/persistence/recoveryBackup.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RecoveryRepairAuthorizationPort"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -1869,6 +1881,115 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/session/pruneRecoveryHandle.ts",
+      "exports": [
+        {
+          "name": "createPruneRecoveryHandleHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Revalidates one explicitly selected eligible handle and its private journal, audit, and backup, then deletes only that handle in one digest-guarded transaction that proves every unrelated handle was preserved."
+        },
+        {
+          "name": "CreatePruneRecoveryHandleHandlerOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../assertCommand.js",
+          "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
+          "edgeKind": "runtime",
+          "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../queue.js",
+          "resolvedPath": "apps/observer/src/commands/queue.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CommandHandler"]
+        },
+        {
+          "specifier": "./shared.js",
+          "resolvedPath": "apps/observer/src/commands/session/shared.ts",
+          "edgeKind": "runtime",
+          "bindings": [
+            "commandValidationError",
+            "findProjectOrThrow",
+            "throwIfAborted",
+            "validateSnapshotRow",
+            "worktreeObservationFromRow"
+          ]
+        },
+        {
+          "specifier": "../../features/evaluator.js",
+          "resolvedPath": "apps/observer/src/features/evaluator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["FeatureFlagEvaluator"]
+        },
+        {
+          "specifier": "../../persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["EventJournal", "RecoveryRepairStore", "SessionStore"]
+        },
+        {
+          "specifier": "../../persistence/recoveryBackup.js",
+          "resolvedPath": "apps/observer/src/persistence/recoveryBackup.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RecoveryRepairAuthorizationPort"]
+        },
+        {
+          "specifier": "../../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "../../sessionRecovery/resolve.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/resolve.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveSessionRecovery"]
+        },
+        {
+          "specifier": "../../utils/time.js",
+          "resolvedPath": "apps/observer/src/utils/time.ts",
+          "edgeKind": "runtime",
+          "bindings": ["nowIso"]
+        },
+        {
+          "specifier": "../../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeMutationCoordinator"]
+        },
+        {
+          "specifier": "../../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeMutationCoordinator"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderProjectConfig", "RepairAction"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RuntimeClock"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/session/rename.ts",
       "exports": [
         {
@@ -1948,7 +2069,7 @@
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates the optional expected session/provider identity and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Failed cleanup discards only a session seeded by this command."
+          "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates the optional expected session/provider identity and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Repair callers also commit the coherent recovery inventory digest before launch. Repair resume also verifies its private journal, audit, and backup and re-resolves the canonical handle immediately before terminal creation. Failed cleanup discards only a session seeded by this command."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -2032,7 +2153,13 @@
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionStore"]
+          "bindings": ["EventJournal", "RecoveryRepairStore", "SessionStore"]
+        },
+        {
+          "specifier": "../../persistence/recoveryBackup.js",
+          "resolvedPath": "apps/observer/src/persistence/recoveryBackup.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RecoveryRepairAuthorizationPort"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -2051,6 +2178,12 @@
           "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverEventBus"]
+        },
+        {
+          "specifier": "../../sessionRecovery/inventoryDigest.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/inventoryDigest.ts",
+          "edgeKind": "runtime",
+          "bindings": ["recoveryInventoryDigest"]
         },
         {
           "specifier": "../../sessionRecovery/resolve.js",
@@ -2092,7 +2225,13 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "SafeError", "WorktreeRow"]
+          "bindings": [
+            "ProviderProjectConfig",
+            "RepairAction",
+            "RepairRecoveryMutationProof",
+            "SafeError",
+            "WorktreeRow"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -4479,6 +4618,12 @@
           "purpose": "Stores provider ingress fallback records as strict JSON files and leaves malformed evidence in place for diagnostics."
         },
         {
+          "name": "createFilesystemRecoveryRepairAuthorizationPort",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "createHarnessEventReportIngestion",
           "kind": "function",
           "role": "USE CASE",
@@ -4692,13 +4837,19 @@
           "name": "createSqliteObserverPersistence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and transactions at the storage boundary."
+          "purpose": "Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and transactions at the storage boundary. It owns coherent recovery digests and exact transactional pruning; the separate SQLite backup adapter owns pre-mutation repair copies and verifies the copy named by the command boundary's private repair proof."
         },
         {
           "name": "CreateSqliteObserverPersistenceOptions",
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "createSqliteRecoveryBackupPort",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Uses SQLite's online backup API so committed WAL rows are included, then reopens the result read-only to verify schema, integrity, size, and recovery inventory before returning an opaque ID."
         },
         {
           "name": "createTerminalCloseHandler",
@@ -5757,6 +5908,36 @@
           "purpose": null
         },
         {
+          "name": "RecoveryBackupPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Creates a verified SQLite-consistent recovery backup without exposing its local path."
+        },
+        {
+          "name": "recoveryInventoryDigest",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "recoveryInventoryPublicDigest",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "RecoveryRepairAuthorizationPort",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "RecoveryRepairStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Reads and mutates recovery handles against one coherent private snapshot and its public digest."
+        },
+        {
           "name": "registerObserverCommandHandlers",
           "kind": "function",
           "role": "COMPOSITION ROOT",
@@ -5946,7 +6127,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Digest-guarded repair composes this session lifecycle with `RecoveryRepairStore`, which owns coherent snapshots and exact-handle pruning after the command boundary verifies its private repair proof. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -6227,6 +6408,12 @@
           "bindings": ["*"]
         },
         {
+          "specifier": "./persistence/recoveryBackup.js",
+          "resolvedPath": "apps/observer/src/persistence/recoveryBackup.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
           "specifier": "./providers/healthCache.js",
           "resolvedPath": "apps/observer/src/providers/healthCache.ts",
           "edgeKind": "runtime",
@@ -6355,6 +6542,12 @@
         {
           "specifier": "./runtime/server.js",
           "resolvedPath": "apps/observer/src/runtime/server.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./sessionRecovery/inventoryDigest.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/inventoryDigest.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -7885,16 +8078,28 @@
           "purpose": "Preserves durable Observer command lifecycle, diagnostic history, and typed success results before terminal completion is observable."
         },
         {
+          "name": "createFilesystemRecoveryRepairAuthorizationPort",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "createSqliteObserverPersistence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and transactions at the storage boundary."
+          "purpose": "Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and transactions at the storage boundary. It owns coherent recovery digests and exact transactional pruning; the separate SQLite backup adapter owns pre-mutation repair copies and verifies the copy named by the command boundary's private repair proof."
         },
         {
           "name": "CreateSqliteObserverPersistenceOptions",
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "createSqliteRecoveryBackupPort",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Uses SQLite's online backup API so committed WAL rows are included, then reopens the result read-only to verify schema, integrity, size, and recovery inventory before returning an opaque ID."
         },
         {
           "name": "EventAndObservationIngressDedupeResult",
@@ -8095,6 +8300,24 @@
           "purpose": null
         },
         {
+          "name": "RecoveryBackupPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Creates a verified SQLite-consistent recovery backup without exposing its local path."
+        },
+        {
+          "name": "RecoveryRepairAuthorizationPort",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "RecoveryRepairStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Reads and mutates recovery handles against one coherent private snapshot and its public digest."
+        },
+        {
           "name": "SessionGroupMemberExpectation",
           "kind": "type",
           "role": null,
@@ -8170,7 +8393,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Digest-guarded repair composes this session lifecycle with `RecoveryRepairStore`, which owns coherent snapshots and exact-handle pruning after the command boundary verifies its private repair proof. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -8208,6 +8431,12 @@
           "specifier": "./ports.js",
           "resolvedPath": "apps/observer/src/persistence/ports.ts",
           "edgeKind": "type-only",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./recoveryBackup.js",
+          "resolvedPath": "apps/observer/src/persistence/recoveryBackup.ts",
+          "edgeKind": "runtime",
           "bindings": ["*"]
         },
         {
@@ -8452,6 +8681,12 @@
           "purpose": "Persists reconcile-owned provider evidence and insert-initializes missing canonical worktree titles from one reconcile result as an atomic capability."
         },
         {
+          "name": "RecoveryRepairStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Reads and mutates recovery handles against one coherent private snapshot and its public digest."
+        },
+        {
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
@@ -8461,7 +8696,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Digest-guarded repair composes this session lifecycle with `RecoveryRepairStore`, which owns coherent snapshots and exact-handle pruning after the command boundary verifies its private repair proof. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -8558,6 +8793,115 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["SessionRecoveryHandle"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/persistence/recoveryBackup.ts",
+      "exports": [
+        {
+          "name": "createFilesystemRecoveryRepairAuthorizationPort",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "createSqliteRecoveryBackupPort",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Uses SQLite's online backup API so committed WAL rows are included, then reopens the result read-only to verify schema, integrity, size, and recovery inventory before returning an opaque ID."
+        },
+        {
+          "name": "RecoveryBackupPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Creates a verified SQLite-consistent recovery backup without exposing its local path."
+        },
+        {
+          "name": "RecoveryRepairAuthorizationPort",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../migrations/index.js",
+          "resolvedPath": "apps/observer/src/migrations/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["latestSchemaVersion"]
+        },
+        {
+          "specifier": "./correlations.js",
+          "resolvedPath": "apps/observer/src/persistence/correlations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["* as correlationStore"]
+        },
+        {
+          "specifier": "./sessionRecoveryHandles.js",
+          "resolvedPath": "apps/observer/src/persistence/sessionRecoveryHandles.ts",
+          "edgeKind": "runtime",
+          "bindings": ["* as sessionRecoveryHandleStore"]
+        },
+        {
+          "specifier": "../sessionRecovery/inventoryDigest.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/inventoryDigest.ts",
+          "edgeKind": "runtime",
+          "bindings": ["recoveryInventoryDigest"]
+        },
+        {
+          "specifier": "../sqlite/driver.js",
+          "resolvedPath": "apps/observer/src/sqlite/driver.ts",
+          "edgeKind": "runtime",
+          "bindings": ["openSqlDatabase"]
+        },
+        {
+          "specifier": "node:crypto",
+          "resolvedPath": "node:crypto",
+          "edgeKind": "runtime",
+          "bindings": ["createHash", "randomUUID"]
+        },
+        {
+          "specifier": "node:fs",
+          "resolvedPath": "node:fs",
+          "edgeKind": "runtime",
+          "bindings": ["createReadStream"]
+        },
+        {
+          "specifier": "node:fs/promises",
+          "resolvedPath": "node:fs/promises",
+          "edgeKind": "runtime",
+          "bindings": ["chmod", "lstat", "mkdir", "readFile", "rm", "stat"]
+        },
+        {
+          "specifier": "node:path",
+          "resolvedPath": "node:path",
+          "edgeKind": "runtime",
+          "bindings": ["join"]
+        },
+        {
+          "specifier": "node:sqlite",
+          "resolvedPath": "node:sqlite",
+          "edgeKind": "runtime",
+          "bindings": ["DatabaseSync", "backup"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["RepairAuditSchema", "RepairBackupSchema", "RepairJournalSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "RepairAction",
+            "RepairAudit",
+            "RepairBackup",
+            "RepairJournal",
+            "RepairRecoveryMutationProof"
+          ]
         }
       ]
     },
@@ -8985,6 +9329,12 @@
       "path": "apps/observer/src/persistence/sessionRecoveryHandles.ts",
       "exports": [
         {
+          "name": "deleteSessionRecoveryHandle",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "deleteSessionRecoveryHandles",
           "kind": "function",
           "role": null,
@@ -9092,7 +9442,7 @@
           "name": "createSqliteObserverPersistence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and transactions at the storage boundary."
+          "purpose": "Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and transactions at the storage boundary. It owns coherent recovery digests and exact transactional pruning; the separate SQLite backup adapter owns pre-mutation repair copies and verifies the copy named by the command boundary's private repair proof."
         },
         {
           "name": "CreateSqliteObserverPersistenceOptions",
@@ -9212,6 +9562,12 @@
           "resolvedPath": "apps/observer/src/persistence/worktreeMetadataCurrent.ts",
           "edgeKind": "runtime",
           "bindings": ["* as worktreeMetadataCurrentStore"]
+        },
+        {
+          "specifier": "../sessionRecovery/inventoryDigest.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/inventoryDigest.ts",
+          "edgeKind": "runtime",
+          "bindings": ["recoveryInventoryDigest"]
         },
         {
           "specifier": "../sqlite.js",
@@ -12308,7 +12664,11 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["createSqliteObserverPersistence"]
+          "bindings": [
+            "createFilesystemRecoveryRepairAuthorizationPort",
+            "createSqliteObserverPersistence",
+            "createSqliteRecoveryBackupPort"
+          ]
         },
         {
           "specifier": "../providers/registry.js",
@@ -14021,13 +14381,56 @@
       ]
     },
     {
+      "path": "apps/observer/src/sessionRecovery/inventoryDigest.ts",
+      "exports": [
+        {
+          "name": "recoveryInventoryDigest",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "recoveryInventoryPublicDigest",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../persistence/types.js",
+          "resolvedPath": "apps/observer/src/persistence/types.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverRecoveryInventoryPersistenceSnapshot"]
+        },
+        {
+          "specifier": "./inventory.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery/inventory.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerRecoveryInventoryFromPersistence"]
+        },
+        {
+          "specifier": "node:crypto",
+          "resolvedPath": "node:crypto",
+          "edgeKind": "runtime",
+          "bindings": ["createHash"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverRecoveryInventory"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/sessionRecovery/resolve.ts",
       "exports": [
         {
           "name": "resolveSessionRecovery",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting the newest automatic candidate deterministically, then returns only typed resume authority for that provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists."
+          "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting the newest automatic candidate deterministically, then returns only typed resume authority for that provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists. Repair callers may also require the canonical newest eligible handle from their coherent snapshot."
         }
       ],
       "imports": [
@@ -14048,6 +14451,12 @@
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
           "bindings": ["SessionStore"]
+        },
+        {
+          "specifier": "../persistence/types.js",
+          "resolvedPath": "apps/observer/src/persistence/types.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverRecoveryInventoryPersistenceSnapshot"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -14097,6 +14506,12 @@
         }
       ],
       "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["compareSessionRecoveryHandleRecency"]
+        },
         {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
@@ -15899,6 +16314,46 @@
       ]
     },
     {
+      "path": "apps/cli/src/repair/adapters.ts",
+      "declaration": "createRepairObserverCommandAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Sends one digest-guarded repair command to the exact running Observer without starting or replacing it.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/repair/adapters.ts",
+      "declaration": "createRepairTerminalReapAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Restricts the update reaper to one previously authorized terminal target and retains its exact identity and escalation postconditions.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/reapProcessGroups.ts",
+          "declaration": "UpdateReapProcessGroupPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/repair/execution.ts",
+      "declaration": "executeRepair",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Re-inventories under the repair lock, commits audit and restart state before mutation, and continues only the same exact postcondition after an irreversible boundary. Terminal repair also takes the update-reap lock second so both commands share one signal exclusion region.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/repair/journal.ts",
+      "declaration": "createFilesystemRepairJournalPort",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Stores private repair progress and excludes concurrent repair processes under the configured state directory while rejecting unverifiable lock ownership. An exclusive claim serializes stale reclamation, exact-owner replacement, and release.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/update/convergenceExecution.ts",
       "declaration": "executeUpdateConvergence",
       "kind": "function",
@@ -16055,11 +16510,34 @@
     },
     {
       "path": "apps/cli/src/update/reapExecution.ts",
+      "declaration": "executeJournaledTerminalReapTargets",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Applies the shared TERM/wait/KILL/postcondition sequence to exact journaled process groups.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/reapProcessGroups.ts",
+          "declaration": "UpdateReapProcessGroupPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/reapExecution.ts",
       "declaration": "executeUpdateReap",
       "kind": "function",
       "role": "USE CASE",
       "purpose": "Repeats authorization under the update lock, commits the private restart journal before any signal, and drains only exact journaled process groups through the fixed TERM/KILL policy.",
       "dependencies": [
+        {
+          "path": "apps/cli/src/update/reapExecution.ts",
+          "declaration": "executeJournaledTerminalReapTargets",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
         {
           "path": "apps/cli/src/update/reapJournal.ts",
           "declaration": "UpdateReapJournalPort",
@@ -16102,11 +16580,27 @@
     },
     {
       "path": "apps/cli/src/update/reapPlan.ts",
+      "declaration": "deriveExactTerminalReapAuthorizationEvidence",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Authorizes one exact live Host-owned child process group. Update and repair both use this policy, while their orchestration decides whether one or every terminal must be selected.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/reapPlan.ts",
       "declaration": "deriveUpdateReapAuthorization",
       "kind": "function",
       "role": "POLICY",
       "purpose": "Derives private SHA-256 authority only for one complete canonical reap-required plan whose exact Host child groups and selected recovery handles remain correlated to the private preflight.",
-      "dependencies": []
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/reapPlan.ts",
+          "declaration": "deriveExactTerminalReapAuthorizationEvidence",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/cli/src/update/reapProcessGroups.ts",
@@ -16247,6 +16741,36 @@
         {
           "path": "packages/protocol/src/client.ts",
           "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflightAdapters.ts",
+      "declaration": "deriveLocalExactTerminalReapAuthorizationEvidence",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Captures one exact Host-owned terminal process group for update or repair authorization.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/reapPlan.ts",
+          "declaration": "deriveExactTerminalReapAuthorizationEvidence",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/reapProcessGroups.ts",
+          "declaration": "UpdateReapProcessGroupPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "readUnixSocketHolderPidsAsync",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -16506,6 +17030,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/commands/session/pruneRecoveryHandle.ts",
+          "declaration": "createPruneRecoveryHandleHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/commands/session/rename.ts",
           "declaration": "createSessionRenameHandler",
           "kind": "function",
@@ -16634,6 +17165,22 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/session/pruneRecoveryHandle.ts",
+      "declaration": "createPruneRecoveryHandleHandler",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Revalidates one explicitly selected eligible handle and its private journal, audit, and backup, then deletes only that handle in one digest-guarded transaction that proves every unrelated handle was preserved.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/sessionRecovery/resolve.ts",
+          "declaration": "resolveSessionRecovery",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/session/rename.ts",
       "declaration": "createSessionRenameHandler",
       "kind": "function",
@@ -16646,7 +17193,7 @@
       "declaration": "createSessionResumeAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates the optional expected session/provider identity and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Failed cleanup discards only a session seeded by this command.",
+      "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates the optional expected session/provider identity and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Repair callers also commit the coherent recovery inventory digest before launch. Repair resume also verifies its private journal, audit, and backup and re-resolves the canonical handle immediately before terminal creation. Failed cleanup discards only a session seeded by this command.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",
@@ -17044,6 +17591,14 @@
     },
     {
       "path": "apps/observer/src/persistence/ports.ts",
+      "declaration": "RecoveryRepairStore",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Reads and mutates recovery handles against one coherent private snapshot and its public digest.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/persistence/ports.ts",
       "declaration": "SessionGroupStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
@@ -17055,7 +17610,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh.",
+      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Exact session lookup lets serialized launch projection consume current durable lifecycle and title authority without scanning unrelated sessions. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Digest-guarded repair composes this session lifecycle with `RecoveryRepairStore`, which owns coherent snapshots and exact-handle pruning after the command boundary verifies its private repair proof. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh.",
       "dependencies": []
     },
     {
@@ -17075,11 +17630,35 @@
       "dependencies": []
     },
     {
+      "path": "apps/observer/src/persistence/recoveryBackup.ts",
+      "declaration": "createSqliteRecoveryBackupPort",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Uses SQLite's online backup API so committed WAL rows are included, then reopens the result read-only to verify schema, integrity, size, and recovery inventory before returning an opaque ID.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/persistence/recoveryBackup.ts",
+          "declaration": "RecoveryBackupPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/persistence/recoveryBackup.ts",
+      "declaration": "RecoveryBackupPort",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Creates a verified SQLite-consistent recovery backup without exposing its local path.",
+      "dependencies": []
+    },
+    {
       "path": "apps/observer/src/persistence/sqliteAdapter.ts",
       "declaration": "createSqliteObserverPersistence",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and transactions at the storage boundary.",
+      "purpose": "Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and transactions at the storage boundary. It owns coherent recovery digests and exact transactional pruning; the separate SQLite backup adapter owns pre-mutation repair copies and verifies the copy named by the command boundary's private repair proof.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -17540,6 +18119,13 @@
         {
           "path": "apps/observer/src/diagnostics/localEvidenceSource.ts",
           "declaration": "createLocalDiagnosticEvidenceSource",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/persistence/recoveryBackup.ts",
+          "declaration": "createSqliteRecoveryBackupPort",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -18140,7 +18726,7 @@
       "declaration": "resolveSessionRecovery",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting the newest automatic candidate deterministically, then returns only typed resume authority for that provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists.",
+      "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting the newest automatic candidate deterministically, then returns only typed resume authority for that provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists. Repair callers may also require the canonical newest eligible handle from their coherent snapshot.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",

@@ -8,6 +8,7 @@ import {
   WorktreeIdSchema,
 } from "../ids.js";
 import { SessionRecoveryHandleSchema } from "../recovery.js";
+import { RepairRecoveryMutationProofSchema } from "../repair.js";
 import { nonEmptyStringSchema, userFacingTitleSchema } from "../shared.js";
 import { TerminalPlacementRequestSchema } from "../terminalPlacement.js";
 import { SessionGroupNameSchema } from "./sessionGroup.js";
@@ -133,8 +134,19 @@ export const ResumeAgentPayloadSchema = z
       })
       .strict()
       .optional(),
+    repair: RepairRecoveryMutationProofSchema.optional(),
     terminal: TerminalCommandOptionsSchema.partial().optional(),
     initialPrompt: nonEmptyStringSchema.optional(),
+  })
+  .strict();
+
+export const PruneRecoveryHandlePayloadSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    worktreeId: WorktreeIdSchema,
+    recoveryHandleId: nonEmptyStringSchema,
+    expected: z.object({ sessionId: SessionIdSchema, provider: ProviderIdSchema }).strict(),
+    repair: RepairRecoveryMutationProofSchema,
   })
   .strict();
 
@@ -200,15 +212,31 @@ export const AcknowledgeTurnPayloadSchema = z
   .strict();
 
 export const CreateSessionCommandSchema = z
-  .object({ type: z.literal("session.create"), payload: CreateSessionPayloadSchema })
+  .object({
+    type: z.literal("session.create"),
+    payload: CreateSessionPayloadSchema,
+  })
   .strict();
 
 export const StartAgentCommandSchema = z
-  .object({ type: z.literal("session.startAgent"), payload: StartAgentPayloadSchema })
+  .object({
+    type: z.literal("session.startAgent"),
+    payload: StartAgentPayloadSchema,
+  })
   .strict();
 
 export const ResumeAgentCommandSchema = z
-  .object({ type: z.literal("session.resumeAgent"), payload: ResumeAgentPayloadSchema })
+  .object({
+    type: z.literal("session.resumeAgent"),
+    payload: ResumeAgentPayloadSchema,
+  })
+  .strict();
+
+export const PruneRecoveryHandleCommandSchema = z
+  .object({
+    type: z.literal("session.pruneRecoveryHandle"),
+    payload: PruneRecoveryHandlePayloadSchema,
+  })
   .strict();
 
 export const ImportRecoveryHandleCommandSchema = z
@@ -219,19 +247,31 @@ export const ImportRecoveryHandleCommandSchema = z
   .strict();
 
 export const ForkSessionCommandSchema = z
-  .object({ type: z.literal("session.fork"), payload: ForkSessionPayloadSchema })
+  .object({
+    type: z.literal("session.fork"),
+    payload: ForkSessionPayloadSchema,
+  })
   .strict();
 
 export const CloseSessionCommandSchema = z
-  .object({ type: z.literal("session.close"), payload: CloseSessionPayloadSchema })
+  .object({
+    type: z.literal("session.close"),
+    payload: CloseSessionPayloadSchema,
+  })
   .strict();
 
 export const RenameSessionCommandSchema = z
-  .object({ type: z.literal("session.rename"), payload: RenameSessionPayloadSchema })
+  .object({
+    type: z.literal("session.rename"),
+    payload: RenameSessionPayloadSchema,
+  })
   .strict();
 
 export const AcknowledgeTurnCommandSchema = z
-  .object({ type: z.literal("session.acknowledgeTurn"), payload: AcknowledgeTurnPayloadSchema })
+  .object({
+    type: z.literal("session.acknowledgeTurn"),
+    payload: AcknowledgeTurnPayloadSchema,
+  })
   .strict();
 
 const ResolvedSessionCommandPlacementSchema = z

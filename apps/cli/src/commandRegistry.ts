@@ -13,6 +13,7 @@ import { observerCliCommand } from "./commands/registry/observer.js";
 import { popupCliCommand } from "./commands/registry/popup.js";
 import { projectCliCommand } from "./commands/registry/project.js";
 import { reconcileCliCommand } from "./commands/registry/reconcile.js";
+import { repairCliCommand } from "./commands/registry/repair.js";
 import { sessionCliCommand } from "./commands/registry/session.js";
 import { setupCliCommand } from "./commands/registry/setup.js";
 import { snapshotCliCommand } from "./commands/registry/snapshot.js";
@@ -31,10 +32,19 @@ export const cliCommandRegistry: CliCommandNode = {
   description: "STATION is a terminal-native control plane for AI-agent worktree sessions.",
   usage: ["stn [--config <path>] [command]", "stn --version", "stn --help", "stn --man"],
   options: [
-    { name: "--config <path>", description: "Use a specific STATION config file." },
+    {
+      name: "--config <path>",
+      description: "Use a specific STATION config file.",
+    },
     { name: "--version", description: "Print the STATION build version." },
-    { name: "-h, --help", description: "Print concise help for a command path." },
-    { name: "--man", description: "Print the fuller manual for a command path." },
+    {
+      name: "-h, --help",
+      description: "Print concise help for a command path.",
+    },
+    {
+      name: "--man",
+      description: "Print the fuller manual for a command path.",
+    },
   ],
   examples: ["stn --help", "stn doctor --help", "stn project add --man"],
   notes: [
@@ -56,6 +66,7 @@ export const cliCommandRegistry: CliCommandNode = {
     observerCliCommand,
     popupCliCommand,
     projectCliCommand,
+    repairCliCommand,
     reconcileCliCommand,
     sessionCliCommand,
     setupCliCommand,

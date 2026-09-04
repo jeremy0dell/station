@@ -202,28 +202,60 @@ async function reapJournaledProcessGroups(
     journal = advanceUpdateReapJournal(journal, "reap-started");
     await journalPort.write(journal);
   }
-  const pending = journal.targets.filter((target) => target.result === undefined);
+  const targets = await executeJournaledTerminalReapTargets(journal.targets, processGroups, [
+    "stn",
+    "update",
+    "--reap",
+  ]);
+  journal = updateReapJournalTargets(journal, targets);
+  await journalPort.write(journal);
+  return journal;
+}
+
+/**
+ * USE CASE
+ *
+ * Applies the shared TERM/wait/KILL/postcondition sequence to exact journaled process groups.
+ */
+export async function executeJournaledTerminalReapTargets(
+  initial: UpdateReapJournal["targets"],
+  processGroups: UpdateReapProcessGroupPort,
+  recoveryCommand: readonly [string, ...string[]],
+): Promise<UpdateReapJournal["targets"]> {
+  const pending = initial.filter((target) => target.result === undefined);
   const termSent = new Set<number>();
   const results = new Map<number, UpdateReapTerminalResult>();
   for (const target of pending) {
     const current = await readProcessGroup(processGroups, target.processGroup.leader.pgid);
     if (current.status === "unknown") {
-      results.set(target.terminal.pid, terminalResult(target, "unresolved", false));
+      results.set(
+        target.terminal.pid,
+        terminalResult(target, "unresolved", false, recoveryCommand),
+      );
       continue;
     }
     if (current.group.members.length === 0) {
-      results.set(target.terminal.pid, terminalResult(target, "already-exited", false));
+      results.set(
+        target.terminal.pid,
+        terminalResult(target, "already-exited", false, recoveryCommand),
+      );
       continue;
     }
     if (!updateReapProcessGroupsMatch(current.group, target.processGroup)) {
-      results.set(target.terminal.pid, terminalResult(target, "unresolved", false));
+      results.set(
+        target.terminal.pid,
+        terminalResult(target, "unresolved", false, recoveryCommand),
+      );
       continue;
     }
     try {
       processGroups.signal(target.processGroup.leader.pgid, "SIGTERM");
       termSent.add(target.terminal.pid);
     } catch {
-      results.set(target.terminal.pid, terminalResult(target, "unresolved", false));
+      results.set(
+        target.terminal.pid,
+        terminalResult(target, "unresolved", false, recoveryCommand),
+      );
     }
   }
   if (termSent.size > 0) await processGroups.wait(3_000);
@@ -232,22 +264,34 @@ async function reapJournaledProcessGroups(
     if (!termSent.has(target.terminal.pid)) continue;
     const current = await readProcessGroup(processGroups, target.processGroup.leader.pgid);
     if (current.status === "unknown") {
-      results.set(target.terminal.pid, terminalResult(target, "unresolved", false));
+      results.set(
+        target.terminal.pid,
+        terminalResult(target, "unresolved", false, recoveryCommand),
+      );
       continue;
     }
     if (current.group.members.length === 0) {
-      results.set(target.terminal.pid, terminalResult(target, "terminated", false));
+      results.set(
+        target.terminal.pid,
+        terminalResult(target, "terminated", false, recoveryCommand),
+      );
       continue;
     }
     if (!updateReapProcessGroupIsAuthorizedRemainder(current.group, target.processGroup)) {
-      results.set(target.terminal.pid, terminalResult(target, "unresolved", false));
+      results.set(
+        target.terminal.pid,
+        terminalResult(target, "unresolved", false, recoveryCommand),
+      );
       continue;
     }
     try {
       processGroups.signal(target.processGroup.leader.pgid, "SIGKILL");
       killSent.add(target.terminal.pid);
     } catch {
-      results.set(target.terminal.pid, terminalResult(target, "unresolved", false));
+      results.set(
+        target.terminal.pid,
+        terminalResult(target, "unresolved", false, recoveryCommand),
+      );
     }
   }
   if (killSent.size > 0) await processGroups.wait(500);
@@ -260,29 +304,30 @@ async function reapJournaledProcessGroups(
         target,
         current.status === "exact" && current.group.members.length === 0 ? "killed" : "unresolved",
         true,
+        recoveryCommand,
       ),
     );
   }
-  journal = updateReapJournalTargets(
-    journal,
-    journal.targets.map((target) => ({
-      ...target,
-      ...(target.result === undefined
-        ? {
-            result: results.get(target.terminal.pid) ?? terminalResult(target, "unresolved", false),
-          }
-        : {}),
-    })),
-  );
-  await journalPort.write(journal);
-  return journal;
+  return initial.map((target) => ({
+    ...target,
+    ...(target.result === undefined
+      ? {
+          result:
+            results.get(target.terminal.pid) ??
+            terminalResult(target, "unresolved", false, recoveryCommand),
+        }
+      : {}),
+  }));
 }
 
 async function readProcessGroup(
   port: UpdateReapProcessGroupPort,
   pgid: number,
 ): Promise<
-  | { status: "exact"; group: Awaited<ReturnType<UpdateReapProcessGroupPort["read"]>> }
+  | {
+      status: "exact";
+      group: Awaited<ReturnType<UpdateReapProcessGroupPort["read"]>>;
+    }
   | { status: "unknown" }
 > {
   try {
@@ -296,6 +341,7 @@ function terminalResult(
   target: UpdateReapJournal["targets"][number],
   terminationOutcome: UpdateReapTerminalResult["terminationOutcome"],
   escalationUsed: boolean,
+  recoveryCommand: readonly [string, ...string[]] = ["stn", "update", "--reap"],
 ): UpdateReapTerminalResult {
   const unresolved = terminationOutcome === "unresolved";
   return {
@@ -311,7 +357,7 @@ function terminalResult(
         ? "retained"
         : "non-resumable",
     unresolved,
-    recoveryCommands: unresolved ? [["stn", "update", "--reap"]] : [],
+    recoveryCommands: unresolved ? [recoveryCommand] : [],
   };
 }
 

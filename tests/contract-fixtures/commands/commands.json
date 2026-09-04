@@ -100,6 +100,31 @@
       "initialPrompt": "Continue the recovered task."
     }
   },
+  "sessionPruneRecoveryHandle": {
+    "type": "session.pruneRecoveryHandle",
+    "payload": {
+      "projectId": "api",
+      "worktreeId": "wt_api_cache",
+      "recoveryHandleId": "rec_codex_123",
+      "expected": {
+        "sessionId": "ses_api_cache",
+        "provider": "codex"
+      },
+      "repair": {
+        "journalId": "00000000-0000-4000-8000-000000000001",
+        "auditId": "00000000-0000-4000-8000-000000000002",
+        "planDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "inventoryDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "expectedRecoveryInventoryDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "backup": {
+          "schemaVersion": 1,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "contentDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "recoveryInventoryDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    }
+  },
   "sessionImportRecoveryHandle": {
     "type": "session.importRecoveryHandle",
     "payload": {
