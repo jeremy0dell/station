@@ -140,6 +140,7 @@ export type RunObserverMainDeps = {
   /** Test/composition override for the child-side incumbent admission policy. */
   startupPolicy?: "generic" | "preserve-incumbent";
   startupReadinessSink?: ObserverStartupReadinessSink;
+  /** Process termination boundary for forced and delayed shutdown exits. */
   exit?: (code: number) => void;
 };
 
@@ -654,7 +655,7 @@ async function runClaimedObserverRuntime(input: {
       },
       STOP_BACKSTOP_MS,
       {
-        exit: () => process.exit(shutdownExitCode),
+        exit: () => (deps.exit ?? process.exit)(shutdownExitCode),
         setTimer: (fn, ms) => setTimeout(fn, ms),
         clearTimer: (timer) => clearTimeout(timer as NodeJS.Timeout),
       },
@@ -816,7 +817,7 @@ async function runClaimedObserverRuntime(input: {
     (deps.exit ?? process.exit)(shutdownExitCode);
   }
   // Stray unref-less timers must not keep a stopped observer alive.
-  setTimeout(() => process.exit(0), 2000).unref();
+  setTimeout(() => (deps.exit ?? process.exit)(0), 2000).unref();
   return 0;
 }
 
