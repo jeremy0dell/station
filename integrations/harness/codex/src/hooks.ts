@@ -10,7 +10,11 @@ import type {
   SafeError,
 } from "@station/contracts";
 import { ProviderHookHealthSchema } from "@station/contracts";
-import { hookSetupFileOpsFor, isHookOwnershipConflict } from "@station/harness-shared";
+import {
+  hookSetupFileOpsFor,
+  isHookOwnershipConflict,
+  sameOwnerOwnership,
+} from "@station/harness-shared";
 import {
   classifyProviderHookArtifactOwnership,
   commandLine,
@@ -296,13 +300,9 @@ async function installCodexHooksUnlocked(
     onMutationCommitted?.();
   }
 
-  const result = installResultFromPlan(plan, true);
+  const result: CodexHookInstallResult = { ...plan, installed: true };
   if (options.artifactOwner !== undefined) {
-    result.ownership = {
-      status: "same-owner",
-      requested: options.artifactOwner,
-      currentLauncher: options.artifactOwner.launcher,
-    };
+    result.ownership = sameOwnerOwnership(options.artifactOwner);
   }
   assignBackupPaths(result, { profileBackupPath, baseBackupPath });
   return result;
@@ -690,28 +690,6 @@ function expectedCodexHookCommands(input: {
 
 function expectedCodexHookScript(input: CodexHookScriptOptions): string {
   return expectedProviderHookScript({ provider: "codex", options: input });
-}
-
-function installResultFromPlan(plan: CodexHookPlan, installed: boolean): CodexHookInstallResult {
-  return {
-    provider: plan.provider,
-    configPath: plan.configPath,
-    profileName: plan.profileName,
-    profileConfigPath: plan.profileConfigPath,
-    baseConfigPath: plan.baseConfigPath,
-    hookScriptPath: plan.hookScriptPath,
-    commands: plan.commands,
-    missing: plan.missing,
-    changed: plan.changed,
-    configChanged: plan.configChanged,
-    generatedGlobalChanged: plan.generatedGlobalChanged,
-    scriptChanged: plan.scriptChanged,
-    generatedGlobalCleanup: plan.generatedGlobalCleanup,
-    before: plan.before,
-    after: plan.after,
-    installed,
-    ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
-  };
 }
 
 async function buildGeneratedGlobalHookCleanup(

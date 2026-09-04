@@ -2,7 +2,11 @@
 // Upstream hook contract: https://code.claude.com/docs/en/hooks-guide
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
 import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
-import { hookSetupFileOpsFor, isHookOwnershipConflict } from "@station/harness-shared";
+import {
+  hookSetupFileOpsFor,
+  isHookOwnershipConflict,
+  sameOwnerOwnership,
+} from "@station/harness-shared";
 import {
   assertProviderHookArtifactOwnership,
   classifyProviderHookArtifactOwnership,
@@ -141,26 +145,6 @@ async function buildUserSettingsCleanup(userSettingsPath: string): Promise<{
   };
 }
 
-function installResultFromPlan(plan: ClaudeHookPlan, installed: boolean): ClaudeHookInstallResult {
-  return {
-    provider: plan.provider,
-    settingsPath: plan.settingsPath,
-    userSettingsPath: plan.userSettingsPath,
-    hookScriptPath: plan.hookScriptPath,
-    events: plan.events,
-    missing: plan.missing,
-    changed: plan.changed,
-    settingsChanged: plan.settingsChanged,
-    scriptChanged: plan.scriptChanged,
-    artifactInvalid: plan.artifactInvalid,
-    userSettingsCleanup: plan.userSettingsCleanup,
-    before: plan.before,
-    after: plan.after,
-    installed,
-    ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
-  };
-}
-
 function doctorMessage(input: {
   installed: boolean;
   artifactInvalid: boolean;
@@ -260,13 +244,14 @@ export async function installClaudeHooks(
     await fileOps.writeHookConfig(plan.userSettingsPath, plan.userSettingsCleanup.after);
   }
 
-  const result = installResultFromPlan({ ...plan, missing: [], artifactInvalid: false }, true);
+  const result: ClaudeHookInstallResult = {
+    ...plan,
+    missing: [],
+    artifactInvalid: false,
+    installed: true,
+  };
   if (options.artifactOwner !== undefined) {
-    result.ownership = {
-      status: "same-owner",
-      requested: options.artifactOwner,
-      currentLauncher: options.artifactOwner.launcher,
-    };
+    result.ownership = sameOwnerOwnership(options.artifactOwner);
   }
   const backupPaths: string[] = [];
   if (backupPath !== undefined) {

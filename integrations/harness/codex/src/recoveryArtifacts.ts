@@ -1,7 +1,7 @@
-import type { Dirent } from "node:fs";
-import { access, readdir } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { SessionRecoveryArtifactLocator, SessionRecoveryHandle } from "@station/contracts";
+import { walkFiles } from "@station/runtime";
 
 async function locateCodexArtifacts(
   codexHome: string,
@@ -32,22 +32,6 @@ async function fileExists(path: string): Promise<boolean> {
   } catch (cause) {
     if ((cause as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw cause;
-  }
-}
-
-async function walkFiles(root: string, visit: (path: string) => void): Promise<void> {
-  let entries: Dirent[];
-  try {
-    entries = await readdir(root, { withFileTypes: true });
-  } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw cause;
-  }
-  entries.sort((left, right) => left.name.localeCompare(right.name));
-  for (const entry of entries) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) await walkFiles(path, visit);
-    else if (entry.isFile()) visit(path);
   }
 }
 

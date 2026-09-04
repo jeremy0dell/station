@@ -20,6 +20,7 @@ export {
   hookSetupErrorClass,
   hookSetupFileOpsFor,
   isHookOwnershipConflict,
+  sameOwnerOwnership,
 } from "./hooks/setupErrors.js";
 export {
   assignDefined,
@@ -33,7 +34,7 @@ export {
 export {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
-  harnessCommand,
+  harnessCommandResolver,
   harnessHealth,
   harnessHookDoctorOptions,
   harnessHookReconciliationOptions,

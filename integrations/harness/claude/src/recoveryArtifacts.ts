@@ -1,7 +1,6 @@
-import type { Dirent } from "node:fs";
-import { readdir } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import type { SessionRecoveryArtifactLocator, SessionRecoveryHandle } from "@station/contracts";
+import { walkFiles } from "@station/runtime";
 
 async function locateClaudeArtifacts(
   claudeProjectsRoot: string,
@@ -14,22 +13,6 @@ async function locateClaudeArtifacts(
     if (basename(path) === expected) matches.push(path);
   });
   return matches.sort((left, right) => left.localeCompare(right));
-}
-
-async function walkFiles(root: string, visit: (path: string) => void): Promise<void> {
-  let entries: Dirent[];
-  try {
-    entries = await readdir(root, { withFileTypes: true });
-  } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw cause;
-  }
-  entries.sort((left, right) => left.name.localeCompare(right.name));
-  for (const entry of entries) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) await walkFiles(path, visit);
-    else if (entry.isFile()) visit(path);
-  }
 }
 
 /**

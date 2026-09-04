@@ -186,6 +186,13 @@ function parseVersionToken(output: string): string | undefined {
   return output.match(/\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?/)?.[0];
 }
 
+/** Binds one provider's command definition so the provider keeps a single `command(options)`. */
+export function harnessCommandResolver(
+  definition: TerminalBoundHarnessCommandDefinition,
+): (options: { command?: string }) => string {
+  return (options) => harnessCommand(options, definition.commandEnvVar, definition.commandFallback);
+}
+
 export function harnessCommand(
   options: { command?: string },
   envVar: string,

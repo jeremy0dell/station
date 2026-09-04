@@ -2,7 +2,11 @@
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
 import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
-import { hookSetupFileOpsFor, isHookOwnershipConflict } from "@station/harness-shared";
+import {
+  hookSetupFileOpsFor,
+  isHookOwnershipConflict,
+  sameOwnerOwnership,
+} from "@station/harness-shared";
 import {
   assertProviderHookArtifactOwnership,
   assignBackupPaths,
@@ -261,11 +265,7 @@ export async function installCursorHooks(
   });
   const result: CursorHookInstallResult = { ...plan, installed: true };
   if (options.artifactOwner !== undefined) {
-    result.ownership = {
-      status: "same-owner",
-      requested: options.artifactOwner,
-      currentLauncher: options.artifactOwner.launcher,
-    };
+    result.ownership = sameOwnerOwnership(options.artifactOwner);
   }
   assignBackupPaths(result, [backupPath]);
   return result;
