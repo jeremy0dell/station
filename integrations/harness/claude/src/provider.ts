@@ -6,6 +6,9 @@ import type {
   HarnessProvider,
   ProviderDoctorCheck,
   ProviderDoctorContext,
+  ProviderHookHealth,
+  ProviderHookReconciliationContext,
+  ProviderHookReconciliationResult,
 } from "@station/contracts";
 import {
   type CommonHarnessProviderOptions,
@@ -13,6 +16,7 @@ import {
   harnessCommand,
   harnessHealth,
   harnessHookDoctorOptions,
+  harnessHookReconciliationOptions,
   harnessHooksStatusFrom,
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
@@ -20,7 +24,12 @@ import {
 import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
 import { z } from "zod";
 import { claudeProviderErrorFromUnknown } from "./errors.js";
-import { doctorClaudeHooks, resolveClaudeSettingsArtifactPath } from "./hooks.js";
+import {
+  doctorClaudeHooks,
+  inspectClaudeHookHealth,
+  reconcileClaudeHooks,
+  resolveClaudeSettingsArtifactPath,
+} from "./hooks.js";
 import {
   buildClaudeLaunchPlan,
   type ClaudeLaunchOptions,
@@ -90,6 +99,8 @@ const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>
   unknownStatusReason: "Claude Code run has no reliable Claude status signal yet.",
   doctorChecks,
   hooksStatus,
+  hookHealth,
+  reconcileHooks,
   version: { latestPackage: "@anthropic-ai/claude-code" },
 };
 
@@ -242,10 +253,31 @@ async function hooksStatus(
   return harnessHooksStatusFrom("claude", options.installHooks === true, hookResult);
 }
 
+async function hookHealth(
+  options: ClaudeHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<ProviderHookHealth> {
+  return inspectClaudeHookHealth({
+    ...claudeHookDoctorOptions(options, context),
+    enabled: options.installHooks === true,
+  });
+}
+
+async function reconcileHooks(
+  options: ClaudeHarnessProviderOptions,
+  context?: ProviderHookReconciliationContext,
+): Promise<ProviderHookReconciliationResult> {
+  return reconcileClaudeHooks({
+    ...harnessHookReconciliationOptions(options, context),
+    ...hookPathOptions(options, context),
+  });
+}
+
 /**
  * ADAPTER
  *
- * Supplies Claude launch, discovery, hook diagnostics, and event normalization through the harness port.
+ * Supplies Claude launch, discovery, hook reconciliation, diagnostics, and event normalization
+ * through the harness port.
  */
 export function createClaudeHarnessProvider(
   options: ClaudeHarnessProviderOptions = {},

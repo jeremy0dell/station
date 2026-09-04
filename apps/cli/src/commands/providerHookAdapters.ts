@@ -6,6 +6,7 @@ import {
   doctorClaudeHooks,
   installClaudeHooks,
   planClaudeHooks,
+  reconcileClaudeHooks,
   uninstallClaudeHooks,
 } from "@station/claude";
 import {
@@ -30,6 +31,7 @@ import {
   doctorCursorHooks,
   installCursorHooks,
   planCursorHooks,
+  reconcileCursorHooks,
   uninstallCursorHooks,
 } from "@station/cursor";
 import {
@@ -40,6 +42,7 @@ import {
   type OpenCodePluginPlan,
   type OpenCodePluginPlanOptions,
   planOpenCodePlugin,
+  reconcileOpenCodePlugin,
   uninstallOpenCodePlugin,
 } from "@station/opencode";
 import {
@@ -65,7 +68,8 @@ export type { ProviderHooksCommandOptions } from "./providerHooks.js";
 export type ClaudeHooksCommandResult =
   | ClaudeHookPlan
   | ClaudeHookInstallResult
-  | ClaudeHookDoctorResult;
+  | ClaudeHookDoctorResult
+  | ProviderHookReconciliationResult;
 
 export type CodexHooksCommandResult =
   | CodexHookPlan
@@ -77,12 +81,14 @@ export type CodexHooksCommandResult =
 export type CursorHooksCommandResult =
   | CursorHookPlan
   | CursorHookInstallResult
-  | CursorHookDoctorResult;
+  | CursorHookDoctorResult
+  | ProviderHookReconciliationResult;
 
 export type OpenCodeHooksCommandResult =
   | OpenCodePluginPlan
   | OpenCodePluginInstallResult
-  | OpenCodePluginDoctorResult;
+  | OpenCodePluginDoctorResult
+  | ProviderHookReconciliationResult;
 
 export type WorktrunkHooksCommandOptions = ProviderHooksCommandOptions & {
   config: StationConfig;
@@ -119,6 +125,10 @@ export function runClaudeHooksCommand(
   options?: ProviderHooksCommandOptions,
 ): Promise<ClaudeHookInstallResult>;
 export function runClaudeHooksCommand(
+  args: ["reconcile", ...string[]],
+  options?: ProviderHooksCommandOptions,
+): Promise<ProviderHookReconciliationResult>;
+export function runClaudeHooksCommand(
   args: string[],
   options?: ProviderHooksCommandOptions,
 ): Promise<ClaudeHooksCommandResult>;
@@ -131,6 +141,8 @@ export function runClaudeHooksCommand(
       provider: "claude",
       plan: planClaudeHooks,
       install: installClaudeHooks,
+      reconcile: (hookOptions) =>
+        reconcileClaudeHooks({ ...hookOptions, enabled: isClaudeEnabled(options.config) }),
       uninstall: uninstallClaudeHooks,
       doctor: doctorClaudeHooks,
       buildOptions: (flags, context) => {
@@ -203,6 +215,10 @@ export function runCursorHooksCommand(
   options?: ProviderHooksCommandOptions,
 ): Promise<CursorHookInstallResult>;
 export function runCursorHooksCommand(
+  args: ["reconcile", ...string[]],
+  options?: ProviderHooksCommandOptions,
+): Promise<ProviderHookReconciliationResult>;
+export function runCursorHooksCommand(
   args: string[],
   options?: ProviderHooksCommandOptions,
 ): Promise<CursorHooksCommandResult>;
@@ -215,6 +231,8 @@ export function runCursorHooksCommand(
       provider: "cursor",
       plan: planCursorHooks,
       install: installCursorHooks,
+      reconcile: (hookOptions) =>
+        reconcileCursorHooks({ ...hookOptions, enabled: isCursorEnabled(options.config) }),
       uninstall: uninstallCursorHooks,
       doctor: doctorCursorHooks,
       buildOptions: (flags, context) => {
@@ -242,6 +260,10 @@ export function runOpenCodeHooksCommand(
   options?: ProviderHooksCommandOptions,
 ): Promise<OpenCodePluginInstallResult>;
 export function runOpenCodeHooksCommand(
+  args: ["reconcile", ...string[]],
+  options?: ProviderHooksCommandOptions,
+): Promise<ProviderHookReconciliationResult>;
+export function runOpenCodeHooksCommand(
   args: string[],
   options?: ProviderHooksCommandOptions,
 ): Promise<OpenCodeHooksCommandResult>;
@@ -254,6 +276,8 @@ export function runOpenCodeHooksCommand(
       provider: "opencode",
       plan: planOpenCodePlugin,
       install: installOpenCodePlugin,
+      reconcile: (hookOptions) =>
+        reconcileOpenCodePlugin({ ...hookOptions, enabled: isOpenCodeEnabled(options.config) }),
       uninstall: uninstallOpenCodePlugin,
       doctor: doctorOpenCodePlugin,
       buildOptions: (flags, context) => {

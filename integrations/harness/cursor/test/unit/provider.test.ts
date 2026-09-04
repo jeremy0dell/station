@@ -1,7 +1,11 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BuildHarnessLaunchRequest, ProviderHookRuntime } from "@station/contracts";
+import type {
+  BuildHarnessLaunchRequest,
+  ProviderHookArtifactOwner,
+  ProviderHookRuntime,
+} from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertPathInsideTestMachineRoot } from "../../../../../packages/testing/src/index.js";
@@ -10,6 +14,16 @@ import { createCursorHarnessProvider } from "../../src/provider";
 
 const now = "2026-06-03T12:00:00.000Z";
 const usesSharedTestMachine = process.env.STATION_TEST_MACHINE_ROOT !== undefined;
+
+function hookOwner(launcher: string, digit: string): ProviderHookArtifactOwner {
+  return {
+    schemaVersion: 1,
+    launcher,
+    runtimeKind: "source",
+    version: `0.0.0-test.${digit}`,
+    buildIdentity: digit.repeat(64),
+  };
+}
 
 if (!usesSharedTestMachine) {
   // Focused test runners can execute this file without loading the suite-level setup.
@@ -102,6 +116,44 @@ describe("CursorHarnessProvider", () => {
       requested: true,
       installed: false,
       message: expect.stringContaining("missing or stale"),
+    });
+  });
+
+  it("refreshes same-launcher hooks after a Station build change", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-provider-upgrade-"));
+    const stateDir = join(root, "state");
+    const launcher = join(root, "bin", "stn-ingress");
+    const previousOwner = hookOwner(launcher, "a");
+    const currentOwner = hookOwner(launcher, "b");
+    stubCursorTestHome(root);
+    await installCursorHooks({
+      stateDir,
+      hookBin: launcher,
+      artifactOwner: previousOwner,
+      homeDir: root,
+    });
+    const provider = createCursorHarnessProvider({
+      installHooks: true,
+      stateDir,
+      hookBin: launcher,
+      artifactOwner: currentOwner,
+    });
+
+    await expect(provider.hookHealth?.()).resolves.toEqual({
+      provider: "cursor",
+      status: "healthy",
+    });
+    await expect(provider.reconcileHooks?.()).resolves.toEqual({
+      provider: "cursor",
+      status: "repaired",
+      changed: true,
+      verified: true,
+    });
+    await expect(provider.reconcileHooks?.()).resolves.toEqual({
+      provider: "cursor",
+      status: "healthy",
+      changed: false,
+      verified: true,
     });
   });
 

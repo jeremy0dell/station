@@ -82,8 +82,8 @@ const setTimeoutAllowlist = new Map([
     "Explicit SIGTERM and SIGKILL grace delays are operator-authorized OS process timing, not command timeout or retry plumbing.",
   ],
   [
-    "integrations/harness/codex/src/hooks/hookMutationLock.ts",
-    "The Codex-owned SQLite artifact lock uses a cancellation-aware retry delay under one exact monotonic deadline.",
+    "packages/runtime/src/providerHookMutationLock.ts",
+    "The provider hook SQLite artifact lock uses a cancellation-aware retry delay under one exact monotonic deadline.",
   ],
   [
     "apps/observer/src/worktreeMutationCoordinator.ts",

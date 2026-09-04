@@ -1,13 +1,23 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BuildHarnessLaunchRequest } from "@station/contracts";
+import type { BuildHarnessLaunchRequest, ProviderHookArtifactOwner } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { installOpenCodePlugin } from "../../src/pluginInstall";
 import { createOpenCodeHarnessProvider } from "../../src/provider";
 
 const now = "2026-05-20T12:00:00.000Z";
+
+function hookOwner(launcher: string, digit: string): ProviderHookArtifactOwner {
+  return {
+    schemaVersion: 1,
+    launcher,
+    runtimeKind: "source",
+    version: `0.0.0-test.${digit}`,
+    buildIdentity: digit.repeat(64),
+  };
+}
 
 describe("OpenCodeHarnessProvider", () => {
   it("declares real OpenCode capabilities", () => {
@@ -216,6 +226,38 @@ describe("OpenCodeHarnessProvider", () => {
       requested: true,
       installed: false,
       message: expect.stringContaining("not installed"),
+    });
+  });
+
+  it("refreshes the same-launcher plugin after a Station build change", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-provider-upgrade-"));
+    const opencodeConfigDir = join(root, "opencode");
+    const launcher = join(root, "bin", "stn-ingress");
+    const previousOwner = hookOwner(launcher, "a");
+    const currentOwner = hookOwner(launcher, "b");
+    await installOpenCodePlugin({ opencodeConfigDir, artifactOwner: previousOwner });
+    const provider = createOpenCodeHarnessProvider({
+      installHooks: true,
+      artifactOwner: currentOwner,
+      env: { OPENCODE_CONFIG_DIR: opencodeConfigDir },
+    });
+
+    await expect(provider.hookHealth?.()).resolves.toEqual({
+      provider: "opencode",
+      status: "needs-repair",
+      reason: "owned-drift",
+    });
+    await expect(provider.reconcileHooks?.()).resolves.toEqual({
+      provider: "opencode",
+      status: "repaired",
+      changed: true,
+      verified: true,
+    });
+    await expect(provider.reconcileHooks?.()).resolves.toEqual({
+      provider: "opencode",
+      status: "healthy",
+      changed: false,
+      verified: true,
     });
   });
 

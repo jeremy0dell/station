@@ -1,13 +1,27 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BuildHarnessLaunchRequest, ProviderHookRuntime } from "@station/contracts";
+import type {
+  BuildHarnessLaunchRequest,
+  ProviderHookArtifactOwner,
+  ProviderHookRuntime,
+} from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { installClaudeHooks } from "../../src/hooks";
 import { createClaudeHarnessProvider } from "../../src/provider";
 
 const now = "2026-06-11T12:00:00.000Z";
+
+function hookOwner(launcher: string, digit: string): ProviderHookArtifactOwner {
+  return {
+    schemaVersion: 1,
+    launcher,
+    runtimeKind: "source",
+    version: `0.0.0-test.${digit}`,
+    buildIdentity: digit.repeat(64),
+  };
+}
 
 describe("ClaudeHarnessProvider", () => {
   it("declares real Claude Code capabilities", () => {
@@ -143,6 +157,46 @@ describe("ClaudeHarnessProvider", () => {
       provider: "claude",
       requested: false,
       installed: false,
+    });
+  });
+
+  it("refreshes same-launcher hooks after a Station build change", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-claude-provider-upgrade-"));
+    const stateDir = join(root, "state");
+    const claudeConfigDir = join(root, "claude-home");
+    const launcher = join(root, "bin", "stn-ingress");
+    const previousOwner = hookOwner(launcher, "a");
+    const currentOwner = hookOwner(launcher, "b");
+    await installClaudeHooks({
+      stateDir,
+      claudeConfigDir,
+      hookBin: launcher,
+      artifactOwner: previousOwner,
+    });
+    const provider = createClaudeHarnessProvider({
+      installHooks: true,
+      stateDir,
+      claudeConfigDir,
+      hookBin: launcher,
+      artifactOwner: currentOwner,
+    });
+
+    await expect(provider.hookHealth?.()).resolves.toEqual({
+      provider: "claude",
+      status: "needs-repair",
+      reason: "owned-drift",
+    });
+    await expect(provider.reconcileHooks?.()).resolves.toEqual({
+      provider: "claude",
+      status: "repaired",
+      changed: true,
+      verified: true,
+    });
+    await expect(provider.reconcileHooks?.()).resolves.toEqual({
+      provider: "claude",
+      status: "healthy",
+      changed: false,
+      verified: true,
     });
   });
 

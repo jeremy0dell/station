@@ -1,8 +1,17 @@
 // Installs/uninstalls the STATION hook into Cursor's .cursor/hooks.json.
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
-import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
-import { generatedHookScriptPath } from "@station/harness-shared";
+import type {
+  ProviderHookArtifactOwner,
+  ProviderHookArtifactOwnership,
+  ProviderHookHealth,
+  ProviderHookReconciliationResult,
+} from "@station/contracts";
+import {
+  generatedHookScriptPath,
+  inspectDeclarativeProviderHookHealth,
+  reconcileDeclarativeProviderHooks,
+} from "@station/harness-shared";
 import {
   assertProviderHookArtifactOwnership,
   assignBackupPaths,
@@ -16,6 +25,7 @@ import {
   providerHookScriptOptions,
   providerHookScriptRoutesByStationEnv,
   uninstallConfigScriptHook,
+  withProviderHookMutationLock,
 } from "@station/runtime";
 import {
   documentContainsCommand,
@@ -48,8 +58,15 @@ export type CursorHookPlanOptions = {
   hookBin?: string;
   artifactOwner?: ProviderHookArtifactOwner;
   takeover?: boolean;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  beginMutation?: () => void;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
+};
+
+export type CursorHookReconciliationOptions = Omit<CursorHookPlanOptions, "takeover"> & {
+  enabled: boolean;
 };
 
 export type CursorHookPlan = {
@@ -161,7 +178,10 @@ async function sharedGeneratedHookPlan(
     return undefined;
   }
 
-  const scriptBefore = await fileOps.readOptionalFile(hookScriptPath);
+  const scriptBefore = await fileOps.readOptionalFile(
+    hookScriptPath,
+    options.signal === undefined ? undefined : { signal: options.signal },
+  );
   const expectedScript = expectedCursorHookScript(
     providerHookScriptOptions(hookScriptPath, options),
   );
@@ -231,14 +251,15 @@ async function assertConfiguredCursorHookOwnership(
   options: CursorHookPlanOptions,
 ): Promise<void> {
   if (options.artifactOwner === undefined) return;
-  const source = await fileOps.readOptionalFile(hooksPath);
+  const readOptions = options.signal === undefined ? undefined : { signal: options.signal };
+  const source = await fileOps.readOptionalFile(hooksPath, readOptions);
   const currentHookScriptPath = sharedGeneratedHookScriptPath(
     generatedCursorHookCommands(parseJsonDocument(source)),
   );
   if (currentHookScriptPath === undefined || currentHookScriptPath === requestedHookScriptPath) {
     return;
   }
-  const currentScript = await fileOps.readOptionalFile(currentHookScriptPath);
+  const currentScript = await fileOps.readOptionalFile(currentHookScriptPath, readOptions);
   assertProviderHookArtifactOwnership({
     provider: "cursor",
     action: "install",
@@ -268,6 +289,7 @@ export async function planCursorHooks(
     expectedScript: script,
     provider: "cursor",
     ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
 
   const result: CursorHookPlan = {
@@ -289,6 +311,17 @@ export async function planCursorHooks(
 export async function installCursorHooks(
   options: CursorHookPlanOptions = {},
 ): Promise<CursorHookInstallResult> {
+  return withProviderHookMutationLock(
+    cursorHookMutationPaths(options),
+    () => installCursorHooksUnlocked(options),
+    hookMutationLockContext(options),
+  );
+}
+
+async function installCursorHooksUnlocked(
+  options: CursorHookPlanOptions,
+  onMutationCommitted?: () => void,
+): Promise<CursorHookInstallResult> {
   const plan = await planCursorHooks(options);
   await assertConfiguredCursorHookOwnership(plan.hooksPath, plan.hookScriptPath, options);
   const backupPath = await installConfigScriptHook({
@@ -304,6 +337,9 @@ export async function installCursorHooks(
     provider: "cursor",
     ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
     ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
+    ...(options.beginMutation === undefined ? {} : { beginMutation: options.beginMutation }),
+    ...(onMutationCommitted === undefined ? {} : { onMutationCommitted }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
   const result: CursorHookInstallResult = { ...plan, installed: true };
   if (options.artifactOwner !== undefined) {
@@ -319,6 +355,16 @@ export async function installCursorHooks(
 
 export async function uninstallCursorHooks(
   options: CursorHookPlanOptions = {},
+): Promise<CursorHookInstallResult> {
+  return withProviderHookMutationLock(
+    cursorHookMutationPaths(options),
+    () => uninstallCursorHooksUnlocked(options),
+    hookMutationLockContext(options),
+  );
+}
+
+async function uninstallCursorHooksUnlocked(
+  options: CursorHookPlanOptions,
 ): Promise<CursorHookInstallResult> {
   const hooksPath = resolveCursorHooksPath(options);
   const hookScriptPath = resolveCursorHookScriptPath(options);
@@ -336,6 +382,8 @@ export async function uninstallCursorHooks(
     provider: "cursor",
     ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
     ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
+    ...(options.beginMutation === undefined ? {} : { beginMutation: options.beginMutation }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
   const result: CursorHookInstallResult = {
     provider: "cursor",
@@ -398,4 +446,88 @@ export async function doctorCursorHooks(
   };
   if (plan.ownership !== undefined) result.ownership = plan.ownership;
   return result;
+}
+
+export async function inspectCursorHookHealth(
+  options: CursorHookReconciliationOptions,
+): Promise<ProviderHookHealth> {
+  return inspectDeclarativeProviderHookHealth({
+    provider: "cursor",
+    enabled: options.enabled,
+    inspect: () => doctorCursorHooks({ ...options, enabled: true }),
+    errors: cursorHookErrors,
+  });
+}
+
+export async function reconcileCursorHooks(
+  options: CursorHookReconciliationOptions,
+): Promise<ProviderHookReconciliationResult> {
+  const planOptions = cursorAutomaticReconciliationOptions(options);
+  return reconcileDeclarativeProviderHooks({
+    provider: "cursor",
+    enabled: options.enabled,
+    ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
+    artifactPaths: cursorHookMutationPaths(options),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    ...(options.beginMutation === undefined ? {} : { beginMutation: options.beginMutation }),
+    inspect: (signal) =>
+      doctorCursorHooks({
+        ...planOptions,
+        ...(signal === undefined ? {} : { signal }),
+        enabled: true,
+      }),
+    install: (context) =>
+      installCursorHooksUnlocked(
+        {
+          ...planOptions,
+          ...(context.signal === undefined ? {} : { signal: context.signal }),
+          beginMutation: context.beginMutation,
+        },
+        context.onMutationCommitted,
+      ),
+    errors: cursorHookErrors,
+  });
+}
+
+const cursorHookErrors = {
+  tag: "CursorHookSetupError",
+  inspection: {
+    code: "CURSOR_HOOK_INSPECTION_FAILED",
+    message: "Cursor hook inspection failed.",
+  },
+  write: {
+    code: "CURSOR_HOOK_WRITE_FAILED",
+    message: "Cursor hook reconciliation could not complete its writes.",
+  },
+  verification: {
+    code: "CURSOR_HOOK_POST_WRITE_DOCTOR_FAILED",
+    message: "Cursor hook writes were not verified by provider doctor.",
+  },
+} as const;
+
+function cursorAutomaticReconciliationOptions(
+  options: CursorHookReconciliationOptions,
+): CursorHookPlanOptions {
+  const planOptions = { ...options } as CursorHookPlanOptions & { enabled?: boolean };
+  delete planOptions.enabled;
+  delete planOptions.takeover;
+  delete planOptions.signal;
+  delete planOptions.timeoutMs;
+  delete planOptions.beginMutation;
+  return planOptions;
+}
+
+function cursorHookMutationPaths(options: CursorHookPlanOptions): string[] {
+  return [resolveCursorHooksPath(options), resolveCursorHookScriptPath(options)];
+}
+
+function hookMutationLockContext(options: CursorHookPlanOptions): {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+} {
+  const context: { signal?: AbortSignal; timeoutMs?: number } = {};
+  if (options.signal !== undefined) context.signal = options.signal;
+  if (options.timeoutMs !== undefined) context.timeoutMs = options.timeoutMs;
+  return context;
 }

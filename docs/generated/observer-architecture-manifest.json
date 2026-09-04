@@ -18077,7 +18077,7 @@
       "declaration": "createClaudeHarnessProvider",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Supplies Claude launch, discovery, hook diagnostics, and event normalization through the harness port.",
+      "purpose": "Supplies Claude launch, discovery, hook reconciliation, diagnostics, and event normalization through the harness port.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -18165,7 +18165,7 @@
       "declaration": "createCursorHarnessProvider",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Supplies Cursor launch, discovery, hook-installation status, diagnostics, and event normalization through the harness port.",
+      "purpose": "Supplies Cursor launch, discovery, hook reconciliation, diagnostics, and event normalization through the harness port.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -18221,7 +18221,7 @@
       "declaration": "createOpenCodeHarnessProvider",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Supplies OpenCode launch, discovery, plugin-installation status, diagnostics, and event normalization through the harness port.",
+      "purpose": "Supplies OpenCode launch, discovery, plugin reconciliation, diagnostics, and event normalization through the harness port.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
