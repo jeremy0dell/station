@@ -123,7 +123,7 @@ describe("contract schemas", () => {
       schemaVersion: 1,
       launcher: "/source/bin/stn-ingress",
       runtimeKind: "source",
-      version: "0.0.0-pre-alpha.14.6",
+      version: "0.0.0-pre-alpha.14.7",
       buildIdentity: "a".repeat(64),
     } as const;
     const current = {
