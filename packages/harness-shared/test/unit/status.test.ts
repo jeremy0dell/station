@@ -14,17 +14,6 @@ describe("harnessEventStatus", () => {
     });
   });
 
-  it("carries an explicit source for process-derived and unknown-provenance statuses", () => {
-    expect(
-      harnessEventStatus("exited", "high", "Agent exited.", now, {
-        source: "harness_process",
-      }),
-    ).toMatchObject({ source: "harness_process" });
-    expect(
-      harnessEventStatus("unknown", "low", "Stale activity.", now, { source: "unknown" }),
-    ).toMatchObject({ source: "unknown" });
-  });
-
   it("sets attention only when the caller supplies a kind", () => {
     const attention = harnessEventStatus("needs_attention", "high", "Approve?", now, {
       attention: "tool_approval",

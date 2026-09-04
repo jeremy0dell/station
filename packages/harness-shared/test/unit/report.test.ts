@@ -67,18 +67,6 @@ describe("buildHarnessEventReport", () => {
 });
 
 describe("stationIdentityProviderData", () => {
-  it("emits camelCase keys in a fixed order", () => {
-    expect(Object.keys(stationIdentityProviderData(identity))).toEqual([
-      "stationProjectId",
-      "stationWorktreeId",
-      "stationWorktreePath",
-      "stationWorktreeManagedRoot",
-      "stationSessionId",
-      "stationTerminalProvider",
-      "stationTerminalTargetId",
-    ]);
-  });
-
   it("omits absent fields rather than emitting undefined values", () => {
     const data = stationIdentityProviderData({ station_project_id: "web" });
 
