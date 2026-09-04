@@ -569,6 +569,27 @@ describe("hosted CI policy", () => {
     );
   });
 
+  it("verifies the installed ingress artifact as a dedicated executable", () => {
+    const installDraft = workflowJob(read(".github/workflows/release.yml"), "install-draft");
+    const verifyInstalled = namedWorkflowStep(installDraft, "Verify installed artifact");
+    const verifyRetry = namedWorkflowStep(
+      installDraft,
+      "Verify lock refusal and same-version retry",
+    );
+
+    for (const step of [verifyInstalled, verifyRetry]) {
+      expect(step).toContain('test -x "$bin_dir/stn-ingress"');
+      expect(step).toContain('test ! -L "$bin_dir/stn-ingress"');
+      expect(step).not.toContain('readlink "$bin_dir/stn-ingress"');
+    }
+    expect(verifyInstalled).toContain('test "$(mode "$bin_dir/stn-ingress")" = 755');
+    expect(verifyRetry).toContain('before_ingress="$(cksum < "$bin_dir/stn-ingress")"');
+    expect(verifyRetry).toContain('test "$(cksum < "$bin_dir/stn-ingress")" = "$before_ingress"');
+    expect(verifyRetry).not.toContain(
+      'ls -ldi "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$receipt_path"',
+    );
+  });
+
   it("keeps binary handoff stress manual, capped, and failure-artifact-only", () => {
     const stress = read(".github/workflows/binary-handoff-stress.yml");
     const packageJson = JSON.parse(read("package.json")) as {

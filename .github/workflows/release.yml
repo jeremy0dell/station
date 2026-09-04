@@ -557,13 +557,15 @@ jobs:
           }
 
           test -x "$bin_dir/stn"
-          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test -x "$bin_dir/stn-ingress"
+          test ! -L "$bin_dir/stn-ingress"
           test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
           test -f "$receipt_path"
           test ! -L "$receipt_path"
           test -f "$license_path"
           test ! -L "$license_path"
           test "$(mode "$bin_dir/stn")" = 755
+          test "$(mode "$bin_dir/stn-ingress")" = 755
           test "$(mode "$receipt_path")" = 600
           test "$(mode "$license_path")" = 644
           test "$(cat "$receipt_path")" = station-installer-binary-v1
@@ -638,11 +640,13 @@ jobs:
           test "$(cksum < "$bin_dir/stn")" = "$before_binary"
           test "$(cksum < "$license_path")" = "$before_license"
           test "$(ls -ldi "$bin_dir/stn" "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$receipt_path" "$license_path")" = "$before_entries"
-          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test -x "$bin_dir/stn-ingress"
+          test ! -L "$bin_dir/stn-ingress"
           test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
 
           rm -rf "$lock_dir"
-          before_owned_entries="$(ls -ldi "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$receipt_path")"
+          before_ingress="$(cksum < "$bin_dir/stn-ingress")"
+          before_owned_entries="$(ls -ldi "$bin_dir/stn-tmux-popup" "$receipt_path")"
           (
             umask 0777
             HOME="$install_home" \
@@ -651,8 +655,10 @@ jobs:
           )
 
           test ! -e "$lock_dir"
-          test "$(ls -ldi "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$receipt_path")" = "$before_owned_entries"
-          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test "$(cksum < "$bin_dir/stn-ingress")" = "$before_ingress"
+          test "$(ls -ldi "$bin_dir/stn-tmux-popup" "$receipt_path")" = "$before_owned_entries"
+          test -x "$bin_dir/stn-ingress"
+          test ! -L "$bin_dir/stn-ingress"
           test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
           test "$(cat "$receipt_path")" = station-installer-binary-v1
           actual="$(env -i \
