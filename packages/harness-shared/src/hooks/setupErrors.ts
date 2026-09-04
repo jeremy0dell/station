@@ -1,5 +1,11 @@
 import type { ProviderHookArtifactOwnership } from "@station/contracts";
-import { createHookSetupFileOps, type HookSetupFileOps } from "@station/runtime";
+import {
+  createHookSetupFileOps,
+  type HookSetupErrorFactory,
+  type HookSetupFileOps,
+} from "@station/runtime";
+
+type HookSetupOperation = Parameters<HookSetupErrorFactory>[0]["operation"];
 
 export type HookSetupErrorClass<TCode extends string> = new (
   code: TCode,
@@ -37,27 +43,26 @@ export function hookSetupFileOpsFor<TCode extends string>(
   labels: { displayName: string; removeTarget: "file" | "script" },
 ): HookSetupFileOps {
   const name = labels.displayName;
+  const failures: Record<HookSetupOperation, { code: TCode; message: string }> = {
+    read: { code: codes.unreadable, message: `${name} hook config could not be read.` },
+    metadata: {
+      code: codes.unreadable,
+      message: `${name} hook config metadata could not be read.`,
+    },
+    remove: {
+      code: codes.writeFailed,
+      message: `${name} hook ${labels.removeTarget} could not be removed.`,
+    },
+    writeScript: { code: codes.writeFailed, message: `${name} hook script could not be written.` },
+    backup: {
+      code: codes.writeFailed,
+      message: `${name} hook config backup could not be written.`,
+    },
+    writeConfig: { code: codes.writeFailed, message: `${name} hook config could not be written.` },
+  };
   return createHookSetupFileOps(({ operation, cause }) => {
-    if (operation === "read" || operation === "metadata") {
-      return new ErrorClass(
-        codes.unreadable,
-        operation === "read"
-          ? `${name} hook config could not be read.`
-          : `${name} hook config metadata could not be read.`,
-        { cause },
-      );
-    }
-    return new ErrorClass(
-      codes.writeFailed,
-      operation === "remove"
-        ? `${name} hook ${labels.removeTarget} could not be removed.`
-        : operation === "writeScript"
-          ? `${name} hook script could not be written.`
-          : operation === "backup"
-            ? `${name} hook config backup could not be written.`
-            : `${name} hook config could not be written.`,
-      { cause },
-    );
+    const failure = failures[operation];
+    return new ErrorClass(failure.code, failure.message, { cause });
   });
 }
 
