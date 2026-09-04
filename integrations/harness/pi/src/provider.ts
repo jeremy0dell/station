@@ -7,7 +7,7 @@ import type {
 import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
-  harnessCommand,
+  harnessCommandResolver,
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
@@ -102,13 +102,7 @@ function compareVersion(
   return 0;
 }
 
-function command(options: PiHarnessProviderOptions): string {
-  return harnessCommand(
-    options,
-    piHarnessCommandDefinition.commandEnvVar,
-    piHarnessCommandDefinition.commandFallback,
-  );
-}
+const command = harnessCommandResolver(piHarnessCommandDefinition);
 
 function buildLaunch(
   options: PiHarnessProviderOptions,

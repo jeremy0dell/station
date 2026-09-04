@@ -11,12 +11,13 @@ import type {
 import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
-  harnessCommand,
+  harnessCommandResolver,
   harnessHealth,
+  healthDoctorCheck,
+  hookDoctorCheck,
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
-import { safeErrorFromUnknown } from "@station/runtime";
 import { openCodeProviderErrorFromUnknown } from "./errors.js";
 import { buildOpenCodeLaunchPlan, type OpenCodeLaunchOptions } from "./launch.js";
 import { doctorOpenCodePlugin } from "./pluginInstall.js";
@@ -76,13 +77,7 @@ const openCodeSpec: TerminalBoundHarnessProviderSpec<OpenCodeHarnessProviderOpti
   hooksStatus,
 };
 
-function command(options: OpenCodeHarnessProviderOptions): string {
-  return harnessCommand(
-    options,
-    openCodeHarnessCommandDefinition.commandEnvVar,
-    openCodeHarnessCommandDefinition.commandFallback,
-  );
-}
+const command = harnessCommandResolver(openCodeHarnessCommandDefinition);
 
 function buildLaunch(
   options: OpenCodeHarnessProviderOptions,
@@ -125,44 +120,27 @@ async function doctorChecks(
 ): Promise<ProviderDoctorCheck[]> {
   const checks: ProviderDoctorCheck[] = [];
   const health = await harnessHealth(openCodeSpec, options);
-  if (health.status === "healthy") {
-    checks.push({
+  checks.push(
+    healthDoctorCheck(health, {
       name: "opencode.command",
-      status: "ok",
-      message: "OpenCode command is available.",
-    });
-  } else {
-    const check: ProviderDoctorCheck = {
-      name: "opencode.command",
-      status: "error",
-      message: "OpenCode command is unavailable.",
-    };
-    if (health.lastError !== undefined) {
-      check.error = health.lastError;
-    }
-    checks.push(check);
-  }
+      ok: "OpenCode command is available.",
+      error: "OpenCode command is unavailable.",
+    }),
+  );
 
-  try {
-    const pluginResult = await doctorOpenCodePlugin(openCodePluginDoctorOptions(options, context));
-    checks.push({
+  checks.push(
+    await hookDoctorCheck({
       name: "opencode-plugin",
-      status: pluginResult.status,
-      message: `${pluginResult.message} Plugin: ${pluginResult.pluginPath}.`,
-    });
-  } catch (cause) {
-    checks.push({
-      name: "opencode-plugin",
-      status: "error",
-      message: "OpenCode plugin diagnostics failed.",
-      error: safeErrorFromUnknown(cause, {
+      run: () => doctorOpenCodePlugin(openCodePluginDoctorOptions(options, context)),
+      describe: (result) => `${result.message} Plugin: ${result.pluginPath}.`,
+      failure: {
         tag: "OpenCodePluginSetupError",
         code: "OPENCODE_PLUGIN_DIAGNOSTIC_FAILED",
         message: "OpenCode plugin diagnostics failed.",
         provider: "opencode",
-      }),
-    });
-  }
+      },
+    }),
+  );
   return checks;
 }
 

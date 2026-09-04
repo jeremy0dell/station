@@ -14,15 +14,16 @@ import type {
 import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
-  harnessCommand,
+  harnessCommandResolver,
   harnessHealth,
   harnessHookDoctorOptions,
   harnessHookReconciliationOptions,
   harnessHooksStatusFrom,
+  healthDoctorCheck,
+  hookDoctorCheck,
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
-import { safeErrorFromUnknown } from "@station/runtime";
 import { codexProviderErrorFromUnknown } from "./errors.js";
 import { acceptsCodexPersistedEvent } from "./events.js";
 import { doctorCodexHooks, inspectCodexHookHealth, reconcileCodexHooks } from "./hooks.js";
@@ -89,13 +90,7 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
   version: { latestPackage: "@openai/codex" },
 };
 
-function command(options: CodexHarnessProviderOptions): string {
-  return harnessCommand(
-    options,
-    codexHarnessCommandDefinition.commandEnvVar,
-    codexHarnessCommandDefinition.commandFallback,
-  );
-}
+const command = harnessCommandResolver(codexHarnessCommandDefinition);
 
 function buildLaunch(
   options: CodexHarnessProviderOptions,
@@ -138,44 +133,28 @@ async function doctorChecks(
 ): Promise<ProviderDoctorCheck[]> {
   const health = await harnessHealth(codexSpec, options);
   const checks: ProviderDoctorCheck[] = [];
-  if (health.status === "healthy") {
-    checks.push({
+  checks.push(
+    healthDoctorCheck(health, {
       name: "codex.login",
-      status: "ok",
-      message: "Codex authentication is available.",
-    });
-  } else {
-    const check: ProviderDoctorCheck = {
-      name: "codex.login",
-      status: "error",
-      message: "Codex is unavailable or not authenticated.",
-    };
-    if (health.lastError !== undefined) {
-      check.error = health.lastError;
-    }
-    checks.push(check);
-  }
+      ok: "Codex authentication is available.",
+      error: "Codex is unavailable or not authenticated.",
+    }),
+  );
 
-  try {
-    const hookResult = await doctorCodexHooks(harnessHookDoctorOptions(options, context));
-    checks.push({
+  checks.push(
+    await hookDoctorCheck({
       name: "codex-hooks",
-      status: hookResult.status,
-      message: `${hookResult.message} Profile config: ${hookResult.profileConfigPath}. Base config: ${hookResult.baseConfigPath}. Script: ${hookResult.hookScriptPath}.`,
-    });
-  } catch (cause) {
-    checks.push({
-      name: "codex-hooks",
-      status: "error",
-      message: "Codex hook diagnostics failed.",
-      error: safeErrorFromUnknown(cause, {
+      run: () => doctorCodexHooks(harnessHookDoctorOptions(options, context)),
+      describe: (result) =>
+        `${result.message} Profile config: ${result.profileConfigPath}. Base config: ${result.baseConfigPath}. Script: ${result.hookScriptPath}.`,
+      failure: {
         tag: "CodexHookSetupError",
         code: "CODEX_HOOK_DIAGNOSTIC_FAILED",
         message: "Codex hook diagnostics failed.",
         provider: "codex",
-      }),
-    });
-  }
+      },
+    }),
+  );
   return checks;
 }
 

@@ -1,5 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 export type ReplaceTextFileOptions = {
@@ -70,5 +81,22 @@ export async function removeFileIfPresent(path: string): Promise<boolean> {
       return false;
     }
     throw cause;
+  }
+}
+
+/** Visits every regular file under a root in name order, treating a missing root as empty. */
+export async function walkFiles(root: string, visit: (path: string) => void): Promise<void> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw cause;
+  }
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+  for (const entry of entries) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) await walkFiles(path, visit);
+    else if (entry.isFile()) visit(path);
   }
 }

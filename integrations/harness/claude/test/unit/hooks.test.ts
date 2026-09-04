@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderHookArtifactOwner } from "@station/contracts";
@@ -452,3 +452,27 @@ async function runHookScript(
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
+
+describe("Claude hook removal failures", () => {
+  it("names the removed artifact a hook file, not a hook script", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-claude-hooks-remove-"));
+    const hooksDir = join(root, "state", "hooks");
+    const options = {
+      claudeSettingsPath: join(hooksDir, "station-claude-settings.json"),
+      claudeConfigDir: join(root, "claude-home"),
+      hookScriptPath: join(hooksDir, "station-claude-hook.sh"),
+      env: {},
+    };
+    await installClaudeHooks(options);
+    // Read-only parent: the artifact still parses, but unlink fails at the remove step.
+    await chmod(hooksDir, 0o500);
+    try {
+      await expect(uninstallClaudeHooks(options)).rejects.toMatchObject({
+        code: "CLAUDE_HOOK_WRITE_FAILED",
+        message: "Claude hook file could not be removed.",
+      });
+    } finally {
+      await chmod(hooksDir, 0o700);
+    }
+  });
+});

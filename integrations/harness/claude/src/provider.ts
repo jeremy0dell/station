@@ -10,14 +10,16 @@ import type {
 import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
-  harnessCommand,
+  harnessCommandResolver,
   harnessHealth,
   harnessHookDoctorOptions,
   harnessHooksStatusFrom,
+  healthDoctorCheck,
+  hookDoctorCheck,
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
-import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
+import { runExternalCommand } from "@station/runtime";
 import { z } from "zod";
 import { claudeProviderErrorFromUnknown } from "./errors.js";
 import { doctorClaudeHooks, resolveClaudeSettingsArtifactPath } from "./hooks.js";
@@ -93,13 +95,7 @@ const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>
   version: { latestPackage: "@anthropic-ai/claude-code" },
 };
 
-function command(options: ClaudeHarnessProviderOptions): string {
-  return harnessCommand(
-    options,
-    claudeHarnessCommandDefinition.commandEnvVar,
-    claudeHarnessCommandDefinition.commandFallback,
-  );
-}
+const command = harnessCommandResolver(claudeHarnessCommandDefinition);
 
 function hookPathOptions(
   options: ClaudeHarnessProviderOptions,
@@ -154,24 +150,14 @@ async function doctorChecks(
 ): Promise<ProviderDoctorCheck[]> {
   const checks: ProviderDoctorCheck[] = [];
   const health = await harnessHealth(claudeSpec, options);
-  if (health.status === "healthy") {
-    checks.push({
-      name: "claude.version",
-      status: "ok",
-      message: "Claude Code command is available.",
-    });
-  } else {
-    const check: ProviderDoctorCheck = {
-      name: "claude.version",
-      status: "error",
-      message: "Claude Code is unavailable.",
-    };
-    if (health.lastError !== undefined) {
-      check.error = health.lastError;
-    }
-    checks.push(check);
-    return checks;
-  }
+  const versionCheck = healthDoctorCheck(health, {
+    name: "claude.version",
+    ok: "Claude Code command is available.",
+    error: "Claude Code is unavailable.",
+  });
+  checks.push(versionCheck);
+  // Every later probe needs a launchable command, so an unavailable Claude stops here.
+  if (versionCheck.status === "error") return checks;
 
   // `claude --version` succeeds while logged out, so launchability needs a separate auth probe.
   try {
@@ -211,26 +197,20 @@ async function doctorChecks(
     });
   }
 
-  try {
-    const hookResult = await doctorClaudeHooks(claudeHookDoctorOptions(options, context));
-    checks.push({
+  checks.push(
+    await hookDoctorCheck({
       name: "claude-hooks",
-      status: hookResult.status,
-      message: `${hookResult.message} Settings artifact: ${hookResult.settingsPath}. User settings: ${hookResult.userSettingsPath}. Script: ${hookResult.hookScriptPath}.`,
-    });
-  } catch (cause) {
-    checks.push({
-      name: "claude-hooks",
-      status: "error",
-      message: "Claude hook diagnostics failed.",
-      error: safeErrorFromUnknown(cause, {
+      run: () => doctorClaudeHooks(claudeHookDoctorOptions(options, context)),
+      describe: (result) =>
+        `${result.message} Settings artifact: ${result.settingsPath}. User settings: ${result.userSettingsPath}. Script: ${result.hookScriptPath}.`,
+      failure: {
         tag: "ClaudeHookSetupError",
         code: "CLAUDE_HOOK_DIAGNOSTIC_FAILED",
         message: "Claude hook diagnostics failed.",
         provider: "claude",
-      }),
-    });
-  }
+      },
+    }),
+  );
   return checks;
 }
 

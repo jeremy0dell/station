@@ -2,28 +2,18 @@
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Keep the parsed payload shape in sync with upstream.
 import type { HarnessEventReport, ObservedStatus } from "@station/contracts";
+import { harnessRunIdForTerminalTarget } from "@station/contracts";
 import {
-  HarnessEventReportSchema,
-  harnessRunIdForTerminalTarget,
-  STATION_SCHEMA_VERSION,
-} from "@station/contracts";
-import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
+  buildHarnessEventReport,
+  type HarnessEventReportInput,
+  harnessEventStatus,
+  reportCorrelation,
+  stationIdentityCorrelation,
+  stationIdentityProviderData,
+} from "@station/harness-shared";
 import { z } from "zod";
 import { compactCursorProviderHookPayload } from "./compaction.js";
 import { cursorHarnessError } from "./errors.js";
-
-export type CursorProviderHookPayloadReportInput = {
-  reportId: string;
-  observedAt: string;
-  payload: unknown;
-  diagnostics?: {
-    payloadBytes?: number | null;
-    compactedBytes?: number | null;
-    compacted?: boolean;
-    truncated?: boolean;
-    omittedFieldNames?: string[];
-  };
-};
 
 export type CursorProviderHookPayload = z.infer<typeof CursorProviderHookPayloadSchema>;
 
@@ -67,30 +57,17 @@ function statusFromCursorStopEvent(
   observedAt: string,
 ): ObservedStatus {
   if (event.status === "error") {
-    return {
-      value: "needs_attention",
-      confidence: "high",
-      reason: "Cursor turn ended with an error.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "needs_attention",
+      "high",
+      "Cursor turn ended with an error.",
+      observedAt,
+    );
   }
   if (event.status === "aborted") {
-    return {
-      value: "idle",
-      confidence: "medium",
-      reason: "Cursor turn was aborted.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus("idle", "medium", "Cursor turn was aborted.", observedAt);
   }
-  return {
-    value: "idle",
-    confidence: "high",
-    reason: "Cursor turn completed.",
-    source: "harness_event",
-    updatedAt: observedAt,
-  };
+  return harnessEventStatus("idle", "high", "Cursor turn completed.", observedAt);
 }
 
 function providerDataFromCursorEvent(event: CursorProviderHookPayload): Record<string, unknown> {
@@ -113,21 +90,7 @@ function providerDataFromCursorEvent(event: CursorProviderHookPayload): Record<s
   if (event.tool_use_id !== undefined) providerData.toolUseId = event.tool_use_id;
   if (event.request_id !== undefined) providerData.requestId = event.request_id;
   if (event.message_id !== undefined) providerData.messageId = event.message_id;
-  if (event.station_project_id !== undefined)
-    providerData.stationProjectId = event.station_project_id;
-  if (event.station_worktree_id !== undefined)
-    providerData.stationWorktreeId = event.station_worktree_id;
-  if (event.station_worktree_path !== undefined) {
-    providerData.stationWorktreePath = event.station_worktree_path;
-  }
-  if (event.station_session_id !== undefined)
-    providerData.stationSessionId = event.station_session_id;
-  if (event.station_terminal_provider !== undefined) {
-    providerData.stationTerminalProvider = event.station_terminal_provider;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    providerData.stationTerminalTargetId = event.station_terminal_target_id;
-  }
+  Object.assign(providerData, stationIdentityProviderData(event));
   return providerData;
 }
 
@@ -139,11 +102,7 @@ function reportCorrelationFromCursorEvent(
   return reportCorrelation({
     cwd,
     nativeSessionId,
-    projectId: event.station_project_id,
-    worktreeId: event.station_worktree_id,
-    sessionId: event.station_session_id,
-    terminalTargetId: event.station_terminal_target_id,
-    harnessRunId: cursorHarnessRunId(event),
+    ...stationIdentityCorrelation("cursor", event),
   });
 }
 
@@ -198,33 +157,18 @@ export function parseCursorProviderHookPayload(input: unknown): CursorProviderHo
 }
 
 export function cursorProviderHookPayloadToHarnessEventReport(
-  input: CursorProviderHookPayloadReportInput,
+  input: HarnessEventReportInput,
 ): HarnessEventReport {
   const event = parseCursorProviderHookPayload(input.payload);
-  const report: HarnessEventReport = {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    reportId: input.reportId,
+  return buildHarnessEventReport(input, {
     provider: "cursor",
-    kind: "harness",
     eventType: event.hook_event_name,
-    observedAt: input.observedAt,
     status: statusFromCursorProviderHookPayload(event, input.observedAt),
+    turn: turnFromCursorProviderHookPayload(event),
+    correlation: reportCorrelationFromCursorEvent(event),
+    coalesceKey: reportCoalesceKeyFromCursorEvent(event),
     providerData: providerDataFromCursorEvent(event),
-  };
-  const turn = turnFromCursorProviderHookPayload(event);
-  if (turn !== undefined) {
-    report.turn = turn;
-  }
-  const correlation = reportCorrelationFromCursorEvent(event);
-  if (correlation !== undefined) {
-    report.correlation = correlation;
-  }
-  report.diagnostics = harnessEventDiagnostics(event.hook_event_name, input.diagnostics);
-  const coalesceKey = reportCoalesceKeyFromCursorEvent(event);
-  if (coalesceKey !== undefined) {
-    report.coalesceKey = coalesceKey;
-  }
-  return HarnessEventReportSchema.parse(report);
+  });
 }
 
 export function statusFromCursorProviderHookPayload(
@@ -233,23 +177,11 @@ export function statusFromCursorProviderHookPayload(
 ): ObservedStatus {
   const eventName = event.hook_event_name;
   if (eventName === "sessionStart") {
-    return {
-      value: "starting",
-      confidence: "high",
-      reason: "Cursor session started.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus("starting", "high", "Cursor session started.", observedAt);
   }
   if (eventName === "sessionEnd") {
     // Cursor sessionEnd ends a composer conversation, not the Station pane process.
-    return {
-      value: "idle",
-      confidence: "high",
-      reason: "Cursor session ended.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus("idle", "high", "Cursor session ended.", observedAt);
   }
   if (eventName === "stop") {
     return statusFromCursorStopEvent(event, observedAt);
@@ -261,13 +193,12 @@ export function statusFromCursorProviderHookPayload(
     eventName === "beforeReadFile" ||
     eventName === "beforeTabFileRead"
   ) {
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: cursorWorkingReason(event, "is about to use"),
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "working",
+      "medium",
+      cursorWorkingReason(event, "is about to use"),
+      observedAt,
+    );
   }
   if (
     eventName === "afterShellExecution" ||
@@ -277,13 +208,12 @@ export function statusFromCursorProviderHookPayload(
     eventName === "postToolUse" ||
     eventName === "postToolUseFailure"
   ) {
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: cursorWorkingReason(event, "completed"),
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "working",
+      "medium",
+      cursorWorkingReason(event, "completed"),
+      observedAt,
+    );
   }
   if (
     eventName === "beforeSubmitPrompt" ||
@@ -293,19 +223,7 @@ export function statusFromCursorProviderHookPayload(
     eventName === "subagentStart" ||
     eventName === "subagentStop"
   ) {
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: `Cursor emitted ${eventName}.`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus("working", "medium", `Cursor emitted ${eventName}.`, observedAt);
   }
-  return {
-    value: "working",
-    confidence: "low",
-    reason: `Cursor emitted ${eventName}.`,
-    source: "harness_event",
-    updatedAt: observedAt,
-  };
+  return harnessEventStatus("working", "low", `Cursor emitted ${eventName}.`, observedAt);
 }

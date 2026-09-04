@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { type FileHandle, mkdir, open } from "node:fs/promises";
 import { dirname } from "node:path";
-import { CodexHookSetupError } from "./hookErrors.js";
+import { CodexHookSetupError, type CodexHookSetupErrorInstance } from "./hookErrors.js";
 import {
   type CodexHookLockDatabase,
   type CodexHookLockDatabaseOpener,
@@ -293,7 +293,7 @@ function cancellationReason(signal: AbortSignal | undefined): unknown {
   );
 }
 
-function lockError(cause: unknown): CodexHookSetupError {
+function lockError(cause: unknown): CodexHookSetupErrorInstance {
   return new CodexHookSetupError(
     "CODEX_HOOK_RECONCILIATION_LOCK_FAILED",
     "Codex hook reconciliation could not acquire its artifact lock.",
@@ -301,14 +301,14 @@ function lockError(cause: unknown): CodexHookSetupError {
   );
 }
 
-function lockTimeoutError(): CodexHookSetupError {
+function lockTimeoutError(): CodexHookSetupErrorInstance {
   return new CodexHookSetupError(
     "CODEX_HOOK_RECONCILIATION_TIMEOUT",
     "Codex hook reconciliation timed out waiting for its artifact lock.",
   );
 }
 
-function lockReleaseError(cause: unknown): CodexHookSetupError {
+function lockReleaseError(cause: unknown): CodexHookSetupErrorInstance {
   return new CodexHookSetupError(
     "CODEX_HOOK_RECONCILIATION_LOCK_RELEASE_FAILED",
     "Codex hook reconciliation could not release its artifact lock.",

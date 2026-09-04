@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderHookArtifactOwner } from "@station/contracts";
@@ -499,3 +499,27 @@ function existingCursorHooks(): string {
     2,
   );
 }
+
+describe("Cursor hook removal failures", () => {
+  it("names the removed artifact a hook script, not a hook file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-hooks-remove-"));
+    const hooksPath = join(root, "cursor", "hooks.json");
+    const hooksDir = join(root, "state", "hooks");
+    const hookScriptPath = join(hooksDir, "station-cursor-hook.sh");
+    await mkdir(join(root, "cursor"), { recursive: true });
+    await writeFile(hooksPath, existingCursorHooks(), "utf8");
+    await installCursorHooks({ cursorHooksPath: hooksPath, hookScriptPath });
+    // Read-only parent: the config still rewrites, but unlink fails at the remove step.
+    await chmod(hooksDir, 0o500);
+    try {
+      await expect(
+        uninstallCursorHooks({ cursorHooksPath: hooksPath, hookScriptPath }),
+      ).rejects.toMatchObject({
+        code: "CURSOR_HOOK_WRITE_FAILED",
+        message: "Cursor hook script could not be removed.",
+      });
+    } finally {
+      await chmod(hooksDir, 0o700);
+    }
+  });
+});

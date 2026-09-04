@@ -1,8 +1,7 @@
 import {
-  type HarnessProviderError,
+  defineHarnessProviderErrors,
   type HarnessProviderErrorClass,
-  harnessProviderErrorClass,
-  harnessProviderErrorFromUnknown,
+  type HarnessProviderErrors,
 } from "@station/harness-shared";
 
 export type PiHarnessErrorCode =
@@ -13,19 +12,13 @@ export type PiHarnessErrorCode =
   | "HARNESS_PI_EVENT_INVALID"
   | "HARNESS_PI_EVENT_INGEST_FAILED";
 
+const piErrors: HarnessProviderErrors<PiHarnessErrorCode> = defineHarnessProviderErrors({
+  name: "PiHarnessProviderError",
+  provider: "pi",
+});
+
 export const PiHarnessProviderError: HarnessProviderErrorClass<PiHarnessErrorCode> =
-  harnessProviderErrorClass<PiHarnessErrorCode>({
-    name: "PiHarnessProviderError",
-    provider: "pi",
-  });
-
-export function piHarnessError(code: PiHarnessErrorCode, message: string, cause?: unknown) {
-  return new PiHarnessProviderError(code, message, { cause });
-}
-
-export function piProviderErrorFromUnknown(
-  error: unknown,
-  fallback: { code: PiHarnessErrorCode; message: string; hint?: string | undefined },
-): HarnessProviderError<PiHarnessErrorCode> {
-  return harnessProviderErrorFromUnknown(PiHarnessProviderError, error, fallback);
-}
+  piErrors.ErrorClass;
+export const piHarnessError: HarnessProviderErrors<PiHarnessErrorCode>["create"] = piErrors.create;
+export const piProviderErrorFromUnknown: HarnessProviderErrors<PiHarnessErrorCode>["fromUnknown"] =
+  piErrors.fromUnknown;
