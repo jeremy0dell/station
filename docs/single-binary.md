@@ -191,6 +191,10 @@ The installer replaces the version-guarded ingress binary immediately before
 `stn`. Either mixed-version window falls back through canonical ingress because
 the native request cannot mutate an Observer with a different build. Update
 expectations use the v2 shape and bind both executable hashes and identities.
+When a legacy v1 update expectation owns an exact `stn-ingress` symlink, the
+installer preserves that symlink for the older process's post-installation
+check. The target updater accepts the transitional symlink as a v2 installation
+and replaces it with the native ingress binary on the next artifact update.
 
 Installer locking, interrupted-upgrade recovery, PATH guidance, and manual
 operator steps are documented in [Install Station](install.md). Those behaviors

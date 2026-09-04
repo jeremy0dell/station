@@ -59,7 +59,7 @@ export async function inspectInstallerInstallation(
     const popupPath = join(installDir, "stn-tmux-popup");
     const receiptPath = join(installDir, receiptName);
     const [ingress, popup] = await Promise.all([
-      binaryIdentity(ingressPath),
+      ingressIdentity(ingressPath),
       launcherIdentity(popupPath),
     ]);
     if (ingress === undefined || popup === undefined) return undefined;
@@ -207,13 +207,13 @@ async function launcherIdentity(path: string) {
   }
 }
 
-async function binaryIdentity(path: string) {
+async function ingressIdentity(path: string) {
   try {
-    const binary = await lstat(path, { bigint: true });
-    if (!binary.isFile() || binary.isSymbolicLink() || (binary.mode & 0o111n) === 0n) {
-      return undefined;
+    const ingress = await lstat(path, { bigint: true });
+    if (ingress.isSymbolicLink()) {
+      return (await readlink(path)) === "stn" ? ingress : undefined;
     }
-    return binary;
+    return ingress.isFile() && (ingress.mode & 0o111n) !== 0n ? ingress : undefined;
   } catch {
     return undefined;
   }

@@ -138,6 +138,11 @@ Binaries older than the first release that supports `--reap` cannot execute
 this recovery path. Close affected sessions before installing that first
 supporting release, then run the update again.
 
+An update started by a legacy installer preserves its exact `stn-ingress`
+symlink while that older process verifies the new `stn` binary. The installed
+target accepts that transitional layout. Its next artifact update replaces the
+symlink with the native ingress binary under the current identity checks.
+
 After a normal exit, the TUI may report:
 
 ```text
