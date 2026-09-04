@@ -14,12 +14,16 @@ import {
   UpdateConvergencePlanSchema,
 } from "./updateConvergencePlan.js";
 import {
+  type UpdateReapRecoveryResult,
+  UpdateReapRecoveryResultSchema,
+} from "./updateReapExecution.js";
+import {
   type UpdateReapRecoveryPreflight,
   UpdateReapRecoveryPreflightSchema,
 } from "./updateRecoveryPreflight.js";
 
 const common = {
-  schemaVersion: z.literal(5),
+  schemaVersion: z.literal(6),
   channel: UpdateChannelIdSchema,
   current: UpdateArtifactSchema,
   target: UpdateArtifactSchema,
@@ -62,6 +66,7 @@ const resultSchema = z
     warnings: z.array(SafeErrorSchema),
     recoveryCommands: z.array(UpdateCommandArgvSchema),
     hookReconciliations: z.array(ProviderHookReconciliationResultSchema),
+    reapRecovery: UpdateReapRecoveryResultSchema.optional(),
     error: SafeErrorSchema.optional(),
     cause: SafeErrorSchema.optional(),
     startupEvidence: ObserverStartupEvidenceSchema.optional(),
@@ -250,6 +255,7 @@ function mapReportIdentities(report: PreviewReport | ResultReport, map: Identity
         mapSafeError(hook.error, pass);
       }
     }
+    if (report.reapRecovery !== undefined) mapReapRecovery(report.reapRecovery, pass);
     mapAggregateIdentities(report.initial, report.plan, pass);
     if (report.finalInspection?.status === "completed") {
       mapAggregateIdentities(report.finalInspection.aggregate, report.finalInspection.plan, pass);
@@ -259,6 +265,10 @@ function mapReportIdentities(report: PreviewReport | ResultReport, map: Identity
     return;
   }
   mapAggregateIdentities(report.initial, report.plan, pass);
+}
+
+function mapReapRecovery(result: UpdateReapRecoveryResult, pass: IdentityPass): void {
+  for (const terminal of result.terminals) mapTerminal(terminal, pass);
 }
 
 function mapAggregateIdentities(

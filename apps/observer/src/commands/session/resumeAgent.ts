@@ -51,9 +51,10 @@ export type CreateSessionResumeAgentHandlerOptions = {
  * USE CASE
  *
  * Serializes recovery with close for one worktree, binds to its canonical open Station session when
- * present, then validates and preflights provider-native resume. Explicit imported handles may seed
- * their absent session identity; ended or contradictory local lifecycle is never reopened. Failed
- * cleanup discards only a session seeded by this command.
+ * present, then validates the optional expected session/provider identity and preflights
+ * provider-native resume. Explicit imported handles may seed their absent session identity; ended
+ * or contradictory local lifecycle is never reopened. Failed cleanup discards only a session
+ * seeded by this command.
  */
 export function createSessionResumeAgentHandler(
   options: CreateSessionResumeAgentHandlerOptions,
@@ -112,6 +113,7 @@ export function createSessionResumeAgentHandler(
         worktreeId: payload.worktreeId,
         worktree,
         recoveryHandleId: payload.recoveryHandleId,
+        ...(payload.expected === undefined ? {} : { expected: payload.expected }),
       });
       await options.launchPreflight(recovery.harness.id, {
         signal: context.signal,

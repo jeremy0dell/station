@@ -127,6 +127,17 @@ package-manager-owned installs defer to that manager unless you explicitly use
 compatible Station Host; uncertain preservation fails closed. `--no-handoff`
 opts out and can leave the new TUI unable to use the incumbent Host.
 
+When the dry run reports `reap-required`, inspect the listed terminal and
+session aliases, then run `stn update --reap`. Station repeats the complete
+inventory under an update lock before it terminates an exact Host-owned process
+group. It resumes eligible sessions after runtime convergence and reports every
+reaped, resumed, retained, or unresolved alias. `stn update --dry-run --reap`
+remains read-only.
+
+Binaries older than the first release that supports `--reap` cannot execute
+this recovery path. Close affected sessions before installing that first
+supporting release, then run the update again.
+
 After a normal exit, the TUI may report:
 
 ```text

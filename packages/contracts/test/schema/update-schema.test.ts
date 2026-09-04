@@ -46,5 +46,20 @@ describe("update command schemas", () => {
         hookProviderIds: ["codex", "codex"],
       }).success,
     ).toBe(false);
+    expect(
+      UpdateSuccessorRequestSchema.parse({
+        ...request,
+        reapContinuation: { journalId: "00000000-0000-4000-8000-000000000001" },
+      }),
+    ).toEqual({
+      ...request,
+      reapContinuation: { journalId: "00000000-0000-4000-8000-000000000001" },
+    });
+    expect(
+      UpdateSuccessorRequestSchema.safeParse({
+        ...request,
+        reapContinuation: { journalId: "not-a-journal", pid: 1 },
+      }).success,
+    ).toBe(false);
   });
 });

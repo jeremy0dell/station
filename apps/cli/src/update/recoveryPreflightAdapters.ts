@@ -7,6 +7,8 @@ import type {
   StationHostTargetBuild,
   StationHostTerminalLifetime,
   UpdateArtifact,
+  UpdateChannelId,
+  UpdateConvergencePlan,
   UpdateReapHostEvidence,
   UpdateReapObserverEvidence,
   UpdateReapRecoveryAssessment,
@@ -20,8 +22,12 @@ import {
   readHarnessHookHealth,
   reconcileHarnessHooks,
 } from "@station/observer/internal";
-import { createObserverClient } from "@station/protocol";
-import { parseStationObserverBuildVersion, type StationBuildInfo } from "@station/runtime";
+import { createObserverClient, readUnixSocketHolderPidsAsync } from "@station/protocol";
+import {
+  createLocalProcessEvidence,
+  parseStationObserverBuildVersion,
+  type StationBuildInfo,
+} from "@station/runtime";
 import {
   convergeStationHost,
   type InspectStationHostDeps,
@@ -40,8 +46,18 @@ import {
   requireCurrentObserverIdentity,
 } from "../persistedStateReconcile.js";
 import type { UpdateConvergenceExecutionDeps } from "./convergenceExecution.js";
+import {
+  deriveUpdateReapAuthorization,
+  type UpdateReapAuthorization,
+  UpdateReapAuthorizationEvidenceError,
+} from "./reapPlan.js";
+import {
+  exactUpdateReapProcessGroup,
+  UpdateReapProcessGroupEvidenceError,
+  type UpdateReapProcessGroupPort,
+} from "./reapProcessGroups.js";
 import type { UpdateRecoveryPreflightPorts } from "./recoveryPreflight.js";
-import { redactedPreflightError } from "./recoveryPreflight.js";
+import { redactedPreflightError, updateRecoveryActionCommitments } from "./recoveryPreflight.js";
 
 export type CreateUpdateRecoveryPreflightPortsOptions = {
   config: StationConfig;
@@ -148,6 +164,76 @@ export type CreateUpdateRuntimeCapabilitiesOptions = {
   convergeHost?: UpdateConvergenceExecutionDeps["convergeHost"];
   reconcilePersisted?: UpdateConvergenceExecutionDeps["reconcilePersisted"];
 };
+
+/**
+ * COMPOSITION ROOT
+ *
+ * Captures the exact Host socket owner and every live terminal process group for one private reap
+ * authorization. The returned SHA-256 digest does not enter the public convergence plan.
+ */
+export async function deriveLocalUpdateReapAuthorization(input: {
+  channel: UpdateChannelId;
+  selectedArtifact: UpdateArtifact;
+  installedScopeDigest: string;
+  preflight: import("@station/contracts").UpdateReapRecoveryPreflight;
+  plan: UpdateConvergencePlan;
+  processGroups: UpdateReapProcessGroupPort;
+  signal?: AbortSignal;
+}): Promise<UpdateReapAuthorization> {
+  const commitments = updateRecoveryActionCommitments(input.preflight);
+  const host = commitments.host;
+  if (host === undefined) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "Exact Host evidence was unavailable for update reap.",
+    );
+  }
+  const holderPids = await readUnixSocketHolderPidsAsync(host.endpoint.socketPath, {
+    deadlineMs: Date.now() + 5_000,
+    ...(input.signal === undefined ? {} : { signal: input.signal }),
+  }).catch(() => {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The exact Host socket owner could not be inspected for update reap.",
+    );
+  });
+  if (holderPids.length !== 1) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The exact Host socket did not have one process owner.",
+    );
+  }
+  const hostProcess = createLocalProcessEvidence().read(holderPids[0] ?? 0);
+  if (hostProcess === undefined) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The Host process identity was unavailable for update reap.",
+    );
+  }
+  const processGroupObservations = await Promise.all(
+    host.terminals
+      .filter((terminal) => terminal.alive)
+      .map((terminal) => input.processGroups.read(terminal.pid)),
+  ).catch((error) => {
+    throw new UpdateReapAuthorizationEvidenceError(
+      error instanceof UpdateReapProcessGroupEvidenceError
+        ? error.message
+        : "Terminal process-group evidence could not be inspected for update reap.",
+    );
+  });
+  const processGroups = processGroupObservations.map(exactUpdateReapProcessGroup);
+  if (processGroups.some((group) => group === undefined)) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "A terminal process-group identity was unavailable for update reap.",
+    );
+  }
+  return deriveUpdateReapAuthorization({
+    channel: input.channel,
+    selectedArtifact: input.selectedArtifact,
+    installedScopeDigest: input.installedScopeDigest,
+    preflight: input.preflight,
+    plan: input.plan,
+    commitments,
+    hostProcess: { pid: hostProcess.pid, startToken: hostProcess.startToken },
+    processGroups: processGroups.filter((group) => group !== undefined),
+  });
+}
 
 /**
  * COMPOSITION ROOT

@@ -60,7 +60,7 @@ export function createUpdateReportForArtifacts(
   plan: UpdateCommandResultDraft["plan"],
 ): UpdateCommandResultDraft {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     kind: "result",
     channel,
     current,
@@ -195,6 +195,16 @@ function renderUpdateReport(report: UpdateCommandResultReport): string {
   }
   for (const hook of report.hookReconciliations) {
     lines.push(`hooks: ${escapeTerminalBytes(hook.provider)}=${escapeTerminalBytes(hook.status)}`);
+  }
+  if (report.reapRecovery !== undefined) {
+    lines.push(
+      `reap recovery: ${escapeTerminalBytes(report.reapRecovery.status)}; unresolved=${report.reapRecovery.unresolved ? "yes" : "no"}`,
+    );
+    for (const terminal of report.reapRecovery.terminals) {
+      lines.push(
+        `  terminal ${escapeTerminalBytes(terminal.terminalTargetId)} session=${escapeTerminalBytes(terminal.sessionId)} termination=${terminal.terminationOutcome} escalation=${terminal.escalationUsed ? "yes" : "no"} resume=${terminal.resumeDisposition} unresolved=${terminal.unresolved ? "yes" : "no"}`,
+      );
+    }
   }
   if (report.finalInspection !== undefined) {
     lines.push(`final: ${escapeTerminalBytes(report.finalInspection.status)}`);

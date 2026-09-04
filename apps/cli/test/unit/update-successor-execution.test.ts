@@ -15,11 +15,13 @@ import { runUpdateSuccessorCommand, type UpdateCommandDeps } from "../../src/com
 import { resolveObserverPaths } from "../../src/paths.js";
 import type { UpdateChannelProbe } from "../../src/update/channelDetection.js";
 import { deriveUpdateConvergencePlan } from "../../src/update/convergencePlan.js";
+import type { UpdateReapJournalPort } from "../../src/update/reapJournal.js";
 import {
   createUpdateSuccessorTransportKey,
   runUpdateSuccessorTransport,
   sealUpdateSuccessorOutput,
   UPDATE_SUCCESSOR_PRIVATE_ENV,
+  UPDATE_SUCCESSOR_REAP_LOCK_ENV,
   type UpdateSuccessorReceipt,
   UpdateSuccessorReceiptSchema,
 } from "../../src/update/successorExecution.js";
@@ -223,6 +225,80 @@ describe("update successor boundary", () => {
     );
   });
 
+  it("passes the reap lock transfer token only through the private successor environment", async () => {
+    const request = successorRequest({
+      reapContinuation: { journalId: "00000000-0000-4000-8000-000000000001" },
+    });
+    const commandRunner = runnerFor(
+      {
+        ...failedReceipt(request, []),
+        reapRecovery: {
+          status: "completed",
+          terminals: [],
+          unresolved: false,
+          recoveryCommands: [],
+        },
+      },
+      1,
+    );
+    const transferToken = "00000000-0000-4000-8000-000000000099";
+
+    await runUpdateSuccessorTransport({
+      launcher: ["/opt/stn"],
+      request,
+      reapLockTransferToken: transferToken,
+      commandRunner,
+    });
+
+    expect(commandRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({ [UPDATE_SUCCESSOR_REAP_LOCK_ENV]: transferToken }),
+      }),
+    );
+    expect(JSON.stringify(request)).not.toContain(transferToken);
+  });
+
+  it("takes over the parent lock before reading a reap continuation journal", async () => {
+    const transferToken = "00000000-0000-4000-8000-000000000099";
+    const takeOverLock = vi.fn<UpdateReapJournalPort["takeOverLock"]>(async (token, run) => {
+      expect(token).toBe(transferToken);
+      return run({
+        prepareTransfer: async () => "00000000-0000-4000-8000-000000000098",
+        release: async () => undefined,
+      });
+    });
+    const reapJournal: UpdateReapJournalPort = {
+      findIncomplete: async () => undefined,
+      read: async () => {
+        throw new Error("journal read reached");
+      },
+      write: async () => undefined,
+      withLock: async () => {
+        throw new Error("successor must not acquire a new lock");
+      },
+      takeOverLock,
+    };
+
+    const result = await runUpdateSuccessorCommand({
+      stdin: JSON.stringify(
+        successorRequest({
+          reapContinuation: { journalId: "00000000-0000-4000-8000-000000000001" },
+        }),
+      ),
+      options: commandOptions(await createTempState()),
+      reapLockTransferToken: transferToken,
+      deps: {
+        buildInfo: () => buildInfo,
+        probes: [targetProbe()],
+        recoveryPreflight: async () => targetPreflight(),
+        reapJournal,
+      },
+    });
+
+    expect(takeOverLock).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ code: 1, output: { status: "failed" } });
+  });
+
   it("rejects a completed receipt whose final aggregate drops requested providers", async () => {
     const state = await createTempState();
     const valid = await runUpdateSuccessorCommand({
@@ -251,6 +327,44 @@ describe("update successor boundary", () => {
         commandRunner: runnerFor(altered, 0),
       }),
     ).rejects.toThrow(/final aggregate/);
+  });
+
+  it("correlates reap recovery to an opaque continuation request", async () => {
+    const state = await createTempState();
+    const valid = await runUpdateSuccessorCommand({
+      stdin: JSON.stringify(successorRequest()),
+      options: commandOptions(state),
+      deps: {
+        buildInfo: () => buildInfo,
+        probes: [targetProbe()],
+        recoveryPreflight: vi.fn(async () => targetPreflight()),
+        convergeObserver: vi.fn(async () => runningObserver(state.config)),
+      },
+    });
+    const receipt = UpdateSuccessorReceiptSchema.parse(valid.output);
+    const reapRecovery = {
+      status: "completed" as const,
+      terminals: [],
+      unresolved: false,
+      recoveryCommands: [],
+    };
+
+    await expect(
+      runUpdateSuccessorTransport({
+        launcher: ["/opt/stn"],
+        request: successorRequest(),
+        commandRunner: runnerFor({ ...receipt, reapRecovery }, 0),
+      }),
+    ).rejects.toThrow(/correlate/);
+    await expect(
+      runUpdateSuccessorTransport({
+        launcher: ["/opt/stn"],
+        request: successorRequest({
+          reapContinuation: { journalId: "00000000-0000-4000-8000-000000000001" },
+        }),
+        commandRunner: runnerFor(receipt, 0),
+      }),
+    ).rejects.toThrow(/correlate/);
   });
 
   it("rejects a completed plan that was not derived from its final aggregate", async () => {

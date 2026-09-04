@@ -11,7 +11,9 @@ import {
   type UpdateConvergencePlan,
   type UpdateConvergencePlanningInput,
   type UpdateFinalInspection,
+  type UpdateReapJournal,
   type UpdateReapRecoveryPreflight,
+  type UpdateReapRecoveryResult,
   type UpdateReapTerminalEvidence,
 } from "@station/contracts";
 import type { ExactObserverOwnershipEvidence, ProviderRegistry } from "@station/observer/internal";
@@ -29,12 +31,25 @@ import {
 import type { ExactObserverBuildStatus } from "../observerProcess/types.js";
 import { resolveObserverPaths } from "../paths.js";
 import type { ExecutableArgv } from "../selfExec.js";
+import { markUpdateReapPhase, recoveryFromUpdateReapJournal } from "./reapExecution.js";
+import type { UpdateReapJournalPort } from "./reapJournal.js";
+import {
+  executeUpdateReapSessionResume,
+  type UpdateReapSessionResumePort,
+} from "./reapSessionResume.js";
 import {
   updateHookError,
   updateHookSuccessFromHealth,
   updateRecoveryActionCommitments,
 } from "./recoveryPreflight.js";
 import type { UpdateApplyReportBase } from "./updateChannel.js";
+
+export type UpdateReapRuntimeContext = {
+  journal: UpdateReapJournal;
+  journalPort: UpdateReapJournalPort;
+  resumePort: UpdateReapSessionResumePort;
+  prepareLockTransfer?: () => Promise<string>;
+};
 
 export type UpdateConvergenceExecutionDeps = {
   providers?: ProviderRegistry;
@@ -91,6 +106,8 @@ export type UpdateConvergenceExecutionInput = {
     installedScopeDigest: string;
     handoff: UpdateRequest["handoff"];
     hookProviderIds: readonly string[];
+    reapContinuation?: { journalId: string };
+    reapLockTransferToken?: string;
   }) => Promise<{
     status: "completed" | "failed";
     finalInspection: UpdateFinalInspection;
@@ -99,7 +116,9 @@ export type UpdateConvergenceExecutionInput = {
     parkedTerminals?: readonly UpdateReapTerminalEvidence[];
     recoveryCommands?: readonly (readonly [string, ...string[]])[];
     error?: unknown;
+    reapRecovery?: UpdateReapRecoveryResult;
   }>;
+  reap?: UpdateReapRuntimeContext;
 };
 
 export type UpdateConvergenceExecutionResult = {
@@ -119,7 +138,8 @@ export type UpdateConvergenceExecutionResult = {
  *
  * Executes one ordered safe convergence. Lifecycle capabilities perform their own immediate
  * identity revalidation, and final inspection redetects the installed artifact. This coordinator
- * only orders those capabilities and never authorizes reap or signal.
+ * orders those capabilities and continues an already-authorized opaque reap journal without
+ * granting signal authority to the public plan.
  */
 export async function executeUpdateConvergence(
   input: UpdateConvergenceExecutionInput,
@@ -149,6 +169,7 @@ export async function executeUpdateConvergence(
   input.report.steps.push(
     updateStep("apply", "skipped", "The selected artifact already matches its target."),
   );
+  await markReapPhase(input, "artifact-applied");
   return executeRuntime(input, deps);
 }
 
@@ -178,6 +199,7 @@ async function executeArtifactChange(
     input.report.steps.push(
       updateStep("apply", "completed", `Installed Station ${applied.installedVersion}.`),
     );
+    await markReapPhase(input, "artifact-applied");
   } catch (error) {
     const recoveryCommands = input.applyRecoveryCommands?.(error);
     if (recoveryCommands !== undefined) input.report.recoveryCommands.push(...recoveryCommands);
@@ -203,6 +225,13 @@ async function executeArtifactChange(
   }
 
   try {
+    let reapLockTransferToken: string | undefined;
+    if (input.reap !== undefined) {
+      if (input.reap.prepareLockTransfer === undefined) {
+        throw new Error("Update reap lock transfer is unavailable for successor crossover.");
+      }
+      reapLockTransferToken = await input.reap.prepareLockTransfer();
+    }
     const successor = await input.runSuccessor({
       launcher: applied.successorCli,
       target: input.target,
@@ -210,6 +239,10 @@ async function executeArtifactChange(
       installedScopeDigest: input.installedScopeDigest,
       handoff: input.request.handoff,
       hookProviderIds: input.initial.hookProviderIds,
+      ...(input.reap === undefined
+        ? {}
+        : { reapContinuation: { journalId: input.reap.journal.id } }),
+      ...(reapLockTransferToken === undefined ? {} : { reapLockTransferToken }),
     });
     input.report.hookReconciliations.push(...successor.hookReconciliations);
     input.report.steps.push(...successor.steps);
@@ -217,6 +250,7 @@ async function executeArtifactChange(
       input.report.recoveryCommands.push(...successor.recoveryCommands);
     }
     input.report.finalInspection = successor.finalInspection;
+    if (successor.reapRecovery !== undefined) input.report.reapRecovery = successor.reapRecovery;
     if (successor.status === "failed" || successor.finalInspection.status !== "completed") {
       if (successor.error !== undefined) {
         input.report.error = publicSafeErrorFromUnknown(successor.error, {
@@ -392,7 +426,9 @@ async function executeRuntime(
       throw new Error("The selected installation changed before runtime convergence.");
     }
     await reconcileHooks(input, deps);
+    await markReapPhase(input, "hooks-converged");
     const observer = await convergeObserver(input, deps);
+    await markReapPhase(input, "observer-converged");
     const hostPhase = input.plan.phases.hostConvergence;
     if (hostPhase.action === "leave-in-place") {
       input.report.steps.push(
@@ -417,6 +453,7 @@ async function executeRuntime(
         updateStep("host-handoff", "completed", "The Host completed exact ownership convergence."),
       );
     }
+    await markReapPhase(input, "host-converged");
     if (input.plan.phases.persistedStateReconcile.action === "run") {
       if (deps.reconcilePersisted === undefined) {
         throw new Error("Persisted-state reconcile capability is unavailable.");
@@ -430,6 +467,27 @@ async function executeRuntime(
         ),
       );
     }
+    await markReapPhase(input, "persisted-reconciled");
+    if (input.reap !== undefined) {
+      input.reap.journal = await executeUpdateReapSessionResume(
+        input.reap.journal,
+        input.reap.journalPort,
+        input.reap.resumePort,
+      );
+      input.report.reapRecovery = recoveryFromUpdateReapJournal(input.reap.journal);
+      input.report.steps.push(
+        updateStep(
+          "session-resume",
+          input.report.reapRecovery.unresolved ? "failed" : "completed",
+          input.report.reapRecovery.unresolved
+            ? "One or more retained sessions could not be resumed."
+            : "Recoverable retained sessions were resumed through exact handles.",
+        ),
+      );
+      if (input.report.reapRecovery.unresolved) {
+        throw new Error("Update reap session recovery remains unresolved.");
+      }
+    }
   } catch (error) {
     failure = error;
     input.report.error = publicSafeErrorFromUnknown(error, {
@@ -439,6 +497,24 @@ async function executeRuntime(
     });
   }
   const finalized = await finalizeUpdateConvergence(input, deps, failure, failure === undefined);
+  if (
+    failure === undefined &&
+    finalized.finalInspection?.status === "completed" &&
+    finalized.finalInspection.plan.outcome === "converged" &&
+    input.reap !== undefined
+  ) {
+    input.reap.journal = await markUpdateReapPhase(
+      input.reap.journal,
+      "verified",
+      input.reap.journalPort,
+    );
+    input.reap.journal = await markUpdateReapPhase(
+      input.reap.journal,
+      "completed",
+      input.reap.journalPort,
+    );
+    input.report.reapRecovery = recoveryFromUpdateReapJournal(input.reap.journal);
+  }
   if (
     (finalized.status === "current" || finalized.status === "intentionally-incomplete") &&
     finalized.finalInspection?.status === "completed" &&
@@ -466,6 +542,14 @@ async function executeRuntime(
     return { status: "failed", finalInspection: finalized.finalInspection };
   }
   return finalized;
+}
+
+async function markReapPhase(
+  input: UpdateConvergenceExecutionInput,
+  phase: UpdateReapJournal["phase"],
+): Promise<void> {
+  if (input.reap === undefined) return;
+  input.reap.journal = await markUpdateReapPhase(input.reap.journal, phase, input.reap.journalPort);
 }
 
 function artifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
