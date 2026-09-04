@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./build-info": {
+      "types": "./dist/buildInfoEntry.d.ts",
+      "import": "./dist/buildInfoEntry.js"
     }
   },
   "scripts": {

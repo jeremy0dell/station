@@ -24,6 +24,7 @@ export type {
   CliCommandNode,
   CliHelpMode,
 } from "./commands/cliCommand/types.js";
+export { isTopLevelCliCommand } from "./topLevelCliCommands.js";
 
 export const cliCommandRegistry: CliCommandNode = {
   name: "stn",
@@ -67,7 +68,6 @@ export const cliCommandRegistry: CliCommandNode = {
 
 const registryApi = createCliCommandRegistryApi(cliCommandRegistry);
 
-export const isTopLevelCliCommand = registryApi.isTopLevelCliCommand;
 export const resolveCliCommandRoute = registryApi.resolveCliCommandRoute;
 export const runCliCommandRoute = registryApi.runCliCommandRoute;
 export const handleCliCommandConfigError = registryApi.handleCliCommandConfigError;

@@ -5,7 +5,10 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "paths": {
-      "@station/contracts": ["../../packages/contracts/dist/index.d.ts"]
+      "@station/contracts": ["../../packages/contracts/dist/index.d.ts"],
+      "@station/contracts/build-identity": [
+        "../../packages/contracts/dist/stationBuildIdentityEntry.d.ts"
+      ]
     }
   },
   "include": ["src/**/*.ts"]

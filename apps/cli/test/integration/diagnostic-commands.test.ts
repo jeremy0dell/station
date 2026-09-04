@@ -489,6 +489,43 @@ describe("CLI diagnostic commands", () => {
     });
   });
 
+  it("does not label a successful command log as a failed command record", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    await mkdir(join(fixture.stateDir, "logs"), { recursive: true });
+    await writeFile(
+      join(fixture.stateDir, "logs", "observer.jsonl"),
+      `${JSON.stringify({
+        timestamp: "2026-05-20T12:00:00.000Z",
+        level: "info",
+        component: "observer",
+        message: "Command succeeded.",
+        attributes: {
+          commandId: "cmd_succeeded",
+          commandType: "observer.reconcile",
+          traceId: "trc_succeeded",
+        },
+      })}\n`,
+    );
+
+    const traced = await runCli(["--config", configPath, "debug", "trace", "trc_succeeded"], {
+      observerDeps: {
+        clientFactory: () => {
+          throw new Error("debug trace should not contact observer");
+        },
+      },
+    });
+
+    expect(traced).toMatchObject({
+      code: 0,
+      output: {
+        matched: true,
+        source: "log",
+        command: expect.not.objectContaining({ status: "failed" }),
+      },
+    });
+  });
+
   it("resolves CLI observer lifecycle failures from live logs", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);

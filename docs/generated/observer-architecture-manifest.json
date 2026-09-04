@@ -19124,7 +19124,7 @@
       "declaration": "createObserverClient",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Presents Observer operations through validated NDJSON requests and surfaces bounded transport overload as a retryable connection failure.",
+      "purpose": "Presents Observer operations through validated NDJSON requests and surfaces bounded transport overload as a retryable connection failure. Command completion uses one guarded server-side wait whose disconnect releases its Observer subscription.",
       "dependencies": []
     },
     {
@@ -19140,7 +19140,7 @@
       "declaration": "startProtocolServer",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Exposes Observer operations through validated NDJSON requests and disconnects subscriptions that exceed the transport's bounded delivery capacity while reporting content-free settlement metrics to the composition boundary.",
+      "purpose": "Exposes Observer operations through validated NDJSON requests and disconnects subscriptions that exceed the transport's bounded delivery capacity. Command waits retain the subscribe-before-read invariant on one guarded connection and release on client disconnect.",
       "dependencies": [
         {
           "path": "packages/contracts/src/observer.ts",

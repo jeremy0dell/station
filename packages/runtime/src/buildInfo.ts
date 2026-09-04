@@ -1,8 +1,11 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type StationBuildIdentity, StationBuildIdentitySchema } from "@station/contracts";
+import {
+  type StationBuildIdentity,
+  StationBuildIdentitySchema,
+} from "@station/contracts/build-identity";
 
 declare const STATION_BUILD_VERSION: string;
 declare const STATION_BUILD_COMPILED: boolean;
@@ -12,6 +15,9 @@ const OBSERVER_BUILD_IDENTITY_MARKER = /\+(?:[0-9A-Za-z-]+\.)*station\./u;
 const OBSERVER_BUILD_IDENTITY_PATTERN = /^(.+)([+.])station\.([0-9a-f]{64})$/u;
 const verifiedSourceBuildIdentitySlot = Symbol.for(
   "@station/runtime/verified-source-build-identity",
+);
+const verifyingSourceBuildIdentitySlot = Symbol.for(
+  "@station/runtime/verifying-source-build-identity",
 );
 
 export type StationBuildInfo = {
@@ -27,13 +33,25 @@ export type StationBuildInfo = {
  */
 export function stationBuildInfo(): StationBuildInfo {
   return {
-    version:
-      typeof STATION_BUILD_VERSION === "undefined" ? "0.0.0-pre-alpha.14.5" : STATION_BUILD_VERSION,
+    version: stationBuildVersion(),
     compiled: isCompiledBinary(),
     buildIdentity:
       typeof STATION_BUILD_IDENTITY === "undefined"
         ? sourceBuildIdentity()
         : STATION_BUILD_IDENTITY,
+  };
+}
+
+/**
+ * Returns exact build information after asynchronous source admission, allowing callers to overlap
+ * content verification with independent module loading without executing against stale outputs.
+ */
+export async function stationBuildInfoAsync(): Promise<StationBuildInfo> {
+  if (isCompiledBinary()) return stationBuildInfo();
+  return {
+    version: stationBuildVersion(),
+    compiled: false,
+    buildIdentity: await sourceBuildIdentityAsync(),
   };
 }
 
@@ -79,21 +97,92 @@ export function isCompiledBinary(): boolean {
   return typeof STATION_BUILD_COMPILED === "undefined" ? false : STATION_BUILD_COMPILED;
 }
 
+function stationBuildVersion(): string {
+  return typeof STATION_BUILD_VERSION === "undefined"
+    ? "0.0.0-pre-alpha.14.5"
+    : STATION_BUILD_VERSION;
+}
+
 function sourceBuildIdentity(): string {
   const processSlots = globalThis as typeof globalThis & Record<symbol, string | undefined>;
   const verifiedIdentity = processSlots[verifiedSourceBuildIdentitySlot];
   if (verifiedIdentity !== undefined) {
     return verifiedIdentity;
   }
+  const evidence = readSourceBuildIdentityEvidence();
+  try {
+    execFileSync(
+      process.execPath,
+      [join(evidence.root, "scripts", "build-identity.mjs"), "--verify", evidence.identity],
+      {
+        cwd: evidence.root,
+        stdio: "ignore",
+      },
+    );
+  } catch (error) {
+    throw staleSourceBuildIdentityError(evidence.path, error);
+  }
+  processSlots[verifiedSourceBuildIdentitySlot] = evidence.identity;
+  return evidence.identity;
+}
+
+async function sourceBuildIdentityAsync(): Promise<StationBuildIdentity> {
+  const verifiedSlots = globalThis as typeof globalThis & Record<symbol, string | undefined>;
+  const verifiedIdentity = verifiedSlots[verifiedSourceBuildIdentitySlot];
+  if (verifiedIdentity !== undefined) return StationBuildIdentitySchema.parse(verifiedIdentity);
+
+  const pendingSlots = globalThis as typeof globalThis &
+    Record<symbol, Promise<StationBuildIdentity> | undefined>;
+  const existing = pendingSlots[verifyingSourceBuildIdentitySlot];
+  if (existing !== undefined) return existing;
+
+  const verification = verifySourceBuildIdentityAsync();
+  pendingSlots[verifyingSourceBuildIdentitySlot] = verification;
+  try {
+    const identity = await verification;
+    verifiedSlots[verifiedSourceBuildIdentitySlot] = identity;
+    return identity;
+  } finally {
+    if (pendingSlots[verifyingSourceBuildIdentitySlot] === verification) {
+      Reflect.deleteProperty(pendingSlots, verifyingSourceBuildIdentitySlot);
+    }
+  }
+}
+
+async function verifySourceBuildIdentityAsync(): Promise<StationBuildIdentity> {
+  const evidence = readSourceBuildIdentityEvidence();
+  try {
+    await new Promise<void>((resolveVerification, rejectVerification) => {
+      execFile(
+        process.execPath,
+        [join(evidence.root, "scripts", "build-identity.mjs"), "--verify", evidence.identity],
+        { cwd: evidence.root },
+        (error) => {
+          if (error === null) resolveVerification();
+          else rejectVerification(error);
+        },
+      );
+    });
+  } catch (error) {
+    throw staleSourceBuildIdentityError(evidence.path, error);
+  }
+  return evidence.identity;
+}
+
+function readSourceBuildIdentityEvidence(): {
+  identity: StationBuildIdentity;
+  path: string;
+  root: string;
+} {
   const moduleDirectory = dirname(fileURLToPath(import.meta.url));
   const root = join(moduleDirectory, "..", "..", "..");
   const path =
     basename(moduleDirectory) === "src"
       ? join(moduleDirectory, "..", "dist", "station-build-id")
       : join(moduleDirectory, "station-build-id");
-  let identity: string;
+  let rawIdentity: string;
   try {
-    identity = readFileSync(path, "utf8").trim();
+    rawIdentity = readFileSync(path, "utf8").trim();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       throw new Error(`Station build identity is missing at ${path}. Run bun run build.`, {
@@ -102,24 +191,16 @@ function sourceBuildIdentity(): string {
     }
     throw error;
   }
-  if (!StationBuildIdentitySchema.safeParse(identity).success) {
+  const parsed = StationBuildIdentitySchema.safeParse(rawIdentity);
+  if (!parsed.success) {
     throw new Error(`Station build identity at ${path} is invalid. Run bun run build.`);
   }
-  try {
-    execFileSync(
-      process.execPath,
-      [join(root, "scripts", "build-identity.mjs"), "--verify", identity],
-      {
-        cwd: root,
-        stdio: "ignore",
-      },
-    );
-  } catch (error) {
-    throw new Error(
-      `Station build identity at ${path} does not match the current checkout and production outputs. Run bun run build.`,
-      { cause: error },
-    );
-  }
-  processSlots[verifiedSourceBuildIdentitySlot] = identity;
-  return StationBuildIdentitySchema.parse(identity);
+  return { identity: parsed.data, path, root };
+}
+
+function staleSourceBuildIdentityError(path: string, cause: unknown): Error {
+  return new Error(
+    `Station build identity at ${path} does not match the current checkout and production outputs. Run bun run build.`,
+    { cause },
+  );
 }

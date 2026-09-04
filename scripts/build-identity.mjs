@@ -5,13 +5,19 @@ import { lstat, mkdir, open, readdir, readFile, readlink, rename, rm } from "nod
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { environmentWithBunRuntime, resolveAndCheckBunVersion } from "./bun-version.mjs";
+import {
+  assertBunVersion,
+  environmentWithBunRuntime,
+  requiredBunVersion,
+  resolveAndCheckBunVersion,
+} from "./bun-version.mjs";
 
 const execFileAsync = promisify(execFile);
 const BUILD_IDENTITY_PATTERN = /^[0-9a-f]{64}$/u;
 const BUILD_IDENTITY_DOMAIN = "station-build-identity-v1";
 const BUILD_INPUT_IDENTITY_DOMAIN = "station-build-input-identity-v1";
 const BUILD_OUTPUT_IDENTITY_DOMAIN = "station-build-output-identity-v1";
+const BUILD_IDENTITY_IO_CONCURRENCY = 64;
 const NODE_ENGINE_PATTERN = /^>=(0|[1-9]\d*)\.(0|[1-9]\d*) <(0|[1-9]\d*)$/u;
 const NODE_VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -37,15 +43,28 @@ export function buildIdentityPath(root = repoRoot) {
   return join(root, "packages", "runtime", "dist", "station-build-id");
 }
 
-/** Hashes repository inputs and production package outputs in stable byte order. */
+/**
+ * Hashes repository inputs and production outputs in stable byte order. The output scan overlaps
+ * the first input scan, while a complete second input scan still detects changes during either.
+ */
 export async function computeBuildIdentity(root = repoRoot) {
-  const inputIdentity = await computeBuildInputIdentity(root);
-  return computeBuildIdentityFromInput(inputIdentity, root);
+  const inputIdentityPromise = computeBuildInputIdentity(root);
+  const outputIdentityPromise = computeBuildOutputIdentity(root);
+  const [inputIdentity, outputIdentity] = await Promise.all([
+    inputIdentityPromise,
+    outputIdentityPromise,
+  ]);
+  const completedInputIdentity = await computeBuildInputIdentity(root);
+  return combineBuildIdentity(inputIdentity, completedInputIdentity, outputIdentity);
 }
 
 async function computeBuildIdentityFromInput(inputIdentity, root) {
   const outputIdentity = await computeBuildOutputIdentity(root);
   const completedInputIdentity = await computeBuildInputIdentity(root);
+  return combineBuildIdentity(inputIdentity, completedInputIdentity, outputIdentity);
+}
+
+function combineBuildIdentity(inputIdentity, completedInputIdentity, outputIdentity) {
   if (completedInputIdentity !== inputIdentity) {
     throw new Error(
       "Station build inputs changed while identity was being computed; retry from a stable checkout.",
@@ -59,51 +78,71 @@ async function computeBuildIdentityFromInput(inputIdentity, root) {
 }
 
 async function computeBuildInputIdentity(root) {
-  const head = (await runGit(root, ["rev-parse", "HEAD"])).toString("utf8").trim();
+  const [headBuffer, trackedBuffer, untrackedBuffer] = await Promise.all([
+    runGit(root, ["rev-parse", "HEAD"]),
+    runGit(root, ["ls-files", "--cached", "-z"]),
+    runGit(root, ["ls-files", "--others", "--exclude-standard", "-z"]),
+  ]);
+  const head = headBuffer.toString("utf8").trim();
   if (!/^[0-9a-f]{40,64}$/u.test(head)) {
     throw new Error(`Could not resolve a full Git HEAD for Station build identity: ${head}`);
   }
 
-  const tracked = splitNullTerminated(await runGit(root, ["ls-files", "--cached", "-z"]));
-  const untracked = splitNullTerminated(
-    await runGit(root, ["ls-files", "--others", "--exclude-standard", "-z"]),
-  );
+  const tracked = splitNullTerminated(trackedBuffer);
+  const untracked = splitNullTerminated(untrackedBuffer);
   const paths = [...new Set([...tracked, ...untracked])]
     .filter(isProductionBuildInput)
     .sort(compareUtf8);
+  const limitFileSystem = createConcurrencyLimit(BUILD_IDENTITY_IO_CONCURRENCY);
+  const entries = await Promise.all(
+    paths.map((path) => readBuildInputEntry(root, path, limitFileSystem)),
+  );
   const hash = createHash("sha256");
   updateHashField(hash, "domain", BUILD_INPUT_IDENTITY_DOMAIN);
   updateHashField(hash, "head", head);
 
-  for (const path of paths) {
-    const absolutePath = join(root, path);
-    updateHashField(hash, "path", path);
-    let info;
-    try {
-      info = await lstat(absolutePath);
-    } catch (error) {
-      if (error?.code === "ENOENT") {
-        updateHashField(hash, "type", "missing");
-        continue;
-      }
-      throw error;
+  for (const entry of entries) {
+    updateHashField(hash, "path", entry.path);
+    if (entry.type === "missing") {
+      updateHashField(hash, "type", entry.type);
+      continue;
     }
-
-    updateHashField(hash, "mode", buildInputMode(info));
-    if (info.isFile()) {
-      updateHashField(hash, "type", "file");
-      updateHashField(hash, "content", await readFile(absolutePath));
-    } else if (info.isSymbolicLink()) {
-      updateHashField(hash, "type", "symlink");
-      updateHashField(hash, "content", await readlink(absolutePath));
-    } else if (info.isDirectory()) {
-      updateHashField(hash, "type", "directory");
-    } else {
-      updateHashField(hash, "type", "special");
-    }
+    updateHashField(hash, "mode", entry.mode);
+    updateHashField(hash, "type", entry.type);
+    if (entry.content !== undefined) updateHashField(hash, "content", entry.content);
   }
 
   return hash.digest("hex");
+}
+
+async function readBuildInputEntry(root, path, limitFileSystem) {
+  const absolutePath = join(root, path);
+  let info;
+  try {
+    info = await limitFileSystem(() => lstat(absolutePath));
+  } catch (error) {
+    if (error?.code === "ENOENT") return { path, type: "missing" };
+    throw error;
+  }
+
+  const mode = buildInputMode(info);
+  if (info.isFile()) {
+    return {
+      path,
+      mode,
+      type: "file",
+      content: await limitFileSystem(() => readFile(absolutePath)),
+    };
+  }
+  if (info.isSymbolicLink()) {
+    return {
+      path,
+      mode,
+      type: "symlink",
+      content: await limitFileSystem(() => readlink(absolutePath)),
+    };
+  }
+  return { path, mode, type: info.isDirectory() ? "directory" : "special" };
 }
 
 export function buildInputMode(info) {
@@ -124,48 +163,91 @@ async function computeBuildOutputIdentity(root) {
     .sort(compareUtf8);
   const hash = createHash("sha256");
   updateHashField(hash, "domain", BUILD_OUTPUT_IDENTITY_DOMAIN);
-  for (const outputRoot of outputRoots) {
-    await updateOutputHash(hash, root, outputRoot);
-  }
+  const limitFileSystem = createConcurrencyLimit(BUILD_IDENTITY_IO_CONCURRENCY);
+  const outputTrees = await Promise.all(
+    outputRoots.map((outputRoot) => readBuildOutputTree(root, outputRoot, limitFileSystem)),
+  );
+  for (const outputTree of outputTrees) updateOutputHash(hash, outputTree);
   return hash.digest("hex");
 }
 
-async function updateOutputHash(hash, root, path) {
+async function readBuildOutputTree(root, path, limitFileSystem) {
   if (path === "packages/runtime/dist/station-build-id") return;
-  updateHashField(hash, "path", path);
   const absolutePath = join(root, path);
   let info;
   try {
-    info = await lstat(absolutePath);
+    info = await limitFileSystem(() => lstat(absolutePath));
   } catch (error) {
     if (error?.code === "ENOENT") {
-      updateHashField(hash, "type", "missing");
-      return;
+      return { path, type: "missing" };
     }
     throw error;
   }
 
-  updateHashField(hash, "mode", (info.mode & 0o7777).toString(8));
+  const mode = (info.mode & 0o7777).toString(8);
   if (info.isFile()) {
-    updateHashField(hash, "type", "file");
-    updateHashField(hash, "content", await readFile(absolutePath));
-    return;
+    return {
+      path,
+      mode,
+      type: "file",
+      content: await limitFileSystem(() => readFile(absolutePath)),
+    };
   }
   if (info.isSymbolicLink()) {
-    updateHashField(hash, "type", "symlink");
-    updateHashField(hash, "content", await readlink(absolutePath));
-    return;
+    return {
+      path,
+      mode,
+      type: "symlink",
+      content: await limitFileSystem(() => readlink(absolutePath)),
+    };
   }
   if (!info.isDirectory()) {
-    updateHashField(hash, "type", "special");
-    return;
+    return { path, mode, type: "special" };
   }
 
-  updateHashField(hash, "type", "directory");
-  const children = (await readdir(absolutePath)).sort(compareUtf8);
-  for (const child of children) {
-    await updateOutputHash(hash, root, join(path, child));
+  const children = (await limitFileSystem(() => readdir(absolutePath))).sort(compareUtf8);
+  return {
+    path,
+    mode,
+    type: "directory",
+    children: await Promise.all(
+      children.map((child) => readBuildOutputTree(root, join(path, child), limitFileSystem)),
+    ),
+  };
+}
+
+function updateOutputHash(hash, entry) {
+  if (entry === undefined) return;
+  updateHashField(hash, "path", entry.path);
+  if (entry.type === "missing") {
+    updateHashField(hash, "type", entry.type);
+    return;
   }
+  updateHashField(hash, "mode", entry.mode);
+  updateHashField(hash, "type", entry.type);
+  if (entry.content !== undefined) updateHashField(hash, "content", entry.content);
+  for (const child of entry.children ?? []) updateOutputHash(hash, child);
+}
+
+/** Bounds filesystem pressure without allowing completion order to affect the digest. */
+function createConcurrencyLimit(concurrency) {
+  let active = 0;
+  const pending = [];
+  return (operation) =>
+    new Promise((resolveOperation, rejectOperation) => {
+      const run = () => {
+        active += 1;
+        Promise.resolve()
+          .then(operation)
+          .then(resolveOperation, rejectOperation)
+          .finally(() => {
+            active -= 1;
+            pending.shift()?.();
+          });
+      };
+      if (active < concurrency) run();
+      else pending.push(run);
+    });
 }
 
 export async function readBuildIdentity(root = repoRoot) {
@@ -176,7 +258,7 @@ export async function readBuildIdentity(root = repoRoot) {
   return identity;
 }
 
-/** Proves current inputs, package outputs, and the published sidecar still match. */
+/** Proves concurrently read inputs, outputs, and the published sidecar still match. */
 export async function verifyBuildIdentity(identity, root = repoRoot) {
   try {
     const [computedIdentity, publishedIdentity] = await Promise.all([
@@ -359,6 +441,9 @@ async function ensureBuild() {
 }
 
 async function requireCurrentBuildIdentity(identity) {
+  if (typeof Bun !== "undefined") {
+    assertBunVersion(Bun.version, await requiredBunVersion(repoRoot));
+  }
   if (!(await verifyBuildIdentity(identity, repoRoot))) {
     throw new Error(
       "Station build identity does not match the current checkout and production outputs; run bun run build.",

@@ -14,6 +14,7 @@ import { ZodError } from "zod";
 import {
   CommandDispatchParamsSchema,
   CommandGetParamsSchema,
+  CommandWaitParamsSchema,
   EventsSubscribeParamsSchema,
   HarnessEventReportParamsSchema,
   ProtocolEventEnvelopeSchema,
@@ -54,8 +55,8 @@ export type ProtocolServerOptions = {
  * ADAPTER
  *
  * Exposes Observer operations through validated NDJSON requests and disconnects
- * subscriptions that exceed the transport's bounded delivery capacity while
- * reporting content-free settlement metrics to the composition boundary.
+ * subscriptions that exceed the transport's bounded delivery capacity. Command waits retain the
+ * subscribe-before-read invariant on one guarded connection and release on client disconnect.
  */
 export async function startProtocolServer(
   options: ProtocolServerOptions,
@@ -115,6 +116,10 @@ async function routeRequest(
   }
   if (request.method === "events.subscribe") {
     await routeSubscriptionRequest(connection, api, request);
+    return;
+  }
+  if (request.method === "command.wait") {
+    await routeCommandWaitRequest(connection, api, request);
     return;
   }
 
@@ -199,6 +204,12 @@ async function routeSingleResponseRequest(
         const params = CommandGetParamsSchema.parse(request.params);
         return (await api.getCommand(params.commandId)) ?? null;
       }
+      case "command.wait": {
+        throw protocolSafeError({
+          code: "PROTOCOL_REQUEST_FAILED",
+          message: "Command waits require a connection-scoped route.",
+        });
+      }
       case "observer.reconcile": {
         const params = ReconcileParamsSchema.parse(request.params);
         return await api.reconcile(params?.reason);
@@ -249,6 +260,63 @@ async function routeSingleResponseRequest(
   } catch (error) {
     throw protocolSafeErrorFromUnknown(error);
   }
+}
+
+async function routeCommandWaitRequest(
+  connection: NdjsonConnection,
+  api: ObserverApi,
+  request: ProtocolRequest,
+): Promise<void> {
+  try {
+    const params = CommandWaitParamsSchema.parse(request.params);
+    const record = await waitForTerminalCommandRecord(connection, api, params.commandId);
+    sendResult(connection, request.id, "command.wait", record);
+  } catch (error) {
+    connection.send(errorResponse(request.id, "Observer protocol method failed.", error));
+  }
+}
+
+async function waitForTerminalCommandRecord(
+  connection: NdjsonConnection,
+  api: ObserverApi,
+  commandId: string,
+): Promise<NonNullable<Awaited<ReturnType<ObserverApi["getCommand"]>>>> {
+  const events = api.subscribe({
+    type: ["command.succeeded", "command.failed"],
+    commandId,
+  });
+  const iterator = events[Symbol.asyncIterator]();
+  try {
+    // Subscribe before getCommand so fast command completions cannot be missed.
+    const existing = terminalCommandRecord(await api.getCommand(commandId));
+    if (existing !== undefined) return existing;
+    for (;;) {
+      const next = await nextEventOrClosed(connection, iterator);
+      if (next.done) {
+        const refreshed = terminalCommandRecord(await api.getCommand(commandId));
+        if (refreshed !== undefined) return refreshed;
+        throw protocolSafeError({
+          code: "PROTOCOL_COMMAND_EVENT_STREAM_CLOSED",
+          message: "Observer event stream closed before command completion.",
+        });
+      }
+      if (
+        (next.value.type === "command.succeeded" || next.value.type === "command.failed") &&
+        next.value.commandId === commandId
+      ) {
+        const terminal = terminalCommandRecord(await api.getCommand(commandId));
+        if (terminal !== undefined) return terminal;
+      }
+    }
+  } finally {
+    await iterator.return?.();
+  }
+}
+
+function terminalCommandRecord(
+  record: Awaited<ReturnType<ObserverApi["getCommand"]>>,
+): NonNullable<Awaited<ReturnType<ObserverApi["getCommand"]>>> | undefined {
+  return record?.status === "succeeded" || record?.status === "failed" ? record : undefined;
 }
 
 async function routeSubscriptionRequest(

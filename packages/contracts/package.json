@@ -8,6 +8,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.js"
+    },
+    "./build-identity": {
+      "types": "./dist/stationBuildIdentityEntry.d.ts",
+      "import": "./dist/stationBuildIdentityEntry.js"
     }
   },
   "scripts": {

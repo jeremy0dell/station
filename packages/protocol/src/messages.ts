@@ -47,6 +47,7 @@ export const ProtocolMethods = [
   "events.subscribe",
   "command.dispatch",
   "command.get",
+  "command.wait",
   "observer.reconcile",
   "observer.ingestProviderHookEvent",
   "observer.harnessEvent.report",
@@ -131,6 +132,13 @@ export const CommandGetParamsSchema = z
   })
   .strict();
 
+export const CommandWaitParamsSchema = CommandGetParamsSchema;
+
+export const CommandWaitResultSchema = CommandRecordSchema.refine(
+  (record) => record.status === "succeeded" || record.status === "failed",
+  "Command wait requires a terminal command record.",
+);
+
 export const ReconcileParamsSchema = z
   .object({
     reason: z.string().min(1).optional(),
@@ -167,6 +175,7 @@ export const ProtocolParamSchemas = {
   "events.subscribe": EventsSubscribeParamsSchema,
   "command.dispatch": CommandDispatchParamsSchema,
   "command.get": CommandGetParamsSchema,
+  "command.wait": CommandWaitParamsSchema,
   "observer.reconcile": ReconcileParamsSchema,
   "observer.ingestProviderHookEvent": ProviderHookIngestParamsSchema,
   "observer.harnessEvent.report": HarnessEventReportParamsSchema,
@@ -189,6 +198,7 @@ export const ProtocolResultSchemas = {
   "events.subscribe": z.object({ subscribed: z.literal(true) }).strict(),
   "command.dispatch": CommandReceiptSchema,
   "command.get": CommandRecordSchema.nullable(),
+  "command.wait": CommandWaitResultSchema,
   "observer.reconcile": ReconcileReceiptSchema,
   "observer.ingestProviderHookEvent": ProviderHookReceiptSchema,
   "observer.harnessEvent.report": HarnessEventReportReceiptSchema,

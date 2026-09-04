@@ -17,6 +17,7 @@
       "@station/pi": ["../../integrations/harness/pi/dist/index.d.ts"],
       "@station/protocol": ["../../packages/protocol/dist/index.d.ts"],
       "@station/runtime": ["../../packages/runtime/dist/index.d.ts"],
+      "@station/runtime/build-info": ["../../packages/runtime/dist/buildInfoEntry.d.ts"],
       "@station/scripted-harness": ["../../integrations/harness/scripted/dist/index.d.ts"],
       "@station/setup-core": ["../../packages/setup-core/dist/index.d.ts"],
       "@station/setup-messages": ["../../packages/setup-messages/dist/index.d.ts"],

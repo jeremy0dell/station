@@ -143,7 +143,8 @@ const PreviousObserverStopReceiptSchema = ObserverStopReceiptSchema.omit({
  * ADAPTER
  *
  * Presents Observer operations through validated NDJSON requests and surfaces
- * bounded transport overload as a retryable connection failure.
+ * bounded transport overload as a retryable connection failure. Command completion uses one
+ * guarded server-side wait whose disconnect releases its Observer subscription.
  */
 export function createObserverClient(options: CreateObserverClientOptions): ObserverClient {
   const requestId = options.requestId ?? defaultRequestId;
@@ -820,94 +821,42 @@ function commandWaitEffect(
   requestId: () => string,
   commandId: CommandId,
 ): Effect.Effect<TerminalCommandRecord, unknown> {
-  let subscription: OpenSubscription | undefined;
-
-  return Effect.gen(function* () {
-    subscription = yield* openSubscriptionEffect(options, requestId(), {
-      type: ["command.succeeded", "command.failed"],
-      commandId,
-    });
-    // Subscribe before getCommand so fast command completions cannot be missed.
-    const existing = yield* commandTerminalRecordEffect(options, requestId, commandId);
-    if (existing !== undefined) {
-      return existing;
-    }
-    return yield* awaitCommandTerminalRecord(options, requestId, commandId, subscription);
-  }).pipe(
-    Effect.ensuring(
-      Effect.tryPromise({
-        try: async () => {
-          if (subscription !== undefined) {
-            await closeSubscription(subscription);
-          }
-        },
-        catch: () => undefined,
-      }).pipe(Effect.catchAll(() => Effect.succeed(undefined))),
-    ),
-  );
+  return Effect.tryPromise({
+    try: (signal) => requestCommandWait(options, requestId(), commandId, signal),
+    catch: (error) => error,
+  });
 }
 
-function openSubscriptionEffect(
+async function requestCommandWait(
   options: CreateObserverClientOptions,
   id: string,
-  filter: EventFilter,
-): Effect.Effect<OpenSubscription, unknown> {
-  return Effect.tryPromise({
-    try: (signal) => openSubscription(options, id, filter, signal),
-    catch: (error) => error,
-  });
-}
-
-function commandTerminalRecordEffect(
-  options: CreateObserverClientOptions,
-  requestId: () => string,
   commandId: CommandId,
-): Effect.Effect<TerminalCommandRecord | undefined, unknown> {
-  return Effect.tryPromise({
-    try: () => requestProtocolMethod(options, requestId(), "command.get", { commandId }),
-    catch: (error) => error,
-  }).pipe(Effect.map((record) => terminalCommandRecord(record ?? undefined)));
-}
-
-function awaitCommandTerminalRecord(
-  options: CreateObserverClientOptions,
-  requestId: () => string,
-  commandId: CommandId,
-  subscription: OpenSubscription,
-): Effect.Effect<TerminalCommandRecord, unknown> {
-  return Effect.gen(function* () {
-    const event = yield* readSubscriptionEventEffect(subscription);
-    if (event === undefined) {
-      const refreshed = yield* commandTerminalRecordEffect(options, requestId, commandId);
-      if (refreshed !== undefined) {
-        return refreshed;
-      }
-      return yield* Effect.fail(
-        protocolSafeError({
-          code: "PROTOCOL_COMMAND_EVENT_STREAM_CLOSED",
-          message: "Observer event stream closed before command completion.",
-        }),
+  signal: AbortSignal,
+): Promise<TerminalCommandRecord> {
+  return openRequestConnection(options, signal, async (connection) => {
+    const iterator = connection.messages()[Symbol.asyncIterator]();
+    const expectedObserver = resolveExpectedObserver(options);
+    if (expectedObserver !== undefined) {
+      await assertExpectedObserver(
+        connection,
+        iterator,
+        `${id}_health`,
+        expectedObserver,
+        false,
+        false,
       );
     }
-    if (
-      (event.type === "command.succeeded" || event.type === "command.failed") &&
-      event.commandId === commandId
-    ) {
-      const terminal = yield* commandTerminalRecordEffect(options, requestId, commandId);
-      if (terminal !== undefined) {
-        return terminal;
-      }
+    const record = await readResponseForRequest(connection, iterator, id, "command.wait", {
+      commandId,
+    });
+    const terminal = terminalCommandRecord(record);
+    if (terminal === undefined) {
+      throw protocolSafeError({
+        code: "PROTOCOL_RESPONSE_VALIDATION_FAILED",
+        message: "Observer command wait returned a non-terminal command record.",
+      });
     }
-    return yield* awaitCommandTerminalRecord(options, requestId, commandId, subscription);
-  });
-}
-
-function readSubscriptionEventEffect(
-  subscription: OpenSubscription,
-): Effect.Effect<StationEvent | undefined, unknown> {
-  return Effect.tryPromise({
-    try: (signal) => readSubscriptionEvent(subscription, signal),
-    catch: (error) => error,
+    return terminal;
   });
 }
 

@@ -24,8 +24,12 @@ describe("protocol command wait client", () => {
   it("returns an already terminal command record and closes the subscription", async () => {
     const { socketPath } = await createTempSocketPath();
     let returned = false;
+    let settledConnections = 0;
     const server = await startProtocolServer({
       socketPath,
+      onConnectionDiagnostics: () => {
+        settledConnections += 1;
+      },
       api: createFakeObserverApi({
         getCommand: async (commandId) => resultCommandRecord(commandId, "succeeded"),
         subscribe: () =>
@@ -47,6 +51,8 @@ describe("protocol command wait client", () => {
         },
       });
       await waitFor(() => returned);
+      await waitFor(() => settledConnections === 1);
+      expect(settledConnections).toBe(1);
     } finally {
       await server.close();
     }

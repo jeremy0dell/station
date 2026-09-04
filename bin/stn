@@ -14,7 +14,7 @@ done
 # Bun's global link enters through a symlinked package directory, so resolve the checkout itself.
 root=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd -P)
 tmux_popup=$root/integrations/terminal/tmux/bin/stn-popup
-entry=$root/apps/cli/dist/main.js
+entry=$root/apps/cli/dist/bootstrap.js
 
 # Keep popup toggle pre-Node, but leave tmux behavior in the tmux integration launcher.
 if [ -x "$tmux_popup" ] && STATION_FAST_POPUP_NO_FALLBACK=1 "$tmux_popup" "$@"; then
@@ -26,4 +26,41 @@ if [ ! -f "$entry" ]; then
   exit 1
 fi
 
+# Raw typed dispatch uses Bun to remove the Node source-startup floor. Other routes retain their
+# established Node runtime; bootstrap still validates the selected runtime before execution.
+command_name=""
+subcommand_name=""
+expect_config_value=false
+valid_config=true
+help_requested=false
+for arg in "$@"; do
+  if [ "$expect_config_value" = "true" ]; then
+    case "$arg" in
+      --*) valid_config=false ;;
+    esac
+    expect_config_value=false
+    continue
+  fi
+  if [ "$arg" = "--config" ]; then
+    expect_config_value=true
+  else
+    case "$arg" in
+      --help|-h|--man) help_requested=true ;;
+      *)
+        if [ -z "$command_name" ]; then
+          command_name=$arg
+        elif [ -z "$subcommand_name" ]; then
+          subcommand_name=$arg
+        fi
+        ;;
+    esac
+  fi
+done
+if [ "$expect_config_value" = "true" ]; then
+  valid_config=false
+fi
+
+if [ "$valid_config" = "true" ] && [ "$help_requested" = "false" ] && [ "$command_name" = "command" ] && [ "$subcommand_name" = "dispatch" ]; then
+  exec bun "$entry" "$@"
+fi
 exec node "$entry" "$@"

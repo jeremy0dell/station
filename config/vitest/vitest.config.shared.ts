@@ -22,6 +22,9 @@ export const stationAliases = {
   "@station/observer": fileURLToPath(new URL("../../apps/observer/src/index.ts", import.meta.url)),
   "@station/client": fileURLToPath(new URL("../../packages/client/src/index.ts", import.meta.url)),
   "@station/config": fileURLToPath(new URL("../../packages/config/src/index.ts", import.meta.url)),
+  "@station/contracts/build-identity": fileURLToPath(
+    new URL("../../packages/contracts/src/stationBuildIdentityEntry.ts", import.meta.url),
+  ),
   "@station/contracts": fileURLToPath(
     new URL("../../packages/contracts/src/index.ts", import.meta.url),
   ),
@@ -57,6 +60,9 @@ export const stationAliases = {
   ),
   "@station/runtime": fileURLToPath(
     new URL("../../packages/runtime/src/index.ts", import.meta.url),
+  ),
+  "@station/runtime/build-info": fileURLToPath(
+    new URL("../../packages/runtime/src/buildInfoEntry.ts", import.meta.url),
   ),
   "@station/scripted-harness": fileURLToPath(
     new URL("../../integrations/harness/scripted/src/index.ts", import.meta.url),

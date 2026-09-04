@@ -454,7 +454,7 @@ function matchFromLog(log: LogRecord, path: string, query: string | undefined): 
       : {
           id: commandId,
           ...(commandType === undefined ? {} : { type: commandType }),
-          status: "failed",
+          ...(isFailedCommandLog(log) ? { status: "failed" } : {}),
           ...(traceId === undefined ? {} : { traceId }),
           ...(spanId === undefined ? {} : { spanId }),
         };
