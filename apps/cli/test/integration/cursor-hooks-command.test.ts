@@ -51,6 +51,36 @@ describe("CLI Cursor hook commands", () => {
     );
   });
 
+  it("reconciles configured hooks through the generic hooks command", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-cursor-hooks-"));
+    const configPath = await writeConfig(root, true);
+    const launcher = join(root, "bin", "stn-ingress");
+    const options = {
+      env: { STATION_CURSOR_HOME: root },
+      providerHookIngressLauncher: launcher,
+      providerHookArtifactOwner: {
+        schemaVersion: 1 as const,
+        launcher,
+        runtimeKind: "compiled" as const,
+        version: "0.0.0-test",
+        buildIdentity: "a".repeat(64),
+      },
+    };
+
+    await expect(
+      runCli(["--config", configPath, "hooks", "reconcile", "cursor"], options),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: { provider: "cursor", status: "repaired", changed: true, verified: true },
+    });
+    await expect(
+      runCli(["--config", configPath, "hooks", "reconcile", "cursor"], options),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: { provider: "cursor", status: "healthy", changed: false, verified: true },
+    });
+  });
+
   it("uses the composed ingress launcher when --hook-bin is omitted", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cli-cursor-hooks-"));
     const configPath = await writeConfig(root, true);

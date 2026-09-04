@@ -131,6 +131,7 @@ Every artifact-backed harness is wired up the same way:
 ```sh
 stn hooks doctor <harness>     # is the hook installed and current?
 stn hooks install <harness>    # write or update the hook
+stn hooks reconcile <harness>  # repair owned hooks and verify the result
 stn hooks uninstall <harness>  # remove it
 ```
 

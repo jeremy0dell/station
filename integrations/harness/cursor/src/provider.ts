@@ -6,12 +6,16 @@ import type {
   HarnessProvider,
   ProviderDoctorCheck,
   ProviderDoctorContext,
+  ProviderHookHealth,
+  ProviderHookReconciliationContext,
+  ProviderHookReconciliationResult,
 } from "@station/contracts";
 import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
   harnessCommand,
   harnessHookDoctorOptions,
+  harnessHookReconciliationOptions,
   harnessHooksStatusFrom,
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
@@ -19,7 +23,7 @@ import {
 import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
 import { z } from "zod";
 import { cursorProviderErrorFromUnknown } from "./errors.js";
-import { doctorCursorHooks } from "./hooks.js";
+import { doctorCursorHooks, inspectCursorHookHealth, reconcileCursorHooks } from "./hooks.js";
 import { buildCursorLaunchPlan, type CursorLaunchOptions } from "./launch.js";
 
 export type CursorHarnessProviderOptions = CommonHarnessProviderOptions & {
@@ -82,6 +86,8 @@ const cursorSpec: TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions>
   unknownStatusReason: "Cursor run has no reliable Cursor hook status signal yet.",
   doctorChecks,
   hooksStatus,
+  hookHealth,
+  reconcileHooks,
 };
 
 function command(options: CursorHarnessProviderOptions): string {
@@ -196,10 +202,35 @@ async function hooksStatus(
   return harnessHooksStatusFrom("cursor", options.installHooks === true, hookResult);
 }
 
+async function hookHealth(
+  options: CursorHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<ProviderHookHealth> {
+  return inspectCursorHookHealth({
+    ...cursorHookDoctorOptions(options, context),
+    enabled: options.installHooks === true,
+  });
+}
+
+async function reconcileHooks(
+  options: CursorHarnessProviderOptions,
+  context?: ProviderHookReconciliationContext,
+): Promise<ProviderHookReconciliationResult> {
+  const hookOptions = harnessHookReconciliationOptions(options, context);
+  if (
+    context?.providerHookRuntime === undefined &&
+    hookOptions.stationConfigPath === undefined &&
+    options.configPath !== undefined
+  ) {
+    hookOptions.stationConfigPath = options.configPath;
+  }
+  return reconcileCursorHooks(hookOptions);
+}
+
 /**
  * ADAPTER
  *
- * Supplies Cursor launch, discovery, hook-installation status, diagnostics, and event normalization
+ * Supplies Cursor launch, discovery, hook reconciliation, diagnostics, and event normalization
  * through the harness port.
  */
 export function createCursorHarnessProvider(
