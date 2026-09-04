@@ -10,6 +10,7 @@ import type { TuiCommandDeps } from "./commands/tui.js";
 import type { UpdateCommandDeps } from "./commands/update.js";
 import type { CliEnv } from "./env.js";
 import type { ObserverProcessDeps } from "./observerProcess.js";
+import type { RepairExecutionDeps } from "./repair/execution.js";
 
 export type CliRunCorrelation = {
   commandId: CommandId;
@@ -31,6 +32,7 @@ export type CliRunOptions = {
   sessionDeps?: SessionCommandDeps;
   hostDeps?: HostCommandDeps;
   popupDeps?: PopupCommandDeps;
+  repairDeps?: RepairExecutionDeps;
   tuiDeps?: TuiCommandDeps;
   notifyDeps?: NotifyCommandDeps;
   observeDeps?: ObserveCommandDeps;

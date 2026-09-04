@@ -7,7 +7,10 @@ import type {
 import { STATION_SCHEMA_VERSION, UpdateReapJournalTargetSchema } from "@station/contracts";
 import type { ExactObserverOwnershipEvidence } from "@station/observer/internal";
 import { describe, expect, it } from "vitest";
-import { deriveUpdateReapAuthorization } from "../../src/update/reapPlan.js";
+import {
+  deriveExactTerminalReapAuthorizationEvidence,
+  deriveUpdateReapAuthorization,
+} from "../../src/update/reapPlan.js";
 
 const now = "2026-09-04T12:00:00.000Z";
 const target = { version: "1.2.3" };
@@ -250,6 +253,22 @@ const processGroup = {
 };
 
 describe("update reap authorization", () => {
+  it("shares one exact-target authorizer with targeted repair", () => {
+    const evidence = deriveExactTerminalReapAuthorizationEvidence({
+      preflight,
+      commitments: { observer, host },
+      hostProcess: { pid: 100, startToken: "host-start" },
+      processGroup,
+      terminalTargetId: "terminal-1",
+    });
+    expect(evidence.target.terminal.terminalTargetId).toBe("terminal-1");
+    expect(evidence.target.processGroup.leader.parentPid).toBe(100);
+    expect(evidence.target.recovery).toMatchObject({
+      kind: "selected",
+      handleId: "handle-1",
+    });
+  });
+
   it("binds the public plan, exact identities, process group, and selected handle", () => {
     const authorized = authorize();
     expect(authorized.digest).toMatch(/^[0-9a-f]{64}$/u);

@@ -47,7 +47,9 @@ import {
 } from "../persistedStateReconcile.js";
 import type { UpdateConvergenceExecutionDeps } from "./convergenceExecution.js";
 import {
+  deriveExactTerminalReapAuthorizationEvidence,
   deriveUpdateReapAuthorization,
+  type ExactTerminalReapAuthorizationEvidence,
   type UpdateReapAuthorization,
   UpdateReapAuthorizationEvidenceError,
 } from "./reapPlan.js";
@@ -91,7 +93,10 @@ export function createUpdateRecoveryPreflightPorts(
   const inspectObserverOwner =
     options.inspectObserverOwner ??
     (() =>
-      inspectExactObserverOwnerWithLocalAdapters({ config: options.config, timeoutMs: 5_000 }));
+      inspectExactObserverOwnerWithLocalAdapters({
+        config: options.config,
+        timeoutMs: 5_000,
+      }));
   const captureObserverOwner = async (): Promise<ExactObserverOwnershipEvidence> => {
     lastObserverEvidence = undefined;
     const evidence = await inspectObserverOwner();
@@ -146,7 +151,10 @@ export function createUpdateRecoveryPreflightPorts(
       return commitments;
     },
     readHookHealth: (providerId) => {
-      const hookOptions: Parameters<typeof readHarnessHookHealth>[0] = { providers, providerId };
+      const hookOptions: Parameters<typeof readHarnessHookHealth>[0] = {
+        providers,
+        providerId,
+      };
       if (options.configPath !== undefined) hookOptions.stationConfigPath = options.configPath;
       return readHarnessHookHealth(hookOptions);
     },
@@ -232,6 +240,64 @@ export async function deriveLocalUpdateReapAuthorization(input: {
     commitments,
     hostProcess: { pid: hostProcess.pid, startToken: hostProcess.startToken },
     processGroups: processGroups.filter((group) => group !== undefined),
+  });
+}
+
+/**
+ * COMPOSITION ROOT
+ *
+ * Captures one exact Host-owned terminal process group for update or repair authorization.
+ */
+export async function deriveLocalExactTerminalReapAuthorizationEvidence(input: {
+  preflight: import("@station/contracts").UpdateReapRecoveryPreflight;
+  terminalTargetId: string;
+  processGroups: UpdateReapProcessGroupPort;
+  signal?: AbortSignal;
+}): Promise<ExactTerminalReapAuthorizationEvidence> {
+  const commitments = updateRecoveryActionCommitments(input.preflight);
+  const host = commitments.host;
+  if (host === undefined) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "Exact Host evidence was unavailable for terminal reap.",
+    );
+  }
+  const terminal = host.terminals.find(
+    (candidate) => candidate.alive && candidate.terminalTargetId === input.terminalTargetId,
+  );
+  if (terminal === undefined) {
+    throw new UpdateReapAuthorizationEvidenceError("The selected terminal was not live.");
+  }
+  const holderPids = await readUnixSocketHolderPidsAsync(host.endpoint.socketPath, {
+    deadlineMs: Date.now() + 5_000,
+    ...(input.signal === undefined ? {} : { signal: input.signal }),
+  }).catch(() => {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The exact Host socket owner could not be inspected for terminal reap.",
+    );
+  });
+  if (holderPids.length !== 1) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The exact Host socket did not have one process owner.",
+    );
+  }
+  const hostProcess = createLocalProcessEvidence().read(holderPids[0] ?? 0);
+  if (hostProcess === undefined) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The Host process identity was unavailable for terminal reap.",
+    );
+  }
+  const processGroup = exactUpdateReapProcessGroup(await input.processGroups.read(terminal.pid));
+  if (processGroup === undefined) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The terminal process-group identity was unavailable for terminal reap.",
+    );
+  }
+  return deriveExactTerminalReapAuthorizationEvidence({
+    preflight: input.preflight,
+    commitments,
+    hostProcess: { pid: hostProcess.pid, startToken: hostProcess.startToken },
+    processGroup,
+    terminalTargetId: input.terminalTargetId,
   });
 }
 

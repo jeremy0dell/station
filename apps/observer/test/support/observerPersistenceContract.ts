@@ -2134,6 +2134,68 @@ export function observerPersistenceContract(
         });
       });
 
+      it("prunes one exact recovery handle against a coherent digest", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.seedSession({
+            sessionId: "ses_repair_prune",
+            projectId: "web",
+            worktreeId: "wt_repair_prune",
+            initialTitle: "Repair prune",
+            harness: "codex",
+            terminalProvider: "station",
+            createdAt: earlier,
+            lastSeenAt: now,
+          });
+          const selected = await persistence.upsertSessionRecoveryHandle({
+            id: "report_repair_prune_selected",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: "wt_repair_prune",
+            sessionId: "ses_repair_prune",
+            target: { kind: "native-session", id: "native_repair_prune_selected" },
+            observedAt: earlier,
+            lastSeenAt: now,
+          });
+          const unrelated = await persistence.upsertSessionRecoveryHandle({
+            id: "report_repair_prune_unrelated",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: "wt_repair_prune",
+            sessionId: "ses_repair_prune",
+            target: { kind: "native-session", id: "native_repair_prune_unrelated" },
+            observedAt: earlier,
+            lastSeenAt: later,
+          });
+          const snapshot = await persistence.readRecoveryRepairSnapshot();
+          const exact = {
+            recoveryHandleId: selected.id,
+            expected: {
+              projectId: "web",
+              worktreeId: "wt_repair_prune",
+              sessionId: "ses_repair_prune",
+              provider: "codex" as const,
+            },
+          };
+
+          await expectPersistenceFailure(
+            persistence.pruneSessionRecoveryHandle({
+              ...exact,
+              expectedRecoveryInventoryDigest: "f".repeat(64),
+            }),
+          );
+          const unchanged = await persistence.listSessionRecoveryHandles();
+          expect(unchanged).toHaveLength(2);
+          expect(unchanged).toEqual(expect.arrayContaining([selected, unrelated]));
+          await expect(
+            persistence.pruneSessionRecoveryHandle({
+              ...exact,
+              expectedRecoveryInventoryDigest: snapshot.recoveryInventoryDigest,
+            }),
+          ).resolves.toMatchObject({ deleted: true });
+          await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([unrelated]);
+        });
+      });
+
       it("ends open sessions without generic evidence reviving them and reopens explicitly", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           for (const sessionId of ["ses_lifecycle_a", "ses_lifecycle_b"]) {

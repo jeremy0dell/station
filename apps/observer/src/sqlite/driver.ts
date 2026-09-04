@@ -37,7 +37,10 @@ type NativeSqliteDatabase = {
   close(): void;
 };
 
-type NativeSqliteConstructor = new (path: string) => NativeSqliteDatabase;
+type NativeSqliteConstructor = new (
+  path: string,
+  options?: { readOnly?: boolean },
+) => NativeSqliteDatabase;
 
 const SqliteBusyErrorSchema = z.union([
   z.object({ code: z.literal("ERR_SQLITE_ERROR"), errcode: z.literal(5) }),
@@ -46,8 +49,10 @@ const SqliteBusyErrorSchema = z.union([
 
 const SqliteDatabase = DatabaseSync as unknown as NativeSqliteConstructor;
 
-export const openSqlDatabase = (path: string): SqlDatabase =>
-  adaptDatabase(new SqliteDatabase(path));
+export const openSqlDatabase = (path: string, options?: { readOnly?: boolean }): SqlDatabase =>
+  adaptDatabase(
+    options === undefined ? new SqliteDatabase(path) : new SqliteDatabase(path, options),
+  );
 
 export function isSqliteBusyError(error: unknown): boolean {
   return SqliteBusyErrorSchema.safeParse(error).success;

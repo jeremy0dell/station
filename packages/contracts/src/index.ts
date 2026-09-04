@@ -28,6 +28,7 @@ export * from "./recovery.js";
 export * from "./recoveryAssessment.js";
 export * from "./recoveryBreadcrumbs.js";
 export * from "./recoveryInventory.js";
+export * from "./repair.js";
 export * from "./sessionRecovery.js";
 export * from "./setupTypes.js";
 export {

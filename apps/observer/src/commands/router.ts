@@ -1,7 +1,13 @@
 import type { ProviderProjectConfig, StationCommand } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import { createFeatureFlagEvaluator, type FeatureFlagEvaluator } from "../features/evaluator.js";
-import type { EventJournal, SessionGroupStore, SessionStore } from "../persistence/index.js";
+import type {
+  EventJournal,
+  RecoveryRepairStore,
+  SessionGroupStore,
+  SessionStore,
+} from "../persistence/index.js";
+import type { RecoveryRepairAuthorizationPort } from "../persistence/recoveryBackup.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
@@ -31,6 +37,7 @@ import { createSessionCloseHandler } from "./session/close.js";
 import { createSessionCreateHandler } from "./session/create.js";
 import { createSessionForkHandler } from "./session/fork.js";
 import { createSessionImportRecoveryHandleHandler } from "./session/importRecoveryHandle.js";
+import { createPruneRecoveryHandleHandler } from "./session/pruneRecoveryHandle.js";
 import { createSessionRenameHandler } from "./session/rename.js";
 import { createSessionResumeAgentHandler } from "./session/resumeAgent.js";
 import type { SessionCommandIdFactory } from "./session/shared.js";
@@ -50,7 +57,7 @@ export type RegisterObserverCommandHandlersOptions = {
   providers: ProviderRegistry;
   projects: readonly ProviderProjectConfig[];
   getProjects?: (() => readonly ProviderProjectConfig[]) | undefined;
-  persistence: SessionStore & SessionGroupStore & EventJournal;
+  persistence: SessionStore & RecoveryRepairStore & SessionGroupStore & EventJournal;
   featureFlags?: FeatureFlagEvaluator | undefined;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
@@ -60,6 +67,7 @@ export type RegisterObserverCommandHandlersOptions = {
   projectConfigWriter: ProjectConfigWriter;
   worktreeMutations?: WorktreeMutationCoordinator | undefined;
   worktreeCreates?: WorktreeCreateCoordinator | undefined;
+  repairRecoveryAuthorization?: RecoveryRepairAuthorizationPort | undefined;
 };
 
 /**
@@ -71,7 +79,9 @@ export type RegisterObserverCommandHandlersOptions = {
  * Runtime-prebound config-aware launch preflight and ProjectConfigWriter are composed here. One
  * shared create policy bounds per-project provider pressure and retains cross-command branch
  * ownership through rollback; the existing mutation coordinator serializes lifecycle use cases
- * across command and native activation boundaries. Handlers receive no configuration or home paths.
+ * across command and native activation boundaries. Digest-guarded recovery resume and exact-handle
+ * prune share the persistence snapshot capability and receive only an injected private repair-proof
+ * verifier. Handlers receive no configuration or home paths.
  */
 export function registerObserverCommandHandlers(
   options: RegisterObserverCommandHandlersOptions,
@@ -103,7 +113,7 @@ export function registerObserverCommandHandlers(
       launchPreflight,
       core: options.core,
       eventBus: options.eventBus,
-      clock: options.clock,
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
       logger: options.logger,
       worktreeCreates,
     }),
@@ -163,6 +173,21 @@ export function registerObserverCommandHandlers(
       idFactory: options.idFactory,
       logger: options.logger,
       worktreeMutations,
+      ...(options.repairRecoveryAuthorization === undefined
+        ? {}
+        : { repairRecoveryAuthorization: options.repairRecoveryAuthorization }),
+    }),
+    "session.pruneRecoveryHandle": createPruneRecoveryHandleHandler({
+      getProjects,
+      providers: options.providers,
+      core: options.core,
+      persistence: options.persistence,
+      featureFlags,
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+      worktreeMutations,
+      ...(options.repairRecoveryAuthorization === undefined
+        ? {}
+        : { repairRecoveryAuthorization: options.repairRecoveryAuthorization }),
     }),
     "session.importRecoveryHandle": createSessionImportRecoveryHandleHandler({
       getProjects,

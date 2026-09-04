@@ -109,7 +109,9 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
         return CommandReceiptSchema.parse(receipt);
       }
       const commandId = idFactory.commandId();
-      const trace = createTraceContext({ operation: `command.${command.type}` });
+      const trace = createTraceContext({
+        operation: `command.${command.type}`,
+      });
       const controller = new AbortController();
       const acceptedEvent: StationEvent = {
         type: "command.accepted",
@@ -434,6 +436,7 @@ function commandScope(command: StationCommand): string {
     case "worktree.remove":
     case "session.startAgent":
     case "session.resumeAgent":
+    case "session.pruneRecoveryHandle":
     case "session.importRecoveryHandle":
       return `worktree:${command.payload.worktreeId}`;
     case "worktree.create":

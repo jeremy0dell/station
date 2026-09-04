@@ -11,6 +11,7 @@ const topLevelCliCommandNames = [
   "observer",
   "popup",
   "project",
+  "repair",
   "reconcile",
   "session",
   "setup",

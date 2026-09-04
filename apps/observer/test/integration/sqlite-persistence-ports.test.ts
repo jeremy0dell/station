@@ -897,7 +897,7 @@ describe("SQLite-only Observer persistence behavior", () => {
     }
   });
 
-  it("exposes healthy SQLite status in addition to the eight application ports", () => {
+  it("exposes healthy SQLite status in addition to the nine application ports", () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
     try {
       const persistence = createSqliteObserverPersistence({

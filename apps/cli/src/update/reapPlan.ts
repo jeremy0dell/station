@@ -29,6 +29,13 @@ export type UpdateReapAuthorization = Readonly<{
   targets: UpdateReapJournalTarget[];
 }>;
 
+export type ExactTerminalReapAuthorizationEvidence = Readonly<{
+  host: UpdateReapAuthorization["host"];
+  observer: unknown;
+  parkedTerminals: UpdateRecoveryPreflightActionCommitments["parkedTerminals"];
+  target: UpdateReapJournalTarget;
+}>;
+
 export class UpdateReapAuthorizationEvidenceError extends Error {
   override readonly name = "UpdateReapAuthorizationEvidenceError";
 }
@@ -62,12 +69,6 @@ export function deriveUpdateReapAuthorization(input: {
     );
   }
   const host = requireExactHost(input.preflight, input.commitments.host);
-  const observer = input.commitments.observer;
-  if (input.preflight.observer.status === "exact" && observer?.status !== "exact") {
-    throw new UpdateReapAuthorizationEvidenceError(
-      "Exact Observer commitments were unavailable for update reap.",
-    );
-  }
   const liveTerminals = host.terminals.filter((terminal) => terminal.alive);
   if (
     liveTerminals.length === 0 ||
@@ -80,72 +81,21 @@ export function deriveUpdateReapAuthorization(input: {
       "Update reap process-group evidence did not cover every live Host terminal.",
     );
   }
-  const recovery = exactRecoveryAssessment(observer);
-  const targets = liveTerminals
-    .map((terminal) => {
-      const processGroup = input.processGroups.find(
-        (candidate) => candidate.leader.pid === terminal.pid,
-      );
-      if (
-        processGroup === undefined ||
-        processGroup.leader.parentPid !== input.hostProcess.pid ||
-        processGroup.leader.pid !== processGroup.leader.pgid
-      ) {
-        throw new UpdateReapAuthorizationEvidenceError(
-          "A reap target was not the exact Host-owned child process-group leader.",
-        );
-      }
-      const disposition = input.preflight.terminalDispositions.find(
-        (candidate) =>
-          candidate.terminalTargetId === terminal.terminalTargetId &&
-          candidate.ptyId === terminal.ptyId &&
-          candidate.ptyInstanceId === terminal.ptyInstanceId &&
-          candidate.sessionId === terminal.sessionId,
-      );
-      if (disposition === undefined || disposition.reapRecovery === "unknown") {
-        throw new UpdateReapAuthorizationEvidenceError(
-          "A reap target did not have a complete recovery disposition.",
-        );
-      }
-      const selected =
-        disposition.reapRecovery === "recoverable"
-          ? selectedRecovery(recovery, terminal.sessionId)
-          : undefined;
-      const target: UpdateReapJournalTarget = {
-        terminal: {
-          kind: terminal.kind,
-          terminalTargetId: terminal.terminalTargetId,
-          ptyId: terminal.ptyId,
-          ptyInstanceId: terminal.ptyInstanceId,
-          projectId: terminal.projectId,
-          worktreeId: terminal.worktreeId,
-          sessionId: terminal.sessionId,
-          harnessProvider: terminal.harnessProvider,
-          pid: terminal.pid,
-        },
-        processGroup,
-        recovery:
-          selected === undefined
-            ? { kind: "non-resumable" }
-            : {
-                kind: "selected",
-                projectId: selected.projectId,
-                worktreeId: selected.worktreeId,
-                sessionId: selected.sessionId,
-                handleId: selected.handleId,
-              },
-      };
-      return target;
-    })
-    .sort(compareUpdateReapJournalTargets);
-  const privateHost = {
-    socketPath: host.endpoint.socketPath,
-    inode: host.endpoint.ino.toString(),
-    birthtimeNs: host.endpoint.birthtimeNs.toString(),
-    buildVersion: host.health.buildVersion,
-    buildIdentity: host.buildIdentity,
-    process: input.hostProcess,
-  };
+  const evidence = liveTerminals.map((terminal) =>
+    deriveExactTerminalReapAuthorizationEvidence({
+      preflight: input.preflight,
+      commitments: input.commitments,
+      hostProcess: input.hostProcess,
+      processGroup: requireProcessGroup(input.processGroups, terminal.pid),
+      terminalTargetId: terminal.terminalTargetId,
+    }),
+  );
+  const targets = evidence.map((entry) => entry.target).sort(compareUpdateReapJournalTargets);
+  const privateHost = evidence[0]?.host;
+  if (privateHost === undefined) {
+    throw new UpdateReapAuthorizationEvidenceError("Update reap did not select a live terminal.");
+  }
+  const observer = input.commitments.observer;
   const digest = createHash("sha256")
     .update(
       canonicalJson({
@@ -177,7 +127,113 @@ export function deriveUpdateReapAuthorization(input: {
   };
 }
 
-function observerAuthorizationIdentity(observer: ExactObserverOwnershipEvidence | undefined) {
+/**
+ * POLICY
+ *
+ * Authorizes one exact live Host-owned child process group. Update and repair both use this
+ * policy, while their orchestration decides whether one or every terminal must be selected.
+ */
+export function deriveExactTerminalReapAuthorizationEvidence(input: {
+  preflight: UpdateReapRecoveryPreflight;
+  commitments: UpdateRecoveryPreflightActionCommitments;
+  hostProcess: Pick<UpdateReapProcess, "pid" | "startToken">;
+  processGroup: UpdateReapProcessGroup;
+  terminalTargetId: string;
+}): ExactTerminalReapAuthorizationEvidence {
+  const host = requireExactHost(input.preflight, input.commitments.host);
+  const observer = input.commitments.observer;
+  if (input.preflight.observer.status === "exact" && observer?.status !== "exact") {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "Exact Observer commitments were unavailable for terminal reap.",
+    );
+  }
+  const terminal = host.terminals.find(
+    (candidate) => candidate.alive && candidate.terminalTargetId === input.terminalTargetId,
+  );
+  if (terminal === undefined) {
+    throw new UpdateReapAuthorizationEvidenceError("The selected terminal was not live.");
+  }
+  const processGroup = input.processGroup;
+  if (
+    processGroup.leader.pid !== terminal.pid ||
+    processGroup.leader.parentPid !== input.hostProcess.pid ||
+    processGroup.leader.pid !== processGroup.leader.pgid
+  ) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The selected terminal was not the exact Host-owned child process-group leader.",
+    );
+  }
+  const disposition = input.preflight.terminalDispositions.find(
+    (candidate) =>
+      candidate.terminalTargetId === terminal.terminalTargetId &&
+      candidate.ptyId === terminal.ptyId &&
+      candidate.ptyInstanceId === terminal.ptyInstanceId &&
+      candidate.sessionId === terminal.sessionId,
+  );
+  if (disposition === undefined || disposition.reapRecovery === "unknown") {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The selected terminal did not have a complete recovery disposition.",
+    );
+  }
+  const selected =
+    disposition.reapRecovery === "recoverable"
+      ? selectedRecovery(exactRecoveryAssessment(observer), terminal.sessionId)
+      : undefined;
+  const target: UpdateReapJournalTarget = {
+    terminal: {
+      kind: terminal.kind,
+      terminalTargetId: terminal.terminalTargetId,
+      ptyId: terminal.ptyId,
+      ptyInstanceId: terminal.ptyInstanceId,
+      projectId: terminal.projectId,
+      worktreeId: terminal.worktreeId,
+      sessionId: terminal.sessionId,
+      harnessProvider: terminal.harnessProvider,
+      pid: terminal.pid,
+    },
+    processGroup,
+    recovery:
+      selected === undefined
+        ? { kind: "non-resumable" }
+        : {
+            kind: "selected",
+            projectId: selected.projectId,
+            worktreeId: selected.worktreeId,
+            sessionId: selected.sessionId,
+            handleId: selected.handleId,
+          },
+  };
+  return {
+    host: {
+      socketPath: host.endpoint.socketPath,
+      inode: host.endpoint.ino.toString(),
+      birthtimeNs: host.endpoint.birthtimeNs.toString(),
+      buildVersion: host.health.buildVersion,
+      buildIdentity: host.buildIdentity,
+      process: input.hostProcess,
+    },
+    observer: observerAuthorizationIdentity(observer),
+    parkedTerminals: input.commitments.parkedTerminals,
+    target,
+  };
+}
+
+function requireProcessGroup(
+  groups: readonly UpdateReapProcessGroup[],
+  pid: number,
+): UpdateReapProcessGroup {
+  const group = groups.find((candidate) => candidate.leader.pid === pid);
+  if (group === undefined) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "A reap target did not have exact process-group evidence.",
+    );
+  }
+  return group;
+}
+
+function observerAuthorizationIdentity(
+  observer: ExactObserverOwnershipEvidence | undefined,
+): unknown {
   if (observer?.status !== "exact") return observer;
   return {
     status: observer.status,

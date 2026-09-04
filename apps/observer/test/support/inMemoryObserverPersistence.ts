@@ -73,6 +73,7 @@ import type {
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
 } from "../../src/persistence/types.js";
+import { recoveryInventoryDigest } from "../../src/sessionRecovery/inventoryDigest.js";
 import { resolveWorktreeDisplayTitle } from "../../src/worktreeDisplayTitle.js";
 
 type CreateInMemoryObserverPersistenceOptions = {
@@ -156,6 +157,60 @@ export function createInMemoryObserverPersistence(
           compareAsc(left.id, right.id),
         ),
       })),
+
+    readRecoveryRepairSnapshot: () =>
+      readSnapshot((snapshot) => {
+        const recoverySnapshot = {
+          sessions: [...snapshot.sessions.values()].sort((left, right) =>
+            compareAsc(left.id, right.id),
+          ),
+          recoveryHandles: [...snapshot.recoveryHandles.values()].sort((left, right) =>
+            compareAsc(left.id, right.id),
+          ),
+        };
+        return {
+          snapshot: recoverySnapshot,
+          recoveryInventoryDigest: recoveryInventoryDigest(recoverySnapshot),
+        };
+      }),
+
+    pruneSessionRecoveryHandle: (input) =>
+      transaction((draft) => {
+        const snapshot = {
+          sessions: [...draft.sessions.values()].sort((left, right) =>
+            compareAsc(left.id, right.id),
+          ),
+          recoveryHandles: [...draft.recoveryHandles.values()].sort((left, right) =>
+            compareAsc(left.id, right.id),
+          ),
+        };
+        if (recoveryInventoryDigest(snapshot) !== input.expectedRecoveryInventoryDigest) {
+          throw new Error("Recovery inventory changed before handle pruning.");
+        }
+        const selected = draft.recoveryHandles.get(input.recoveryHandleId);
+        if (
+          selected === undefined ||
+          selected.projectId !== input.expected.projectId ||
+          selected.worktreeId !== input.expected.worktreeId ||
+          selected.sessionId !== input.expected.sessionId ||
+          selected.provider !== input.expected.provider
+        ) {
+          throw new Error("Recovery handle identity changed before pruning.");
+        }
+        draft.recoveryHandles.delete(selected.id);
+        const after = {
+          sessions: [...draft.sessions.values()].sort((left, right) =>
+            compareAsc(left.id, right.id),
+          ),
+          recoveryHandles: [...draft.recoveryHandles.values()].sort((left, right) =>
+            compareAsc(left.id, right.id),
+          ),
+        };
+        return {
+          deleted: true,
+          recoveryInventoryDigest: recoveryInventoryDigest(after),
+        };
+      }),
 
     getSession: (sessionId) => readSnapshot((snapshot) => snapshot.sessions.get(sessionId)),
 
@@ -413,7 +468,9 @@ export function createInMemoryObserverPersistence(
             deletedHandles += 1;
           }
         }
-        return { changed: executionDeleted || readinessDeleted || deletedHandles > 0 };
+        return {
+          changed: executionDeleted || readinessDeleted || deletedHandles > 0,
+        };
       }),
 
     repairSessionHarnessDerivedState: (input) =>
@@ -809,7 +866,10 @@ function emptyState(): InMemoryObserverPersistenceState {
 
 function applySessionGroupMutation<T>(
   state: InMemoryObserverPersistenceState,
-  mutation: { state: sessionGroupStore.SessionGroupPersistenceState; result: T },
+  mutation: {
+    state: sessionGroupStore.SessionGroupPersistenceState;
+    result: T;
+  },
 ): T {
   state.sessionGroups = mutation.state;
   return mutation.result;

@@ -40,6 +40,18 @@ export const ObserverRecoveryInventoryHandleSchema = z
   .strict();
 export type ObserverRecoveryInventoryHandle = z.infer<typeof ObserverRecoveryInventoryHandleSchema>;
 
+/** Keeps public repair planning and private Observer resolution on one deterministic ordering. */
+export function compareSessionRecoveryHandleRecency(
+  left: Pick<ObserverRecoveryInventoryHandle, "id" | "observedAt" | "lastSeenAt">,
+  right: Pick<ObserverRecoveryInventoryHandle, "id" | "observedAt" | "lastSeenAt">,
+): number {
+  return (
+    Date.parse(right.lastSeenAt) - Date.parse(left.lastSeenAt) ||
+    Date.parse(right.observedAt) - Date.parse(left.observedAt) ||
+    compareCodeUnitStrings(left.id, right.id)
+  );
+}
+
 export const ObserverRecoveryInventorySchema = z
   .object({
     schemaVersion: z.literal(1),
