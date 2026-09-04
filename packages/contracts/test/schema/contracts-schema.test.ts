@@ -1525,6 +1525,33 @@ describe("contract schemas", () => {
     expectParses(
       StationCommandSchema,
       {
+        type: "session.resumeAgent",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          recoveryHandleId: "recovery_handle_1",
+          expected: { sessionId: "ses_web_feature", provider: "codex" },
+        },
+      },
+      "identity-bound recovery handle resume",
+    );
+    expectFails(
+      StationCommandSchema,
+      {
+        type: "session.resumeAgent",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          recoveryHandleId: "recovery_handle_1",
+          expected: { sessionId: "ses_web_feature" },
+        },
+      },
+      "recovery handle resume with incomplete expected identity",
+    );
+
+    expectParses(
+      StationCommandSchema,
+      {
         type: "session.acknowledgeTurn",
         payload: {
           sessionId: "ses_web_feature",

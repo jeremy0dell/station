@@ -315,5 +315,23 @@ describe("resolveSessionRecovery", () => {
       handle: { sessionId: "ses_feature" },
       resume: { previousSessionId: "ses_feature" },
     });
+    await expect(
+      resolveRecovery({
+        handles: [selected],
+        recoveryHandleId: selected.id,
+        localSession: "none",
+        expected: { sessionId: "ses_feature", provider: "fake-harness" },
+      }),
+    ).resolves.toMatchObject({
+      handle: { sessionId: "ses_feature", provider: "fake-harness" },
+    });
+    await expect(
+      resolveRecovery({
+        handles: [selected],
+        recoveryHandleId: selected.id,
+        localSession: "none",
+        expected: { sessionId: "ses_other", provider: "fake-harness" },
+      }),
+    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_MISMATCH" });
   });
 });

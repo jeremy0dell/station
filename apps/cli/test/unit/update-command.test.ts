@@ -5,6 +5,7 @@ import {
   type UpdateArtifact,
   UpdateConvergencePlanningInputSchema,
   type UpdateFinalInspection,
+  type UpdateReapJournal,
   type UpdateReapRecoveryPreflight,
   UpdateReapRecoveryPreflightSchema,
   type UpdateReapTerminalEvidence,
@@ -14,11 +15,14 @@ import type { ProviderRegistry } from "@station/observer/internal";
 import { type StationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState } from "../../../../tests/support/temp-projects";
+import { parseUpdateRequest } from "../../src/commands/update/args.js";
 import { runUpdateCommand } from "../../src/commands/update.js";
 import type { ExactObserverBuildStatus } from "../../src/observerProcess/types.js";
 import { resolveObserverPaths } from "../../src/paths.js";
 import { selectUpdateChannel, type UpdateChannelProbe } from "../../src/update/channelDetection.js";
 import { deriveUpdateConvergencePlan } from "../../src/update/convergencePlan.js";
+import type { UpdateReapJournalPort } from "../../src/update/reapJournal.js";
+import { UpdateReapAuthorizationEvidenceError } from "../../src/update/reapPlan.js";
 import { updateRecoveryPreflightCommitments } from "../../src/update/recoveryPreflight.js";
 import type {
   UpdateApplyReportBase,
@@ -39,19 +43,15 @@ const targetBuildInfo: StationBuildInfo = {
 const providers = {} as ProviderRegistry;
 
 describe("stn update command", () => {
-  it("rejects non-dry-run --reap before update detection or mutation", async () => {
-    const state = await createTempState();
-    const detectAndPlan = vi.fn();
-
-    await expect(
-      runUpdateCommand(["--reap"], commandOptions(state), {
-        probes: [{ channel: "installer-binary", detectAndPlan }],
-      }),
-    ).rejects.toThrow("Use --dry-run --reap");
-    expect(detectAndPlan).not.toHaveBeenCalled();
+  it("parses non-dry-run --reap as explicit apply authorization", () => {
+    expect(parseUpdateRequest(["--reap", "--json"])).toMatchObject({
+      mode: "apply",
+      reap: true,
+      output: "json",
+    });
   });
 
-  it("publishes a v5 preview without applying or crossing runtime boundaries", async () => {
+  it("publishes a v6 preview without applying or crossing runtime boundaries", async () => {
     const state = await createTempState();
     const fixture = probeFixture("installer-binary", { status: "current" });
     const preflight = vi.fn(async ({ installed, target }: PreflightInput) =>
@@ -68,7 +68,7 @@ describe("stn update command", () => {
     expect(result).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 5,
+        schemaVersion: 6,
         kind: "preview",
         plan: { outcome: "converged" },
       },
@@ -76,6 +76,239 @@ describe("stn update command", () => {
     expect(preflight).toHaveBeenCalledOnce();
     expect(fixture.apply).not.toHaveBeenCalled();
     expect(convergeObserver).not.toHaveBeenCalled();
+  });
+
+  it("reaps a current-artifact busy Host and completes the private journal", async () => {
+    const state = await createTempState();
+    const fixture = probeFixture("installer-binary", { status: "current" });
+    const initial = preflightEvidence({
+      installed: { version: "1.0.0" },
+      target: { version: "1.0.0" },
+      observer: matchingObserver(),
+      host: oldBusyHost("non-releasable"),
+      terminalDispositions: [
+        {
+          terminalTargetId: "target-1",
+          ptyId: "pty-1",
+          ptyInstanceId: "instance-1",
+          sessionId: "session-1",
+          handoff: "non-preservable",
+          reapRecovery: "non-resumable",
+          reasons: ["retained_session_missing"],
+        },
+      ],
+    });
+    const emptyIncumbent = preflightEvidence({
+      installed: { version: "1.0.0" },
+      target: { version: "1.0.0" },
+      observer: matchingObserver(),
+      host: { ...oldBusyHost("non-releasable"), terminals: [] },
+    });
+    Object.defineProperty(emptyIncumbent, updateRecoveryPreflightCommitments, {
+      value: {
+        host: {
+          endpoint: { socketPath: "/state/host.sock", ino: 1n, birthtimeNs: 2n },
+          health: { ok: true, protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "0.9.0" },
+          buildIdentity: "b".repeat(64),
+          terminals: [],
+        },
+      },
+      enumerable: false,
+    });
+    const final = preflightEvidence({
+      installed: { version: "1.0.0" },
+      target: { version: "1.0.0" },
+      observer: matchingObserver(),
+      host: matchingHost(),
+    });
+    const recoveryPreflight = vi
+      .fn()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(emptyIncumbent)
+      .mockResolvedValueOnce(emptyIncumbent)
+      .mockResolvedValueOnce(final);
+    const journal = memoryReapJournal();
+    let terminalAlive = true;
+
+    const result = await runUpdateCommand(["--reap", "--json"], commandOptions(state), {
+      probes: [fixture.probe],
+      buildInfo: () => buildInfo,
+      providers,
+      recoveryPreflight,
+      reapJournal: journal,
+      reapProcessGroups: {
+        read: async () =>
+          terminalAlive
+            ? {
+                leader: { pid: 200, parentPid: 100, pgid: 200, startToken: "terminal-start" },
+                members: [{ pid: 200, parentPid: 100, pgid: 200, startToken: "terminal-start" }],
+              }
+            : { members: [] },
+        signal: vi.fn(),
+        wait: async () => {
+          terminalAlive = false;
+        },
+      },
+      reapSessionResume: { inspect: async () => "pending", resume: vi.fn() },
+      deriveReapAuthorization: async () => currentArtifactReapAuthorization(),
+      convergeObserver: vi.fn(async () => runningObserver(state.config)),
+      convergeHost: vi.fn(async () => undefined),
+      reconcilePersisted: vi.fn(async () => undefined),
+    });
+
+    expect(result).toMatchObject({
+      code: 0,
+      output: {
+        schemaVersion: 6,
+        status: "current",
+        reapRecovery: {
+          status: "completed",
+          unresolved: false,
+          terminals: [
+            {
+              terminationOutcome: "terminated",
+              resumeDisposition: "non-resumable",
+            },
+          ],
+        },
+      },
+    });
+    expect(journal.stored?.phase).toBe("completed");
+    expect(recoveryPreflight).toHaveBeenCalledTimes(5);
+  });
+
+  it.each([
+    "changed",
+    "unavailable",
+    "initial-unavailable",
+  ] as const)("reports %s locked reap evidence as an unstarted refusal", async (repeatedEvidence) => {
+    const state = await createTempState();
+    const fixture = probeFixture("installer-binary", { status: "current" });
+    const initial = preflightEvidence({
+      installed: { version: "1.0.0" },
+      target: { version: "1.0.0" },
+      observer: matchingObserver(),
+      host: oldBusyHost("non-releasable"),
+      terminalDispositions: [
+        {
+          terminalTargetId: "target-1",
+          ptyId: "pty-1",
+          ptyInstanceId: "instance-1",
+          sessionId: "session-1",
+          handoff: "non-preservable",
+          reapRecovery: "non-resumable",
+          reasons: ["retained_session_missing"],
+        },
+      ],
+    });
+    const signal = vi.fn();
+    let authorizationCount = 0;
+
+    const result = await runUpdateCommand(["--reap", "--json"], commandOptions(state), {
+      probes: [fixture.probe],
+      buildInfo: () => buildInfo,
+      recoveryPreflight: vi.fn().mockResolvedValue(initial),
+      reapJournal: memoryReapJournal(),
+      reapProcessGroups: {
+        read: async () => ({ members: [] }),
+        signal,
+        wait: async () => undefined,
+      },
+      reapSessionResume: { inspect: async () => "pending", resume: vi.fn() },
+      deriveReapAuthorization: async () => {
+        if (repeatedEvidence === "initial-unavailable") {
+          throw new UpdateReapAuthorizationEvidenceError(
+            "The exact Host socket owner could not be inspected for update reap.",
+          );
+        }
+        if (authorizationCount++ === 0) {
+          return { ...currentArtifactReapAuthorization(), digest: "a".repeat(64) };
+        }
+        if (repeatedEvidence === "unavailable") throw new Error("ps failed");
+        return { ...currentArtifactReapAuthorization(), digest: "b".repeat(64) };
+      },
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        schemaVersion: 6,
+        status: "failed",
+        error: { code: "UPDATE_REAP_AUTHORIZATION_REFUSED" },
+        steps: [
+          { id: "detect", status: "completed" },
+          { id: "plan", status: "completed" },
+          { id: "recovery-preparation", status: "failed" },
+          { id: "terminal-reap", status: "skipped" },
+          { id: "session-resume", status: "skipped" },
+        ],
+        reapRecovery: {
+          status: "refused",
+          unresolved: true,
+          terminals: [{ terminationOutcome: "unresolved", escalationUsed: false }],
+        },
+      },
+    });
+    expect(signal).not.toHaveBeenCalled();
+  });
+
+  it("reports a pre-reap continuation whose current plan no longer authorizes reaping", async () => {
+    const state = await createTempState();
+    const fixture = probeFixture("installer-binary", { status: "current" });
+    const current = preflightEvidence({
+      installed: { version: "1.0.0" },
+      target: { version: "1.0.0" },
+      observer: matchingObserver(),
+      host: matchingHost(),
+    });
+    const authorization = currentArtifactReapAuthorization();
+    const journal = memoryReapJournal();
+    journal.stored = {
+      schemaVersion: 1,
+      id: "00000000-0000-4000-8000-000000000001",
+      authorizationDigest: authorization.digest,
+      phase: "recovery-prepared",
+      channel: authorization.channel,
+      selectedArtifact: authorization.selectedArtifact,
+      installedScopeDigest: authorization.installedScopeDigest,
+      host: authorization.host,
+      targets: authorization.targets,
+      createdAt: "2026-09-04T12:00:00.000Z",
+      updatedAt: "2026-09-04T12:00:00.000Z",
+    };
+    const signal = vi.fn();
+    const deriveReapAuthorization = vi.fn(async () => authorization);
+
+    const result = await runUpdateCommand(["--reap", "--json"], commandOptions(state), {
+      probes: [fixture.probe],
+      buildInfo: () => buildInfo,
+      recoveryPreflight: vi.fn().mockResolvedValue(current),
+      reapJournal: journal,
+      reapProcessGroups: {
+        read: async () => ({ members: [] }),
+        signal,
+        wait: async () => undefined,
+      },
+      reapSessionResume: { inspect: async () => "pending", resume: vi.fn() },
+      deriveReapAuthorization,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_REAP_AUTHORIZATION_REFUSED" },
+        reapRecovery: { status: "refused", unresolved: true },
+        steps: expect.arrayContaining([
+          { id: "recovery-preparation", status: "failed", detail: expect.any(String) },
+          { id: "terminal-reap", status: "skipped", detail: expect.any(String) },
+          { id: "session-resume", status: "skipped", detail: expect.any(String) },
+        ]),
+      },
+    });
+    expect(deriveReapAuthorization).not.toHaveBeenCalled();
+    expect(signal).not.toHaveBeenCalled();
   });
 
   it("executes same-artifact convergence in hook, Observer, Host, and persisted-state order", async () => {
@@ -1121,6 +1354,67 @@ function parkedTerminalEvidence(suffix = "parked"): UpdateReapTerminalEvidence {
     alive: true,
     handoffSupport: "bridge-releasable",
   };
+}
+
+function currentArtifactReapAuthorization() {
+  return {
+    digest: "f".repeat(64),
+    channel: "installer-binary" as const,
+    selectedArtifact: { version: "1.0.0" },
+    installedScopeDigest: "b".repeat(64),
+    host: {
+      socketPath: "/state/host.sock",
+      inode: "1",
+      birthtimeNs: "2",
+      buildVersion: "0.9.0",
+      buildIdentity: "b".repeat(64),
+      process: { pid: 100, startToken: "host-start" },
+    },
+    targets: [
+      {
+        terminal: {
+          kind: "agent" as const,
+          terminalTargetId: "target-1",
+          ptyId: "pty-1",
+          ptyInstanceId: "instance-1",
+          projectId: "project-1",
+          worktreeId: "worktree-1",
+          sessionId: "session-1",
+          harnessProvider: "codex",
+          pid: 200,
+        },
+        processGroup: {
+          leader: { pid: 200, parentPid: 100, pgid: 200, startToken: "terminal-start" },
+          members: [{ pid: 200, parentPid: 100, pgid: 200, startToken: "terminal-start" }],
+        },
+        recovery: { kind: "non-resumable" as const },
+      },
+    ],
+  };
+}
+
+function memoryReapJournal(): UpdateReapJournalPort & { stored?: UpdateReapJournal } {
+  const port: UpdateReapJournalPort & { stored?: UpdateReapJournal } = {
+    findIncomplete: async () => (port.stored?.phase === "completed" ? undefined : port.stored),
+    read: async () => {
+      if (port.stored === undefined) throw new Error("missing journal");
+      return port.stored;
+    },
+    write: async (journal) => {
+      port.stored = structuredClone(journal);
+    },
+    withLock: async (run) =>
+      run({
+        prepareTransfer: async () => "00000000-0000-4000-8000-000000000099",
+        release: async () => undefined,
+      }),
+    takeOverLock: async (_transferToken, run) =>
+      run({
+        prepareTransfer: async () => "00000000-0000-4000-8000-000000000098",
+        release: async () => undefined,
+      }),
+  };
+  return port;
 }
 
 function runningObserver(config: StationConfig): ExactObserverBuildStatus {

@@ -206,13 +206,23 @@ directory and inspect the complete evidence bundle rather than RSS alone.
 ## Update convergence
 
 `stn update --dry-run --json` is the read-only starting point. It reports the
-v5 aggregate and plan, including exact Observer/Host evidence and parked-bridge
+v6 aggregate and plan, including exact Observer/Host evidence and parked-bridge
 viability. Same-artifact apply runs hook, exact Observer, Host, parked-bridge,
 persisted-state, and final-inspection capabilities in process. Artifact-changing
 apply installs once and crosses once into the target launcher through a bounded
 strict successor request; the target performs runtime convergence in process.
 Unknown ownership and busy non-preservable terminals fail closed as
-`reap-required`; `--no-handoff` is `intentionally-incomplete`. `current` and
+`reap-required`. `stn update --reap` repeats the inventory under a dedicated
+lock, sends `SIGTERM` only to exact Host-owned process groups, and permits
+`SIGKILL` only for unchanged members of the authorized group. It verifies that
+the incumbent Host has zero PTYs, converges the runtime, and verifies each exact
+resumed Station session.
+Its public report exposes only aliased terminal and session outcomes. Private
+mode-0600 journals under the configured state directory record restart progress;
+an artifact-changing successor takes ownership of the same lock without exposing
+the transfer token. The reported recovery command continues the same journal
+after signaling starts.
+`--no-handoff` is `intentionally-incomplete`. `current` and
 `updated` require a completed final aggregate whose plan is `converged`.
 
 ## Detailed references

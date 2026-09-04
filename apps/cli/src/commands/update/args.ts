@@ -79,11 +79,6 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
     }
     throw new Error(updateUsage);
   }
-  if (reap && mode !== "preview") {
-    throw new Error(
-      "stn update --reap is not an execution mode yet. Use --dry-run --reap to inspect non-resumable consequences without mutation.",
-    );
-  }
   return {
     ...(channel === undefined ? {} : { channel }),
     mode,

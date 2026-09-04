@@ -520,6 +520,7 @@ describe("hosted CI policy", () => {
       "current-idle-host",
       "current-busy-source-bridge-host",
       "current-busy-non-bridge-host",
+      "current-busy-non-bridge-host-reap",
     ]) {
       expect(updateSmoke).toContain(`name: "${scenario}"`);
     }
@@ -531,10 +532,12 @@ describe("hosted CI policy", () => {
       ["current-idle-host", "ci"],
       ["current-busy-source-bridge-host", "cb"],
       ["current-busy-non-bridge-host", "cx"],
+      ["current-busy-non-bridge-host-reap", "cr"],
     ]) {
       expect(updateSmoke).toContain(`name: "${scenario}",\n      socketKey: "${socketKey}"`);
     }
     expect(updateSmoke).toContain('hostState: "busy-source-bridge"');
+    expect(updateSmoke).toContain("reap: true");
     expect(updateSmoke).not.toContain('hostState: "busy-compiled-bridge"');
     expect(updateSmoke).toContain(
       '"--scenarios release requires --busy-host-outcome preserved-refusal."',

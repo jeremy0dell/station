@@ -21,7 +21,7 @@ builds the four native targets, creates a six-asset draft, exercises the stamped
 draft installer, binds the exact numeric asset IDs and shared target build
 identity, and records an immutable `accepted-release-candidate-*` artifact. The
 macOS candidate lane selects the newest complete immutable predecessor and runs
-seven staged cases. The predecessor artifact runs external and tmux busy
+eight staged cases. The predecessor artifact runs external and tmux busy
 compiled-Host refusals plus one tmux no-Host update. The refusal cases preserve
 the old Host, PTY, and output, while the no-Host case completes the version
 change. Four more cases start the compiled predecessor runtime, install the
@@ -37,12 +37,15 @@ proves bridge handoff across the exact predecessor source revision, while the
 other cases retain compiled-artifact packaging proof. The first three converge
 the candidate runtime; the busy compiled Bun case returns
 `reap-required` without signaling or changing the installed candidate or old
-runtime.
+runtime. An eighth isolated case starts another disposable busy compiled Host,
+runs the current candidate with `--reap`, and verifies that the exact terminal
+exits, the replacement Host is empty, and the v6 result records the reaping and
+non-resumable session disposition without raw process identity.
 
-Every v5 preview and result uses correlated `public-*` aliases instead of local
+Every v6 preview and result uses correlated `public-*` aliases instead of local
 project, worktree, session, terminal-target, PTY, and PTY-instance identifiers.
 Successful results include a completed final inspection whose newly derived
-plan is `converged`. `bun run test:ci:binary` runs the same seven cases against
+plan is `converged`. `bun run test:ci:binary` runs the same eight cases against
 deterministic same-source binaries; its source bridge uses the current checkout
 with an explicit test identity override. Only the tagged staged lane proves the
 immutable predecessor-to-candidate release boundary. Post-promotion public update

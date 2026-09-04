@@ -47,5 +47,6 @@ export * from "./uiLifecycle.js";
 export * from "./update.js";
 export * from "./updateArtifact.js";
 export * from "./updateConvergencePlan.js";
+export * from "./updateReapExecution.js";
 export * from "./updateRecoveryPreflight.js";
 export * from "./updateReport.js";

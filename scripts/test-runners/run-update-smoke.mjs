@@ -313,6 +313,14 @@ async function runUpdateSmoke(options) {
       artifactState: "current",
       hostState: "busy-compiled-non-bridge",
     },
+    {
+      name: "current-busy-non-bridge-host-reap",
+      socketKey: "cr",
+      invocation: "external",
+      artifactState: "current",
+      hostState: "busy-compiled-non-bridge",
+      reap: true,
+    },
   ];
   const scenarios =
     options.scenarios === "no-host"
@@ -569,13 +577,15 @@ async function runScenario(input) {
         spawnedPty = await incumbentHostClient.spawn({
           ...ptyIdentity,
           command: "/bin/sh",
-          args: [
-            "-c",
-            'printf "UPDATE_SMOKE_PRE\\n"; while [ ! -f "$1" ]; do sleep 0.1; done; printf "UPDATE_SMOKE_POST\\n"; while [ ! -f "$2" ]; do sleep 0.1; done',
-            "update-smoke-child",
-            postSignal,
-            releaseSignal,
-          ],
+          args: input.reap
+            ? ["-c", 'printf "UPDATE_SMOKE_PRE\\n"; read _']
+            : [
+                "-c",
+                'printf "UPDATE_SMOKE_PRE\\n"; while [ ! -f "$1" ]; do sleep 0.1; done; printf "UPDATE_SMOKE_POST\\n"; while [ ! -f "$2" ]; do sleep 0.1; done',
+                "update-smoke-child",
+                postSignal,
+                releaseSignal,
+              ],
           cwd: scenarioRoot,
           cols: 80,
           rows: 24,
@@ -643,15 +653,19 @@ async function runScenario(input) {
     const beforeDryRun = await captureDryRunState(dryRunStateInput);
     const dryRunResult =
       input.invocation === "external"
-        ? await run(installedBinary, ["update", "--dry-run", "--json"], {
-            env,
-            timeoutMs: childTimeoutMs,
-            allowedExitCodes: [0, 1],
-          })
+        ? await run(
+            installedBinary,
+            ["update", "--dry-run", ...(input.reap ? ["--reap"] : []), "--json"],
+            {
+              env,
+              timeoutMs: childTimeoutMs,
+              allowedExitCodes: [0, 1],
+            },
+          )
         : await runInTmuxPane(
             tmuxServer,
             "dry-run",
-            [installedBinary, "update", "--dry-run", "--json"],
+            [installedBinary, "update", "--dry-run", ...(input.reap ? ["--reap"] : []), "--json"],
             scenarioRoot,
           );
     const dryRunJson = parseJson(dryRunResult.stdout, `${input.name} compiled dry-run report`);
@@ -699,7 +713,7 @@ async function runScenario(input) {
     const expectedUpdateCode = preservedRefusal ? 1 : 0;
     const updateResult =
       input.invocation === "external"
-        ? await run(installedBinary, ["update", "--json"], {
+        ? await run(installedBinary, ["update", ...(input.reap ? ["--reap"] : []), "--json"], {
             env,
             timeoutMs: childTimeoutMs,
             allowedExitCodes: [expectedUpdateCode],
@@ -707,7 +721,7 @@ async function runScenario(input) {
         : await runInTmuxPane(
             tmuxServer,
             "update",
-            [installedBinary, "update", "--json"],
+            [installedBinary, "update", ...(input.reap ? ["--reap"] : []), "--json"],
             scenarioRoot,
           );
     assertEqual(
@@ -820,7 +834,14 @@ async function runScenario(input) {
       const hostHealth = await targetHostClient.health();
       assertEqual(hostHealth.buildVersion, input.target.version, `${input.name} target Host build`);
       const targetInventory = await targetHostClient.list();
-      if (scenarioHasBusyHost(input)) {
+      if (input.reap) {
+        assertDeepEqual(targetInventory, [], `${input.name} reaped target Host inventory`);
+        assertEqual(
+          await waitForExactProcessExit(processIdentities.get("pty-payload"), 10_000),
+          true,
+          `${input.name} reaped PTY payload exit`,
+        );
+      } else if (scenarioHasBusyHost(input)) {
         const live = targetInventory.find((entry) => entry.ptyId === spawnedPty.ptyId);
         if (live === undefined) throw new Error(`${input.name} target Host lost the live PTY.`);
         assertEqual(live.ptyId, spawnedPty.ptyId, `${input.name} PTY ID`);
@@ -1010,6 +1031,9 @@ async function runScenario(input) {
         timeoutMs: 2000,
         expectedBuildVersion: health.buildVersion,
       });
+      if (spawnedPty !== undefined) {
+        await client.close(spawnedPty.ptyId).catch(() => undefined);
+      }
       await waitForHostIdle(client, 10_000);
       await client.stopIfIdle(health.buildVersion);
       client.dispose();
@@ -1882,7 +1906,7 @@ function assertUpdateReport(report, reportJson, input, installedBinary, configPa
     assertPredecessorV4UpdateReport(report, input, installedBinary, configPath);
     return;
   }
-  assertEqual(report.schemaVersion, 5, `${input.name} update schema`);
+  assertEqual(report.schemaVersion, 6, `${input.name} update schema`);
   assertEqual(report.kind, "result", `${input.name} update result kind`);
   assertEqual(report.channel, "installer-binary", `${input.name} update channel`);
   const refusal = updateRequiresPreservation(input);
@@ -1892,7 +1916,7 @@ function assertUpdateReport(report, reportJson, input, installedBinary, configPa
       ? "current"
       : "updated";
   assertEqual(report.status, expectedStatus, `${input.name} update status`);
-  assertV5ReportEvidence(report, reportJson, input, evidence);
+  assertCurrentReportEvidence(report, reportJson, input, evidence);
   assertDeepEqual(report.warnings, [], `${input.name} update warnings`);
   const expectedRecovery = refusal
     ? [[installedBinary, "--config", configPath, "update", "--handoff=processes"]]
@@ -1903,6 +1927,18 @@ function assertUpdateReport(report, reportJson, input, installedBinary, configPa
     `${input.name} recovery commands (${JSON.stringify({ error: report.error, steps: report.steps })})`,
   );
   assertEqual(report.error?.code, undefined, `${input.name} update error`);
+  if (input.reap) {
+    assertEqual(report.reapRecovery?.status, "completed", `${input.name} reap recovery status`);
+    assertEqual(report.reapRecovery?.unresolved, false, `${input.name} reap unresolved state`);
+    assertEqual(report.reapRecovery?.terminals.length, 1, `${input.name} reaped terminal count`);
+    assertEqual(
+      report.reapRecovery?.terminals[0]?.resumeDisposition,
+      "non-resumable",
+      `${input.name} reaped session disposition`,
+    );
+  } else {
+    assertEqual(report.reapRecovery, undefined, `${input.name} omitted reap recovery`);
+  }
   if (refusal) {
     assertEqual(report.finalInspection, undefined, `${input.name} refusal final inspection`);
   } else {
@@ -1924,17 +1960,31 @@ function assertUpdateReport(report, reportJson, input, installedBinary, configPa
   );
   const expectedIds = refusal
     ? ["detect", "plan", "apply"]
-    : [
-        "detect",
-        "plan",
-        "apply",
-        ...(input.artifactState === "predecessor" ? ["detect", "plan", "apply"] : []),
-        "hook-reconciliation",
-        "observer-restart",
-        ...(scenarioHasHost(input) ? ["host-handoff"] : []),
-        "persisted-state-reconcile",
-        "final-verification",
-      ];
+    : input.reap
+      ? [
+          "detect",
+          "plan",
+          "recovery-preparation",
+          "terminal-reap",
+          "apply",
+          "hook-reconciliation",
+          "observer-restart",
+          "host-handoff",
+          "persisted-state-reconcile",
+          "session-resume",
+          "final-verification",
+        ]
+      : [
+          "detect",
+          "plan",
+          "apply",
+          ...(input.artifactState === "predecessor" ? ["detect", "plan", "apply"] : []),
+          "hook-reconciliation",
+          "observer-restart",
+          ...(scenarioHasHost(input) ? ["host-handoff"] : []),
+          "persisted-state-reconcile",
+          "final-verification",
+        ];
   assertDeepEqual(
     report.steps.map((step) => step.id),
     expectedIds,
@@ -2016,7 +2066,7 @@ function assertPredecessorV4UpdateReport(report, input, installedBinary, configP
 }
 
 function updateRequiresPreservation(input) {
-  return input.hostState === "busy-compiled-non-bridge";
+  return input.hostState === "busy-compiled-non-bridge" && input.reap !== true;
 }
 
 function scenarioHasHost(input) {
@@ -2148,16 +2198,16 @@ function assertDryUpdateReport(report, reportJson, input, evidence) {
   if (report.schemaVersion === 4) {
     return assertPredecessorV4DryUpdateReport(report, reportJson, input, evidence);
   }
-  assertEqual(report.schemaVersion, 5, `${input.name} dry-run schema`);
+  assertEqual(report.schemaVersion, 6, `${input.name} dry-run schema`);
   assertEqual(report.kind, "preview", `${input.name} dry-run kind`);
   assertEqual(report.channel, "installer-binary", `${input.name} dry-run channel`);
-  assertV5ReportEvidence(report, reportJson, input, evidence);
+  assertCurrentReportEvidence(report, reportJson, input, evidence);
   assertEqual(report.initial?.boundary.authorization, "none", `${input.name} dry authorization`);
   assertEqual(report.plan?.authorization, "none", `${input.name} dry plan authorization`);
   assertEqual("recoveryPreflight" in report, false, `${input.name} dry omits nested preflight`);
   assertEqual(
     report.plan.outcome,
-    updateRequiresPreservation(input) ? "reap-required" : "actionable",
+    updateRequiresPreservation(input) || input.reap ? "reap-required" : "actionable",
     `${input.name} dry-run classification`,
   );
   return ["blocked", "reap-required"].includes(report.plan.outcome) ? 1 : 0;
@@ -2226,7 +2276,7 @@ function assertPredecessorV4DryUpdateReport(report, reportJson, input, evidence)
   return ["blocked", "reap-required"].includes(report.plan.outcome) ? 1 : 0;
 }
 
-function assertV5ReportEvidence(report, reportJson, input, evidence) {
+function assertCurrentReportEvidence(report, reportJson, input, evidence) {
   const incumbentArtifact = { version: input.options.incumbentVersion };
   const targetArtifact = { version: input.target.version };
   assertDeepEqual(
@@ -2615,7 +2665,13 @@ async function snapshotTaggedPredecessorSource(path, version) {
     [join(resolvedPath, "scripts", "build-identity.mjs"), "--verify", buildIdentity],
     { cwd: resolvedPath, env: buildEnvironment() },
   );
-  return { path: resolvedPath, version, tag: expectedTag, commit: head, buildIdentity };
+  return {
+    path: resolvedPath,
+    version,
+    tag: expectedTag,
+    commit: head,
+    buildIdentity,
+  };
 }
 
 async function assertTaggedPredecessorSourceUnchanged(snapshot) {

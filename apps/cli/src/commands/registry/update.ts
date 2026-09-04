@@ -1,23 +1,30 @@
 import type { UpdateSuccessorRequest } from "@station/contracts";
-import { stationBuildInfo } from "@station/runtime";
+import { stationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
 import {
   type CreateProviderRegistryOptions,
   createProviderRegistry,
 } from "../../observerProviders.js";
+import { resolveObserverPaths } from "../../paths.js";
 import { readStdinIfAvailable } from "../../stdin.js";
 import { createDefaultUpdateProbes } from "../../update/defaultUpdateProbes.js";
+import { createFilesystemUpdateReapJournalPort } from "../../update/reapJournal.js";
+import { createPosixUpdateReapProcessGroupPort } from "../../update/reapProcessGroups.js";
+import { createObserverUpdateReapSessionResumePort } from "../../update/reapSessionResume.js";
 import { runUpdateRecoveryPreflight } from "../../update/recoveryPreflight.js";
 import {
   type CreateUpdateRecoveryPreflightPortsOptions,
   type CreateUpdateRuntimeCapabilitiesOptions,
   createUpdateRecoveryPreflightPorts,
   createUpdateRuntimeCapabilities,
+  deriveLocalUpdateReapAuthorization,
 } from "../../update/recoveryPreflightAdapters.js";
 import {
   runUpdateSuccessorTransport,
   sealUpdateSuccessorOutput,
   UPDATE_SUCCESSOR_PRIVATE_ENV,
+  UPDATE_SUCCESSOR_REAP_LOCK_ENV,
   type UpdateSuccessorTransportInput,
+  updateSuccessorReapLockTransferTokenIsValid,
   updateSuccessorTransportKeyIsValid,
 } from "../../update/successorExecution.js";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
@@ -48,8 +55,7 @@ export const updateCliCommand: CliCommandNode = {
     { name: "--dry-run", description: "Print the complete plan without applying it." },
     {
       name: "--reap",
-      description:
-        "With --dry-run, keep read-only behavior; every dry run includes recovery facts.",
+      description: "Authorize exact terminal reaping; with --dry-run, keep read-only behavior.",
     },
     { name: "--json", description: "Print the update plan or result as JSON." },
     {
@@ -69,13 +75,14 @@ export const updateCliCommand: CliCommandNode = {
     "stn update --dry-run",
     "stn update --dry-run --json",
     "stn update --dry-run --reap --json",
+    "stn update --reap",
     "stn update --drive-package-manager",
     "stn update --handoff=screen",
   ],
   notes: [
     "Package-managed installations defer by default and print the exact manager command.",
     "A committed update restarts the Observer before the default processes Host handoff.",
-    "Non-dry-run --reap is reserved for the later destructive executor and is rejected before update detection.",
+    "--reap signals only exact Host-owned process groups from a repeated locked preflight.",
   ],
   verification: ["stn update --dry-run --json"],
 };
@@ -83,8 +90,13 @@ export const updateCliCommand: CliCommandNode = {
 async function runUpdateCliCommand(context: CliCommandRunContext) {
   if (isSuccessorInvocation(context.args)) {
     const successorTransportKey = consumeSuccessorTransportKey(context);
+    const reapLockTransferToken = consumeSuccessorReapLockTransferToken(context);
     try {
-      return await runProtectedUpdateSuccessor(context, successorTransportKey);
+      return await runProtectedUpdateSuccessor(
+        context,
+        successorTransportKey,
+        reapLockTransferToken,
+      );
     } catch {
       return {
         code: 1,
@@ -110,6 +122,7 @@ async function runUpdateCliCommand(context: CliCommandRunContext) {
 async function runProtectedUpdateSuccessor(
   context: CliCommandRunContext,
   successorTransportKey: string,
+  reapLockTransferToken: string | undefined,
 ) {
   const loaded = loadedConfigCommandOptions(context);
   const options = updateCommandOptions(context, loaded);
@@ -117,11 +130,24 @@ async function runProtectedUpdateSuccessor(
   const stdin = context.options.stdin ?? (await readStdinIfAvailable({ maxBytes: 64 * 1024 }));
   const input: Parameters<typeof runUpdateSuccessorCommand>[0] = { options, deps };
   if (stdin !== undefined) input.stdin = stdin;
+  if (reapLockTransferToken !== undefined) input.reapLockTransferToken = reapLockTransferToken;
   const result = await runUpdateSuccessorCommand(input);
   return {
     ...result,
     output: sealUpdateSuccessorOutput(result.output, successorTransportKey),
   };
+}
+
+function consumeSuccessorReapLockTransferToken(context: CliCommandRunContext): string | undefined {
+  const env = context.options.env ?? process.env;
+  const transferToken = env[UPDATE_SUCCESSOR_REAP_LOCK_ENV];
+  delete env[UPDATE_SUCCESSOR_REAP_LOCK_ENV];
+  delete process.env[UPDATE_SUCCESSOR_REAP_LOCK_ENV];
+  if (transferToken === undefined) return undefined;
+  if (!updateSuccessorReapLockTransferTokenIsValid(transferToken)) {
+    throw new Error("Update successor reap lock transfer was invalid.");
+  }
+  return transferToken;
 }
 
 function consumeSuccessorTransportKey(context: CliCommandRunContext): string {
@@ -168,6 +194,18 @@ function createUpdateDeps(
   const recoveryPreflight =
     suppliedDeps.recoveryPreflight ?? createRecoveryPreflight(loaded, providers, hostDeps);
   const capabilities = createRuntimeCapabilities(loaded, suppliedDeps, providers, hostDeps);
+  const reapProcessGroups =
+    suppliedDeps.reapProcessGroups ?? createPosixUpdateReapProcessGroupPort();
+  const reapJournal =
+    suppliedDeps.reapJournal ??
+    createFilesystemUpdateReapJournalPort(resolveObserverPaths(loaded.config).stateDir);
+  const reapSessionResume =
+    suppliedDeps.reapSessionResume ??
+    createObserverUpdateReapSessionResumePort({
+      config: loaded.config,
+      expectedBuildVersion: stationObserverBuildVersion(currentBuildInfo),
+      ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
+    });
 
   const deps: UpdateCommandDeps = {
     ...suppliedDeps,
@@ -179,6 +217,13 @@ function createUpdateDeps(
     reconcileHook: suppliedDeps.reconcileHook ?? capabilities.reconcileHook,
     convergeHost: suppliedDeps.convergeHost ?? capabilities.convergeHost,
     reconcilePersisted: suppliedDeps.reconcilePersisted ?? capabilities.reconcilePersisted,
+    reapProcessGroups,
+    reapJournal,
+    reapSessionResume,
+    deriveReapAuthorization:
+      suppliedDeps.deriveReapAuthorization ??
+      ((input) =>
+        deriveLocalUpdateReapAuthorization({ ...input, processGroups: reapProcessGroups })),
   };
   if (hostDeps !== undefined) deps.hostDeps = hostDeps;
   deps.runSuccessor = suppliedDeps.runSuccessor ?? createSuccessorRunner(loaded, suppliedDeps);
@@ -263,10 +308,14 @@ function createSuccessorRunner(
       installedScopeDigest: input.installedScopeDigest,
       handoff,
       hookProviderIds: [...input.hookProviderIds],
+      ...(input.reapContinuation === undefined ? {} : { reapContinuation: input.reapContinuation }),
     };
     const transportOptions: UpdateSuccessorTransportInput = {
       launcher: input.launcher,
       request,
+      ...(input.reapLockTransferToken === undefined
+        ? {}
+        : { reapLockTransferToken: input.reapLockTransferToken }),
     };
     if (loaded.configPath !== undefined) transportOptions.configPath = loaded.configPath;
     if (suppliedDeps.commandRunner !== undefined) {
@@ -283,10 +332,17 @@ function createSuccessorRunner(
         status: action.status,
         detail: action.detail,
       })),
+      ...(receipt.reapRecovery === undefined ? {} : { reapRecovery: receipt.reapRecovery }),
     };
     if (receipt.status === "failed") {
       result.recoveryCommands = [
-        retrySuccessorCommand(input.launcher, loaded.configPath, input.channel, input.handoff),
+        retrySuccessorCommand(
+          input.launcher,
+          loaded.configPath,
+          input.channel,
+          input.handoff,
+          input.reapContinuation !== undefined,
+        ),
       ];
     }
     if (receipt.error !== undefined) result.error = receipt.error;
@@ -313,11 +369,13 @@ function retrySuccessorCommand(
   configPath: string | undefined,
   channel: UpdateSuccessorRequest["channel"],
   handoff: "processes" | "screen" | undefined,
+  reap: boolean,
 ): readonly [string, ...string[]] {
   const [command, ...prefix] = launcher;
   const retryCommand: [string, ...string[]] = [command, ...prefix];
   if (configPath !== undefined) retryCommand.push("--config", configPath);
   retryCommand.push("update", "--channel", channel);
+  if (reap) retryCommand.push("--reap");
   retryCommand.push(handoff === undefined ? "--no-handoff" : `--handoff=${handoff}`);
   return retryCommand;
 }

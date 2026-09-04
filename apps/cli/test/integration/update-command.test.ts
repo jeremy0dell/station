@@ -50,7 +50,7 @@ describe("registered stn update command", () => {
     expect(result).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 5,
+        schemaVersion: 6,
         kind: "preview",
         channel: "installer-binary",
         plan: { outcome: "actionable" },
@@ -71,7 +71,7 @@ describe("registered stn update command", () => {
     expect(reapResult).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 5,
+        schemaVersion: 6,
         kind: "preview",
         initial: {
           boundary: {

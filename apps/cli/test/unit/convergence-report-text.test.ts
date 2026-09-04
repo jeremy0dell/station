@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   previewUpdateCommandResult,
   renderUpdateConvergenceReportText,
+  updateCommandResult,
 } from "../../src/commands/update/report.js";
 
 type PreviewReport = Extract<UpdateCommandReport, { kind: "preview" }>;
@@ -117,6 +118,69 @@ describe("convergence report text", () => {
     expect(text).toContain("resume capabilities: codex=enabled");
     expect(text).not.toContain("private-session");
   });
+
+  it("names resumed, retained, and unresolved reap outcomes in result text", () => {
+    const preview = report("reap-required");
+    const result = {
+      ...preview,
+      kind: "result" as const,
+      status: "failed" as const,
+      steps: [],
+      warnings: [],
+      recoveryCommands: [["stn", "update", "--reap"] as const],
+      hookReconciliations: [],
+      reapRecovery: {
+        status: "partial" as const,
+        terminals: [
+          {
+            terminalTargetId: "public-terminal-target-00000001",
+            ptyId: "public-pty-00000001",
+            ptyInstanceId: "public-pty-instance-00000001",
+            sessionId: "public-session-00000001",
+            terminationOutcome: "terminated" as const,
+            escalationUsed: false,
+            resumeDisposition: "resumed" as const,
+            unresolved: false,
+            recoveryCommands: [],
+          },
+          {
+            terminalTargetId: "public-terminal-target-00000002",
+            ptyId: "public-pty-00000002",
+            ptyInstanceId: "public-pty-instance-00000002",
+            sessionId: "public-session-00000002",
+            terminationOutcome: "killed" as const,
+            escalationUsed: true,
+            resumeDisposition: "retained" as const,
+            unresolved: false,
+            recoveryCommands: [],
+          },
+          {
+            terminalTargetId: "public-terminal-target-00000003",
+            ptyId: "public-pty-00000003",
+            ptyInstanceId: "public-pty-instance-00000003",
+            sessionId: "public-session-00000003",
+            terminationOutcome: "unresolved" as const,
+            escalationUsed: false,
+            resumeDisposition: "unresolved" as const,
+            unresolved: true,
+            recoveryCommands: [["stn", "update", "--reap"] as const],
+          },
+        ],
+        unresolved: true,
+        recoveryCommands: [["stn", "update", "--reap"] as const],
+      },
+    };
+
+    const output = updateCommandResult(result, "text").output;
+    expect(output).toContain("termination=terminated");
+    expect(output).toContain("resume=resumed");
+    expect(output).toContain("termination=killed");
+    expect(output).toContain("resume=retained");
+    expect(output).toContain("termination=unresolved");
+    expect(output).toContain("resume=unresolved");
+    expect(output).toContain("unresolved=yes");
+    expect(output).toContain("stn update --reap");
+  });
 });
 
 function recoveryReport(): PreviewReport {
@@ -205,7 +269,7 @@ function recoveryReport(): PreviewReport {
 function report(outcome: PreviewReport["plan"]["outcome"], targetVersion = "1.1.0"): PreviewReport {
   const phase = { action: "no-op", reason: "healthy" } as const;
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     kind: "preview",
     channel: "installer-binary",
     current: { version: "1.0.0" },
