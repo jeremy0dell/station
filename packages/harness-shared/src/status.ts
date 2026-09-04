@@ -1,24 +1,19 @@
 import type { ObservedStatus } from "@station/contracts";
 
-export type HarnessEventStatusExtra = {
-  attention?: NonNullable<ObservedStatus["attention"]>;
-  source?: ObservedStatus["source"];
-};
-
-/** `source` defaults to harness_event, so process-derived and unknown-provenance statuses
- * must pass `extra.source` explicitly. */
+/** Every caller normalizes a hook event, so `source` is fixed. A provider deriving status from
+ * process state instead must build its own literal. */
 export function harnessEventStatus(
   value: ObservedStatus["value"],
   confidence: ObservedStatus["confidence"],
   reason: string,
   updatedAt: string,
-  extra: HarnessEventStatusExtra = {},
+  extra: { attention?: NonNullable<ObservedStatus["attention"]> } = {},
 ): ObservedStatus {
   const status: ObservedStatus = {
     value,
     confidence,
     reason,
-    source: extra.source ?? "harness_event",
+    source: "harness_event",
     updatedAt,
   };
   if (extra.attention !== undefined) {
