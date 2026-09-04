@@ -595,7 +595,9 @@ export class WorktrunkProvider implements WorktreeProvider {
     // lands staged in the target, which is fine for a fork.
     const env = { GIT_INDEX_FILE: join(indexDir, "index") };
     try {
-      await this.#runSeedCommand("git", ["-C", srcPath, "read-tree", "HEAD"], { env });
+      await this.#runSeedCommand("git", ["-C", srcPath, "read-tree", "HEAD"], {
+        env,
+      });
       await this.#runSeedCommand("git", ["-C", srcPath, "add", "-A"], { env });
       const written = await this.#runSeedCommand("git", ["-C", srcPath, "write-tree"], { env });
       const tree = written.stdout.trim();
@@ -714,26 +716,54 @@ export class WorktrunkProvider implements WorktreeProvider {
     }
 
     // Worktrunk 0.64 needs selected-checkout context and cannot delete a branch shared elsewhere.
-    await this.#run(
-      this.#args([
-        "-C",
-        selected.path,
-        "remove",
-        ...this.#automationHookArgs(),
-        ...removalFlags,
-        "--foreground",
-        "--format=json",
-      ]),
-      undefined,
-      {
-        code: "WORKTRUNK_COMMAND_FAILED",
-        message: "Worktrunk failed to remove a worktree.",
-      },
-    );
+    try {
+      await this.#run(
+        this.#args([
+          "-C",
+          selected.path,
+          "remove",
+          ...this.#automationHookArgs(),
+          ...removalFlags,
+          "--foreground",
+          "--format=json",
+        ]),
+        undefined,
+        {
+          code: "WORKTRUNK_COMMAND_FAILED",
+          message: "Worktrunk failed to remove a worktree.",
+        },
+      );
+    } catch (cause) {
+      if (
+        !(cause instanceof WorktrunkProviderError) ||
+        cause.code !== "WORKTRUNK_TIMEOUT" ||
+        !(await this.#removalCompletedAfterTimeout(project, selected))
+      ) {
+        throw cause;
+      }
+    }
     return {
       worktreeId: request.worktreeId,
       removed: true,
     };
+  }
+
+  async #removalCompletedAfterTimeout(
+    project: ProviderProjectConfig,
+    selected: WorktreeObservation,
+  ): Promise<boolean> {
+    try {
+      if (!(await pathIsMissing(selected.path))) return false;
+      const currentWorktrees = await this.#readWorktrees(project, {
+        retries: 1,
+      });
+      return !currentWorktrees.some(
+        (worktree) =>
+          worktree.id === selected.id || samePath(worktree.path, selected.path, this.#platform),
+      );
+    } catch {
+      return false;
+    }
   }
 
   #args(args: string[]): string[] {
@@ -1267,6 +1297,18 @@ async function isExistingRegularFile(path: string): Promise<boolean> {
   } catch (cause) {
     if ((cause as NodeJS.ErrnoException).code === "ENOENT") {
       return false;
+    }
+    throw cause;
+  }
+}
+
+async function pathIsMissing(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return false;
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === "ENOENT") {
+      return true;
     }
     throw cause;
   }
