@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import type { CliProcessDeps } from "../../src/cliProcessTypes.js";
 import type { CliRunOptions } from "../../src/cliTypes.js";
+import * as commandDispatchProcess from "../../src/commandDispatchProcess.js";
 import { runCli, runCliMain } from "../../src/main.js";
 
 const now = new Date("2026-08-27T12:00:00.000Z");
@@ -635,6 +636,120 @@ describe("CLI process diagnostics", () => {
       },
     });
     expect(clientFactory).not.toHaveBeenCalled();
+  });
+});
+
+describe("narrow command-dispatch process", () => {
+  it("preserves typed dispatch, process output, correlation, and diagnostics", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const records: LogRecord[] = [];
+    const capture = processCapture();
+    const command = reconcileCommand("narrow-process");
+    const dispatch = vi.fn(async () => acceptedReceipt("cmd_narrow"));
+
+    await commandDispatchProcess.runCliMain(
+      ["--config", configPath, "command", "dispatch", "--stdin"],
+      {
+        stdin: JSON.stringify(command),
+        env: { STATION_CLI_TRACE: "1" },
+        observerDeps: runningObserverDeps(fixture.socketPath, dispatch),
+        updateDeps: { currentBuildInfo: buildInfo },
+        cliProcessDeps: {
+          ...capture.deps,
+          createLogger: () => memoryLogger(records),
+        },
+      },
+    );
+
+    expect(dispatch).toHaveBeenCalledWith(command);
+    expect(JSON.parse(capture.stdout())).toEqual({
+      status: "accepted",
+      receipt: acceptedReceipt("cmd_narrow"),
+    });
+    expect(capture.stderr()).toBe("");
+    expect(capture.code()).toBe(0);
+    expect(records.map((record) => record.message)).toEqual([
+      "cli.process.trace.start",
+      "cli.process.trace.outcome",
+    ]);
+    expect(records[1]).toMatchObject({
+      commandId: "cmd_narrow",
+      traceId: "trc_process",
+      attributes: { exitCode: 0 },
+    });
+  });
+
+  it("preserves rejected receipt output and failure diagnostics", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const records: LogRecord[] = [];
+    const capture = processCapture();
+
+    await commandDispatchProcess.runCliMain(
+      ["--config", configPath, "command", "dispatch", "--stdin"],
+      {
+        stdin: JSON.stringify(reconcileCommand("narrow-rejected")),
+        observerDeps: runningObserverDeps(fixture.socketPath, async () => rejectedReceipt()),
+        updateDeps: { currentBuildInfo: buildInfo },
+        cliProcessDeps: {
+          ...capture.deps,
+          createLogger: () => memoryLogger(records),
+        },
+      },
+    );
+
+    expect(JSON.parse(capture.stdout())).toMatchObject({
+      status: "rejected",
+      receipt: { commandId: "cmd_rejected", accepted: false },
+    });
+    expect(capture.code()).toBe(1);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      message: "cli.command.rejected",
+      commandId: "cmd_rejected",
+      traceId: "trc_process",
+    });
+  });
+
+  it("retains accepted correlation when completion waiting fails", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const records: LogRecord[] = [];
+    const capture = processCapture();
+
+    await commandDispatchProcess.runCliMain(
+      ["--config", configPath, "command", "dispatch", "--stdin", "--wait"],
+      {
+        stdin: JSON.stringify(reconcileCommand("narrow-timeout")),
+        observerDeps: runningObserverDeps(
+          fixture.socketPath,
+          async () => acceptedReceipt("cmd_narrow_timeout"),
+          async () => {
+            throw {
+              tag: "TimeoutError",
+              code: "PROTOCOL_COMMAND_WAIT_TIMEOUT",
+              message: "Observer command did not finish before the timeout.",
+            };
+          },
+        ),
+        updateDeps: { currentBuildInfo: buildInfo },
+        cliProcessDeps: {
+          ...capture.deps,
+          createLogger: () => memoryLogger(records),
+        },
+      },
+    );
+
+    expect(capture.stdout()).toBe("");
+    expect(capture.stderr()).toContain("COMMAND_WAIT_TIMEOUT");
+    expect(capture.stderr()).toContain("cmd_narrow_timeout");
+    expect(capture.code()).toBe(1);
+    expect(records[0]).toMatchObject({
+      message: "cli.process.failure",
+      commandId: "cmd_narrow_timeout",
+      traceId: "trc_process",
+    });
   });
 });
 

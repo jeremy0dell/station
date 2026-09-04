@@ -24,6 +24,9 @@
       "@station/client": ["./packages/client/src/index.ts"],
       "@station/config": ["./packages/config/src/index.ts"],
       "@station/contracts": ["./packages/contracts/src/index.ts"],
+      "@station/contracts/build-identity": [
+        "./packages/contracts/src/stationBuildIdentityEntry.ts"
+      ],
       "@station/dashboard-core": ["./packages/dashboard-core/src/index.ts"],
       "@station/dashboard-core/*": ["./packages/dashboard-core/src/*"],
       "@station/claude": ["./integrations/harness/claude/src/index.ts"],
@@ -36,6 +39,7 @@
       "@station/pi": ["./integrations/harness/pi/src/index.ts"],
       "@station/protocol": ["./packages/protocol/src/index.ts"],
       "@station/runtime": ["./packages/runtime/src/index.ts"],
+      "@station/runtime/build-info": ["./packages/runtime/src/buildInfoEntry.ts"],
       "@station/scripted-harness": ["./integrations/harness/scripted/src/index.ts"],
       "@station/setup-core": ["./packages/setup-core/src/index.ts"],
       "@station/setup-messages": ["./packages/setup-messages/src/index.ts"],

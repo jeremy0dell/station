@@ -8,7 +8,7 @@ in their own documents.
 ## Prepare a checkout
 
 Development requires Node.js 24.2+ and below 25, with Bun 1.4.0 as the
-repository package manager and script dispatcher.
+repository package manager, script dispatcher, and raw typed-command source runtime.
 
 ```sh
 bun install

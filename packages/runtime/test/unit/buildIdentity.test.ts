@@ -90,6 +90,44 @@ describe("build identity", () => {
     expect(await computeBuildIdentity(root)).not.toBe(clean);
   });
 
+  it("keeps concurrent input and output reads deterministic and fail-closed", async () => {
+    const root = await createRepository();
+    roots.push(root);
+    const sourceDirectory = join(root, "packages", "example", "src");
+    const outputDirectory = join(root, "packages", "example", "dist", "chunks");
+    await Promise.all([
+      mkdir(sourceDirectory, { recursive: true }),
+      mkdir(outputDirectory, { recursive: true }),
+    ]);
+    const indexes = Array.from({ length: 96 }, (_, index) => index);
+    await Promise.all(
+      indexes.flatMap((index) => [
+        writeFile(join(sourceDirectory, `${index}.ts`), `export const value${index} = ${index};\n`),
+        writeFile(
+          join(outputDirectory, `${index}.js`),
+          `export const value${index} = ${"x".repeat(index + 1)};\n`,
+        ),
+      ]),
+    );
+    git(root, ["add", "packages/example/src"]);
+    git(root, ["commit", "--quiet", "-m", "add concurrent identity fixture"]);
+
+    const identity = await computeBuildIdentity(root);
+    await publishBuildIdentity(identity, root);
+
+    await expect(computeBuildIdentity(root)).resolves.toBe(identity);
+    await expect(verifyBuildIdentity(identity, root)).resolves.toBe(true);
+
+    const sourcePath = join(sourceDirectory, "47.ts");
+    await writeFile(sourcePath, "export const value47 = 'stale';\n");
+    await expect(verifyBuildIdentity(identity, root)).resolves.toBe(false);
+    await writeFile(sourcePath, "export const value47 = 47;\n");
+
+    const outputPath = join(outputDirectory, "71.js");
+    await writeFile(outputPath, "export const value71 = 'stale';\n");
+    await expect(verifyBuildIdentity(identity, root)).resolves.toBe(false);
+  });
+
   it("uses Git's platform-neutral mode for symlink inputs", () => {
     expect(buildInputMode({ mode: 0o755, isSymbolicLink: () => true })).toBe("777");
     expect(buildInputMode({ mode: 0o777, isSymbolicLink: () => true })).toBe("777");

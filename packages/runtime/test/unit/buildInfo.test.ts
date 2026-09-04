@@ -6,14 +6,19 @@ import {
 
 const buildIdentity = "a".repeat(64);
 const verifyBuildIdentity = vi.hoisted(() => vi.fn());
+const verifyBuildIdentityAsync = vi.hoisted(() => vi.fn());
 const verifiedSourceBuildIdentitySlot = Symbol.for(
   "@station/runtime/verified-source-build-identity",
+);
+const verifyingSourceBuildIdentitySlot = Symbol.for(
+  "@station/runtime/verifying-source-build-identity",
 );
 
 vi.mock("node:fs", () => ({
   readFileSync: () => `${buildIdentity}\n`,
 }));
 vi.mock("node:child_process", () => ({
+  execFile: verifyBuildIdentityAsync,
   execFileSync: verifyBuildIdentity,
 }));
 
@@ -21,7 +26,46 @@ describe("station build info", () => {
   beforeEach(() => {
     vi.resetModules();
     verifyBuildIdentity.mockReset();
+    verifyBuildIdentityAsync.mockReset();
+    verifyBuildIdentityAsync.mockImplementation((_command, _args, _options, callback) => {
+      callback(null);
+    });
     Reflect.deleteProperty(globalThis, verifiedSourceBuildIdentitySlot);
+    Reflect.deleteProperty(globalThis, verifyingSourceBuildIdentitySlot);
+  });
+
+  it("deduplicates asynchronous source admission and populates the synchronous cache", async () => {
+    const { stationBuildInfo, stationBuildInfoAsync } = await import("../../src/buildInfo.js");
+
+    const [first, second] = await Promise.all([stationBuildInfoAsync(), stationBuildInfoAsync()]);
+
+    expect(first).toEqual({
+      version: "0.0.0-pre-alpha.14.5",
+      compiled: false,
+      buildIdentity,
+    });
+    expect(second).toEqual(first);
+    expect(verifyBuildIdentityAsync).toHaveBeenCalledTimes(1);
+    expect(verifyBuildIdentityAsync).toHaveBeenCalledWith(
+      process.execPath,
+      [expect.stringMatching(/scripts\/build-identity\.mjs$/u), "--verify", buildIdentity],
+      expect.objectContaining({ cwd: expect.any(String) }),
+      expect.any(Function),
+    );
+    expect(verifyBuildIdentity).not.toHaveBeenCalled();
+    expect(stationBuildInfo()).toEqual(first);
+    expect(verifyBuildIdentity).not.toHaveBeenCalled();
+  });
+
+  it("does not cache a rejected asynchronous source admission", async () => {
+    verifyBuildIdentityAsync.mockImplementationOnce((_command, _args, _options, callback) => {
+      callback(new Error("stale identity"));
+    });
+    const { stationBuildInfoAsync } = await import("../../src/buildInfo.js");
+
+    await expect(stationBuildInfoAsync()).rejects.toThrow("does not match the current checkout");
+    await expect(stationBuildInfoAsync()).resolves.toMatchObject({ buildIdentity });
+    expect(verifyBuildIdentityAsync).toHaveBeenCalledTimes(2);
   });
 
   it("caches one verified source identity across module resets in the same process", async () => {

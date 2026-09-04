@@ -1,28 +1,29 @@
-import { randomUUID } from "node:crypto";
 import { loadConfig } from "@station/config";
 import { ObserverLifecycleFailureSchema } from "@station/contracts";
-import {
-  isSafeError,
-  providerHookArtifactOwner,
-  type RuntimeSafeError,
-  stationBuildInfo,
-} from "@station/runtime";
+import { providerHookArtifactOwner, stationBuildInfo } from "@station/runtime";
 import { CliInputError } from "./args.js";
 import {
-  defaultCommandEnv,
   type ParsedGlobalOptions,
   type PreparedCliConfig,
   parseGlobalOptions,
   resolveDefaultCliCommand,
   runParsedCli,
 } from "./cliExecution.js";
+import {
+  type CliProcessIo,
+  createCliProcessIo,
+  formatCliError,
+  resolveCliProcessEnv,
+  safeCliProcessInvocationId,
+  safeCliProcessNow,
+} from "./cliProcessBoundary.js";
 import { createCliProcessDiagnostics } from "./cliProcessDiagnostics.js";
 import type { CliProcessDeps } from "./cliProcessTypes.js";
 import type { CliRunOptions, CliRunResult } from "./cliTypes.js";
 import { resolveCliCommandRoute } from "./commandRegistry.js";
 import type { CliEnv } from "./env.js";
 import { isCliHelpFlag } from "./help.js";
-import { escapeTerminalBytes, formatCliJson, formatCliOutput } from "./terminalOutput.js";
+import { formatCliOutput } from "./terminalOutput.js";
 import { resolveDefaultIngressLauncher } from "./worktrunkHookExpectation.js";
 
 type CliBuildInfo = ReturnType<typeof stationBuildInfo>;
@@ -38,13 +39,6 @@ type PreparedCliProcess = {
   suppressOutput: boolean;
 };
 
-type CliProcessIo = {
-  stdoutWrite(value: string): void;
-  stderrWrite(value: string): void;
-  exit(code: number): void;
-  setExitCode(code: number): void;
-};
-
 /**
  * ADAPTER
  *
@@ -58,8 +52,8 @@ export async function runCliMain(
 ): Promise<void> {
   const deps = options.cliProcessDeps ?? {};
   const clock = deps.clock ?? { now: () => new Date() };
-  const startedAt = safeNow(clock);
-  const invocationId = safeInvocationId(deps.randomUUID);
+  const startedAt = safeCliProcessNow(clock);
+  const invocationId = safeCliProcessInvocationId(deps.randomUUID);
   const prepared = await prepareCliProcess(argv, options, deps);
   const diagnostics = createCliProcessDiagnostics(
     {
@@ -94,7 +88,7 @@ async function prepareCliProcess(
     parseError = error;
   }
 
-  const processEnv = defaultCommandEnv(options);
+  const processEnv = resolveCliProcessEnv(options);
   const helpRequested = parsed?.args.some(isCliHelpFlag) === true;
   const versionRequested = parsed?.args.length === 1 && parsed.args[0] === "--version";
   const command =
@@ -191,19 +185,6 @@ async function runPreparedCliProcess(
   }
 }
 
-function createCliProcessIo(deps: CliProcessDeps): CliProcessIo {
-  return {
-    stdoutWrite: deps.stdoutWrite ?? ((value) => process.stdout.write(value)),
-    stderrWrite: deps.stderrWrite ?? ((value) => process.stderr.write(value)),
-    exit: deps.exit ?? ((code) => process.exit(code)),
-    setExitCode:
-      deps.setExitCode ??
-      ((code) => {
-        process.exitCode = code;
-      }),
-  };
-}
-
 async function prepareCliConfig(
   parsed: ParsedGlobalOptions | undefined,
   loader: CliProcessDeps["loadConfig"],
@@ -252,46 +233,4 @@ export function shouldSuppressCliProcessOutput(invoked: readonly string[]): bool
   if (invoked.some(isCliHelpFlag)) return false;
   const command = invoked[0];
   return command === undefined || command === "tui" || command === "popup" || command === "observe";
-}
-
-function formatCliError(error: unknown): string {
-  if (isSafeError(error)) return formatSafeError(error);
-  if (error instanceof Error) return escapeTerminalBytes(error.message);
-  if (typeof error === "object" && error !== null) {
-    try {
-      return formatCliJson(error);
-    } catch {
-      return escapeTerminalBytes(String(error));
-    }
-  }
-  return escapeTerminalBytes(String(error));
-}
-
-function formatSafeError(error: RuntimeSafeError): string {
-  const lines = [`${escapeTerminalBytes(error.message)} (${escapeTerminalBytes(error.code)})`];
-  if (error.hint !== undefined) lines.push(`Hint: ${escapeTerminalBytes(error.hint)}`);
-  if (error.diagnosticId !== undefined) {
-    lines.push(`Diagnostic: ${escapeTerminalBytes(error.diagnosticId)}`);
-  }
-  if (error.commandId !== undefined) {
-    lines.push(`Command: ${escapeTerminalBytes(error.commandId)}`);
-  }
-  if (error.traceId !== undefined) lines.push(`Trace: ${escapeTerminalBytes(error.traceId)}`);
-  return lines.join("\n");
-}
-
-function safeNow(clock: { now(): Date }): Date {
-  try {
-    return clock.now();
-  } catch {
-    return new Date();
-  }
-}
-
-function safeInvocationId(create: (() => string) | undefined): string {
-  try {
-    return (create ?? randomUUID)();
-  } catch {
-    return randomUUID();
-  }
 }

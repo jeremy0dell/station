@@ -5,10 +5,10 @@ import { stationBuildInfo } from "@station/runtime";
 import { captureNativeCallerClaims } from "@station/terminal";
 import { captureTmuxCallerClaims } from "@station/tmux";
 import { CliInputError, parseRequiredOptionValue } from "./args.js";
+import { resolveCliProcessEnv } from "./cliProcessBoundary.js";
 import type { CliRunOptions, CliRunResult } from "./cliTypes.js";
 import {
   handleCliCommandConfigError,
-  isTopLevelCliCommand,
   renderCliCommandHelpTopic,
   resolveCliCommandRoute,
   runCliCommandRoute,
@@ -16,6 +16,7 @@ import {
 import type { CliEnv } from "./env.js";
 import { renderCliHelpFromArgs } from "./help.js";
 import { probeHarnessHooksStatus } from "./observerProviders.js";
+import { isTopLevelCliCommand } from "./topLevelCliCommands.js";
 
 export type ParsedGlobalOptions = { args: string[]; configPath?: string };
 
@@ -61,7 +62,7 @@ export async function runParsedCli(
     };
   }
 
-  const command = args[0] ?? resolveDefaultCliCommand(defaultCommandEnv(commandOptions));
+  const command = args[0] ?? resolveDefaultCliCommand(resolveCliProcessEnv(commandOptions));
   const commandArgs = args[0] === undefined ? [] : args.slice(1);
   const route = resolveCliCommandRoute(command, commandArgs);
   if (route === undefined) {
@@ -125,10 +126,6 @@ export function parseGlobalOptions(argv: readonly string[]): ParsedGlobalOptions
     args,
     ...(configPath === undefined ? {} : { configPath }),
   };
-}
-
-export function defaultCommandEnv(options: CliRunOptions): CliEnv {
-  return options.env ?? options.popupDeps?.env ?? options.tuiDeps?.env ?? process.env;
 }
 
 export function resolveDefaultCliCommand(env: CliEnv): "popup" | "tui" {
