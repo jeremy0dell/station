@@ -295,13 +295,28 @@ function generatedStationHookCommand(hook: unknown): string | undefined {
   ) {
     return undefined;
   }
-  return hookRecord.command;
+  return generatedHookScriptPath(hookRecord.command);
 }
 
 function commandLooksLikeGeneratedHookScript(command: string): boolean {
-  return (
-    command === GENERATED_HOOK_SCRIPT_NAME || command.endsWith(`/${GENERATED_HOOK_SCRIPT_NAME}`)
-  );
+  return generatedHookScriptPath(command) !== undefined;
+}
+
+function generatedHookScriptPath(command: string): string | undefined {
+  if (isGeneratedHookScriptPath(command)) return command;
+  let token: string;
+  if (command.startsWith("'")) {
+    const match = /'(?: |$)/u.exec(command);
+    if (match?.index === undefined) return undefined;
+    token = command.slice(1, match.index).replaceAll("'\\''", "'");
+  } else {
+    token = command.slice(0, command.indexOf(" ") < 0 ? undefined : command.indexOf(" "));
+  }
+  return isGeneratedHookScriptPath(token) ? token : undefined;
+}
+
+function isGeneratedHookScriptPath(path: string): boolean {
+  return path === GENERATED_HOOK_SCRIPT_NAME || path.endsWith(`/${GENERATED_HOOK_SCRIPT_NAME}`);
 }
 
 function withoutGeneratedHooksFromEntry(

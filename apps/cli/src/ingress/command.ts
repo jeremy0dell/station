@@ -28,6 +28,8 @@ export type ProviderIngressCommandOptions = {
   env?: NodeJS.ProcessEnv;
   observerCommand?: ExecutableArgv;
   observerEntryPath?: string;
+  /** Reuses an ID minted by an attempted fast delivery so fallback remains deduplicated. */
+  hookId?: string;
 };
 
 export type ProviderIngressMainResult = {
@@ -145,7 +147,10 @@ export async function runProviderIngressMain(
   options: ProviderIngressCommandOptions = {},
 ): Promise<ProviderIngressMainResult> {
   try {
-    const receipt = await runProviderIngressCommand(argv, options, {});
+    const deps: ProviderHookSenderDeps = {};
+    const hookId = options.hookId;
+    if (hookId !== undefined) deps.hookId = () => hookId;
+    const receipt = await runProviderIngressCommand(argv, options, deps);
     if (receipt.status === "rejected") {
       return {
         code: 1,
@@ -222,6 +227,7 @@ async function parseArgs(argv: string[]): Promise<ParsedOptions> {
       autoStart = false;
       continue;
     }
+    if (arg === "--fast") continue;
     if (arg !== undefined) {
       providerArgs.push(arg);
     }

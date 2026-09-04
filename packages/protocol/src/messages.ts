@@ -141,6 +141,8 @@ export const ReconcileParamsSchema = z
 export const ProviderHookIngestParamsSchema = z
   .object({
     event: ProviderHookEventSchema,
+    /** Rejects a transport shortcut before mutation when the socket owner is another build. */
+    expectedBuildVersion: z.string().min(1).optional(),
   })
   .strict();
 

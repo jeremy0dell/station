@@ -8,8 +8,11 @@ Observer process ownership remains defined by
 
 ## Responsibility
 
-The compiled `stn` executable contains the CLI, Observer, provider-hook ingress,
-native TUI, popup dashboard, and Station Host. It can start the native UI and a
+The compiled `stn` executable contains the CLI, Observer, canonical provider-hook
+ingress, native TUI, popup dashboard, and Station Host. A small native
+`stn-ingress` launcher handles the latency-sensitive first delivery before
+falling back to canonical ingress when delivery is not conclusively accepted.
+The installation can start the native UI and a
 healthy Observer without Node.js, a source checkout, or `node_modules`.
 
 External workflow tools remain separate. Git, Worktrunk, tmux, Hunk, and agent
@@ -37,7 +40,7 @@ Each release archive is named
 `stn-v{version}-{platform}-{architecture}.tar.gz` and contains exactly:
 
 - `stn`, the compiled executable;
-- `stn-ingress`, a symlink to `stn`;
+- `stn-ingress`, a native provider-hook transport launcher;
 - `stn-tmux-popup`, a symlink to `stn`; and
 - `LICENSE`.
 
@@ -59,14 +62,13 @@ bun run build:binary -- --version 0.0.0-local
 `scripts/build-binary.mjs` first performs the whole-repository source build and
 verifies its published build identity. It then links the Station workspace,
 builds the native controlling-terminal helper and provider assets, and writes
-the executable and aliases under `station/dist/bin/`.
+the executables and popup alias under `station/dist/bin/`.
 
 The compiled entrypoint dispatches raw arguments before CLI option parsing or
 stdin reads:
 
 ```text
 stn
-├── argv0 stn-ingress  -> provider-hook ingress
 ├── argv0 stn-tmux-popup -> popup command
 ├── __observer         -> Observer process
 ├── __ingress          -> provider-hook ingress
@@ -75,6 +77,10 @@ stn
 ├── __station-host     -> persistent PTY host
 ├── __tmux-popup       -> popup command
 └── all other argv     -> normal CLI
+
+stn-ingress
+├── explicit compatible --fast hook -> exact-build Observer delivery and exit
+└── every inconclusive result       -> stn __ingress with the same hook ID
 ```
 
 Internal tokens are process boundaries, not public CLI commands. Compiled
@@ -85,6 +91,16 @@ The installed executable directory is the ownership root for popup registration,
 setup-generated launchers, and the absolute `stn-ingress` path stored in provider
 hooks. A virtual compiled module path and filesystem root `/` are never accepted
 as ownership roots.
+
+The native ingress launcher does not own provider parsing or lifecycle policy.
+Only provider integrations opt configured events into `--fast`; the Observer
+performs strict normalization, and canonical ingress retains validation,
+auto-start, spooling, and error behavior for every non-accepted result. The
+native launcher recognizes only the exact validated accepted receipt emitted by
+the matching build; all other responses re-enter canonical ingress. Accepted
+fast delivery remains visible in the Observer's report-processing log. The
+initial socket request names the exact Observer build and is rejected before
+mutation on mismatch.
 
 ## Runtime boundaries
 
@@ -170,6 +186,11 @@ receipt contains exactly `station-installer-binary-v1`; installations without
 that receipt continue to run but require a later exact-tag install before the
 installer-binary update adapter can own them.
 
+The installer replaces the version-guarded ingress binary immediately before
+`stn`. Either mixed-version window falls back through canonical ingress because
+the native request cannot mutate an Observer with a different build. Update
+expectations use the v2 shape and bind both executable hashes and identities.
+
 Installer locking, interrupted-upgrade recovery, PATH guidance, and manual
 operator steps are documented in [Install Station](install.md). Those behaviors
 belong to the installer contract rather than the compiled executable.
@@ -182,8 +203,8 @@ Run the focused local binary proof with a development version:
 bun run smoke:binary -- --expected-version 0.0.0-local
 ```
 
-The smoke builds the binary and exercises version/help output, raw dispatch,
-both aliases, setup readiness, packaged assets, provider-hook ingress, Observer
+The smoke builds the binaries and exercises version/help output, raw dispatch,
+the native ingress transport, the popup alias, setup readiness, packaged assets, provider-hook ingress, Observer
 startup and handoff, hostile-directory isolation, popup reuse, inaccessible
 socket preservation, and the compiled PTY helper.
 

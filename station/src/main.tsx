@@ -432,7 +432,7 @@ async function startStationMain(
   installLiveHostTtyDimensions();
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
-    maxFps: 120,
+    maxFps: 1_500,
     exitSignals: [
       "SIGINT",
       "SIGTERM",

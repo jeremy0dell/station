@@ -36,7 +36,12 @@ export const ProviderHookEventSchema = z
     receivedAt: TimestampSchema,
     projectId: ProjectIdSchema.optional(),
     worktreeId: WorktreeIdSchema.optional(),
+    /** Provider-neutral launch identity carried outside an unparsed provider payload. */
+    worktreePath: nonEmptyStringSchema.optional(),
+    worktreeManagedRoot: nonEmptyStringSchema.optional(),
     sessionId: SessionIdSchema.optional(),
+    terminalProvider: ProviderIdSchema.optional(),
+    terminalTargetId: TerminalTargetIdSchema.optional(),
     payload: optionalProviderDataSchema,
   })
   .strict();

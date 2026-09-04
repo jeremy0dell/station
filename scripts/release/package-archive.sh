@@ -34,8 +34,8 @@ archive=$repo_root/stn-v$version-$target.tar.gz
   printf 'Expected an executable Station binary at %s/stn.\n' "$bin_dir" >&2
   exit 1
 }
-[ "$(readlink "$bin_dir/stn-ingress" 2>/dev/null || true)" = stn ] || {
-  printf 'Expected stn-ingress to be a symlink to stn.\n' >&2
+[ -x "$bin_dir/stn-ingress" ] && [ ! -L "$bin_dir/stn-ingress" ] || {
+  printf 'Expected an executable Station ingress binary at %s/stn-ingress.\n' "$bin_dir" >&2
   exit 1
 }
 [ "$(readlink "$bin_dir/stn-tmux-popup" 2>/dev/null || true)" = stn ] || {

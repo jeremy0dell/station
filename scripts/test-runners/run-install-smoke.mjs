@@ -159,19 +159,19 @@ function prepareFixtures() {
   createManualRelease("v1.2.14", "linux-x64", [
     tarFile("../stn", "untrusted traversal payload\n", 0o755),
     tarFile("LICENSE", "Station fixture license v1.2.14\n", 0o644),
-    tarSymlink("stn-ingress", "stn"),
+    tarFile("stn-ingress", releaseBinarySource("v1.2.14", "linux-x64"), 0o755),
     tarSymlink("stn-tmux-popup", "stn"),
   ]);
   createManualRelease("v1.2.15", "linux-x64", [
     tarSymlink("stn", "missing-runtime"),
     tarFile("LICENSE", "Station fixture license v1.2.15\n", 0o644),
-    tarSymlink("stn-ingress", "stn"),
+    tarFile("stn-ingress", releaseBinarySource("v1.2.15", "linux-x64"), 0o755),
     tarSymlink("stn-tmux-popup", "stn"),
   ]);
   createManualRelease("v1.2.16", "linux-x64", [
     tarFile("stn", releaseBinarySource("v1.2.16", "linux-x64"), 0o755),
     tarSymlink("LICENSE", "stn"),
-    tarSymlink("stn-ingress", "stn"),
+    tarFile("stn-ingress", releaseBinarySource("v1.2.16", "linux-x64"), 0o755),
     tarSymlink("stn-tmux-popup", "stn"),
   ]);
   createRelease("v1.2.17", ["linux-x64"], { ingressTarget: "../stn" });
@@ -184,20 +184,20 @@ function prepareFixtures() {
   createManualRelease("v1.2.24", "linux-x64", [
     tarFile("stn", releaseBinarySource("v1.2.24", "linux-x64"), 0o755),
     tarFile("LICENSE", "Station fixture license v1.2.24\n", 0o644),
-    tarFile("stn-ingress", "not a symlink\n", 0o755),
+    tarFile("stn-ingress", "not executable\n", 0o644),
     tarSymlink("stn-tmux-popup", "stn"),
   ]);
   createRelease("v1.2.25", ["linux-x64"], { probeMode: "stdout-flood" });
   createManualRelease("v1.2.26", "linux-x64", [
     tarFile("LICENSE", "Station fixture license v1.2.26\n", 0o644),
     tarHardlink("stn", "LICENSE"),
-    tarSymlink("stn-ingress", "stn"),
+    tarFile("stn-ingress", releaseBinarySource("v1.2.26", "linux-x64"), 0o755),
     tarSymlink("stn-tmux-popup", "stn"),
   ]);
   createManualRelease("v1.2.27", "linux-x64", [
     tarFile("stn", releaseBinarySource("v1.2.27", "linux-x64"), 0o755),
     tarHardlink("LICENSE", "stn"),
-    tarSymlink("stn-ingress", "stn"),
+    tarFile("stn-ingress", releaseBinarySource("v1.2.27", "linux-x64"), 0o755),
     tarSymlink("stn-tmux-popup", "stn"),
   ]);
   createRelease("v1.2.28", ["linux-x64"], { probeMode: "secret-check" });
@@ -820,9 +820,9 @@ function scenarioArtifactValidation() {
     ["v1.2.14", "exact Station release manifest", "traversal-like archive member"],
     ["v1.2.15", "required Station member types", "wrong binary archive type"],
     ["v1.2.16", "required Station member types", "wrong license archive type"],
-    ["v1.2.17", "symlink to 'stn'", "wrong launcher archive target"],
+    ["v1.2.17", "required Station member types", "wrong ingress archive type"],
     ["v1.2.23", "symlink to 'stn'", "wrong popup launcher archive target"],
-    ["v1.2.24", "required Station member types", "regular-file launcher archive type"],
+    ["v1.2.24", "regular executable 'stn-ingress'", "non-executable ingress archive"],
     ["v1.2.26", "required Station member types", "hardlinked binary archive type"],
     ["v1.2.27", "required Station member types", "hardlinked license archive type"],
     ["v1.2.9", "reports an unexpected version", "wrong embedded version"],
@@ -1009,7 +1009,7 @@ function scenarioPathResolutionAndFilesystemFailures() {
     platform: linuxX64(),
     dataHome: newlineLinkData,
   });
-  assertFailure(newlineLink, "existing launcher", "newline launcher target");
+  assertFailure(newlineLink, "existing Station ingress launcher", "newline launcher target");
   assertNoGhApiCalls(newlineLink, "newline launcher target");
   assertEqual(
     readlinkSync(join(newlineLinkDir, "stn-ingress")),
@@ -1477,7 +1477,7 @@ exec /bin/rm "$@"
 
 function scenarioCommitFailures() {
   const cases = [
-    { command: "ln", destination: "stn-ingress", label: "ingress alias commit" },
+    { command: "mv", destination: "stn-ingress", label: "ingress binary commit" },
     { command: "ln", destination: "stn-tmux-popup", label: "popup alias commit" },
     { command: "mv", destination: "LICENSE", label: "license commit" },
     { command: "mv", destination: "stn", label: "runtime commit" },
@@ -1563,7 +1563,7 @@ function scenarioAmbiguousRuntimeCommit() {
   const installDir = join(root, "ambiguous-runtime-bin");
   const dataHome = join(root, "ambiguous-runtime-data");
   seedInstallation({ installDir, dataHome, tag: "v0.9.0" });
-  const shim = makeMoveThenFailShim(join(installDir, "stn"));
+  const shim = makeMoveThenFailShim(join(installDir, "stn"), "runtime");
   const ambiguous = runInstaller({
     installDir,
     platform: linuxX64(),
@@ -1579,29 +1579,28 @@ function scenarioAmbiguousRuntimeCommit() {
   assertNotIncludes(ambiguous.stderr, "was unchanged", "ambiguous activation truthfulness");
   assertNoInstallerResidue(installDir, dataHome);
 
-  const aliasInstallDir = join(root, "ambiguous-alias-bin");
-  const aliasDataHome = join(root, "ambiguous-alias-data");
-  const aliasShim = makeLinkThenFailShim(join(aliasInstallDir, "stn-ingress"));
-  const aliasFailure = runInstaller({
-    installDir: aliasInstallDir,
+  const ingressInstallDir = join(root, "ambiguous-ingress-bin");
+  const ingressDataHome = join(root, "ambiguous-ingress-data");
+  const ingressShim = makeMoveThenFailShim(join(ingressInstallDir, "stn-ingress"), "ingress");
+  const ingressFailure = runInstaller({
+    installDir: ingressInstallDir,
     platform: linuxX64(),
     version: releaseTag,
-    dataHome: aliasDataHome,
-    commandBinDirs: [aliasShim.directory],
-    environment: aliasShim.environment,
+    dataHome: ingressDataHome,
+    commandBinDirs: [ingressShim.directory],
+    environment: ingressShim.environment,
   });
-  assertNonzero(aliasFailure, "link-performed-then-error");
-  assertEqual(
-    readlinkSync(join(aliasInstallDir, "stn-ingress")),
-    "stn",
-    "unconfirmed alias is not removed",
-  );
-  assert(!existsSync(join(aliasInstallDir, "stn")), "link ambiguity leaves runtime absent");
+  assertNonzero(ingressFailure, "ingress-move-performed-then-error");
   assert(
-    !existsSync(join(aliasDataHome, "station", "LICENSE")),
-    "link ambiguity leaves license absent",
+    !isSymlink(join(ingressInstallDir, "stn-ingress")),
+    "unconfirmed ingress binary is not removed",
   );
-  assertNoInstallerResidue(aliasInstallDir, aliasDataHome);
+  assert(!existsSync(join(ingressInstallDir, "stn")), "ingress ambiguity leaves runtime absent");
+  assert(
+    !existsSync(join(ingressDataHome, "station", "LICENSE")),
+    "ingress ambiguity leaves license absent",
+  );
+  assertNoInstallerResidue(ingressInstallDir, ingressDataHome);
 
   const warningInstallDir = join(root, "cleanup-warning-bin");
   const warningDataHome = join(root, "cleanup-warning-data");
@@ -1720,10 +1719,9 @@ async function scenarioManagedPathReplacement() {
         "popup replacement runtime preservation",
         { aliases: false, assertAliasesAbsent: false },
       );
-      assertEqual(
-        readlinkSync(join(replacementInstallDir, "stn-ingress")),
-        "stn",
-        "popup replacement leaves ingress",
+      assert(
+        existsSync(join(replacementInstallDir, "stn-ingress")),
+        "popup replacement leaves ingress launcher",
       );
       assertLicense(replacementDataHome, "v0.9.0", "popup replacement license preservation");
     } else if (resource === "binary") {
@@ -1938,7 +1936,7 @@ async function scenarioAliasCreationSignal() {
   const dataHome = join(root, "alias-signal-data");
   const marker = join(root, "alias-signal.ready");
   const releaseFile = join(root, "alias-signal.release");
-  const shim = makeLinkThenBlockShim(join(installDir, "stn-ingress"), marker, releaseFile);
+  const shim = makeLinkThenBlockShim(join(installDir, "stn-tmux-popup"), marker, releaseFile);
   const running = runInstaller({
     installDir,
     platform: linuxX64(),
@@ -1967,7 +1965,7 @@ async function scenarioAliasCreationSignal() {
   const replacedDataHome = join(root, "alias-signal-replaced-data");
   const replacedMarker = join(root, "alias-signal-replaced.ready");
   const replacedRelease = join(root, "alias-signal-replaced.release");
-  const replacedPath = join(replacedInstallDir, "stn-ingress");
+  const replacedPath = join(replacedInstallDir, "stn-tmux-popup");
   const replacedShim = makeLinkThenBlockShim(replacedPath, replacedMarker, replacedRelease);
   const replacedRunning = runInstaller({
     installDir: replacedInstallDir,
@@ -2325,7 +2323,16 @@ function createRelease(tag, targets, options = {}) {
       mode: options.probeMode,
       reportedVersion: options.reportedVersion,
     });
-    symlinkSync(options.ingressTarget ?? "stn", join(payloadDir, "stn-ingress"));
+    if (options.ingressTarget === undefined) {
+      writeReleaseBinary(join(payloadDir, "stn-ingress"), {
+        tag,
+        target,
+        mode: options.probeMode,
+        reportedVersion: options.reportedVersion,
+      });
+    } else {
+      symlinkSync(options.ingressTarget, join(payloadDir, "stn-ingress"));
+    }
     symlinkSync(options.popupTarget ?? "stn", join(payloadDir, "stn-tmux-popup"));
     writeText(join(payloadDir, "LICENSE"), `Station fixture license ${tag}\n`, 0o644);
 
@@ -2906,9 +2913,9 @@ exec "$FAKE_REAL_COMMAND" "$@"
   };
 }
 
-function makeMoveThenFailShim(destination) {
-  const shimDir = join(root, "move-then-fail-shim");
-  const state = join(root, "move-then-fail.state");
+function makeMoveThenFailShim(destination, slug) {
+  const shimDir = join(root, `${slug}-move-then-fail-shim`);
+  const state = join(root, `${slug}-move-then-fail.state`);
   makeDirectory(shimDir);
   writeExecutable(
     join(shimDir, "mv"),
@@ -2929,37 +2936,6 @@ exec "$FAKE_REAL_COMMAND" "$@"
     environment: {
       FAKE_FAIL_DESTINATION: destination,
       FAKE_REAL_COMMAND: resolveCommand("mv"),
-      FAKE_SHIM_STATE: state,
-    },
-  };
-}
-
-function makeLinkThenFailShim(destination) {
-  const shimDir = join(root, "link-then-fail-shim");
-  const state = join(root, "link-then-fail.state");
-  makeDirectory(shimDir);
-  writeExecutable(
-    join(shimDir, "ln"),
-    `#!/bin/sh
-last=''
-source=''
-for argument do source=$last; last=$argument; done
-destination=$last
-if [ -d "$last" ]; then destination=$last/\${source##*/}; fi
-if [ "$destination" = "$FAKE_FAIL_DESTINATION" ] && [ ! -e "$FAKE_SHIM_STATE" ]; then
-  "$FAKE_REAL_COMMAND" "$@" || exit
-  : > "$FAKE_SHIM_STATE"
-  chmod 600 "$FAKE_SHIM_STATE"
-  exit 71
-fi
-exec "$FAKE_REAL_COMMAND" "$@"
-`,
-  );
-  return {
-    directory: shimDir,
-    environment: {
-      FAKE_FAIL_DESTINATION: destination,
-      FAKE_REAL_COMMAND: resolveCommand("ln"),
       FAKE_SHIM_STATE: state,
     },
   };
@@ -3212,7 +3188,11 @@ if [ "\${1:-}" = --version ]; then printf '%s\\n' '${version}'; else printf '%s\
 `,
   );
   if (withAliases) {
-    symlinkSync("stn", join(installDir, "stn-ingress"));
+    if (withReceipt) {
+      writeExecutable(join(installDir, "stn-ingress"), `#!/bin/sh\nprintf '%s\\n' '${version}'\n`);
+    } else {
+      symlinkSync("stn", join(installDir, "stn-ingress"));
+    }
     symlinkSync("stn", join(installDir, "stn-tmux-popup"));
   }
   if (withReceipt) {
@@ -3236,12 +3216,13 @@ function writeExpectedInstallation(path, installDir) {
   writeText(
     path,
     [
-      "format=station-installer-expected-v1",
+      "format=station-installer-expected-v2",
       `binary_sha256=${binaryHash}`,
       `binary_device=${binaryStat.dev}`,
       `binary_inode=${binaryStat.ino}`,
       `ingress_device=${ingressStat.dev}`,
       `ingress_inode=${ingressStat.ino}`,
+      `ingress_sha256=${createHash("sha256").update(readFileSync(ingress)).digest("hex")}`,
       `popup_device=${popupStat.dev}`,
       `popup_inode=${popupStat.ino}`,
       `receipt_device=${receiptStat.dev}`,
@@ -3260,6 +3241,8 @@ function assertInstalled({ installDir, dataHome = dataDir, tag, target, receipt 
   assertRuntimeVersion(installDir, tag, `${target} installed entrypoints`);
   assertLicense(dataHome, tag, `${target} installed license`);
   assertMode(binary, 0o755, `${target} executable mode`);
+  assert(!isSymlink(join(installDir, "stn-ingress")), `${target} installed ingress binary`);
+  assertMode(join(installDir, "stn-ingress"), 0o755, `${target} ingress executable mode`);
   if (receipt) assertInstallerReceipt(installDir, `${target} installer receipt`);
 }
 
@@ -3285,7 +3268,7 @@ function assertRuntimeVersion(
     assertEqual(result.stdout, `${tag.slice(1)}\n`, `${label} ${entrypoint} version`);
   }
   if (aliases) {
-    assertEqual(readlinkSync(join(installDir, "stn-ingress")), "stn", `${label} ingress link`);
+    assert(existsSync(join(installDir, "stn-ingress")), `${label} ingress exists`);
     assertEqual(readlinkSync(join(installDir, "stn-tmux-popup")), "stn", `${label} popup link`);
   } else if (assertAliasesAbsent) {
     assert(!existsSync(join(installDir, "stn-ingress")), `${label} leaves ingress absent`);

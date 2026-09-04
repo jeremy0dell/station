@@ -13,7 +13,7 @@ import { updateErrorFromUnknown } from "./updateError.js";
 
 const receiptName = ".station-install-receipt";
 const receiptContent = "station-installer-binary-v1\n";
-const expectedInstallationFormat = "station-installer-expected-v1";
+const expectedInstallationFormat = "station-installer-expected-v2";
 
 const InstallationFileIdentitySchema = z
   .object({
@@ -29,7 +29,7 @@ export const InstallerInstallationSchema = z
     installDir: z.string().startsWith("/"),
     executablePath: z.string().startsWith("/"),
     binaryIdentity: InstallationBinaryIdentitySchema,
-    ingressIdentity: InstallationFileIdentitySchema,
+    ingressIdentity: InstallationBinaryIdentitySchema,
     popupIdentity: InstallationFileIdentitySchema,
     receiptIdentity: InstallationFileIdentitySchema,
   })
@@ -59,7 +59,7 @@ export async function inspectInstallerInstallation(
     const popupPath = join(installDir, "stn-tmux-popup");
     const receiptPath = join(installDir, receiptName);
     const [ingress, popup] = await Promise.all([
-      launcherIdentity(ingressPath),
+      binaryIdentity(ingressPath),
       launcherIdentity(popupPath),
     ]);
     if (ingress === undefined || popup === undefined) return undefined;
@@ -89,7 +89,10 @@ export async function inspectInstallerInstallation(
         inode: String(executable.ino),
         sha256: await sha256File(executablePath),
       },
-      ingressIdentity: statIdentity(ingress),
+      ingressIdentity: {
+        ...statIdentity(ingress),
+        sha256: await sha256File(ingressPath),
+      },
       popupIdentity: statIdentity(popup),
       receiptIdentity: statIdentity(receipt),
     };
@@ -170,7 +173,8 @@ function isInstallerReplacement(
     current.installDir === previous.installDir &&
     !sameFileIdentity(current.binaryIdentity, previous.binaryIdentity) &&
     current.binaryIdentity.sha256 !== previous.binaryIdentity.sha256 &&
-    sameFileIdentity(current.ingressIdentity, previous.ingressIdentity) &&
+    !sameFileIdentity(current.ingressIdentity, previous.ingressIdentity) &&
+    current.ingressIdentity.sha256 !== previous.ingressIdentity.sha256 &&
     sameFileIdentity(current.popupIdentity, previous.popupIdentity) &&
     sameFileIdentity(current.receiptIdentity, previous.receiptIdentity)
   );
@@ -184,6 +188,7 @@ export function installerExpectationText(installation: InstallerInstallation): s
     `binary_inode=${installation.binaryIdentity.inode}`,
     `ingress_device=${installation.ingressIdentity.device}`,
     `ingress_inode=${installation.ingressIdentity.inode}`,
+    `ingress_sha256=${installation.ingressIdentity.sha256}`,
     `popup_device=${installation.popupIdentity.device}`,
     `popup_inode=${installation.popupIdentity.inode}`,
     `receipt_device=${installation.receiptIdentity.device}`,
@@ -202,6 +207,18 @@ async function launcherIdentity(path: string) {
   }
 }
 
+async function binaryIdentity(path: string) {
+  try {
+    const binary = await lstat(path, { bigint: true });
+    if (!binary.isFile() || binary.isSymbolicLink() || (binary.mode & 0o111n) === 0n) {
+      return undefined;
+    }
+    return binary;
+  } catch {
+    return undefined;
+  }
+}
+
 function sameInstallationIdentity(
   left: InstallerInstallation,
   right: InstallerInstallation,
@@ -210,6 +227,7 @@ function sameInstallationIdentity(
     sameFileIdentity(left.binaryIdentity, right.binaryIdentity) &&
     left.binaryIdentity.sha256 === right.binaryIdentity.sha256 &&
     sameFileIdentity(left.ingressIdentity, right.ingressIdentity) &&
+    left.ingressIdentity.sha256 === right.ingressIdentity.sha256 &&
     sameFileIdentity(left.popupIdentity, right.popupIdentity) &&
     sameFileIdentity(left.receiptIdentity, right.receiptIdentity)
   );

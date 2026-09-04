@@ -245,6 +245,7 @@ export type ConfigScriptHookUninstallPlan<Document, EventName extends string> = 
 function providerHookCommandLineFromScriptArgs(
   provider: string,
   options: ProviderHookScriptOptions,
+  forwardScriptArgs: boolean,
 ): string {
   return [
     shellQuote(options.hookBin ?? "stn-ingress"),
@@ -254,6 +255,7 @@ function providerHookCommandLineFromScriptArgs(
     guardedArrayExpansion("CONFIG_ARG"),
     ...(options.autoStartFromHooks === false ? ["--no-auto-start"] : []),
     shellQuote(provider),
+    ...(forwardScriptArgs ? ['"$@"'] : []),
   ].join(" ");
 }
 
@@ -506,6 +508,8 @@ export function expectedProviderHookScript(input: {
   options?: ProviderHookScriptOptions;
   ignoreFailure?: boolean;
   redirectStderr?: boolean;
+  /** Forwards provider-configured positional context to the ingress executable. */
+  forwardScriptArgs?: boolean;
 }): string {
   const suffix = input.ignoreFailure === true ? " || true" : "";
   const redirect = input.redirectStderr === true ? " > /dev/null 2>&1" : " > /dev/null";
@@ -514,7 +518,7 @@ export function expectedProviderHookScript(input: {
   // `codex` in any terminal) still deliver, and the provider adapter decides
   // scope — the observer correlates env-less events by their payload cwd.
   return [
-    "#!/usr/bin/env bash",
+    "#!/bin/bash",
     ...(options.artifactOwner === undefined
       ? []
       : [`# ${providerHookOwnerMarker(options.artifactOwner)}`]),
@@ -536,7 +540,11 @@ export function expectedProviderHookScript(input: {
       options.hookSpoolDir,
       { skipFallbackWhenEnvPresent: "STATION_CONFIG_PATH" },
     ),
-    `${providerHookCommandLineFromScriptArgs(input.provider, options)}${redirect}${suffix}`,
+    `${input.ignoreFailure === true ? "" : "exec "}${providerHookCommandLineFromScriptArgs(
+      input.provider,
+      options,
+      input.forwardScriptArgs === true,
+    )}${redirect}${suffix}`,
     "",
   ].join("\n");
 }
@@ -547,7 +555,8 @@ export function providerHookScriptRoutesByStationEnv(script: string, provider: s
     script.includes("STATION_CONFIG_PATH") &&
     script.includes("STATION_STATE_DIR") &&
     script.includes("STATION_HOOK_SPOOL_DIR") &&
-    script.includes(`${shellQuote(provider)} > /dev/null`)
+    script.includes(shellQuote(provider)) &&
+    script.includes(" > /dev/null")
   );
 }
 

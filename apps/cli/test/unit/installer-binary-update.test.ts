@@ -5,7 +5,6 @@ import {
   mkdtemp,
   readdir,
   readFile,
-  readlink,
   realpath,
   rename,
   rm,
@@ -197,7 +196,11 @@ describe("installer-binary detection and planning", () => {
         inode: expect.any(String),
         sha256: createHash("sha256").update("current-binary").digest("hex"),
       },
-      ingressIdentity: { device: expect.any(String), inode: expect.any(String) },
+      ingressIdentity: {
+        device: expect.any(String),
+        inode: expect.any(String),
+        sha256: createHash("sha256").update("current-ingress").digest("hex"),
+      },
       popupIdentity: { device: expect.any(String), inode: expect.any(String) },
       receiptIdentity: { device: expect.any(String), inode: expect.any(String) },
     });
@@ -321,7 +324,7 @@ describe("installer-binary apply", () => {
         ],
       }),
     );
-    expect(await readlink(join(fixture.installDir, "stn-ingress"))).toBe("stn");
+    expect(await readFile(join(fixture.installDir, "stn-ingress"), "utf8")).toBe("target-ingress");
     expect(await readFile(fixture.receiptPath, "utf8")).toBe(RECEIPT);
     expect(await readdir(fixture.tempRoot)).toEqual([]);
   });
@@ -549,11 +552,9 @@ async function installedFixture() {
   const executablePath = join(installDir, "stn");
   const receiptPath = join(installDir, ".station-install-receipt");
   await writeFile(executablePath, "current-binary", { mode: 0o755 });
+  await writeFile(join(installDir, "stn-ingress"), "current-ingress", { mode: 0o755 });
   await writeFile(receiptPath, RECEIPT, { mode: 0o600 });
-  await Promise.all([
-    symlink("stn", join(installDir, "stn-ingress")),
-    symlink("stn", join(installDir, "stn-tmux-popup")),
-  ]);
+  await symlink("stn", join(installDir, "stn-tmux-popup"));
   return {
     root,
     installDir: await realpath(installDir),
@@ -658,6 +659,7 @@ function installingRunner(
         "binary_inode",
         "ingress_device",
         "ingress_inode",
+        "ingress_sha256",
         "popup_device",
         "popup_inode",
         "receipt_device",
@@ -665,6 +667,7 @@ function installingRunner(
       ]);
       if (options.installFailsBeforeMutation === true) throw installerError();
       await replaceExecutable(fixture.executablePath, "target-binary");
+      await replaceExecutable(join(fixture.installDir, "stn-ingress"), "target-ingress");
       installedVersion = TARGET_VERSION;
       if (options.installFailsAfterMutation === true) throw installerError();
       return commandResult(input);

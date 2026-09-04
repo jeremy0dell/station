@@ -15,7 +15,6 @@ import {
   commandLine,
   createHookSetupFileOps,
   expectedProviderHookScript,
-  hookCommandsForEvents,
   installConfigScriptHook,
   normalizeCancellationError,
   ProviderHookArtifactOwnershipError,
@@ -700,14 +699,28 @@ async function doctorCodexHooksWithinBoundary(
   return result;
 }
 
+/** Selects fast transport only for Codex events without permission-review semantics. */
 function expectedCodexHookCommands(input: {
   hookScriptPath: string;
 }): Record<CodexForwardedEventType, string> {
-  return hookCommandsForEvents(CODEX_HOOK_EVENT_NAMES, input.hookScriptPath);
+  return Object.fromEntries(
+    CODEX_HOOK_EVENT_NAMES.map((event) => [
+      event,
+      commandLine([
+        input.hookScriptPath,
+        ...(event === "PermissionRequest" ? [] : ["--fast"]),
+        event,
+      ]),
+    ]),
+  ) as Record<CodexForwardedEventType, string>;
 }
 
 function expectedCodexHookScript(input: CodexHookScriptOptions): string {
-  return expectedProviderHookScript({ provider: "codex", options: input });
+  return expectedProviderHookScript({
+    provider: "codex",
+    options: input,
+    forwardScriptArgs: true,
+  });
 }
 
 function installResultFromPlan(plan: CodexHookPlan, installed: boolean): CodexHookInstallResult {

@@ -353,6 +353,7 @@ describe("provider hook ingress command", () => {
         fixture.stateDir,
         "--config",
         configPath,
+        "--fast",
         "codex",
       ],
       {
@@ -889,6 +890,48 @@ describe("provider hook ingress command", () => {
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("HOOK_PAYLOAD_INVALID");
+  });
+
+  it("reuses a native transport hook ID on canonical fallback", async () => {
+    const fixture = await createTempState();
+    const result = await runProviderIngressMain(
+      [
+        "--socket",
+        fixture.socketPath,
+        "--state-dir",
+        fixture.stateDir,
+        "--spool-dir",
+        fixture.hookSpoolDir,
+        "--no-auto-start",
+        "--fast",
+        "codex",
+        "Stop",
+      ],
+      {
+        stdin: JSON.stringify({
+          session_id: "codex_session_1",
+          transcript_path: null,
+          cwd: "/tmp/station/web/task",
+          hook_event_name: "Stop",
+          model: "gpt-5.4-codex",
+          permission_mode: "default",
+          turn_id: "turn_1",
+          stop_hook_active: false,
+          last_assistant_message: null,
+        }),
+        env: stationEnv(),
+        hookId: "hook_native_fallback",
+      },
+    );
+
+    expect(result.code).toBe(0);
+    const files = await listHookSpoolFiles(fixture.hookSpoolDir);
+    expect(files).toHaveLength(1);
+    await expect(
+      readHookSpoolRecord(fixture.hookSpoolDir, files[0] as string),
+    ).resolves.toMatchObject({
+      event: { hookId: "hook_native_fallback", event: "Stop" },
+    });
   });
 
   it("rejects malformed provider payloads before delivery or spool writes", async () => {
