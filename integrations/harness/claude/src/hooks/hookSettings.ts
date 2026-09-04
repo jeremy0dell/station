@@ -1,4 +1,9 @@
-import { createJsonHookConfigEditor, isJsonObject } from "@station/harness-shared";
+import {
+  createJsonHookConfigEditor,
+  generatedHookScriptPath,
+  isJsonObject,
+} from "@station/harness-shared";
+import { commandLine } from "@station/runtime";
 import {
   CLAUDE_HOOK_EVENT_NAMES,
   type ClaudeForwardedEventType,
@@ -41,18 +46,18 @@ function matcherForEvent(eventName: ClaudeForwardedEventType): string | undefine
 
 function generatedHookEntry(
   eventName: ClaudeForwardedEventType,
-  hookScriptPath: string,
+  command: string,
 ): Record<string, unknown> {
-  const entry: Record<string, unknown> = { hooks: [generatedHookCommand(hookScriptPath)] };
+  const entry: Record<string, unknown> = { hooks: [generatedHookCommand(command)] };
   const matcher = matcherForEvent(eventName);
   if (matcher !== undefined) entry.matcher = matcher;
   return entry;
 }
 
-function generatedHookCommand(hookScriptPath: string): Record<string, unknown> {
+function generatedHookCommand(command: string): Record<string, unknown> {
   return {
     type: "command",
-    command: hookScriptPath,
+    command,
     timeout: 30,
     statusMessage: GENERATED_HOOK_STATUS_MESSAGE,
   };
@@ -62,7 +67,7 @@ function isGeneratedStationHookCommand(value: unknown): boolean {
   if (!isJsonObject(value) || value.type !== "command" || typeof value.command !== "string") {
     return false;
   }
-  if (value.command.endsWith(`/${GENERATED_HOOK_SCRIPT_NAME}`)) {
+  if (generatedHookScriptPath(value.command, GENERATED_HOOK_SCRIPT_NAME) !== undefined) {
     return true;
   }
   return (
@@ -75,8 +80,9 @@ export function expectedClaudeHookSettings(input: {
   hookScriptPath: string;
 }): ClaudeSettingsDocument {
   const hooks: Record<string, unknown> = {};
+  const commands = expectedClaudeHookCommands(input.hookScriptPath);
   for (const eventName of CLAUDE_HOOK_EVENT_NAMES) {
-    hooks[eventName] = [generatedHookEntry(eventName, input.hookScriptPath)];
+    hooks[eventName] = [generatedHookEntry(eventName, commands[eventName])];
   }
   return { hooks };
 }
@@ -112,10 +118,16 @@ export function missingClaudeHookEvents(
   document: ClaudeSettingsDocument,
   hookScriptPath: string,
 ): ClaudeForwardedEventType[] {
-  return hookConfigEditor.missingEvents(
-    document,
-    Object.fromEntries(
-      CLAUDE_HOOK_EVENT_NAMES.map((eventName) => [eventName, hookScriptPath]),
-    ) as Record<ClaudeForwardedEventType, string>,
-  );
+  return hookConfigEditor.missingEvents(document, expectedClaudeHookCommands(hookScriptPath));
+}
+
+function expectedClaudeHookCommands(
+  hookScriptPath: string,
+): Record<ClaudeForwardedEventType, string> {
+  return Object.fromEntries(
+    CLAUDE_HOOK_EVENT_NAMES.map((eventName) => [
+      eventName,
+      commandLine([hookScriptPath, "--fast", eventName]),
+    ]),
+  ) as Record<ClaudeForwardedEventType, string>;
 }

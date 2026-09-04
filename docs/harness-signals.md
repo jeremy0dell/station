@@ -72,9 +72,9 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    use the raw `stn-ingress` path. `HarnessProvider` has no fallback raw-event
    ingestion operation; cwd-only and other unresolved report evidence is
    correlated against current graph truth only during Observer projection.
-   Compiled fast ingress may carry Station identity in provider-neutral envelope
-   fields; the Observer adapter translates those fields into the provider payload
-   before this one normalization pass.
+   Compiled fast ingress selected by Claude, Codex, or Cursor may carry Station
+   identity in provider-neutral envelope fields; the Observer adapter translates
+   those fields into the provider payload before this one normalization pass.
 2. **No provider vocabulary in core.** Observer core and the TUI must not
    match on provider prose (`reason` strings), provider event names, or
    provider keys in `providerData`. If core needs to branch on it, it becomes

@@ -57,11 +57,11 @@ describe("Claude hook setup", () => {
       hooks: Record<string, { matcher?: string; hooks: { command: string }[] }[]>;
     };
     expect(Object.keys(settings.hooks)).toEqual(expectedEvents);
-    for (const entries of Object.values(settings.hooks)) {
+    for (const [eventName, entries] of Object.entries(settings.hooks)) {
       expect(entries).toHaveLength(1);
       expect(entries[0]?.hooks[0]).toMatchObject({
         type: "command",
-        command: hookScriptPath,
+        command: `${hookScriptPath} --fast ${eventName}`,
         timeout: 30,
         statusMessage: "Notify station",
       });
@@ -103,7 +103,7 @@ describe("Claude hook setup", () => {
     // and leave scope decisions to the provider adapter.
     expect(script).not.toContain("STATION_SESSION_ID");
     expect(script).toContain("--config /tmp/station/config.toml");
-    expect(script).toContain("claude > /dev/null");
+    expect(script).toContain('claude "$@" > /dev/null');
     expect(script).not.toContain("payload_file=");
     expect(scriptMode).toBe(0o700);
     await expect(doctorClaudeHooks({ ...options, enabled: true })).resolves.toMatchObject({
@@ -111,6 +111,36 @@ describe("Claude hook setup", () => {
       installed: true,
       settingsPath,
     });
+  });
+
+  it("migrates legacy bare hook commands to event-declared fast commands", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-claude-hooks-legacy-"));
+    const settingsPath = join(root, "state", "hooks", "station-claude-settings.json");
+    const hookScriptPath = join(root, "state", "hooks", "station-claude-hook.sh");
+    await mkdir(join(root, "state", "hooks"), { recursive: true });
+    await writeFile(settingsPath, legacyClaudeSettings(hookScriptPath), "utf8");
+
+    const installed = await installClaudeHooks({
+      claudeSettingsPath: settingsPath,
+      claudeConfigDir: join(root, "claude-home"),
+      hookScriptPath,
+      env: {},
+    });
+    const settings = JSON.parse(await readFile(settingsPath, "utf8")) as {
+      hooks: Record<string, { hooks: { command: string }[] }[]>;
+    };
+
+    expect(installed.changed).toBe(true);
+    for (const eventName of expectedEvents) {
+      expect(settings.hooks[eventName]?.[0]?.hooks).toEqual([
+        {
+          type: "command",
+          command: `${hookScriptPath} --fast ${eventName}`,
+          timeout: 30,
+          statusMessage: "Notify station",
+        },
+      ]);
+    }
   });
 
   it("refuses install and uninstall from another Station runtime owner", async () => {
@@ -225,11 +255,14 @@ describe("Claude hook setup", () => {
     });
 
     const payload = JSON.stringify({ hook_event_name: "PreToolUse" });
-    const result = await runHookScript(hookScriptPath, payload, { TMPDIR: root });
+    const result = await runHookScript(hookScriptPath, payload, { TMPDIR: root }, [
+      "--fast",
+      "PreToolUse",
+    ]);
 
     expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
     await expect(readFile(argsLog, "utf8")).resolves.toBe(
-      "--config /tmp/station/config.toml claude\n",
+      "--config /tmp/station/config.toml claude --fast PreToolUse\n",
     );
   });
 
@@ -262,15 +295,20 @@ describe("Claude hook setup", () => {
     });
 
     const payload = JSON.stringify({ hook_event_name: "PreToolUse" });
-    const result = await runHookScript(hookScriptPath, payload, {
-      TMPDIR: root,
-      STATION_SESSION_ID: "ses_web_task",
-      STATION_WORKTREE_ID: "wt_web_task",
-    });
+    const result = await runHookScript(
+      hookScriptPath,
+      payload,
+      {
+        TMPDIR: root,
+        STATION_SESSION_ID: "ses_web_task",
+        STATION_WORKTREE_ID: "wt_web_task",
+      },
+      ["--fast", "PreToolUse"],
+    );
 
     expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
     await expect(readFile(argsLog, "utf8")).resolves.toBe(
-      "--config /tmp/station/config.toml claude\n",
+      "--config /tmp/station/config.toml claude --fast PreToolUse\n",
     );
     await expect(readFile(stdinLog, "utf8")).resolves.toBe(payload);
   });
@@ -396,10 +434,33 @@ function userSettingsWithGeneratedEntries(hookScriptPath: string): string {
   );
 }
 
+function legacyClaudeSettings(hookScriptPath: string): string {
+  return JSON.stringify({
+    hooks: Object.fromEntries(
+      expectedEvents.map((eventName) => [
+        eventName,
+        [
+          {
+            hooks: [
+              {
+                type: "command",
+                command: hookScriptPath,
+                timeout: 30,
+                statusMessage: "Notify station",
+              },
+            ],
+          },
+        ],
+      ]),
+    ),
+  });
+}
+
 async function runHookScript(
   scriptPath: string,
   stdin: string,
   env: NodeJS.ProcessEnv,
+  args: string[] = [],
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   const childEnv: NodeJS.ProcessEnv = {};
   if (process.env.PATH !== undefined) {
@@ -411,7 +472,7 @@ async function runHookScript(
     }
   }
 
-  const child = spawn(scriptPath, [], {
+  const child = spawn(scriptPath, args, {
     env: childEnv,
     stdio: ["pipe", "pipe", "pipe"],
   });

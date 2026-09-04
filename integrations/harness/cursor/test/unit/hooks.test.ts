@@ -46,7 +46,9 @@ describe("Cursor hook setup", () => {
         "postToolUseFailure",
       ],
     });
-    expect(plan.commands.beforeShellExecution).toBe(hookScriptPath);
+    expect(plan.commands.beforeShellExecution).toBe(
+      `${hookScriptPath} --fast beforeShellExecution`,
+    );
     expect(plan.after).toContain('"beforeShellExecution"');
     await expect(readFile(hooksPath, "utf8")).rejects.toThrow();
     await expect(readFile(hookScriptPath, "utf8")).rejects.toThrow();
@@ -105,10 +107,12 @@ describe("Cursor hook setup", () => {
       timeout: 5,
     });
     expect(config.hooks.afterShellExecution).toContainEqual({
-      command: hookScriptPath,
+      command: `${hookScriptPath} --fast afterShellExecution`,
       timeout: 30,
     });
-    expect(config.hooks.beforeShellExecution).toEqual([{ command: hookScriptPath, timeout: 30 }]);
+    expect(config.hooks.beforeShellExecution).toEqual([
+      { command: `${hookScriptPath} --fast beforeShellExecution`, timeout: 30 },
+    ]);
     expect(script).toContain(
       `if [ -n "${shellParameter("STATION_OBSERVER_SOCKET_PATH:-")}" ]; then`,
     );
@@ -117,11 +121,11 @@ describe("Cursor hook setup", () => {
     expect(script).toContain('CONFIG_ARG=(--config "$STATION_CONFIG_PATH")');
     expect(script).toContain("CONFIG_ARG=(--config /tmp/station/config.toml)");
     expect(providerHookScriptRoutesByStationEnv(script, "cursor")).toBe(true);
-    expect(script).toContain("--no-auto-start cursor");
+    expect(script).toContain('--no-auto-start cursor "$@"');
     // External sessions carry no station env; the script must deliver anyway
     // and leave scope decisions to the provider adapter.
     expect(script).not.toContain("STATION_SESSION_ID");
-    expect(script).toContain("cursor > /dev/null");
+    expect(script).toContain('cursor "$@" > /dev/null');
     expect(scriptMode).toBe(0o700);
     await expect(
       doctorCursorHooks({
@@ -140,6 +144,25 @@ describe("Cursor hook setup", () => {
       hooksPath,
       hookScriptPath,
     });
+  });
+
+  it("migrates legacy bare hook commands to event-declared fast commands", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-hooks-legacy-"));
+    const hooksPath = join(root, "cursor", "hooks.json");
+    const hookScriptPath = join(root, "state", "hooks", "station-cursor-hook.sh");
+    await mkdir(join(root, "cursor"), { recursive: true });
+    await writeFile(hooksPath, legacyCursorHooks(hookScriptPath), "utf8");
+
+    const installed = await installCursorHooks({ cursorHooksPath: hooksPath, hookScriptPath });
+    const config = JSON.parse(await readFile(hooksPath, "utf8")) as {
+      hooks: Record<string, { command: string; timeout: number }[]>;
+    };
+
+    expect(installed.changed).toBe(true);
+    for (const [eventName, command] of Object.entries(installed.commands)) {
+      expect(config.hooks[eventName]).toEqual([{ command, timeout: 30 }]);
+      expect(command).toBe(`${hookScriptPath} --fast ${eventName}`);
+    }
   });
 
   it("doctor accepts a shared generated hook script that routes by Station env", async () => {
@@ -172,8 +195,8 @@ describe("Cursor hook setup", () => {
       installed: true,
       hookScriptPath: sharedHookScriptPath,
       commands: {
-        sessionStart: sharedHookScriptPath,
-        postToolUse: sharedHookScriptPath,
+        sessionStart: `${sharedHookScriptPath} --fast sessionStart`,
+        postToolUse: `${sharedHookScriptPath} --fast postToolUse`,
       },
     });
   });
@@ -270,11 +293,14 @@ describe("Cursor hook setup", () => {
     });
 
     const payload = JSON.stringify({ hook_event_name: "beforeShellExecution" });
-    const result = await runHookScript(hookScriptPath, payload, { TMPDIR: root });
+    const result = await runHookScript(hookScriptPath, payload, { TMPDIR: root }, [
+      "--fast",
+      "beforeShellExecution",
+    ]);
 
     expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
     await expect(readFile(argsLog, "utf8")).resolves.toBe(
-      "--config /tmp/station/config.toml cursor\n",
+      "--config /tmp/station/config.toml cursor --fast beforeShellExecution\n",
     );
   });
 
@@ -305,15 +331,20 @@ describe("Cursor hook setup", () => {
     });
 
     const payload = JSON.stringify({ hook_event_name: "sessionStart" });
-    const result = await runHookScript(hookScriptPath, payload, {
-      TMPDIR: root,
-      STATION_SESSION_ID: "ses_web_task",
-      STATION_WORKTREE_ID: "wt_web_task",
-    });
+    const result = await runHookScript(
+      hookScriptPath,
+      payload,
+      {
+        TMPDIR: root,
+        STATION_SESSION_ID: "ses_web_task",
+        STATION_WORKTREE_ID: "wt_web_task",
+      },
+      ["--fast", "sessionStart"],
+    );
 
     expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
     await expect(readFile(argsLog, "utf8")).resolves.toBe(
-      "--config /tmp/station/config.toml cursor\n",
+      "--config /tmp/station/config.toml cursor --fast sessionStart\n",
     );
     await expect(readFile(stdinLog, "utf8")).resolves.toBe(payload);
   });
@@ -345,17 +376,22 @@ describe("Cursor hook setup", () => {
       hookBin,
     });
 
-    const result = await runHookScript(hookScriptPath, '{"hook_event_name":"sessionStart"}', {
-      TMPDIR: root,
-      STATION_SESSION_ID: "ses_web_task",
-      STATION_WORKTREE_ID: "wt_web_task",
-      STATION_CONFIG_PATH: "/tmp/demo/config.toml",
-      STATION_OBSERVER_SOCKET_PATH: "/tmp/demo/observer.sock",
-    });
+    const result = await runHookScript(
+      hookScriptPath,
+      '{"hook_event_name":"sessionStart"}',
+      {
+        TMPDIR: root,
+        STATION_SESSION_ID: "ses_web_task",
+        STATION_WORKTREE_ID: "wt_web_task",
+        STATION_CONFIG_PATH: "/tmp/demo/config.toml",
+        STATION_OBSERVER_SOCKET_PATH: "/tmp/demo/observer.sock",
+      },
+      ["--fast", "sessionStart"],
+    );
 
     expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
     await expect(readFile(argsLog, "utf8")).resolves.toBe(
-      "--socket /tmp/demo/observer.sock --config /tmp/demo/config.toml cursor\n",
+      "--socket /tmp/demo/observer.sock --config /tmp/demo/config.toml cursor --fast sessionStart\n",
     );
   });
 
@@ -428,6 +464,7 @@ async function runHookScript(
   scriptPath: string,
   stdin: string,
   env: NodeJS.ProcessEnv,
+  args: string[] = [],
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   const childEnv: NodeJS.ProcessEnv = {};
   if (process.env.PATH !== undefined) {
@@ -439,7 +476,7 @@ async function runHookScript(
     }
   }
 
-  const child = spawn(scriptPath, [], {
+  const child = spawn(scriptPath, args, {
     env: childEnv,
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -498,4 +535,22 @@ function existingCursorHooks(): string {
     null,
     2,
   );
+}
+
+function legacyCursorHooks(hookScriptPath: string): string {
+  return JSON.stringify({
+    version: 1,
+    hooks: Object.fromEntries(
+      [
+        "sessionStart",
+        "stop",
+        "sessionEnd",
+        "beforeShellExecution",
+        "afterShellExecution",
+        "preToolUse",
+        "postToolUse",
+        "postToolUseFailure",
+      ].map((eventName) => [eventName, [{ command: hookScriptPath, timeout: 30 }]]),
+    ),
+  });
 }

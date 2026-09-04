@@ -1,4 +1,8 @@
-import { createJsonHookConfigEditor, isJsonObject } from "@station/harness-shared";
+import {
+  createJsonHookConfigEditor,
+  generatedHookScriptPath,
+  isJsonObject,
+} from "@station/harness-shared";
 import { z } from "zod";
 import {
   CURSOR_HOOK_EVENT_NAMES,
@@ -52,9 +56,7 @@ export const documentContainsCommand: (document: CursorHooksDocument, command: s
   hookConfigEditor.documentContainsCommand;
 
 function commandLooksLikeGeneratedHookScript(command: string): boolean {
-  return (
-    command === GENERATED_HOOK_SCRIPT_NAME || command.endsWith(`/${GENERATED_HOOK_SCRIPT_NAME}`)
-  );
+  return generatedHookScriptPath(command, GENERATED_HOOK_SCRIPT_NAME) !== undefined;
 }
 
 export function parseJsonDocument(source: string): CursorHooksDocument {

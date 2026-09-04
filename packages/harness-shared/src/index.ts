@@ -14,6 +14,7 @@ export {
   reportCorrelation,
 } from "./events.js";
 export { createHarnessHookAdapter } from "./hookAdapter.js";
+export { generatedHookScriptPath } from "./hooks/generatedCommand.js";
 export { createJsonHookConfigEditor, isJsonObject } from "./hooks/jsonConfig.js";
 export {
   type CommonLaunchEnvOptions,
