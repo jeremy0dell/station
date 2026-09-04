@@ -69,6 +69,36 @@ describe("CLI OpenCode hook commands", () => {
     );
   });
 
+  it("reconciles configured hooks through the generic hooks command", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-opencode-hooks-"));
+    const configPath = await writeConfig(root, true);
+    const launcher = join(root, "bin", "stn-ingress");
+    const options = {
+      env: { OPENCODE_CONFIG_DIR: join(root, "opencode") },
+      providerHookIngressLauncher: launcher,
+      providerHookArtifactOwner: {
+        schemaVersion: 1 as const,
+        launcher,
+        runtimeKind: "compiled" as const,
+        version: "0.0.0-test",
+        buildIdentity: "a".repeat(64),
+      },
+    };
+
+    await expect(
+      runCli(["--config", configPath, "hooks", "reconcile", "opencode"], options),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: { provider: "opencode", status: "repaired", changed: true, verified: true },
+    });
+    await expect(
+      runCli(["--config", configPath, "hooks", "reconcile", "opencode"], options),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: { provider: "opencode", status: "healthy", changed: false, verified: true },
+    });
+  });
+
   it("installs and uninstalls through the generic hooks command", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cli-opencode-hooks-"));
     const configPath = await writeConfig(root, true);

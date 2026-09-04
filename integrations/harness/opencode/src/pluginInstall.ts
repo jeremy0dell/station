@@ -1,12 +1,23 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
-import { isHookOwnershipConflict, sameOwnerOwnership } from "@station/harness-shared";
+import type {
+  ProviderHookArtifactOwner,
+  ProviderHookArtifactOwnership,
+  ProviderHookHealth,
+  ProviderHookReconciliationResult,
+} from "@station/contracts";
+import {
+  inspectDeclarativeProviderHookHealth,
+  isHookOwnershipConflict,
+  reconcileDeclarativeProviderHooks,
+  sameOwnerOwnership,
+} from "@station/harness-shared";
 import {
   assertProviderHookArtifactOwnership,
   classifyProviderHookArtifactOwnership,
   createHookSetupFileOps,
   providerHookOwnerMarker,
+  withProviderHookMutationLock,
 } from "@station/runtime";
 import { openCodeForwardedEventTypes } from "./ingressRules.js";
 import { renderStationOpenCodePlugin } from "./pluginScript.js";
@@ -24,6 +35,13 @@ export type OpenCodePluginPlanOptions = {
   homeDir?: string;
   artifactOwner?: ProviderHookArtifactOwner;
   takeover?: boolean;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  beginMutation?: () => void;
+};
+
+export type OpenCodePluginReconciliationOptions = Omit<OpenCodePluginPlanOptions, "takeover"> & {
+  enabled: boolean;
 };
 
 export type OpenCodePluginPlan = {
@@ -63,7 +81,10 @@ export async function planOpenCodePlugin(
 ): Promise<OpenCodePluginPlan> {
   const configDir = resolveOpenCodeConfigDir(options);
   const pluginPath = resolveOpenCodePluginPath(options);
-  const before = await fileOps.readOptionalFile(pluginPath);
+  const before = await fileOps.readOptionalFile(
+    pluginPath,
+    options.signal === undefined ? undefined : { signal: options.signal },
+  );
   const after = expectedOpenCodePluginScript(options);
   const changed = before !== after;
   const ownership = openCodePluginOwnership(before, options);
@@ -83,13 +104,29 @@ export async function planOpenCodePlugin(
 export async function installOpenCodePlugin(
   options: OpenCodePluginPlanOptions = {},
 ): Promise<OpenCodePluginInstallResult> {
+  return withProviderHookMutationLock(
+    [resolveOpenCodePluginPath(options)],
+    () => installOpenCodePluginUnlocked(options),
+    hookMutationLockContext(options),
+  );
+}
+
+async function installOpenCodePluginUnlocked(
+  options: OpenCodePluginPlanOptions,
+  onMutationCommitted?: () => void,
+): Promise<OpenCodePluginInstallResult> {
   const plan = await planOpenCodePlugin(options);
-  const current = await fileOps.readOptionalFile(plan.pluginPath);
+  const current = await fileOps.readOptionalFile(
+    plan.pluginPath,
+    options.signal === undefined ? undefined : { signal: options.signal },
+  );
   assertOpenCodePluginOwnership("install", plan.pluginPath, current, options);
   let backupPath: string | undefined;
   if (plan.changed) {
+    options.beginMutation?.();
     backupPath = await fileOps.backupIfPresent(plan.pluginPath);
     await fileOps.writeHookConfig(plan.pluginPath, plan.after);
+    onMutationCommitted?.();
   }
   const result: OpenCodePluginInstallResult = {
     ...plan,
@@ -107,11 +144,25 @@ export async function installOpenCodePlugin(
 export async function uninstallOpenCodePlugin(
   options: OpenCodePluginPlanOptions = {},
 ): Promise<OpenCodePluginInstallResult> {
+  return withProviderHookMutationLock(
+    [resolveOpenCodePluginPath(options)],
+    () => uninstallOpenCodePluginUnlocked(options),
+    hookMutationLockContext(options),
+  );
+}
+
+async function uninstallOpenCodePluginUnlocked(
+  options: OpenCodePluginPlanOptions,
+): Promise<OpenCodePluginInstallResult> {
   const plan = await planOpenCodePlugin(options);
-  const current = await fileOps.readOptionalFile(plan.pluginPath);
+  const current = await fileOps.readOptionalFile(
+    plan.pluginPath,
+    options.signal === undefined ? undefined : { signal: options.signal },
+  );
   assertOpenCodePluginOwnership("uninstall", plan.pluginPath, current, options);
   let removed = false;
   if (plan.before.includes(OPENCODE_STATION_PLUGIN_MARKER)) {
+    options.beginMutation?.();
     removed = await fileOps.removeHookFileIfPresent(plan.pluginPath);
   }
   return {
@@ -184,6 +235,86 @@ export function resolveOpenCodePluginPath(options: OpenCodePluginPlanOptions = {
     options.pluginPath ??
     join(resolveOpenCodeConfigDir(options), "plugins", OPENCODE_STATION_PLUGIN_NAME)
   );
+}
+
+export async function inspectOpenCodePluginHealth(
+  options: OpenCodePluginReconciliationOptions,
+): Promise<ProviderHookHealth> {
+  return inspectDeclarativeProviderHookHealth({
+    provider: "opencode",
+    enabled: options.enabled,
+    inspect: () => doctorOpenCodePlugin({ ...options, enabled: true }),
+    errors: openCodePluginErrors,
+  });
+}
+
+export async function reconcileOpenCodePlugin(
+  options: OpenCodePluginReconciliationOptions,
+): Promise<ProviderHookReconciliationResult> {
+  const planOptions = openCodeAutomaticReconciliationOptions(options);
+  return reconcileDeclarativeProviderHooks({
+    provider: "opencode",
+    enabled: options.enabled,
+    ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
+    artifactPaths: [resolveOpenCodePluginPath(options)],
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    ...(options.beginMutation === undefined ? {} : { beginMutation: options.beginMutation }),
+    inspect: (signal) =>
+      doctorOpenCodePlugin({
+        ...planOptions,
+        ...(signal === undefined ? {} : { signal }),
+        enabled: true,
+      }),
+    install: (context) =>
+      installOpenCodePluginUnlocked(
+        {
+          ...planOptions,
+          ...(context.signal === undefined ? {} : { signal: context.signal }),
+          beginMutation: context.beginMutation,
+        },
+        context.onMutationCommitted,
+      ),
+    errors: openCodePluginErrors,
+  });
+}
+
+const openCodePluginErrors = {
+  tag: "OpenCodePluginSetupError",
+  inspection: {
+    code: "OPENCODE_PLUGIN_INSPECTION_FAILED",
+    message: "OpenCode plugin inspection failed.",
+  },
+  write: {
+    code: "OPENCODE_PLUGIN_WRITE_FAILED",
+    message: "OpenCode plugin reconciliation could not complete its writes.",
+  },
+  verification: {
+    code: "OPENCODE_PLUGIN_POST_WRITE_DOCTOR_FAILED",
+    message: "OpenCode plugin writes were not verified by provider doctor.",
+  },
+} as const;
+
+function openCodeAutomaticReconciliationOptions(
+  options: OpenCodePluginReconciliationOptions,
+): OpenCodePluginPlanOptions {
+  const planOptions = { ...options } as OpenCodePluginPlanOptions & { enabled?: boolean };
+  delete planOptions.enabled;
+  delete planOptions.takeover;
+  delete planOptions.signal;
+  delete planOptions.timeoutMs;
+  delete planOptions.beginMutation;
+  return planOptions;
+}
+
+function hookMutationLockContext(options: OpenCodePluginPlanOptions): {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+} {
+  const context: { signal?: AbortSignal; timeoutMs?: number } = {};
+  if (options.signal !== undefined) context.signal = options.signal;
+  if (options.timeoutMs !== undefined) context.timeoutMs = options.timeoutMs;
+  return context;
 }
 
 /**

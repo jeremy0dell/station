@@ -1,10 +1,17 @@
 // Installs/uninstalls the STATION hook into Claude Code's settings.json hooks.
 // Upstream hook contract: https://code.claude.com/docs/en/hooks-guide
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
-import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
+import type {
+  ProviderHookArtifactOwner,
+  ProviderHookArtifactOwnership,
+  ProviderHookHealth,
+  ProviderHookReconciliationResult,
+} from "@station/contracts";
 import {
   hookSetupFileOpsFor,
+  inspectDeclarativeProviderHookHealth,
   isHookOwnershipConflict,
+  reconcileDeclarativeProviderHooks,
   sameOwnerOwnership,
 } from "@station/harness-shared";
 import {
@@ -14,6 +21,7 @@ import {
   installConfigScriptHook,
   type ProviderHookScriptOptions,
   providerHookScriptOptions,
+  withProviderHookMutationLock,
 } from "@station/runtime";
 import { CLAUDE_HOOK_EVENT_NAMES, type ClaudeForwardedEventType } from "./hooks/hookConstants.js";
 import { ClaudeHookSetupError } from "./hooks/hookErrors.js";
@@ -49,8 +57,15 @@ export type ClaudeHookPlanOptions = {
   hookBin?: string;
   artifactOwner?: ProviderHookArtifactOwner;
   takeover?: boolean;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  beginMutation?: () => void;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
+};
+
+export type ClaudeHookReconciliationOptions = Omit<ClaudeHookPlanOptions, "takeover"> & {
+  enabled: boolean;
 };
 
 export type ClaudeUserSettingsCleanup = {
@@ -124,11 +139,17 @@ function parseArtifactDocument(contents: string): {
   }
 }
 
-async function buildUserSettingsCleanup(userSettingsPath: string): Promise<{
+async function buildUserSettingsCleanup(
+  userSettingsPath: string,
+  signal?: AbortSignal,
+): Promise<{
   cleanup: ClaudeUserSettingsCleanup;
   document: ClaudeSettingsDocument;
 }> {
-  const before = await fileOps.readOptionalFile(userSettingsPath);
+  const before = await fileOps.readOptionalFile(
+    userSettingsPath,
+    signal === undefined ? undefined : { signal },
+  );
   const { document } = parseArtifactDocument(before);
   const stale = generatedClaudeHookEvents(document);
   const afterDocument = removeGeneratedClaudeHookEntries(document);
@@ -185,11 +206,12 @@ export async function planClaudeHooks(
   const settingsPath = resolveClaudeSettingsArtifactPath(options);
   const userSettingsPath = resolveClaudeUserSettingsPath(options);
   const hookScriptPath = resolveClaudeHookScriptPath(options);
-  const before = await fileOps.readOptionalFile(settingsPath);
+  const readOptions = options.signal === undefined ? undefined : { signal: options.signal };
+  const before = await fileOps.readOptionalFile(settingsPath, readOptions);
   const { document, invalid } = parseArtifactDocument(before);
   const after = stringifyClaudeSettings(expectedClaudeHookSettings({ hookScriptPath }));
   const script = expectedClaudeHookScript(providerHookScriptOptions(hookScriptPath, options));
-  const scriptBefore = await fileOps.readOptionalFile(hookScriptPath);
+  const scriptBefore = await fileOps.readOptionalFile(hookScriptPath, readOptions);
   const settingsChanged = before.trim() !== after.trim();
   const scriptChanged = scriptBefore !== script;
   const ownership =
@@ -199,7 +221,7 @@ export async function planClaudeHooks(
           contents: scriptBefore,
           requested: options.artifactOwner,
         });
-  const { cleanup } = await buildUserSettingsCleanup(userSettingsPath);
+  const { cleanup } = await buildUserSettingsCleanup(userSettingsPath, options.signal);
 
   const result: ClaudeHookPlan = {
     provider: "claude",
@@ -223,7 +245,19 @@ export async function planClaudeHooks(
 export async function installClaudeHooks(
   options: ClaudeHookPlanOptions = {},
 ): Promise<ClaudeHookInstallResult> {
+  return withProviderHookMutationLock(
+    claudeHookMutationPaths(options),
+    () => installClaudeHooksUnlocked(options),
+    hookMutationLockContext(options),
+  );
+}
+
+async function installClaudeHooksUnlocked(
+  options: ClaudeHookPlanOptions,
+  onMutationCommitted?: () => void,
+): Promise<ClaudeHookInstallResult> {
   const plan = await planClaudeHooks(options);
+  const beginMutation = once(() => options.beginMutation?.());
   const backupPath = await installConfigScriptHook({
     configPath: plan.settingsPath,
     hookScriptPath: plan.hookScriptPath,
@@ -237,12 +271,17 @@ export async function installClaudeHooks(
     provider: "claude",
     ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
     ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
+    beginMutation,
+    ...(onMutationCommitted === undefined ? {} : { onMutationCommitted }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
   let userSettingsBackupPath: string | undefined;
 
   if (plan.userSettingsCleanup.changed) {
+    beginMutation();
     userSettingsBackupPath = await fileOps.backupIfPresent(plan.userSettingsPath);
     await fileOps.writeHookConfig(plan.userSettingsPath, plan.userSettingsCleanup.after);
+    onMutationCommitted?.();
   }
 
   const result: ClaudeHookInstallResult = {
@@ -272,11 +311,22 @@ export async function installClaudeHooks(
 export async function uninstallClaudeHooks(
   options: ClaudeHookPlanOptions = {},
 ): Promise<ClaudeHookInstallResult> {
+  return withProviderHookMutationLock(
+    claudeHookMutationPaths(options),
+    () => uninstallClaudeHooksUnlocked(options),
+    hookMutationLockContext(options),
+  );
+}
+
+async function uninstallClaudeHooksUnlocked(
+  options: ClaudeHookPlanOptions,
+): Promise<ClaudeHookInstallResult> {
   const settingsPath = resolveClaudeSettingsArtifactPath(options);
   const userSettingsPath = resolveClaudeUserSettingsPath(options);
   const hookScriptPath = resolveClaudeHookScriptPath(options);
-  const before = await fileOps.readOptionalFile(settingsPath);
-  const currentScript = await fileOps.readOptionalFile(hookScriptPath);
+  const readOptions = options.signal === undefined ? undefined : { signal: options.signal };
+  const before = await fileOps.readOptionalFile(settingsPath, readOptions);
+  const currentScript = await fileOps.readOptionalFile(hookScriptPath, readOptions);
   assertProviderHookArtifactOwnership({
     provider: "claude",
     action: "uninstall",
@@ -285,16 +335,22 @@ export async function uninstallClaudeHooks(
     ...(options.artifactOwner === undefined ? {} : { requested: options.artifactOwner }),
     ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
   });
-  const { cleanup, document: cleanedUserDocument } =
-    await buildUserSettingsCleanup(userSettingsPath);
+  const { cleanup, document: cleanedUserDocument } = await buildUserSettingsCleanup(
+    userSettingsPath,
+    options.signal,
+  );
   let userSettingsBackupPath: string | undefined;
+  const beginMutation = once(() => options.beginMutation?.());
 
+  beginMutation();
   const settingsRemoved = await fileOps.removeHookFileIfPresent(settingsPath);
   if (cleanup.changed) {
+    beginMutation();
     userSettingsBackupPath = await fileOps.backupIfPresent(userSettingsPath);
     await fileOps.writeHookConfig(userSettingsPath, cleanup.after);
   }
   const scriptStillNeeded = settingsDocumentContainsCommand(cleanedUserDocument, hookScriptPath);
+  if (!scriptStillNeeded) beginMutation();
   const scriptRemoved = scriptStillNeeded
     ? false
     : await fileOps.removeHookFileIfPresent(hookScriptPath);
@@ -371,4 +427,101 @@ export async function doctorClaudeHooks(
   };
   if (plan.ownership !== undefined) result.ownership = plan.ownership;
   return result;
+}
+
+export async function inspectClaudeHookHealth(
+  options: ClaudeHookReconciliationOptions,
+): Promise<ProviderHookHealth> {
+  return inspectDeclarativeProviderHookHealth({
+    provider: "claude",
+    enabled: options.enabled,
+    inspect: () => doctorClaudeHooks({ ...options, enabled: true }),
+    errors: claudeHookErrors,
+  });
+}
+
+export async function reconcileClaudeHooks(
+  options: ClaudeHookReconciliationOptions,
+): Promise<ProviderHookReconciliationResult> {
+  const planOptions = claudeAutomaticReconciliationOptions(options);
+  return reconcileDeclarativeProviderHooks({
+    provider: "claude",
+    enabled: options.enabled,
+    ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
+    artifactPaths: claudeHookMutationPaths(options),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    ...(options.beginMutation === undefined ? {} : { beginMutation: options.beginMutation }),
+    inspect: (signal) =>
+      doctorClaudeHooks({
+        ...planOptions,
+        ...(signal === undefined ? {} : { signal }),
+        enabled: true,
+      }),
+    install: (context) =>
+      installClaudeHooksUnlocked(
+        {
+          ...planOptions,
+          ...(context.signal === undefined ? {} : { signal: context.signal }),
+          beginMutation: context.beginMutation,
+        },
+        context.onMutationCommitted,
+      ),
+    errors: claudeHookErrors,
+  });
+}
+
+const claudeHookErrors = {
+  tag: "ClaudeHookSetupError",
+  inspection: {
+    code: "CLAUDE_HOOK_INSPECTION_FAILED",
+    message: "Claude hook inspection failed.",
+  },
+  write: {
+    code: "CLAUDE_HOOK_WRITE_FAILED",
+    message: "Claude hook reconciliation could not complete its writes.",
+  },
+  verification: {
+    code: "CLAUDE_HOOK_POST_WRITE_DOCTOR_FAILED",
+    message: "Claude hook writes were not verified by provider doctor.",
+  },
+} as const;
+
+function claudeAutomaticReconciliationOptions(
+  options: ClaudeHookReconciliationOptions,
+): ClaudeHookPlanOptions {
+  const planOptions = { ...options } as ClaudeHookPlanOptions & { enabled?: boolean };
+  delete planOptions.enabled;
+  delete planOptions.takeover;
+  delete planOptions.signal;
+  delete planOptions.timeoutMs;
+  delete planOptions.beginMutation;
+  return planOptions;
+}
+
+function claudeHookMutationPaths(options: ClaudeHookPlanOptions): string[] {
+  return [
+    resolveClaudeSettingsArtifactPath(options),
+    resolveClaudeUserSettingsPath(options),
+    resolveClaudeHookScriptPath(options),
+  ];
+}
+
+function hookMutationLockContext(options: ClaudeHookPlanOptions): {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+} {
+  const context: { signal?: AbortSignal; timeoutMs?: number } = {};
+  if (options.signal !== undefined) context.signal = options.signal;
+  if (options.timeoutMs !== undefined) context.timeoutMs = options.timeoutMs;
+  return context;
+}
+
+function once(effect: () => void): () => void {
+  let called = false;
+  return () => {
+    if (called) return;
+    called = true;
+    effect();
+  };
 }

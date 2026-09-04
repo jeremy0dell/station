@@ -12,3 +12,4 @@ export * from "./objects.js";
 export * from "./oneShotAuthorityStore.js";
 export * from "./paths.js";
 export * from "./processEvidence.js";
+export * from "./providerHookMutationLock.js";

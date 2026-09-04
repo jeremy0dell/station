@@ -1,4 +1,3 @@
-import { providerHookReconciliationSucceeded } from "@station/contracts";
 import {
   actionNeedsYes,
   hookCommandExitCode,
@@ -30,7 +29,7 @@ export const hooksCliCommand: CliCommandNode = {
     "stn hooks install <target> --yes [options]",
     "stn hooks uninstall <target> --yes [options]",
     "stn hooks doctor <target> [options]",
-    "stn hooks reconcile codex",
+    "stn hooks reconcile <harness>",
   ],
   options: [
     { name: "<target>", description: `One of: ${hookTargets.join(", ")}.` },
@@ -58,8 +57,8 @@ async function runProviderHookCliCommand(context: CliCommandRunContext) {
     throw new Error(`Unknown hook action: ${hookAction ?? ""}`);
   }
   const hookTarget = context.args[0];
-  if (hookAction === "reconcile" && hookTarget !== "codex") {
-    throw new Error("Automatic hook reconciliation is currently supported only for codex.");
+  if (hookAction === "reconcile" && (hookTarget === "worktrunk" || hookTarget === "event")) {
+    throw new Error(`Automatic hook reconciliation does not support ${hookTarget}.`);
   }
   const hookArgs = [hookAction, ...context.args.slice(1)];
   switch (hookTarget) {
@@ -79,13 +78,6 @@ async function runProviderHookCliCommand(context: CliCommandRunContext) {
       const codexOptions: ProviderHooksCommandOptions = loadedCommandOptions(context);
       if (context.options.env !== undefined) {
         codexOptions.env = context.options.env;
-      }
-      if (hookAction === "reconcile") {
-        const result = await runCodexHooksCommand(
-          ["reconcile", ...context.args.slice(1)],
-          codexOptions,
-        );
-        return { code: providerHookReconciliationSucceeded(result) ? 0 : 1, output: result };
       }
       const result = await runCodexHooksCommand(hookArgs, codexOptions);
       return { code: hookCommandExitCode(result), output: result };

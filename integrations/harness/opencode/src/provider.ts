@@ -7,6 +7,9 @@ import type {
   HarnessProvider,
   ProviderDoctorCheck,
   ProviderDoctorContext,
+  ProviderHookHealth,
+  ProviderHookReconciliationContext,
+  ProviderHookReconciliationResult,
 } from "@station/contracts";
 import {
   type CommonHarnessProviderOptions,
@@ -20,7 +23,11 @@ import {
 } from "@station/harness-shared";
 import { openCodeProviderErrorFromUnknown } from "./errors.js";
 import { buildOpenCodeLaunchPlan, type OpenCodeLaunchOptions } from "./launch.js";
-import { doctorOpenCodePlugin } from "./pluginInstall.js";
+import {
+  doctorOpenCodePlugin,
+  inspectOpenCodePluginHealth,
+  reconcileOpenCodePlugin,
+} from "./pluginInstall.js";
 
 export type OpenCodeHarnessProviderOptions = CommonHarnessProviderOptions & {
   profile?: string;
@@ -75,6 +82,8 @@ const openCodeSpec: TerminalBoundHarnessProviderSpec<OpenCodeHarnessProviderOpti
   unknownStatusReason: "OpenCode run has no reliable OpenCode status signal yet.",
   doctorChecks,
   hooksStatus,
+  hookHealth,
+  reconcileHooks,
 };
 
 const command = harnessCommandResolver(openCodeHarnessCommandDefinition);
@@ -147,11 +156,13 @@ async function doctorChecks(
 function openCodePluginDoctorOptions(
   options: OpenCodeHarnessProviderOptions,
   context?: ProviderDoctorContext,
-): Parameters<typeof doctorOpenCodePlugin>[0] {
-  const pluginOptions: Parameters<typeof doctorOpenCodePlugin>[0] = {
+): NonNullable<Parameters<typeof doctorOpenCodePlugin>[0]> {
+  const pluginOptions: NonNullable<Parameters<typeof doctorOpenCodePlugin>[0]> = {
     enabled: options.installHooks === true,
     env: options.env ?? process.env,
   };
+  if (context?.signal !== undefined) pluginOptions.signal = context.signal;
+  if (context?.timeoutMs !== undefined) pluginOptions.timeoutMs = context.timeoutMs;
   const requesterRuntime = context?.providerHookRuntime;
   if (requesterRuntime !== undefined) {
     pluginOptions.observerSocketPath = requesterRuntime.observerSocketPath;
@@ -195,11 +206,30 @@ async function hooksStatus(
   return status;
 }
 
+async function hookHealth(
+  options: OpenCodeHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<ProviderHookHealth> {
+  return inspectOpenCodePluginHealth({
+    ...openCodePluginDoctorOptions(options, context),
+    enabled: options.installHooks === true,
+  });
+}
+
+async function reconcileHooks(
+  options: OpenCodeHarnessProviderOptions,
+  context?: ProviderHookReconciliationContext,
+): Promise<ProviderHookReconciliationResult> {
+  const pluginOptions = openCodePluginDoctorOptions(options, context);
+  if (context?.beginMutation !== undefined) pluginOptions.beginMutation = context.beginMutation;
+  return reconcileOpenCodePlugin({ ...pluginOptions, enabled: options.installHooks === true });
+}
+
 /**
  * ADAPTER
  *
- * Supplies OpenCode launch, discovery, plugin-installation status, diagnostics, and event
- * normalization through the harness port.
+ * Supplies OpenCode launch, discovery, plugin reconciliation, diagnostics, and event normalization
+ * through the harness port.
  */
 export function createOpenCodeHarnessProvider(
   options: OpenCodeHarnessProviderOptions = {},
