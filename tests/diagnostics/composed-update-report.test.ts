@@ -81,7 +81,7 @@ function currentReport() {
 
 function predecessorV4Report() {
   const current = { version: "0.0.0-pre-alpha.14.3" };
-  const target = { version: "0.0.0-pre-alpha.14.4" };
+  const target = { version: "0.0.0-pre-alpha.14.5" };
   return {
     schemaVersion: 4,
     kind: "preview",
@@ -136,7 +136,7 @@ describe("composed update report parsing", () => {
 
     expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.5.16")).toBe(1);
     expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.14.3")).toBe(4);
-    expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.14.4")).toBe(5);
+    expect(updateReportSchemaVersionForEmitter("0.0.0-pre-alpha.14.5")).toBe(5);
     expect(updateReportSchemaVersionForEmitter("0.0.0-local")).toBe(5);
     expect(updateReportSchemaVersionForEmitter("0.0.1-local")).toBe(5);
   });

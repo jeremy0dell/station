@@ -79,9 +79,9 @@ describe("release readiness docs", () => {
       "let your agent install and validate station",
     );
     expect(prompt).toContain(
-      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.4/install.sh",
+      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.5/install.sh",
     );
-    expect(prompt).toContain("v0.0.0-pre-alpha.14.4");
+    expect(prompt).toContain("v0.0.0-pre-alpha.14.5");
     expect(prompt).toContain("stn setup check --json");
     expect(prompt).toContain("stn doctor");
     expect(prompt).toContain("summary.requiredOk: true");
@@ -101,7 +101,7 @@ describe("release readiness docs", () => {
     expect(normalizedPrompt).toContain("verify all three launchers in a new shell");
     expect(normalizedPrompt).toContain("do not claim success");
     expect(install).toContain("../README.md#let-your-agent-install-and-validate-station");
-    expect(install).not.toContain("Install experimental Station v0.0.0-pre-alpha.14.4");
+    expect(install).not.toContain("Install experimental Station v0.0.0-pre-alpha.14.5");
   });
 
   it("keeps the Node.js 24.2+ development requirement consistent", async () => {
@@ -233,9 +233,9 @@ describe("release readiness docs", () => {
     );
     const packageJson = await readPackageManifest();
     const normalizedReleasing = releasing.replace(/\s+/g, " ");
-    const exactVersion = "v0.0.0-pre-alpha.14.4";
+    const exactVersion = "v0.0.0-pre-alpha.14.5";
     const exactInstallerUrl =
-      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.4/install.sh";
+      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.5/install.sh";
 
     for (const [path, document] of [
       ["README.md", readme],
@@ -386,7 +386,7 @@ describe("release readiness docs", () => {
       expect(promote).toContain(target);
     }
 
-    expect(packageJson.version).toBe("0.0.0-pre-alpha.14.4");
+    expect(packageJson.version).toBe("0.0.0-pre-alpha.14.5");
     expect(packageJson.scripts["smoke:install"]).toBe(
       "node scripts/test-runners/run-install-smoke.mjs",
     );
