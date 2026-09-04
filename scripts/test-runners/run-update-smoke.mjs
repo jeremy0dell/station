@@ -1481,7 +1481,8 @@ async function installIncumbent(source, installDir, dataHome) {
   const binary = join(installDir, "stn");
   await copyFile(source, binary);
   await chmod(binary, 0o755);
-  await symlink("stn", join(installDir, "stn-ingress"));
+  await copyFile(join(dirname(source), "stn-ingress"), join(installDir, "stn-ingress"));
+  await chmod(join(installDir, "stn-ingress"), 0o755);
   await symlink("stn", join(installDir, "stn-tmux-popup"));
   await writeFile(join(installDir, ".station-install-receipt"), receiptContent, {
     mode: 0o600,
@@ -1490,7 +1491,11 @@ async function installIncumbent(source, installDir, dataHome) {
   await mkdir(licenseDir, { recursive: true, mode: 0o700 });
   await copyFile(join(repoRoot, "LICENSE"), join(licenseDir, "LICENSE"));
   await chmod(join(licenseDir, "LICENSE"), 0o644);
-  assertEqual(await readlink(join(installDir, "stn-ingress")), "stn", "incumbent ingress alias");
+  assertEqual(
+    (await lstat(join(installDir, "stn-ingress"))).isFile(),
+    true,
+    "incumbent ingress binary",
+  );
   assertEqual(
     (await lstat(join(installDir, ".station-install-receipt"))).mode & 0o777,
     0o600,

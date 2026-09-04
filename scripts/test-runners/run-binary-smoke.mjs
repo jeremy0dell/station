@@ -4,6 +4,7 @@ import { constants, readFileSync } from "node:fs";
 import {
   access,
   chmod,
+  copyFile,
   lstat,
   mkdir,
   mkdtemp,
@@ -15,6 +16,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, relative, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -27,6 +29,7 @@ import {
   ObserverHealthSchema,
   ObserverProcessIdentitySchema,
   SafeErrorSchema,
+  STATION_SCHEMA_VERSION,
 } from "../../packages/contracts/dist/index.js";
 import {
   createObserverClient,
@@ -208,7 +211,7 @@ async function runBinarySmoke() {
     if (installedRoot === parse(installedRoot).root) {
       fail("compiled popup ownership unexpectedly resolved to filesystem root");
     }
-    await assertExactBinaryAlias(installedRoot, "stn-ingress");
+    await assertExactIngressBinary(installedRoot);
     await assertExactBinaryAlias(installedRoot, "stn-tmux-popup");
     await Promise.all([
       mkdir(homeDir, { recursive: true, mode: 0o700 }),
@@ -222,6 +225,11 @@ async function runBinarySmoke() {
     await writeSmokeConfig(configPath, stateDir, socketPath);
     await writeSmokeConfig(popupConfigPath, stateDir, socketPath, "tmux");
     await writeHostileConfig(hostileDir, markerPath);
+    await verifyNativeIngressTransport({
+      ingressPath: join(installedRoot, "stn-ingress"),
+      root,
+      observerVersion: compiledObserverVersion,
+    });
 
     if (!ptyOnly) {
       await requireCommittedCleanCheckout(repoRoot);
@@ -3237,6 +3245,141 @@ async function assertExactBinaryAlias(installedRoot, name) {
   assertEqual(stat.isSymbolicLink(), true, `${name} exact symlink`);
   assertEqual(await readlink(path), "stn", `${name} exact symlink target`);
   assertEqual(await realpath(path), join(installedRoot, "stn"), `${name} binary identity`);
+}
+
+async function assertExactIngressBinary(installedRoot) {
+  const path = join(installedRoot, "stn-ingress");
+  const stat = await lstat(path);
+  assertEqual(stat.isFile(), true, "stn-ingress regular binary");
+  assertEqual(stat.isSymbolicLink(), false, "stn-ingress is not a symlink");
+  assertEqual((stat.mode & 0o111) !== 0, true, "stn-ingress executable mode");
+}
+
+async function verifyNativeIngressTransport(input) {
+  const directory = join(input.root, "native-ingress-smoke");
+  const ingressPath = join(directory, "stn-ingress");
+  const runtimePath = join(directory, "stn");
+  const argsPath = join(directory, "runtime.args");
+  const stdinPath = join(directory, "runtime.stdin");
+  const hookIdPath = join(directory, "runtime.hook-id");
+  const socketPath = join(input.root, "native-ingress.sock");
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await copyFile(input.ingressPath, ingressPath);
+  await chmod(ingressPath, 0o755);
+  await writeFile(
+    runtimePath,
+    `#!/bin/sh\nprintf '%s\\n' "$@" > ${quoteShellWord(argsPath)}\nprintf '%s' "\${STATION_INTERNAL_PROVIDER_HOOK_ID:-}" > ${quoteShellWord(hookIdPath)}\ncat > ${quoteShellWord(stdinPath)}\n`,
+    { mode: 0o755 },
+  );
+
+  const requests = [];
+  const requestWaiters = [];
+  const nextRequest = () => {
+    const request = requests.shift();
+    return request === undefined
+      ? new Promise((resolve) => requestWaiters.push(resolve))
+      : Promise.resolve(request);
+  };
+  let requestCount = 0;
+  const server = createServer((socket) => {
+    let buffer = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      buffer += chunk;
+      const newline = buffer.indexOf("\n");
+      if (newline < 0) return;
+      const value = JSON.parse(buffer.slice(0, newline));
+      const waiter = requestWaiters.shift();
+      if (waiter === undefined) requests.push(value);
+      else waiter(value);
+      const response =
+        requestCount === 0
+          ? {
+              schemaVersion: STATION_SCHEMA_VERSION,
+              jsonrpc: "2.0",
+              id: value.id,
+              result: {
+                schemaVersion: STATION_SCHEMA_VERSION,
+                hookId: value.params.event.hookId,
+                provider: value.params.event.provider,
+                event: value.params.event.event,
+                status: "accepted",
+                receivedAt: value.params.event.receivedAt,
+              },
+            }
+          : {
+              schemaVersion: STATION_SCHEMA_VERSION,
+              jsonrpc: "2.0",
+              id: value.id,
+              error: {
+                tag: "ProtocolError",
+                code: "OBSERVER_BUILD_MISMATCH",
+                message: "Synthetic fallback response.",
+              },
+            };
+      requestCount += 1;
+      socket.end(`${JSON.stringify(response)}\n`);
+    });
+  });
+  await new Promise((resolvePromise, reject) => {
+    server.once("error", reject);
+    server.listen(socketPath, resolvePromise);
+  });
+  const payload = {
+    session_id: "codex-native-ingress",
+    transcript_path: null,
+    cwd: input.root,
+    model: "codex-smoke",
+    turn_id: "turn-native-ingress",
+    hook_event_name: "Stop",
+    stop_hook_active: false,
+    last_assistant_message: null,
+  };
+  try {
+    const result = await run(ingressPath, ["--fast", "--socket", socketPath, "codex", "Stop"], {
+      env: {
+        PATH: "/usr/bin:/bin",
+        STATION_SESSION_ID: "session-native-ingress",
+        STATION_WORKTREE_ID: "worktree-native-ingress",
+      },
+      input: JSON.stringify(payload),
+    });
+    assertEqual(result.code, 0, "native ingress accepted completion");
+    const delivered = await nextRequest();
+    assertEqual(
+      delivered.params?.expectedBuildVersion,
+      input.observerVersion,
+      "native ingress exact Observer guard",
+    );
+    assertEqual(delivered.params?.event?.event, "Stop", "native ingress declared event");
+    assertEqual(
+      delivered.params?.event?.sessionId,
+      "session-native-ingress",
+      "native ingress session identity",
+    );
+    assertDeepEqual(delivered.params?.event?.payload, payload, "native ingress raw payload");
+    assertEqual(await pathExists(argsPath), false, "native accepted path skips canonical runtime");
+
+    const fallback = await run(ingressPath, ["--fast", "--socket", socketPath, "codex", "Stop"], {
+      env: {
+        PATH: "/usr/bin:/bin",
+        STATION_SESSION_ID: "session-native-ingress",
+        STATION_WORKTREE_ID: "worktree-native-ingress",
+      },
+      input: JSON.stringify(payload),
+    });
+    assertEqual(fallback.code, 0, "native ingress canonical fallback");
+    await nextRequest();
+    assertDeepEqual(
+      (await readFile(argsPath, "utf8")).trim().split("\n"),
+      ["__ingress", "--fast", "--socket", socketPath, "codex", "Stop"],
+      "native ingress canonical completion args",
+    );
+    assertEqual(await readFile(stdinPath, "utf8"), JSON.stringify(payload), "native stdin replay");
+    assertIncludes(await readFile(hookIdPath, "utf8"), "hook_", "native ingress hook ID handoff");
+  } finally {
+    await new Promise((resolvePromise) => server.close(resolvePromise));
+  }
 }
 
 function requiredSetupAction(plan, id) {

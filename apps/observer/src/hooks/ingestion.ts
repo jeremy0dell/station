@@ -202,12 +202,13 @@ type IngestViaHookAdapterInput = {
 async function ingestViaHookAdapter(
   input: IngestViaHookAdapterInput,
 ): Promise<ProviderHookReceipt> {
+  const correlatedEvent = withTransportIdentityPayload(input.event, input.adapter);
   const event =
     input.adapter.normalizeEventName === undefined
-      ? input.event
+      ? correlatedEvent
       : ProviderHookEventSchema.parse({
-          ...input.event,
-          event: input.adapter.normalizeEventName(input.event.event),
+          ...correlatedEvent,
+          event: input.adapter.normalizeEventName(correlatedEvent.event),
         });
 
   const scope = input.adapter.decideScope?.(event);
@@ -240,7 +241,16 @@ async function ingestViaHookAdapter(
     // event resolve to the same report id and dedupe instead of duplicating.
     fallbackReportId: () => event.hookId ?? `hook_${randomUUID()}`,
   });
-  if (result === undefined || !result.ok) {
+  const eventMismatch = result?.ok === true && result.report.eventType !== event.event;
+  if (result === undefined || !result.ok || eventMismatch) {
+    const mismatchError: SafeError | undefined = eventMismatch
+      ? {
+          tag: "HookPayloadError",
+          code: "HOOK_EVENT_MISMATCH",
+          message: "Provider hook payload event did not match its transport event.",
+          provider: event.provider,
+        }
+      : undefined;
     return ProviderHookReceiptSchema.parse({
       schemaVersion: STATION_SCHEMA_VERSION,
       hookId: event.hookId,
@@ -248,12 +258,15 @@ async function ingestViaHookAdapter(
       event: event.event,
       status: "rejected",
       receivedAt: event.receivedAt,
-      error: safeErrorFromUnknown(result === undefined ? undefined : result.error, {
-        tag: "HookPayloadError",
-        code: "HOOK_REPORT_INVALID",
-        message: "Provider hook payload could not be normalized to a harness event report.",
-        provider: event.provider,
-      }),
+      error: safeErrorFromUnknown(
+        mismatchError ?? (result === undefined || result.ok ? undefined : result.error),
+        {
+          tag: "HookPayloadError",
+          code: "HOOK_REPORT_INVALID",
+          message: "Provider hook payload could not be normalized to a harness event report.",
+          provider: event.provider,
+        },
+      ),
     });
   }
 
@@ -270,6 +283,34 @@ async function ingestViaHookAdapter(
     hookReceipt.error = receipt.error;
   }
   return ProviderHookReceiptSchema.parse(hookReceipt);
+}
+
+// Native ingress cannot safely rewrite raw provider JSON, so the adapter performs
+// the ordinary environment-to-payload translation at the strict Observer boundary.
+function withTransportIdentityPayload(
+  event: ProviderHookEvent,
+  adapter: ProviderHookAdapter,
+): ProviderHookEvent {
+  const enrichPayload = adapter.enrichPayload;
+  if (enrichPayload === undefined) return event;
+  const env: Record<string, string | undefined> = {};
+  if (event.projectId !== undefined) env.STATION_PROJECT_ID = event.projectId;
+  if (event.worktreeId !== undefined) env.STATION_WORKTREE_ID = event.worktreeId;
+  if (event.worktreePath !== undefined) env.STATION_WORKTREE_PATH = event.worktreePath;
+  if (event.worktreeManagedRoot !== undefined) {
+    env.STATION_WORKTREE_MANAGED_ROOT = event.worktreeManagedRoot;
+  }
+  if (event.sessionId !== undefined) env.STATION_SESSION_ID = event.sessionId;
+  if (event.terminalProvider !== undefined) {
+    env.STATION_TERMINAL_PROVIDER = event.terminalProvider;
+  }
+  if (event.terminalTargetId !== undefined) {
+    env.STATION_TERMINAL_TARGET_ID = event.terminalTargetId;
+  }
+  return ProviderHookEventSchema.parse({
+    ...event,
+    payload: enrichPayload({ payload: event.payload, env }),
+  });
 }
 
 /**

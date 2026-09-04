@@ -1,6 +1,6 @@
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { HarnessEventReportReceipt, ProviderHookAdapter } from "@station/contracts";
-import { STATION_SCHEMA_VERSION } from "@station/contracts";
+import { enrichStationHookIdentityPayload, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import {
@@ -233,6 +233,113 @@ describe("observer provider hook ingress", () => {
     expect(ignored).toMatchObject({ status: "ignored" });
 
     await reports.return?.();
+    sqlite.close();
+  });
+
+  it("enriches native transport identity before provider scope and normalization", async () => {
+    const clock = { now: () => new Date(now) };
+    let enrichedSessionId: string | undefined;
+    const adapter: ProviderHookAdapter = {
+      provider: "fake-harness",
+      kind: "harness",
+      enrichPayload: enrichStationHookIdentityPayload,
+      decideScope: (event) =>
+        (event.payload as { station_session_id?: string }).station_session_id === "session-fast"
+          ? { action: "accept", reason: "station-env" }
+          : { action: "ignore", reason: "missing-station-env" },
+      toHarnessEventReport: (input) => {
+        enrichedSessionId = (input.event.payload as { station_session_id?: string })
+          .station_session_id;
+        return {
+          ok: true,
+          report: {
+            schemaVersion: STATION_SCHEMA_VERSION,
+            reportId: `fake:${input.event.hookId}`,
+            provider: "fake-harness",
+            kind: "harness",
+            eventType: input.event.event,
+            observedAt: input.event.receivedAt,
+            correlation: { sessionId: enrichedSessionId as string },
+          },
+        };
+      },
+    };
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+      hookAdapters: [adapter],
+    });
+    const { sqlite, eventBus, api } = createTestObserver({ config, providers, clock });
+    const reports = eventBus.subscribe({ type: "harness.eventReported" })[Symbol.asyncIterator]();
+
+    const receipt = await api.ingestProviderHookEvent({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "hook_native_identity",
+      provider: "fake-harness",
+      kind: "harness",
+      event: "Stop",
+      receivedAt: now,
+      sessionId: "session-fast",
+      worktreeId: "wt_web_task",
+      worktreePath: "/tmp/station/web/task",
+      terminalProvider: "tmux",
+      terminalTargetId: "tmux:server:$1:@2:%3",
+      payload: {},
+    });
+
+    expect(receipt).toMatchObject({ status: "accepted" });
+    await expect(reports.next()).resolves.toMatchObject({
+      value: {
+        type: "harness.eventReported",
+        reportId: "fake:hook_native_identity",
+      },
+    });
+    expect(enrichedSessionId).toBe("session-fast");
+    await reports.return?.();
+    sqlite.close();
+  });
+
+  it("rejects a declared transport event that disagrees with provider normalization", async () => {
+    const clock = { now: () => new Date(now) };
+    const adapter: ProviderHookAdapter = {
+      provider: "fake-harness",
+      kind: "harness",
+      toHarnessEventReport: (input) => ({
+        ok: true,
+        report: {
+          schemaVersion: STATION_SCHEMA_VERSION,
+          reportId: `fake:${input.event.hookId}`,
+          provider: "fake-harness",
+          kind: "harness",
+          eventType: "Stop",
+          observedAt: input.event.receivedAt,
+        },
+      }),
+    };
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+      hookAdapters: [adapter],
+    });
+    const { sqlite, persistence, api } = createTestObserver({ config, providers, clock });
+
+    await expect(
+      api.ingestProviderHookEvent({
+        schemaVersion: STATION_SCHEMA_VERSION,
+        hookId: "hook_event_mismatch",
+        provider: "fake-harness",
+        kind: "harness",
+        event: "PreToolUse",
+        receivedAt: now,
+        payload: {},
+      }),
+    ).resolves.toMatchObject({
+      status: "rejected",
+      error: { code: "HOOK_EVENT_MISMATCH" },
+    });
+    await expect(persistence.listProviderObservations()).resolves.toEqual([]);
     sqlite.close();
   });
 

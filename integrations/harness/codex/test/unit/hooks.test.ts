@@ -86,7 +86,8 @@ describe("Codex hook setup", () => {
       "SubagentStart",
       "Stop",
     ]);
-    expect(plan.commands.PreToolUse).toBe(hookScriptPath);
+    expect(plan.commands.PreToolUse).toBe(`${hookScriptPath} --fast PreToolUse`);
+    expect(plan.commands.PermissionRequest).toBe(`${hookScriptPath} PermissionRequest`);
     expect(plan.after).toContain("[[hooks.PreToolUse]]");
     expect(plan.after).not.toContain("[[hooks.SubagentStop]]");
     await expect(readFile(configPath, "utf8")).rejects.toThrow();
@@ -196,7 +197,7 @@ describe("Codex hook setup", () => {
     // and leave scope decisions to the provider adapter.
     expect(script).not.toContain("STATION_SESSION_ID");
     expect(script).not.toContain("payload_file=");
-    expect(script).toContain("codex > /dev/null");
+    expect(script).toContain('codex "$@" > /dev/null');
     expect(scriptMode).toBe(0o700);
   });
 
@@ -296,7 +297,7 @@ describe("Codex hook setup", () => {
     expect(verification.message).toContain("/tmp/station/config.toml");
     expect(verification.message).toContain("Correct invalid configuration or ownership");
     await expect(readFile(configPath, "utf8")).resolves.toBe("not = [valid");
-    await expect(readFile(hookScriptPath, "utf8")).resolves.toContain("codex > /dev/null");
+    await expect(readFile(hookScriptPath, "utf8")).resolves.toContain('codex "$@" > /dev/null');
   });
 
   it("rethrows cancellation and deadline from no-op verification without normalization", async () => {
@@ -383,11 +384,14 @@ describe("Codex hook setup", () => {
     });
 
     const payload = JSON.stringify({ hook_event_name: "PreToolUse" });
-    const result = await runHookScript(hookScriptPath, payload, { TMPDIR: root });
+    const result = await runHookScript(hookScriptPath, payload, { TMPDIR: root }, [
+      "--fast",
+      "PreToolUse",
+    ]);
 
     expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
     await expect(readFile(argsLog, "utf8")).resolves.toBe(
-      "--config /tmp/station/config.toml codex\n",
+      "--config /tmp/station/config.toml codex --fast PreToolUse\n",
     );
   });
 
@@ -420,15 +424,20 @@ describe("Codex hook setup", () => {
     });
 
     const payload = JSON.stringify({ hook_event_name: "PreToolUse" });
-    const result = await runHookScript(hookScriptPath, payload, {
-      TMPDIR: root,
-      STATION_SESSION_ID: "ses_web_task",
-      STATION_WORKTREE_ID: "wt_web_task",
-    });
+    const result = await runHookScript(
+      hookScriptPath,
+      payload,
+      {
+        TMPDIR: root,
+        STATION_SESSION_ID: "ses_web_task",
+        STATION_WORKTREE_ID: "wt_web_task",
+      },
+      ["--fast", "PreToolUse"],
+    );
 
     expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
     await expect(readFile(argsLog, "utf8")).resolves.toBe(
-      "--config /tmp/station/config.toml codex\n",
+      "--config /tmp/station/config.toml codex --fast PreToolUse\n",
     );
     await expect(readFile(stdinLog, "utf8")).resolves.toBe(payload);
   });
@@ -1229,6 +1238,7 @@ async function runHookScript(
   scriptPath: string,
   stdin: string,
   env: NodeJS.ProcessEnv,
+  args: readonly string[] = [],
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   const childEnv: NodeJS.ProcessEnv = {};
   if (process.env.PATH !== undefined) {
@@ -1240,7 +1250,7 @@ async function runHookScript(
     }
   }
 
-  const child = spawn(scriptPath, [], {
+  const child = spawn(scriptPath, args, {
     env: childEnv,
     stdio: ["pipe", "pipe", "pipe"],
   });

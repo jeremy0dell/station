@@ -38,7 +38,9 @@ export type ReconcileSchedulerFlushProfile = {
 const defaultDebounceMs = 100;
 const defaultBacklogDebounceMs = 1000;
 const defaultInteractiveDebounceMs = 25;
-const defaultQuietDebounceMs = 250;
+// The quiet window must outlast a typical provider scan so projected events do
+// not queue behind the convergence work that their own delivery requested.
+const defaultQuietDebounceMs = 750;
 
 type QueuedReconcileRequest = {
   reason: string;

@@ -42,10 +42,14 @@ activation_ambiguity_reported=0
 activation_failed_precommit=0
 activation_ambiguous=0
 rollback_failed=0
-created_ingress=0
 created_popup=0
-created_ingress_inode=""
 created_popup_inode=""
+ingress_backup=""
+ingress_displaced=0
+ingress_installed=0
+previous_ingress_inode=""
+installed_ingress_inode=""
+installed_ingress_sha256=""
 preserve_install_stage=0
 receipt_path=""
 receipt_stage=""
@@ -57,6 +61,7 @@ expected_binary_device=""
 expected_binary_inode=""
 expected_ingress_device=""
 expected_ingress_inode=""
+expected_ingress_sha256=""
 expected_popup_device=""
 expected_popup_inode=""
 expected_receipt_device=""
@@ -258,6 +263,37 @@ cleanup() {
   fi
 
   if [ "$runtime_committed" -eq 0 ]; then
+    if [ "$ingress_installed" -eq 1 ]; then
+      if [ ! -f "$install_dir/stn-ingress" ] || [ -L "$install_dir/stn-ingress" ] ||
+        [ ! -x "$install_dir/stn-ingress" ] ||
+        ! alias_inode "$install_dir/stn-ingress" ||
+        [ "$alias_inode_result" != "$installed_ingress_inode" ] ||
+        ! file_sha256 "$install_dir/stn-ingress" ||
+        [ "$hash_result" != "$installed_ingress_sha256" ]; then
+        rollback_failed=1
+        if [ "$ingress_displaced" -eq 1 ]; then preserve_install_stage=1; fi
+        warn "installed ingress binary changed during cleanup; inspect '$install_dir/stn-ingress' and '$ingress_backup' manually."
+      elif [ "$ingress_displaced" -eq 1 ]; then
+        if ! mv -f "$ingress_backup" "$install_dir/stn-ingress" 2>/dev/null; then
+          rollback_failed=1
+          preserve_install_stage=1
+          warn "could not restore the previous ingress launcher from '$ingress_backup'."
+        fi
+      elif ! rm -f "$install_dir/stn-ingress" 2>/dev/null; then
+        rollback_failed=1
+        warn "could not remove the new ingress binary '$install_dir/stn-ingress'."
+      fi
+    elif [ "$ingress_displaced" -eq 1 ]; then
+      if alias_inode "$install_dir/stn-ingress" &&
+        [ "$alias_inode_result" = "$previous_ingress_inode" ]; then
+        :
+      elif { [ -e "$install_dir/stn-ingress" ] || [ -L "$install_dir/stn-ingress" ]; } ||
+        ! mv "$ingress_backup" "$install_dir/stn-ingress" 2>/dev/null; then
+        rollback_failed=1
+        preserve_install_stage=1
+        warn "could not restore the previous ingress launcher from '$ingress_backup'."
+      fi
+    fi
     if [ "$license_displaced" -eq 1 ]; then
       if ! mv -f "$license_backup" "$license_path" 2>/dev/null; then
         rollback_failed=1
@@ -270,7 +306,6 @@ cleanup() {
         warn "could not remove the new license '$license_path'."
       fi
     fi
-    remove_created_alias "$install_dir/stn-ingress" "$created_ingress" "$created_ingress_inode" "$install_stage/stn-ingress.rollback"
     remove_created_alias "$install_dir/stn-tmux-popup" "$created_popup" "$created_popup_inode" "$install_stage/stn-tmux-popup.rollback"
     if [ "$activation_failed_precommit" -eq 1 ] && [ "$rollback_failed" -eq 0 ]; then
       printf 'The existing Station installation was unchanged.\n' >&2
@@ -490,6 +525,7 @@ parse_expected_installation() {
   seen_binary_inode=0
   seen_ingress_device=0
   seen_ingress_inode=0
+  seen_ingress_sha256=0
   seen_popup_device=0
   seen_popup_inode=0
   seen_receipt_device=0
@@ -526,6 +562,11 @@ parse_expected_installation() {
         seen_ingress_inode=1
         expected_ingress_inode=$expected_value
         ;;
+      ingress_sha256)
+        [ "$seen_ingress_sha256" -eq 0 ] || fail "expected installation file contains duplicate key 'ingress_sha256'."
+        seen_ingress_sha256=1
+        expected_ingress_sha256=$expected_value
+        ;;
       popup_device)
         [ "$seen_popup_device" -eq 0 ] || fail "expected installation file contains duplicate key 'popup_device'."
         seen_popup_device=1
@@ -552,8 +593,17 @@ parse_expected_installation() {
 
   [ "$seen_format$seen_binary_sha256$seen_binary_device$seen_binary_inode$seen_ingress_device$seen_ingress_inode$seen_popup_device$seen_popup_inode$seen_receipt_device$seen_receipt_inode" = 1111111111 ] ||
     fail "expected installation file is missing one or more required keys."
-  [ "$expected_format" = station-installer-expected-v1 ] ||
-    fail "expected installation file has an unsupported format."
+  case "$expected_format" in
+    station-installer-expected-v1)
+      [ "$seen_ingress_sha256" -eq 0 ] || fail "legacy expected installation file cannot contain ingress_sha256."
+      ;;
+    station-installer-expected-v2)
+      [ "$seen_ingress_sha256" -eq 1 ] || fail "expected installation file is missing ingress_sha256."
+      printf '%s\n' "$expected_ingress_sha256" | grep -Eq '^[0-9a-f]{64}$' ||
+        fail "expected installation file contains an invalid ingress SHA-256."
+      ;;
+    *) fail "expected installation file has an unsupported format." ;;
+  esac
   printf '%s\n' "$expected_binary_sha256" | grep -Eq '^[0-9a-f]{64}$' ||
     fail "expected installation file contains an invalid binary SHA-256."
   require_decimal "$expected_binary_device" "expected installation file contains an invalid binary device."
@@ -725,9 +775,9 @@ file_mode() {
 file_sha256() {
   hash_path=$1
   if command -v sha256sum >/dev/null 2>&1; then
-    hash_raw=$(sha256sum "$hash_path" 2>/dev/null) || return 1
+    hash_raw=$(sha256sum < "$hash_path" 2>/dev/null) || return 1
   elif command -v shasum >/dev/null 2>&1; then
-    hash_raw=$(shasum -a 256 "$hash_path" 2>/dev/null) || return 1
+    hash_raw=$(shasum -a 256 < "$hash_path" 2>/dev/null) || return 1
   else
     return 1
   fi
@@ -771,9 +821,18 @@ validate_expected_installation() {
   if [ ! -f "$binary_path" ] || [ -L "$binary_path" ]; then
     fail "expected Station binary '$binary_path' changed before installer commit."
   fi
-  if [ ! -L "$ingress_path" ] || ! readlink_target "$ingress_path" 2>/dev/null || [ "$link_target" != stn ]; then
-    fail "expected Station ingress launcher '$ingress_path' changed before installer commit."
-  fi
+  case "$expected_format" in
+    station-installer-expected-v1)
+      if [ ! -L "$ingress_path" ] || ! readlink_target "$ingress_path" 2>/dev/null || [ "$link_target" != stn ]; then
+        fail "expected Station ingress launcher '$ingress_path' changed before installer commit."
+      fi
+      ;;
+    station-installer-expected-v2)
+      if [ ! -f "$ingress_path" ] || [ -L "$ingress_path" ] || [ ! -x "$ingress_path" ]; then
+        fail "expected Station ingress binary '$ingress_path' changed before installer commit."
+      fi
+      ;;
+  esac
   if [ ! -L "$popup_path" ] || ! readlink_target "$popup_path" 2>/dev/null || [ "$link_target" != stn ]; then
     fail "expected Station popup launcher '$popup_path' changed before installer commit."
   fi
@@ -785,6 +844,10 @@ validate_expected_installation() {
   if ! file_sha256 "$binary_path" || [ "$hash_result" != "$expected_binary_sha256" ]; then
     fail "expected Station binary contents changed before installer commit."
   fi
+  if [ "$expected_format" = station-installer-expected-v2 ] &&
+    { ! file_sha256 "$ingress_path" || [ "$hash_result" != "$expected_ingress_sha256" ]; }; then
+    fail "expected Station ingress binary contents changed before installer commit."
+  fi
 }
 
 if [ -e "$binary_path" ] || [ -L "$binary_path" ]; then
@@ -792,13 +855,21 @@ if [ -e "$binary_path" ] || [ -L "$binary_path" ]; then
     fail "existing Station binary '$binary_path' must be a regular non-symlink file."
   fi
 fi
-for launcher_path in "$ingress_path" "$popup_path"; do
-  if [ -e "$launcher_path" ] || [ -L "$launcher_path" ]; then
-    if [ ! -L "$launcher_path" ] || ! readlink_target "$launcher_path" 2>/dev/null || [ "$link_target" != stn ]; then
-      fail "existing launcher '$launcher_path' must be absent or a symlink to 'stn'; it was not changed."
+if [ -e "$ingress_path" ] || [ -L "$ingress_path" ]; then
+  if [ -L "$ingress_path" ]; then
+    if ! readlink_target "$ingress_path" 2>/dev/null || [ "$link_target" != stn ]; then
+      fail "existing Station ingress launcher '$ingress_path' must target 'stn'; it was not changed."
     fi
+  elif [ ! -f "$ingress_path" ] || [ ! -x "$ingress_path" ] ||
+    { { [ ! -f "$receipt_path" ] || [ -L "$receipt_path" ]; } && { [ ! -f "$binary_path" ] || [ -L "$binary_path" ]; }; }; then
+    fail "existing Station ingress binary '$ingress_path' is not owned by an installed Station release; it was not changed."
   fi
-done
+fi
+if [ -e "$popup_path" ] || [ -L "$popup_path" ]; then
+  if [ ! -L "$popup_path" ] || ! readlink_target "$popup_path" 2>/dev/null || [ "$link_target" != stn ]; then
+    fail "existing launcher '$popup_path' must be absent or a symlink to 'stn'; it was not changed."
+  fi
+fi
 if [ -e "$license_path" ] || [ -L "$license_path" ]; then
   if [ ! -f "$license_path" ] || [ -L "$license_path" ]; then
     fail "existing Station license '$license_path' must be a regular non-symlink file."
@@ -929,7 +1000,7 @@ if ! tar -tvzf "$archive_path" > "$verbose_manifest_path"; then
 fi
 awk '{ print substr($1, 1, 1) }' "$verbose_manifest_path" > "$manifest_types_path"
 actual_typed_manifest=$(LC_ALL=C paste "$manifest_path" "$manifest_types_path" | LC_ALL=C sort)
-expected_typed_manifest=$(printf 'LICENSE\t-\nstn\t-\nstn-ingress\tl\nstn-tmux-popup\tl\n' | LC_ALL=C sort)
+expected_typed_manifest=$(printf 'LICENSE\t-\nstn\t-\nstn-ingress\t-\nstn-tmux-popup\tl\n' | LC_ALL=C sort)
 if [ "$actual_typed_manifest" != "$expected_typed_manifest" ]; then
   fail "$archive_name does not contain the required Station member types; nothing was installed."
 fi
@@ -943,14 +1014,15 @@ fi
 if [ ! -f "$extracted_dir/stn" ] || [ -L "$extracted_dir/stn" ]; then
   fail "the Station release manifest must contain a regular 'stn' binary."
 fi
+if [ ! -f "$extracted_dir/stn-ingress" ] || [ -L "$extracted_dir/stn-ingress" ] || [ ! -x "$extracted_dir/stn-ingress" ]; then
+  fail "the Station release manifest must contain a regular executable 'stn-ingress' binary."
+fi
 if [ ! -f "$extracted_dir/LICENSE" ] || [ -L "$extracted_dir/LICENSE" ]; then
   fail "the Station release manifest must contain a regular 'LICENSE' file."
 fi
-for launcher in stn-ingress stn-tmux-popup; do
-  if [ ! -L "$extracted_dir/$launcher" ] || ! readlink_target "$extracted_dir/$launcher" || [ "$link_target" != stn ]; then
-    fail "the Station release manifest must contain '$launcher' as a symlink to 'stn'."
-  fi
-done
+if [ ! -L "$extracted_dir/stn-tmux-popup" ] || ! readlink_target "$extracted_dir/stn-tmux-popup" || [ "$link_target" != stn ]; then
+  fail "the Station release manifest must contain 'stn-tmux-popup' as a symlink to 'stn'."
+fi
 
 # Stage on each destination filesystem so every final rename is atomic.
 install_stage=$(mktemp -d "$install_dir/.station-install.XXXXXX") || fail "cannot stage files in $install_dir."
@@ -966,8 +1038,17 @@ if ! cp "$extracted_dir/stn" "$install_stage/stn"; then
   fail "could not stage the Station binary in $install_dir."
 fi
 chmod 0755 "$install_stage/stn" || fail "could not set executable permissions on the staged Station binary."
+if ! cp "$extracted_dir/stn-ingress" "$install_stage/stn-ingress.new"; then
+  fail "could not stage the Station ingress binary in $install_dir."
+fi
+chmod 0755 "$install_stage/stn-ingress.new" || fail "could not set executable permissions on the staged Station ingress binary."
+if ! file_sha256 "$install_stage/stn-ingress.new"; then
+  fail "could not record the staged Station ingress binary contents."
+fi
+installed_ingress_sha256=$hash_result
 if { [ "$target" = darwin-arm64 ] || [ "$target" = darwin-x64 ]; } && command -v xattr >/dev/null 2>&1; then
   xattr -d com.apple.quarantine "$install_stage/stn" 2>/dev/null || true
+  xattr -d com.apple.quarantine "$install_stage/stn-ingress.new" 2>/dev/null || true
 fi
 
 probe_output=$temp_dir/probe.stdout
@@ -1136,10 +1217,6 @@ create_alias() {
         ;;
     esac
     case "$alias_kind" in
-      ingress)
-        created_ingress=1
-        created_ingress_inode=$file_value
-        ;;
       popup)
         created_popup=1
         created_popup_inode=$file_value
@@ -1154,9 +1231,6 @@ create_alias() {
   fail "could not create Station launcher '$alias_path'."
 }
 
-if [ ! -L "$ingress_path" ]; then
-  create_alias "$ingress_path" ingress
-fi
 if [ ! -L "$popup_path" ]; then
   create_alias "$popup_path" popup
 fi
@@ -1167,11 +1241,19 @@ revalidate_managed_paths() {
       fail "Station binary destination '$binary_path' changed during installation; it must remain absent or a regular non-symlink file."
     fi
   fi
-  for managed_launcher in "$ingress_path" "$popup_path"; do
-    if [ ! -L "$managed_launcher" ] || ! readlink_target "$managed_launcher" 2>/dev/null || [ "$link_target" != stn ]; then
-      fail "Station launcher '$managed_launcher' changed during installation; it must remain a symlink exactly targeting 'stn'."
+  if [ -e "$ingress_path" ] || [ -L "$ingress_path" ]; then
+    if [ -L "$ingress_path" ]; then
+      if ! readlink_target "$ingress_path" 2>/dev/null || [ "$link_target" != stn ]; then
+        fail "Station ingress launcher '$ingress_path' changed during installation."
+      fi
+    elif [ ! -f "$ingress_path" ] || [ ! -x "$ingress_path" ] ||
+      { { [ ! -f "$receipt_path" ] || [ -L "$receipt_path" ]; } && { [ ! -f "$binary_path" ] || [ -L "$binary_path" ]; }; }; then
+      fail "Station ingress binary '$ingress_path' changed during installation."
     fi
-  done
+  fi
+  if [ ! -L "$popup_path" ] || ! readlink_target "$popup_path" 2>/dev/null || [ "$link_target" != stn ]; then
+    fail "Station launcher '$popup_path' changed during installation; it must remain a symlink exactly targeting 'stn'."
+  fi
   if [ -e "$license_path" ] || [ -L "$license_path" ]; then
     if [ ! -f "$license_path" ] || [ -L "$license_path" ]; then
       fail "Station license destination '$license_path' changed during installation; it must remain absent or a regular non-symlink file."
@@ -1201,9 +1283,32 @@ if ! mv "$new_license" "$license_path"; then
   fail "could not install the Station license '$license_path'."
 fi
 
-# Renaming the verified binary is the sole runtime commit point; aliases already resolve through stn.
+# The ingress transport rejects a mismatched Observer build, so replacing it
+# immediately before the main binary keeps either mixed-version window safe.
 revalidate_managed_paths
 validate_expected_installation
+if [ -e "$ingress_path" ] || [ -L "$ingress_path" ]; then
+  ingress_backup=$install_stage/stn-ingress.previous
+  if ! alias_inode "$ingress_path"; then
+    fail "could not record the existing Station ingress launcher identity."
+  fi
+  previous_ingress_inode=$alias_inode_result
+  if ! ln -P "$ingress_path" "$ingress_backup"; then
+    fail "could not back up the existing Station ingress launcher '$ingress_path'."
+  fi
+  ingress_displaced=1
+fi
+if ! mv -f "$install_stage/stn-ingress.new" "$ingress_path"; then
+  fail "could not activate the verified Station ingress binary; restoring the previous installation."
+fi
+ingress_installed=1
+if ! alias_inode "$ingress_path"; then
+  fail "could not record the activated Station ingress binary identity."
+fi
+installed_ingress_inode=$alias_inode_result
+if ! file_sha256 "$ingress_path" || [ "$hash_result" != "$installed_ingress_sha256" ]; then
+  fail "the activated Station ingress binary changed before runtime commit."
+fi
 commit_started=1
 if mv -f "$install_stage/stn" "$binary_path"; then
   runtime_committed=1
