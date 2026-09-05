@@ -40,7 +40,7 @@ describe("station build info", () => {
     const [first, second] = await Promise.all([stationBuildInfoAsync(), stationBuildInfoAsync()]);
 
     expect(first).toEqual({
-      version: "0.0.0-pre-alpha.14.7",
+      version: "0.0.0-pre-alpha.14.8",
       compiled: false,
       buildIdentity,
     });
@@ -78,14 +78,14 @@ describe("station build info", () => {
     expect(isCompiledBinary()).toBe(false);
     expect(verifyBuildIdentity).not.toHaveBeenCalled();
     expect(stationBuildInfo()).toEqual({
-      version: "0.0.0-pre-alpha.14.7",
+      version: "0.0.0-pre-alpha.14.8",
       compiled: false,
       buildIdentity,
     });
-    expect(currentObserverBuildVersion()).toBe(`0.0.0-pre-alpha.14.7+station.${buildIdentity}`);
-    expect(currentObserverBuildVersion()).toBe(`0.0.0-pre-alpha.14.7+station.${buildIdentity}`);
+    expect(currentObserverBuildVersion()).toBe(`0.0.0-pre-alpha.14.8+station.${buildIdentity}`);
+    expect(currentObserverBuildVersion()).toBe(`0.0.0-pre-alpha.14.8+station.${buildIdentity}`);
     expect(stationBuildInfo()).toEqual({
-      version: "0.0.0-pre-alpha.14.7",
+      version: "0.0.0-pre-alpha.14.8",
       compiled: false,
       buildIdentity,
     });
