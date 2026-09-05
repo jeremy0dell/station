@@ -81,7 +81,7 @@ function currentReport() {
 
 function predecessorV4Report() {
   const current = { version: "0.0.0-pre-alpha.14.3" };
-  const target = { version: "0.0.0-pre-alpha.14.7" };
+  const target = { version: "0.0.0-pre-alpha.14.8" };
   return {
     schemaVersion: 4,
     kind: "preview",
