@@ -555,6 +555,9 @@ describe("hosted CI policy", () => {
     expect(promote).toContain('previous_tag="$(jq -er .previousTag candidate/manifest.json)"');
     expect(promote).toContain(".previousTag == $previousTag");
     expect(promote).toContain(".immutable");
+    expect(promote).toContain('case "$release_draft:$release_immutable" in');
+    expect(promote).toContain('if [ "$release_draft" = true ]; then');
+    expect(promote).toContain('test "$(jq -r .immutable <<<"$published_release_json")" = true');
     expect(promotion).toContain("group: station-release-publication");
     expect(promote).toContain('test "$freshest_previous" = "$previous_tag"');
     expect(promote.indexOf('test "$freshest_previous" = "$previous_tag"')).toBeLessThan(
@@ -571,13 +574,17 @@ describe("hosted CI policy", () => {
 
   it("verifies the installed ingress artifact as a dedicated executable", () => {
     const installDraft = workflowJob(read(".github/workflows/release.yml"), "install-draft");
+    const publicInstall = namedWorkflowStep(
+      workflowJob(read(".github/workflows/promote-release.yml"), "verify-public-install"),
+      "Install without GitHub credentials or gh",
+    );
     const verifyInstalled = namedWorkflowStep(installDraft, "Verify installed artifact");
     const verifyRetry = namedWorkflowStep(
       installDraft,
       "Verify lock refusal and same-version retry",
     );
 
-    for (const step of [verifyInstalled, verifyRetry]) {
+    for (const step of [verifyInstalled, verifyRetry, publicInstall]) {
       expect(step).toContain('test -x "$bin_dir/stn-ingress"');
       expect(step).toContain('test ! -L "$bin_dir/stn-ingress"');
       expect(step).not.toContain('readlink "$bin_dir/stn-ingress"');
