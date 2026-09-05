@@ -33,7 +33,7 @@ jobs:
       target_build_identity: ${{ steps.candidate.outputs.target_build_identity }}
       previous_tag: ${{ steps.candidate.outputs.previous_tag }}
     steps:
-      - name: Verify accepted candidate and publish its draft
+      - name: Verify accepted candidate and publish or re-verify its release
         id: candidate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -129,7 +129,12 @@ jobs:
           remote_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
           test "$remote_commit" = "$commit"
           release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id")"
-          test "$(jq -r .draft <<<"$release_json")" = true
+          release_draft="$(jq -r .draft <<<"$release_json")"
+          release_immutable="$(jq -r .immutable <<<"$release_json")"
+          case "$release_draft:$release_immutable" in
+            true:false|false:true) ;;
+            *) echo "Release $release_id is neither a mutable draft nor an immutable publication." >&2; exit 1 ;;
+          esac
           test "$(jq -r .tag_name <<<"$release_json")" = "$TAG"
           expected_prerelease=false
           case "$version" in *-*) expected_prerelease=true ;; esac
@@ -165,7 +170,8 @@ jobs:
           final_ids="$(
             jq -r '.assets | sort_by(.name) | .[] | "\(.name)=\(.id)"' <<<"$final_release_json"
           )"
-          test "$(jq -r .draft <<<"$final_release_json")" = true
+          test "$(jq -r .draft <<<"$final_release_json")" = "$release_draft"
+          test "$(jq -r .immutable <<<"$final_release_json")" = "$release_immutable"
           test "$(jq -r .prerelease <<<"$final_release_json")" = "$expected_prerelease"
           test "$final_ids" = "$current_ids"
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)" = "$commit"
@@ -206,13 +212,16 @@ jobs:
           )"
           test "$freshest_previous" = "$previous_tag"
 
-          gh api --method PATCH \
-            "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-            -F tag_name="$TAG" \
-            -F prerelease="$expected_prerelease" \
-            -F draft=false >/dev/null
+          if [ "$release_draft" = true ]; then
+            gh api --method PATCH \
+              "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              -F tag_name="$TAG" \
+              -F prerelease="$expected_prerelease" \
+              -F draft=false >/dev/null
+          fi
           published_release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id")"
           test "$(jq -r .draft <<<"$published_release_json")" = false
+          test "$(jq -r .immutable <<<"$published_release_json")" = true
           test "$(jq -r .tag_name <<<"$published_release_json")" = "$TAG"
           test "$(jq -r .prerelease <<<"$published_release_json")" = "$expected_prerelease"
           test "$(
@@ -314,7 +323,8 @@ jobs:
           version="${EXPECTED_VERSION#v}"
           test "$(env -i HOME="$install_home" XDG_DATA_HOME="$data_home" \
             PATH="$bin_dir:$public_path" stn --version)" = "$version"
-          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test -x "$bin_dir/stn-ingress"
+          test ! -L "$bin_dir/stn-ingress"
           test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
           receipt_path="$bin_dir/.station-install-receipt"
           test -f "$receipt_path"
