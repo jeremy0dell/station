@@ -1503,10 +1503,24 @@ function releaseDownloadUrl(tag, name) {
 
 async function installIncumbent(source, installDir, dataHome) {
   const binary = join(installDir, "stn");
+  const ingressSource = join(dirname(source), "stn-ingress");
+  const ingress = join(installDir, "stn-ingress");
   await copyFile(source, binary);
   await chmod(binary, 0o755);
-  await copyFile(join(dirname(source), "stn-ingress"), join(installDir, "stn-ingress"));
-  await chmod(join(installDir, "stn-ingress"), 0o755);
+  const ingressSourceMetadata = await lstat(ingressSource);
+  if (ingressSourceMetadata.isSymbolicLink()) {
+    assertEqual(await readlink(ingressSource), "stn", "incumbent ingress source alias");
+    await symlink("stn", ingress);
+  } else {
+    assertEqual(ingressSourceMetadata.isFile(), true, "incumbent ingress source binary");
+    assertEqual(
+      (ingressSourceMetadata.mode & 0o111) !== 0,
+      true,
+      "incumbent ingress source executable mode",
+    );
+    await copyFile(ingressSource, ingress);
+    await chmod(ingress, 0o755);
+  }
   await symlink("stn", join(installDir, "stn-tmux-popup"));
   await writeFile(join(installDir, ".station-install-receipt"), receiptContent, {
     mode: 0o600,
@@ -1515,10 +1529,11 @@ async function installIncumbent(source, installDir, dataHome) {
   await mkdir(licenseDir, { recursive: true, mode: 0o700 });
   await copyFile(join(repoRoot, "LICENSE"), join(licenseDir, "LICENSE"));
   await chmod(join(licenseDir, "LICENSE"), 0o644);
+  const installedIngressMetadata = await lstat(ingress);
   assertEqual(
-    (await lstat(join(installDir, "stn-ingress"))).isFile(),
-    true,
-    "incumbent ingress binary",
+    installedIngressMetadata.isSymbolicLink(),
+    ingressSourceMetadata.isSymbolicLink(),
+    "incumbent ingress layout",
   );
   assertEqual(
     (await lstat(join(installDir, ".station-install-receipt"))).mode & 0o777,
@@ -1906,7 +1921,11 @@ function assertUpdateReport(report, reportJson, input, installedBinary, configPa
     assertPredecessorV4UpdateReport(report, input, installedBinary, configPath);
     return;
   }
-  assertEqual(report.schemaVersion, 6, `${input.name} update schema`);
+  assertEqual(
+    report.schemaVersion,
+    updateReportSchemaVersionForEmitter(reportEmitterVersion(input)),
+    `${input.name} update schema`,
+  );
   assertEqual(report.kind, "result", `${input.name} update result kind`);
   assertEqual(report.channel, "installer-binary", `${input.name} update channel`);
   const refusal = updateRequiresPreservation(input);
@@ -2198,7 +2217,11 @@ function assertDryUpdateReport(report, reportJson, input, evidence) {
   if (report.schemaVersion === 4) {
     return assertPredecessorV4DryUpdateReport(report, reportJson, input, evidence);
   }
-  assertEqual(report.schemaVersion, 6, `${input.name} dry-run schema`);
+  assertEqual(
+    report.schemaVersion,
+    updateReportSchemaVersionForEmitter(reportEmitterVersion(input)),
+    `${input.name} dry-run schema`,
+  );
   assertEqual(report.kind, "preview", `${input.name} dry-run kind`);
   assertEqual(report.channel, "installer-binary", `${input.name} dry-run channel`);
   assertCurrentReportEvidence(report, reportJson, input, evidence);

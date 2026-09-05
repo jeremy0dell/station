@@ -828,7 +828,11 @@ validate_expected_installation() {
       fi
       ;;
     station-installer-expected-v2)
-      if [ ! -f "$ingress_path" ] || [ -L "$ingress_path" ] || [ ! -x "$ingress_path" ]; then
+      if [ -L "$ingress_path" ]; then
+        if ! readlink_target "$ingress_path" 2>/dev/null || [ "$link_target" != stn ]; then
+          fail "expected Station ingress launcher '$ingress_path' changed before installer commit."
+        fi
+      elif [ ! -f "$ingress_path" ] || [ ! -x "$ingress_path" ]; then
         fail "expected Station ingress binary '$ingress_path' changed before installer commit."
       fi
       ;;
@@ -1283,31 +1287,36 @@ if ! mv "$new_license" "$license_path"; then
   fail "could not install the Station license '$license_path'."
 fi
 
-# The ingress transport rejects a mismatched Observer build, so replacing it
-# immediately before the main binary keeps either mixed-version window safe.
+# A v1 updater requires its exact ingress symlink to survive post-installation
+# verification. The target updater records that layout as v2 and replaces it
+# with the native ingress binary during the next artifact update.
 revalidate_managed_paths
 validate_expected_installation
-if [ -e "$ingress_path" ] || [ -L "$ingress_path" ]; then
-  ingress_backup=$install_stage/stn-ingress.previous
+if [ "$expected_format" != station-installer-expected-v1 ]; then
+  # The ingress transport rejects a mismatched Observer build, so replacing it
+  # immediately before the main binary keeps either mixed-version window safe.
+  if [ -e "$ingress_path" ] || [ -L "$ingress_path" ]; then
+    ingress_backup=$install_stage/stn-ingress.previous
+    if ! alias_inode "$ingress_path"; then
+      fail "could not record the existing Station ingress launcher identity."
+    fi
+    previous_ingress_inode=$alias_inode_result
+    if ! ln -P "$ingress_path" "$ingress_backup"; then
+      fail "could not back up the existing Station ingress launcher '$ingress_path'."
+    fi
+    ingress_displaced=1
+  fi
+  if ! mv -f "$install_stage/stn-ingress.new" "$ingress_path"; then
+    fail "could not activate the verified Station ingress binary; restoring the previous installation."
+  fi
+  ingress_installed=1
   if ! alias_inode "$ingress_path"; then
-    fail "could not record the existing Station ingress launcher identity."
+    fail "could not record the activated Station ingress binary identity."
   fi
-  previous_ingress_inode=$alias_inode_result
-  if ! ln -P "$ingress_path" "$ingress_backup"; then
-    fail "could not back up the existing Station ingress launcher '$ingress_path'."
+  installed_ingress_inode=$alias_inode_result
+  if ! file_sha256 "$ingress_path" || [ "$hash_result" != "$installed_ingress_sha256" ]; then
+    fail "the activated Station ingress binary changed before runtime commit."
   fi
-  ingress_displaced=1
-fi
-if ! mv -f "$install_stage/stn-ingress.new" "$ingress_path"; then
-  fail "could not activate the verified Station ingress binary; restoring the previous installation."
-fi
-ingress_installed=1
-if ! alias_inode "$ingress_path"; then
-  fail "could not record the activated Station ingress binary identity."
-fi
-installed_ingress_inode=$alias_inode_result
-if ! file_sha256 "$ingress_path" || [ "$hash_result" != "$installed_ingress_sha256" ]; then
-  fail "the activated Station ingress binary changed before runtime commit."
 fi
 commit_started=1
 if mv -f "$install_stage/stn" "$binary_path"; then

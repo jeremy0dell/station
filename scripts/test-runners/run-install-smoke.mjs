@@ -678,6 +678,55 @@ function scenarioReceiptAndExpectedInstallation() {
     target: "linux-x64",
   });
 
+  const legacyInstallDir = join(root, "legacy-expected-installation-bin");
+  const legacyDataHome = join(root, "legacy-expected-installation-data");
+  seedInstallation({
+    installDir: legacyInstallDir,
+    dataHome: legacyDataHome,
+    tag: rollbackTag,
+    withReceipt: true,
+  });
+  unlinkSync(join(legacyInstallDir, "stn-ingress"));
+  symlinkSync("stn", join(legacyInstallDir, "stn-ingress"));
+  const legacyIngress = lstatSync(join(legacyInstallDir, "stn-ingress"));
+  const legacyExpectedFile = join(root, "expected-installation.legacy");
+  writeExpectedInstallation(legacyExpectedFile, legacyInstallDir, "v1");
+  const legacyExpected = runInstaller({
+    installDir: legacyInstallDir,
+    platform: linuxX64(),
+    dataHome: legacyDataHome,
+    extraArguments: ["--expected-installation", legacyExpectedFile],
+  });
+  assertSuccess(legacyExpected, "legacy expected installation contract");
+  assertRuntimeVersion(legacyInstallDir, releaseTag, "legacy expected installation");
+  assertEqual(
+    readlinkSync(join(legacyInstallDir, "stn-ingress")),
+    "stn",
+    "legacy expected ingress target",
+  );
+  const preservedLegacyIngress = lstatSync(join(legacyInstallDir, "stn-ingress"));
+  assertEqual(
+    [preservedLegacyIngress.dev, preservedLegacyIngress.ino],
+    [legacyIngress.dev, legacyIngress.ino],
+    "legacy updater preserves ingress identity",
+  );
+
+  const successorExpectedFile = join(root, "expected-installation.successor");
+  writeExpectedInstallation(successorExpectedFile, legacyInstallDir);
+  const successorExpected = runInstaller({
+    installDir: legacyInstallDir,
+    platform: linuxX64(),
+    dataHome: legacyDataHome,
+    extraArguments: ["--expected-installation", successorExpectedFile],
+  });
+  assertSuccess(successorExpected, "successor expected installation contract");
+  assertInstalled({
+    installDir: legacyInstallDir,
+    dataHome: legacyDataHome,
+    tag: releaseTag,
+    target: "linux-x64",
+  });
+
   for (const changed of ["binary", "ingress", "receipt"]) {
     const installDir = join(root, `expected-${changed}-race-bin`);
     const dataHome = join(root, `expected-${changed}-race-data`);
@@ -3203,7 +3252,7 @@ if [ "\${1:-}" = --version ]; then printf '%s\\n' '${version}'; else printf '%s\
   writeText(join(licenseDir, "LICENSE"), `Station fixture license ${tag}\n`, 0o644);
 }
 
-function writeExpectedInstallation(path, installDir) {
+function writeExpectedInstallation(path, installDir, format = "v2") {
   const binary = join(installDir, "stn");
   const ingress = join(installDir, "stn-ingress");
   const popup = join(installDir, "stn-tmux-popup");
@@ -3216,13 +3265,15 @@ function writeExpectedInstallation(path, installDir) {
   writeText(
     path,
     [
-      "format=station-installer-expected-v2",
+      `format=station-installer-expected-${format}`,
       `binary_sha256=${binaryHash}`,
       `binary_device=${binaryStat.dev}`,
       `binary_inode=${binaryStat.ino}`,
       `ingress_device=${ingressStat.dev}`,
       `ingress_inode=${ingressStat.ino}`,
-      `ingress_sha256=${createHash("sha256").update(readFileSync(ingress)).digest("hex")}`,
+      ...(format === "v1"
+        ? []
+        : [`ingress_sha256=${createHash("sha256").update(readFileSync(ingress)).digest("hex")}`]),
       `popup_device=${popupStat.dev}`,
       `popup_inode=${popupStat.ino}`,
       `receipt_device=${receiptStat.dev}`,

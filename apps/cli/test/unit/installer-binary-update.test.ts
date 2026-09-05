@@ -207,6 +207,21 @@ describe("installer-binary detection and planning", () => {
     expect(discoveries).toBe(0);
   });
 
+  it("detects the legacy exact ingress alias for one successor update", async () => {
+    const fixture = await installedFixture();
+    const ingressPath = join(fixture.installDir, "stn-ingress");
+    await unlink(ingressPath);
+    await symlink("stn", ingressPath);
+
+    await expect(createChannel(fixture).detect()).resolves.toMatchObject({
+      ingressIdentity: {
+        device: expect.any(String),
+        inode: expect.any(String),
+        sha256: createHash("sha256").update("current-binary").digest("hex"),
+      },
+    });
+  });
+
   it("returns undefined for source, unsupported, receipt-less, and non-owned layouts", async () => {
     const fixture = await installedFixture();
     await expect(
