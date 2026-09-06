@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  type CodexHookLockDatabase,
   withCodexHookMutationLock,
   withCodexHookMutationLockForTest,
 } from "../../src/hooks/hookMutationLock";
-import type { CodexHookLockDatabase } from "../../src/hooks/hookMutationLockSqlite";
 
 describe("Codex hook mutation lock", () => {
   it("serializes reversed multi-artifact acquisitions", async () => {

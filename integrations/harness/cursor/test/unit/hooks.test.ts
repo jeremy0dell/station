@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { chmodSync } from "node:fs";
 import { access, chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -564,12 +565,14 @@ describe("Cursor hook removal failures", () => {
     await mkdir(join(root, "cursor"), { recursive: true });
     await writeFile(hooksPath, existingCursorHooks(), "utf8");
     await installCursorHooks({ cursorHooksPath: hooksPath, hookScriptPath });
-    // Read-only parent: the config still rewrites, but unlink fails at the remove step.
-    await chmod(hooksDir, 0o500);
+    // Acquire the provider lock before making the artifact parent read-only.
+    const uninstallOptions = {
+      cursorHooksPath: hooksPath,
+      hookScriptPath,
+      beginMutation: () => chmodSync(hooksDir, 0o500),
+    };
     try {
-      await expect(
-        uninstallCursorHooks({ cursorHooksPath: hooksPath, hookScriptPath }),
-      ).rejects.toMatchObject({
+      await expect(uninstallCursorHooks(uninstallOptions)).rejects.toMatchObject({
         code: "CURSOR_HOOK_WRITE_FAILED",
         message: "Cursor hook script could not be removed.",
       });

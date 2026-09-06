@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { chmodSync } from "node:fs";
 import { access, chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -525,10 +526,13 @@ describe("Claude hook removal failures", () => {
       env: {},
     };
     await installClaudeHooks(options);
-    // Read-only parent: the artifact still parses, but unlink fails at the remove step.
-    await chmod(hooksDir, 0o500);
+    // Acquire the provider lock before making the artifact parent read-only.
+    const uninstallOptions = {
+      ...options,
+      beginMutation: () => chmodSync(hooksDir, 0o500),
+    };
     try {
-      await expect(uninstallClaudeHooks(options)).rejects.toMatchObject({
+      await expect(uninstallClaudeHooks(uninstallOptions)).rejects.toMatchObject({
         code: "CLAUDE_HOOK_WRITE_FAILED",
         message: "Claude hook file could not be removed.",
       });
