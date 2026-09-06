@@ -6,12 +6,15 @@ import type {
   HarnessEventReport,
   ObservedStatus,
 } from "@station/contracts";
+import { observedPathIsSameOrInside } from "@station/contracts";
 import {
-  HarnessEventReportSchema,
-  observedPathIsSameOrInside,
-  STATION_SCHEMA_VERSION,
-} from "@station/contracts";
-import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
+  buildHarnessEventReport,
+  type HarnessEventReportInput,
+  harnessEventDiagnostics,
+  harnessEventStatus,
+  reportCorrelation,
+  stationIdentityCorrelation,
+} from "@station/harness-shared";
 import { z } from "zod";
 import { codexHarnessError } from "./errors.js";
 import { CodexPermissionReviewerEvidenceSchema } from "./permissionReviewerEvidence.js";
@@ -173,19 +176,6 @@ export const CodexHookEventSchema = z.discriminatedUnion("hook_event_name", [
 
 export type CodexHookEvent = z.infer<typeof CodexHookEventSchema>;
 
-export type CodexHarnessEventReportInput = {
-  reportId: string;
-  observedAt: string;
-  payload: unknown;
-  diagnostics?: {
-    payloadBytes?: number | null;
-    compactedBytes?: number | null;
-    compacted?: boolean;
-    truncated?: boolean;
-    omittedFieldNames?: string[];
-  };
-};
-
 export function parseCodexHookEvent(input: unknown): CodexHookEvent {
   const result = CodexHookEventSchema.safeParse(input);
   if (!result.success) {
@@ -199,26 +189,9 @@ export function parseCodexHookEvent(input: unknown): CodexHookEvent {
 }
 
 export function codexHookPayloadToHarnessEventReport(
-  input: CodexHarnessEventReportInput,
+  input: HarnessEventReportInput,
 ): HarnessEventReport {
   const event = parseCodexHookEvent(input.payload);
-  const report: HarnessEventReport = {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    reportId: input.reportId,
-    provider: "codex",
-    kind: "harness",
-    eventType: event.hook_event_name,
-    observedAt: input.observedAt,
-    status: statusFromCodexHookEvent(event, input.observedAt),
-  };
-  const turn = turnFromCodexHookEvent(event);
-  if (turn !== undefined) {
-    report.turn = turn;
-  }
-  const correlation = reportCorrelationFromCodexEvent(event);
-  if (correlation !== undefined) {
-    report.correlation = correlation;
-  }
   const diagnostics = harnessEventDiagnostics(event.hook_event_name, input.diagnostics);
   if (
     codexStationIdentityCwdMismatch(
@@ -229,13 +202,16 @@ export function codexHookPayloadToHarnessEventReport(
   ) {
     diagnostics.correlationIssue = "station_identity_cwd_mismatch";
   }
-  report.diagnostics = diagnostics;
-  const coalesceKey = reportCoalesceKeyFromCodexEvent(event, input.reportId);
-  if (coalesceKey !== undefined) {
-    report.coalesceKey = coalesceKey;
-  }
-  report.providerData = providerDataFromCodexEvent(event);
-  return HarnessEventReportSchema.parse(report);
+  return buildHarnessEventReport(input, {
+    provider: "codex",
+    eventType: event.hook_event_name,
+    status: statusFromCodexHookEvent(event, input.observedAt),
+    turn: turnFromCodexHookEvent(event),
+    correlation: reportCorrelationFromCodexEvent(event),
+    diagnostics,
+    coalesceKey: reportCoalesceKeyFromCodexEvent(event, input.reportId),
+    providerData: providerDataFromCodexEvent(event),
+  });
 }
 
 export function codexHookPayloadReportId(payload: unknown, observedAt: string): string {
@@ -247,127 +223,94 @@ export function statusFromCodexHookEvent(
   observedAt: string,
 ): ObservedStatus {
   if (event.hook_event_name === "SessionStart") {
-    return {
-      value: "starting",
-      confidence: "high",
-      reason: `Codex session started from ${event.source}.`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "starting",
+      "high",
+      `Codex session started from ${event.source}.`,
+      observedAt,
+    );
   }
   if (event.hook_event_name === "PermissionRequest") {
     if (
       event.station_codex_permission_reviewer_evidence?.status === "resolved" &&
       event.station_codex_permission_reviewer_evidence.reviewer === "auto_review"
     ) {
-      return {
-        value: "working",
-        confidence: "medium",
-        reason: `Codex routed permission for ${event.tool_name} to automatic review.`,
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus(
+        "working",
+        "medium",
+        `Codex routed permission for ${event.tool_name} to automatic review.`,
+        observedAt,
+      );
     }
-    return {
-      value: "needs_attention",
-      confidence: "high",
-      reason: `Codex requested permission for ${event.tool_name}.`,
-      source: "harness_event",
-      updatedAt: observedAt,
-      attention: "tool_approval",
-    };
+    return harnessEventStatus(
+      "needs_attention",
+      "high",
+      `Codex requested permission for ${event.tool_name}.`,
+      observedAt,
+      { attention: "tool_approval" },
+    );
   }
   if (event.hook_event_name === "Stop") {
     if (event.stop_hook_active) {
-      return {
-        value: "working",
-        confidence: "medium",
-        reason: "A Stop hook kept Codex working.",
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus("working", "medium", "A Stop hook kept Codex working.", observedAt);
     }
-    return {
-      value: "idle",
-      confidence: "high",
-      reason: "Codex turn completed.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus("idle", "high", "Codex turn completed.", observedAt);
   }
   if (event.hook_event_name === "PostToolUse") {
     if (event.tool_name === USER_INPUT_TOOL) {
-      return {
-        value: "working",
-        confidence: "high",
-        reason: "Codex received user input.",
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return harnessEventStatus("working", "high", "Codex received user input.", observedAt);
     }
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: `Codex completed ${event.tool_name}.`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "working",
+      "medium",
+      `Codex completed ${event.tool_name}.`,
+      observedAt,
+    );
   }
   if (event.hook_event_name === "PreCompact") {
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: `Codex is about to compact the conversation (${event.trigger}).`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "working",
+      "medium",
+      `Codex is about to compact the conversation (${event.trigger}).`,
+      observedAt,
+    );
   }
   if (event.hook_event_name === "PostCompact") {
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: `Codex compacted the conversation (${event.trigger}).`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "working",
+      "medium",
+      `Codex compacted the conversation (${event.trigger}).`,
+      observedAt,
+    );
   }
   if (event.hook_event_name === "SubagentStart") {
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: `Codex started subagent ${event.agent_type}.`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "working",
+      "medium",
+      `Codex started subagent ${event.agent_type}.`,
+      observedAt,
+    );
   }
   if (event.hook_event_name === "PreToolUse") {
     // request_user_input blocks the turn on the user: the "tool call" IS the
     // clarifying question, so it must read as attention, not tool activity.
     if (event.tool_name === USER_INPUT_TOOL) {
-      return {
-        value: "needs_attention",
-        confidence: "high",
-        reason: "Codex requested user input.",
-        source: "harness_event",
-        updatedAt: observedAt,
-        attention: "question",
-      };
+      return harnessEventStatus(
+        "needs_attention",
+        "high",
+        "Codex requested user input.",
+        observedAt,
+        { attention: "question" },
+      );
     }
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: `Codex is about to use ${event.tool_name}.`,
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
+    return harnessEventStatus(
+      "working",
+      "medium",
+      `Codex is about to use ${event.tool_name}.`,
+      observedAt,
+    );
   }
-  return {
-    value: "working",
-    confidence: "medium",
-    reason: "Codex received a user prompt.",
-    source: "harness_event",
-    updatedAt: observedAt,
-  };
+  return harnessEventStatus("working", "medium", "Codex received a user prompt.", observedAt);
 }
 
 function turnFromCodexHookEvent(event: CodexHookEvent): HarnessEventReport["turn"] | undefined {
@@ -488,10 +431,7 @@ function reportCorrelationFromCodexEvent(
   return reportCorrelation({
     cwd: event.cwd,
     nativeSessionId: event.session_id,
-    projectId: event.station_project_id,
-    worktreeId: event.station_worktree_id,
-    sessionId: event.station_session_id,
-    terminalTargetId: event.station_terminal_target_id,
+    ...stationIdentityCorrelation("codex", event, { harnessRunId: false }),
   });
 }
 

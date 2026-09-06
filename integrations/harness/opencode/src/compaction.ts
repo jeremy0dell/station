@@ -1,21 +1,15 @@
-import { jsonByteCount } from "@station/harness-shared";
+import { jsonByteCount, type PayloadCompactionResult } from "@station/harness-shared";
 import {
   OpenCodeCompactEventSchema,
   type OpenCodeNativeEvent,
   OpenCodeNativeEventSchema,
 } from "./eventSchemas.js";
 
+export type { PayloadCompactionResult };
+
 export type OpenCodePayloadCompactionOptions = {
   cwd?: string;
   pid?: number;
-};
-
-export type OpenCodePayloadCompactionResult = {
-  payload: unknown;
-  compacted: boolean;
-  originalByteCount: number | null;
-  compactedByteCount: number | null;
-  omittedFieldNames: string[];
 };
 
 const nativeTopLevelFields = new Set(["id", "type", "properties", "cwd", "directory", "pid"]);
@@ -23,7 +17,7 @@ const nativeTopLevelFields = new Set(["id", "type", "properties", "cwd", "direct
 export function compactOpenCodeHookPayload(
   payload: unknown,
   options: OpenCodePayloadCompactionOptions = {},
-): OpenCodePayloadCompactionResult {
+): PayloadCompactionResult {
   const originalByteCount = jsonByteCount(payload);
   const compactResult = OpenCodeCompactEventSchema.safeParse(payload);
   if (compactResult.success) {

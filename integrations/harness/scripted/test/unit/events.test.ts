@@ -56,4 +56,23 @@ describe("scripted harness events", () => {
       /HARNESS_SCRIPTED_EVENT_INVALID/,
     );
   });
+
+  it("keeps the process-derived status source distinct from event-derived statuses", () => {
+    const sourceByType = Object.fromEntries(
+      (["started", "activity", "idle", "attention", "exit"] as const).map((type) => [
+        type,
+        statusFromScriptedEvent(
+          parseScriptedAgentEvent({ type, at: observedAt, runId: "run_web_task" }),
+        ).source,
+      ]),
+    );
+
+    expect(sourceByType).toEqual({
+      started: "harness_process",
+      activity: "harness_process",
+      idle: "harness_event",
+      attention: "harness_event",
+      exit: "harness_process",
+    });
+  });
 });

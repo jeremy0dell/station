@@ -135,6 +135,21 @@ describe("ClaudeHarnessProvider", () => {
     expect(checks?.[1]?.message).toContain("login");
   });
 
+  it("stops after the version check when the claude command is unavailable", async () => {
+    const provider = createClaudeHarnessProvider({
+      command: "claude-test",
+      now: () => new Date(now),
+      runner: async () => {
+        throw new Error("claude-test is not installed");
+      },
+    });
+
+    const checks = await provider.doctorChecks?.();
+
+    expect(checks).toHaveLength(1);
+    expect(checks?.[0]).toMatchObject({ name: "claude.version", status: "error" });
+  });
+
   it("hooksStatus reports requested:false / installed:false when hooks are not enabled", async () => {
     // install_hooks omitted → the doctor short-circuits without reading files, so
     // the gate sees requested:false (and points the user at the config flag).

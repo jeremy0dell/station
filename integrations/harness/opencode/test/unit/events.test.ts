@@ -382,3 +382,37 @@ function samplePayloadForEventType(eventType: string) {
     tool_name: "bash",
   };
 }
+
+describe("station identity provider data", () => {
+  it("keeps station identity keys ahead of the integration keys", () => {
+    const report = openCodeHookPayloadToHarnessEventReport({
+      reportId: "report_identity",
+      eventType: "session.idle",
+      observedAt: now,
+      payload: {
+        event_type: "session.idle",
+        cwd: "/work/project",
+        station_integration_id: "int",
+        station_integration_version: "1",
+        station_project_id: "web",
+        station_worktree_id: "wt_web",
+        station_worktree_path: "/work/project",
+        station_session_id: "ses_web",
+        station_terminal_provider: "tmux",
+        station_terminal_target_id: "tt_web",
+      },
+    });
+
+    expect(Object.keys(report.providerData as Record<string, unknown>)).toEqual([
+      "openCodeEventType",
+      "stationProjectId",
+      "stationWorktreeId",
+      "stationWorktreePath",
+      "stationSessionId",
+      "stationTerminalProvider",
+      "stationTerminalTargetId",
+      "stationIntegrationId",
+      "stationIntegrationVersion",
+    ]);
+  });
+});

@@ -2,13 +2,17 @@
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
 import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
-import { generatedHookScriptPath } from "@station/harness-shared";
+import {
+  generatedHookScriptPath,
+  hookSetupFileOpsFor,
+  isHookOwnershipConflict,
+  sameOwnerOwnership,
+} from "@station/harness-shared";
 import {
   assertProviderHookArtifactOwnership,
   assignBackupPaths,
   classifyProviderHookArtifactOwnership,
   commandLine,
-  createHookSetupFileOps,
   expectedProviderHookScript,
   installConfigScriptHook,
   type ProviderHookScriptOptions,
@@ -89,28 +93,11 @@ export type CursorHookScriptOptions = ProviderHookScriptOptions & {
   hookScriptPath: string;
 };
 
-const fileOps = createHookSetupFileOps(({ operation, cause }) => {
-  if (operation === "read" || operation === "metadata") {
-    return new CursorHookSetupError(
-      "CURSOR_HOOK_CONFIG_UNREADABLE",
-      operation === "read"
-        ? "Cursor hook config could not be read."
-        : "Cursor hook config metadata could not be read.",
-      { cause },
-    );
-  }
-  return new CursorHookSetupError(
-    "CURSOR_HOOK_WRITE_FAILED",
-    operation === "remove"
-      ? "Cursor hook script could not be removed."
-      : operation === "writeScript"
-        ? "Cursor hook script could not be written."
-        : operation === "backup"
-          ? "Cursor hook config backup could not be written."
-          : "Cursor hook config could not be written.",
-    { cause },
-  );
-});
+const fileOps = hookSetupFileOpsFor(
+  CursorHookSetupError,
+  { unreadable: "CURSOR_HOOK_CONFIG_UNREADABLE", writeFailed: "CURSOR_HOOK_WRITE_FAILED" },
+  { displayName: "Cursor", removeTarget: "script" },
+);
 
 function missingDescription(plan: CursorHookPlan): string {
   const missing = plan.missing.length === 0 ? "none" : plan.missing.join(", ");
@@ -180,8 +167,7 @@ async function sharedGeneratedHookPlan(
           contents: scriptBefore,
           requested: options.artifactOwner,
         });
-  const ownershipConflict =
-    ownership?.status === "different-owner" || ownership?.status === "unknown-owner";
+  const ownershipConflict = isHookOwnershipConflict(ownership);
 
   return {
     provider: "cursor",
@@ -307,11 +293,7 @@ export async function installCursorHooks(
   });
   const result: CursorHookInstallResult = { ...plan, installed: true };
   if (options.artifactOwner !== undefined) {
-    result.ownership = {
-      status: "same-owner",
-      requested: options.artifactOwner,
-      currentLauncher: options.artifactOwner.launcher,
-    };
+    result.ownership = sameOwnerOwnership(options.artifactOwner);
   }
   assignBackupPaths(result, [backupPath]);
   return result;
@@ -374,8 +356,7 @@ export async function doctorCursorHooks(
   }
 
   const installed = plan.missing.length === 0 && !plan.configChanged && !plan.scriptChanged;
-  const ownershipConflict =
-    plan.ownership?.status === "different-owner" || plan.ownership?.status === "unknown-owner";
+  const ownershipConflict = isHookOwnershipConflict(plan.ownership);
   if (!installed) {
     const shared = await sharedGeneratedHookPlan(plan.before, options);
     if (shared !== undefined) {

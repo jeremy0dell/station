@@ -3,11 +3,11 @@ export {
   jsonByteCount,
   type PayloadCompactionResult,
 } from "./compaction.js";
+export { healthDoctorCheck, hookDoctorCheck } from "./doctor.js";
 export {
-  HarnessProviderError,
+  defineHarnessProviderErrors,
   type HarnessProviderErrorClass,
-  harnessProviderErrorClass,
-  harnessProviderErrorFromUnknown,
+  type HarnessProviderErrors,
 } from "./errors.js";
 export {
   harnessEventDiagnostics,
@@ -17,6 +17,14 @@ export { createHarnessHookAdapter } from "./hookAdapter.js";
 export { generatedHookScriptPath } from "./hooks/generatedCommand.js";
 export { createJsonHookConfigEditor, isJsonObject } from "./hooks/jsonConfig.js";
 export {
+  type HookSetupErrorClass,
+  hookSetupErrorClass,
+  hookSetupFileOpsFor,
+  isHookOwnershipConflict,
+  sameOwnerOwnership,
+} from "./hooks/setupErrors.js";
+export {
+  assignDefined,
   type CommonLaunchEnvOptions,
   type CommonProviderDataInput,
   commonProviderData,
@@ -27,7 +35,7 @@ export {
 export {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
-  harnessCommand,
+  harnessCommandResolver,
   harnessHealth,
   harnessHookDoctorOptions,
   harnessHookReconciliationOptions,
@@ -35,3 +43,10 @@ export {
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "./provider.js";
+export {
+  buildHarnessEventReport,
+  type HarnessEventReportInput,
+  stationIdentityCorrelation,
+  stationIdentityProviderData,
+} from "./report.js";
+export { harnessEventStatus } from "./status.js";

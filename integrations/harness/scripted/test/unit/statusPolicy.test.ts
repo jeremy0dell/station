@@ -47,6 +47,18 @@ describe("scripted discovery status policy", () => {
       reason: "Scripted agent exited with code 0.",
     });
   });
+
+  it("marks stale activity unknown and keeps the unknown status source", async () => {
+    const staleAt = "2026-05-20T11:59:00.000Z";
+    const [run] = await discover([{ type: "activity", at: staleAt, runId: "run_web_task" }]);
+    expect(run?.status).toEqual({
+      value: "unknown",
+      confidence: "low",
+      reason: "Scripted activity is stale and no completion signal was observed.",
+      source: "unknown",
+      updatedAt: staleAt,
+    });
+  });
 });
 
 async function discover(events: readonly unknown[]) {

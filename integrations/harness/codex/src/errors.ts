@@ -1,8 +1,7 @@
 import {
-  type HarnessProviderError,
+  defineHarnessProviderErrors,
   type HarnessProviderErrorClass,
-  harnessProviderErrorClass,
-  harnessProviderErrorFromUnknown,
+  type HarnessProviderErrors,
 } from "@station/harness-shared";
 
 export type CodexHarnessErrorCode =
@@ -12,19 +11,14 @@ export type CodexHarnessErrorCode =
   | "HARNESS_CODEX_EVENT_UNSUPPORTED"
   | "HARNESS_CODEX_EVENT_INGEST_FAILED";
 
+const codexErrors: HarnessProviderErrors<CodexHarnessErrorCode> = defineHarnessProviderErrors({
+  name: "CodexHarnessProviderError",
+  provider: "codex",
+});
+
 export const CodexHarnessProviderError: HarnessProviderErrorClass<CodexHarnessErrorCode> =
-  harnessProviderErrorClass<CodexHarnessErrorCode>({
-    name: "CodexHarnessProviderError",
-    provider: "codex",
-  });
-
-export function codexHarnessError(code: CodexHarnessErrorCode, message: string, cause?: unknown) {
-  return new CodexHarnessProviderError(code, message, { cause });
-}
-
-export function codexProviderErrorFromUnknown(
-  error: unknown,
-  fallback: { code: CodexHarnessErrorCode; message: string; hint?: string | undefined },
-): HarnessProviderError<CodexHarnessErrorCode> {
-  return harnessProviderErrorFromUnknown(CodexHarnessProviderError, error, fallback);
-}
+  codexErrors.ErrorClass;
+export const codexHarnessError: HarnessProviderErrors<CodexHarnessErrorCode>["create"] =
+  codexErrors.create;
+export const codexProviderErrorFromUnknown: HarnessProviderErrors<CodexHarnessErrorCode>["fromUnknown"] =
+  codexErrors.fromUnknown;

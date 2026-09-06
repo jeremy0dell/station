@@ -275,3 +275,35 @@ function splitNativeOneTurnReports() {
     stop: reportForCursorPayload(fixture.stop),
   };
 }
+
+describe("station identity provider data", () => {
+  it("keeps station identity keys in a stable providerData order", () => {
+    const report = cursorProviderHookPayloadToHarnessEventReport({
+      reportId: "report_identity",
+      observedAt: now,
+      payload: {
+        hook_event_name: "afterShellExecution",
+        session_id: "cursor_session_123",
+        cwd: "/work/project",
+        station_project_id: "web",
+        station_worktree_id: "wt_web",
+        station_worktree_path: "/work/project",
+        station_session_id: "ses_web",
+        station_terminal_provider: "tmux",
+        station_terminal_target_id: "tt_web",
+      },
+    });
+
+    expect(Object.keys(report.providerData as Record<string, unknown>)).toEqual([
+      "hookEventName",
+      "cursorSessionId",
+      "cwd",
+      "stationProjectId",
+      "stationWorktreeId",
+      "stationWorktreePath",
+      "stationSessionId",
+      "stationTerminalProvider",
+      "stationTerminalTargetId",
+    ]);
+  });
+});
