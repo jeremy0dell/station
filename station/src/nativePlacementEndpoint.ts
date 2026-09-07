@@ -101,7 +101,21 @@ export async function createStationNativePlacementEndpoint(options: {
           if (pane.agentIdentity !== undefined) {
             proof.terminalTargetId = pane.agentIdentity.terminalTargetId as TerminalTargetId;
           }
-          if (terminal.hostPtyRef !== undefined) proof.hostPtyRef = terminal.hostPtyRef;
+          if (terminal.hostPtyRef !== undefined) {
+            // Warm attachments may retain Host listing metadata outside the strict wire identity.
+            const ref = terminal.hostPtyRef;
+            proof.hostPtyRef = {
+              kind: ref.kind,
+              terminalTargetId: ref.terminalTargetId,
+              worktreeId: ref.worktreeId,
+              projectId: ref.projectId,
+              sessionId: ref.sessionId,
+              worktreePath: ref.worktreePath,
+              harnessProvider: ref.harnessProvider,
+              ptyId: ref.ptyId,
+              ptyInstanceId: ref.ptyInstanceId,
+            };
+          }
           return [proof];
         }),
       },
