@@ -14,7 +14,7 @@ function prepareSandbox(profile: "first-run" | "multi" | "everything-missing"): 
   const prepared = spawnSync(
     process.execPath,
     [sandboxScript, "--prepare-only", "--skip-build", "--profile", profile],
-    { cwd: process.cwd(), encoding: "utf8" },
+    { cwd: process.cwd(), env: { ...process.env, TERM: "xterm-256color" }, encoding: "utf8" },
   );
   expect(prepared.status, prepared.stderr).toBe(0);
   const root = prepared.stdout.match(/^ {2}root:\s+(.+)$/m)?.[1];

@@ -88,10 +88,11 @@ describe("observer protocol server", () => {
         socketListening: async () => true,
       };
       await expect(
-        runObserverMain(
-          ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "1000"],
-          { providerRegistryFactory, buildVersion: observerBuildVersion, incumbentLifecycle },
-        ),
+        runObserverMain(["--socket", socketPath, "--state-dir", stateDir], {
+          providerRegistryFactory,
+          buildVersion: observerBuildVersion,
+          incumbentLifecycle,
+        }),
       ).resolves.toBe(0);
       expect(providerRegistryFactory).not.toHaveBeenCalled();
       await expect(access(join(stateDir, "observer.sqlite"))).rejects.toMatchObject({

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { once } from "node:events";
 import { constants, readFileSync } from "node:fs";
 import {
   access,
@@ -4117,11 +4118,14 @@ async function runOwnedBinarySmokeTopologyTest() {
               ]
             : []),
           "setInterval(() => {}, 1000);",
+          "process.send('ready');",
+          "process.disconnect();",
         ].join("\n"),
       ],
-      { stdio: "ignore" },
+      { stdio: ["ignore", "ignore", "ignore", "ipc"] },
     ),
   );
+  await Promise.all(children.map((child) => once(child, "message")));
   await writeFile(
     descriptorPath,
     `${JSON.stringify({
