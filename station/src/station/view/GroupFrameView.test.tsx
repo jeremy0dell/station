@@ -34,10 +34,12 @@ describe("GroupFrameView", () => {
     const child = setup.renderer.root.findDescendantById("mixed-child");
     const first = frame.findIndex((line) => line.includes("first semantic cell"));
     expect(child?.height).toBe(2);
-    expect(frame[first]).toMatch(/^╭─.*─╮$/u);
-    expect(frame[first + 1]?.startsWith("│")).toBe(true);
+    expect(child?.screenX).toBe(2);
+    expect(child?.width).toBe(20);
+    expect(frame[first]).toMatch(/^ ╭first semantic cell.*─╮$/u);
+    expect(frame[first + 1]?.startsWith(" │")).toBe(true);
     expect(frame[first + 1]?.trimEnd().endsWith("│")).toBe(true);
-    expect(frame[first + 2]?.trimEnd()).toMatch(/^╰─+╯$/u);
+    expect(frame[first + 2]?.trimEnd()).toMatch(/^ ╰─+╯$/u);
     expect(hitBottomCellId(setup, "last-semantic-cell")).toBe("last-semantic-cell");
 
     await act(async () => setup.renderer.resize(14, 8));
@@ -45,12 +47,14 @@ describe("GroupFrameView", () => {
     const resized = setup.captureCharFrame().split("\n");
     const resizedFirst = resized.findIndex((line) => line.includes("first"));
     expect(child?.height).toBe(6);
-    expect(resized[resizedFirst]).toMatch(/^╭─.*─╮$/u);
+    expect(child?.screenX).toBe(2);
+    expect(child?.width).toBe(10);
+    expect(resized[resizedFirst]).toMatch(/^ ╭first.*─╮$/u);
     for (const line of resized.slice(resizedFirst + 1, resizedFirst + 6)) {
-      expect(line.startsWith("│")).toBe(true);
+      expect(line.startsWith(" │")).toBe(true);
       expect(line.trimEnd().endsWith("│")).toBe(true);
     }
-    expect(resized[resizedFirst + 6]?.trimEnd()).toMatch(/^╰─+╯$/u);
+    expect(resized[resizedFirst + 6]?.trimEnd()).toMatch(/^ ╰─+╯$/u);
     expect(hitBottomCellId(setup, "last-semantic-cell")).toBe("last-semantic-cell");
   });
 });

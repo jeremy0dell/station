@@ -36,19 +36,19 @@ export function GroupFrameView({
     // Keep the border unclipped: OpenTUI's bordered scissor drops the final content row from hit-testing.
     <box
       {...(renderableId === undefined ? {} : { id: renderableId })}
-      width="100%"
+      alignSelf="stretch"
+      marginLeft={1}
       flexDirection="column"
       border={["left", "right", "bottom"]}
       borderStyle="rounded"
       borderColor={borderColor}
-      paddingLeft={1}
       paddingRight={1}
       overflow="visible"
     >
       {children}
       {/* Overlay the top corners so the frame starts on the header's semantic row. */}
       <text position="absolute" top={0} left={-1} fg={borderColor}>
-        ╭─
+        ╭
       </text>
       <text position="absolute" top={0} right={-1} fg={borderColor}>
         ─╮
@@ -57,7 +57,7 @@ export function GroupFrameView({
   );
 }
 
-/** Renderer-boundary width available between the frame's two-cell header markers. */
+/** Renderer-boundary width after the frame's left margin, borders, and right padding. */
 export function groupFrameContentColumns(columns: number): number {
   return Math.max(1, Math.floor(columns) - 4);
 }
