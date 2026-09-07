@@ -427,6 +427,9 @@ describeRealTmux("real tmux dev popup routing", () => {
           "display-popup",
           "-c",
           clientName,
+          // -c selects the client; -t selects the window that owns the control colors.
+          "-t",
+          "base:0",
           "-w",
           "80",
           "-h",
