@@ -104,7 +104,6 @@ describe("tmux popup launcher", () => {
     expect(calls.some((call) => /popup-(?:border-)?style/.test(call))).toBe(false);
   });
 
-
   it("only claims bare station and explicit popup invocations", async () => {
     const fixture = await createFakeTmux();
 

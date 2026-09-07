@@ -16358,7 +16358,7 @@
       "declaration": "runTmuxPopupMain",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Chooses the current-build popup fast path before loading the full CLI fallback.",
+      "purpose": "Supplies the current renderer command to the popup adapter before loading the CLI fallback.",
       "dependencies": []
     },
     {
@@ -19490,7 +19490,7 @@
       "declaration": "runManagedFastPopup",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Executes popup reuse checks from the current installed build before loading the CLI. Inconclusive routes enter the same installation's full popup command.",
+      "purpose": "Executes popup reuse checks from the current installed build before loading the CLI. CLI composition supplies the renderer command for this invocation. Inconclusive routes enter the same installation's full popup command.",
       "dependencies": []
     },
     {

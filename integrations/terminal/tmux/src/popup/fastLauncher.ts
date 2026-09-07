@@ -19,12 +19,12 @@ import {
   registeredPopupRootOption,
   registeredPopupSessionNameOption,
 } from "./constants.js";
-import {
-  type BuildManagedFastPopupRunShellCommandOptions,
-  ManagedPopupLaunchOptionsSchema,
-  validateManagedBindingOptions,
-} from "./fastBinding.js";
 import { popupProtocolSha256 } from "./fastProtocol.js";
+import {
+  type ManagedPopupLaunchOptions,
+  ManagedPopupLaunchOptionsSchema,
+  validateManagedPopupLaunchOptions,
+} from "./launchRequest.js";
 import { persistentPopupSignature } from "./signature.js";
 
 const bindingArgvSchema = z.tuple([
@@ -38,15 +38,17 @@ const bindingArgvSchema = z.tuple([
  * ADAPTER
  *
  * Executes popup reuse checks from the current installed build before loading the CLI.
+ * CLI composition supplies the renderer command for this invocation.
  * Inconclusive routes enter the same installation's full popup command.
  */
 export async function runManagedFastPopup(
   argv: readonly string[],
   installedRoot: string,
+  buildRendererCommand: (configPath: string | undefined) => string,
 ): Promise<void> {
   const [serialized, clientName, clientPid, clientSession] = bindingArgvSchema.parse(argv);
   const request = ManagedPopupLaunchOptionsSchema.parse(JSON.parse(serialized));
-  const options: BuildManagedFastPopupRunShellCommandOptions = {
+  const options: ManagedPopupLaunchOptions = {
     tmuxCommand: request.tmuxCommand,
     installedRoot,
     fallbackAlias: join(installedRoot, "stn-tmux-popup"),
@@ -56,8 +58,8 @@ export async function runManagedFastPopup(
     popupStatusBar: request.popupStatusBar,
   };
   if (request.configPath !== undefined) options.configPath = request.configPath;
-  validateManagedBindingOptions(options);
-  const script = buildManagedFastPopupScript(options);
+  validateManagedPopupLaunchOptions(options);
+  const script = buildManagedFastPopupScript(options, buildRendererCommand(request.configPath));
   await new Promise<void>((resolve, reject) => {
     const child = spawn(
       "/bin/sh",
@@ -98,25 +100,14 @@ function escapeTmuxFormat(value: string): string {
   return value.replaceAll("#", "##");
 }
 
-function expectedPersistentPopupSignature(options: {
-  configPath?: string;
-  installedRoot: string;
-}): string {
-  const command = [
-    shellQuote(join(options.installedRoot, "stn")),
-    ...(options.configPath === undefined ? [] : ["--config", shellQuote(options.configPath)]),
-    "tui",
-    "--popup",
-    "--persistent",
-  ].join(" ");
-  return persistentPopupSignature(command);
-}
-
-function buildManagedFastPopupScript(options: BuildManagedFastPopupRunShellCommandOptions): string {
+function buildManagedFastPopupScript(
+  options: ManagedPopupLaunchOptions,
+  rendererCommand: string,
+): string {
   const sessionName = defaultPersistentPopupSessionName;
   const expectedRootSha256 = popupProtocolSha256(options.installedRoot);
   const expectedSessionSha256 = popupProtocolSha256(sessionName);
-  const expectedSignatureSha256 = popupProtocolSha256(expectedPersistentPopupSignature(options));
+  const expectedSignatureSha256 = popupProtocolSha256(persistentPopupSignature(rendererCommand));
   const installedRoot = options.installedRoot;
   const fallbackAlias = options.fallbackAlias;
   const configPath = options.configPath ?? "";

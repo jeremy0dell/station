@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import { dirname, join, normalize, parse } from "node:path";
 import { emptyConfig } from "@station/config";
 import type { CliEnv } from "../../env.js";
+import { buildPopupRendererCommand } from "../../popupRendererCommand.js";
 import { selfExecArgv } from "../../selfExec.js";
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type {
@@ -93,15 +94,11 @@ function defaultPopupTuiCommand(
   cliEntryPath: string,
 ): string {
   const command = nonEmptyString(env?.STATION_TUI_COMMAND);
-  const parts =
-    command === undefined
-      ? [...selfExecArgv("cli", [process.execPath, cliEntryPath])].map(shellQuote)
-      : [command];
-  if (configPath !== undefined) {
-    parts.push("--config", shellQuote(configPath));
-  }
-  parts.push("tui", "--popup", "--persistent");
-  return parts.join(" ");
+  return buildPopupRendererCommand(
+    selfExecArgv("cli", [process.execPath, cliEntryPath]),
+    configPath,
+    command,
+  );
 }
 
 function popupUiSessionNameFromEnv(env: CliEnv | undefined): string | undefined {
@@ -113,10 +110,6 @@ function nonEmptyString(value: string | undefined): string | undefined {
     return undefined;
   }
   return value;
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function popupOwnerRoot(

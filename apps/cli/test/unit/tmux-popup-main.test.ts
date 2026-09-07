@@ -9,7 +9,11 @@ describe("compiled popup entry", () => {
     const cli = vi.fn();
     const args = ["{}", "/dev/ttys001", "123", "outer"];
     await runTmuxPopupMain(["__managed-popup", ...args], "/opt/station", cli);
-    expect(runManagedFastPopup).toHaveBeenCalledWith(args, "/opt/station");
+    expect(runManagedFastPopup).toHaveBeenCalledWith(args, "/opt/station", expect.any(Function));
+    const buildCommand = vi.mocked(runManagedFastPopup).mock.lastCall?.[2];
+    expect(buildCommand?.("/tmp/config.toml")).toBe(
+      "'/opt/station/stn' --config '/tmp/config.toml' tui --popup --persistent",
+    );
     expect(cli).not.toHaveBeenCalled();
   });
 

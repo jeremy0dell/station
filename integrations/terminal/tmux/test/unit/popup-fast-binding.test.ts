@@ -446,7 +446,8 @@ process.exit(0);
 import { appendFileSync } from "node:fs";
 import { runManagedFastPopup } from ${JSON.stringify(fileURLToPath(new URL("../../dist/popup/fastLauncher.js", import.meta.url)))};
 if (process.argv[2] === "__managed-popup") {
-  await runManagedFastPopup(process.argv.slice(3), ${JSON.stringify(installedRoot)});
+  await runManagedFastPopup(process.argv.slice(3), ${JSON.stringify(installedRoot)},
+    () => ${JSON.stringify(fixturePopupCommand(installedRoot, configPath))});
 } else {
   appendFileSync(${JSON.stringify(fallbackLogPath)}, (process.env.STATION_FOCUS_CLIENT_ID ?? "") + "\\n");
   appendFileSync(${JSON.stringify(fallbackConfigLogPath)}, [process.env.STATION_CONFIG_PATH ?? "", process.argv[2] ?? "", process.argv[3] ?? ""].join("\\t") + "\\n");
@@ -475,15 +476,17 @@ if (process.argv[2] === "__managed-popup") {
 }
 
 function fixturePopupSignature(installedRoot: string, configPath: string | undefined): string {
-  return persistentPopupSignature(
-    [
-      shellLiteral(join(installedRoot, "stn")),
-      ...(configPath === undefined ? [] : ["--config", shellLiteral(configPath)]),
-      "tui",
-      "--popup",
-      "--persistent",
-    ].join(" "),
-  );
+  return persistentPopupSignature(fixturePopupCommand(installedRoot, configPath));
+}
+
+function fixturePopupCommand(installedRoot: string, configPath: string | undefined): string {
+  return [
+    shellLiteral(join(installedRoot, "stn")),
+    ...(configPath === undefined ? [] : ["--config", shellLiteral(configPath)]),
+    "tui",
+    "--popup",
+    "--persistent",
+  ].join(" ");
 }
 
 function popupClaim(state: "closing" | "open", clientPid: number, clientName: string): string {
