@@ -1,4 +1,5 @@
 import type { ExactObserverOwnershipEvidence } from "@station/observer/internal";
+import { systemClock } from "@station/runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   convergeExactObserverBuild,
@@ -11,6 +12,8 @@ const ensureAdapters = vi.hoisted(() => ({
   inspect: vi.fn(),
   start: vi.fn(),
   withSession: vi.fn(),
+  readProcessExistence: vi.fn(),
+  probeSocket: vi.fn(),
 }));
 
 vi.mock("../../../src/observerProcess/inspectExactObserverOwner.js", async (importActual) => ({
@@ -22,9 +25,16 @@ vi.mock("../../../src/observerProcess.js", async (importActual) => ({
   ...(await importActual()),
   startObserverPreservingIncumbent: (...args: unknown[]) => ensureAdapters.start(...args),
 }));
+vi.mock("@station/observer/internal", async (importActual) => ({
+  ...(await importActual()),
+  createLocalObserverProcessEvidence: () => ({
+    readProcessExistence: ensureAdapters.readProcessExistence,
+  }),
+}));
 vi.mock("@station/protocol", async (importActual) => ({
   ...(await importActual()),
   withExactObserverLifecycleSession: (...args: unknown[]) => ensureAdapters.withSession(...args),
+  probeUnixSocket: (...args: unknown[]) => ensureAdapters.probeSocket(...args),
 }));
 
 const socketPath = "/tmp/station/observer.sock";
@@ -36,9 +46,12 @@ type ExactEvidence = Extract<ExactObserverOwnershipEvidence, { status: "exact" }
 
 beforeEach(() => {
   vi.spyOn(Date, "now").mockReturnValue(nowMs);
+  vi.spyOn(systemClock, "now").mockReturnValue(new Date(nowMs));
   ensureAdapters.inspect.mockReset();
   ensureAdapters.start.mockReset();
   ensureAdapters.withSession.mockReset();
+  ensureAdapters.readProcessExistence.mockReset().mockReturnValue({ status: "absent" });
+  ensureAdapters.probeSocket.mockReset().mockResolvedValue({ status: "absent" });
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -899,9 +912,13 @@ describe("exact Observer convergence lifecycle", () => {
       .mockResolvedValueOnce(incumbent)
       .mockResolvedValueOnce(successor);
     const withSession = vi.fn(sessionRunner(stop));
+    const waitForExit = vi.fn(async () => undefined);
 
     await expect(
-      convergeExactObserverBuild(command, dependencies({ inspect, start, withSession })),
+      convergeExactObserverBuild(
+        command,
+        dependencies({ inspect, start, withSession, waitForExit }),
+      ),
     ).resolves.toMatchObject({
       status: "running",
       lifecycle: "replaced",
@@ -913,7 +930,43 @@ describe("exact Observer convergence lifecycle", () => {
       health: command.expected.health,
       deadlineMs: command.deadlineMs,
     });
-    expect(stop.mock.invocationCallOrder[0]).toBeLessThan(start.mock.invocationCallOrder[0] ?? 0);
+    expect(stop.mock.invocationCallOrder[0]).toBeLessThan(
+      waitForExit.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(waitForExit.mock.invocationCallOrder[0]).toBeLessThan(
+      start.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("does not start when the stopped generation's exit remains uncertain", async () => {
+    const command = restartCommand();
+    const incumbent = exactEvidence(command);
+    const stop = vi.fn();
+    const start = vi.fn();
+    const waitForExit = vi.fn(async () => {
+      throw new Error("Process evidence unavailable");
+    });
+    const result = await convergeExactObserverBuild(
+      command,
+      dependencies({
+        inspect: async () => incumbent,
+        start,
+        withSession: sessionRunner(stop),
+        waitForExit,
+      }),
+    );
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      phase: "stop",
+      incumbentDisposition: "unknown",
+      cause: { code: "OBSERVER_EXACT_STOP_UNCERTAIN" },
+    });
+    expect(stop).toHaveBeenCalledOnce();
+    expect(waitForExit).toHaveBeenCalledWith({
+      identity: command.expected.processIdentity,
+      deadlineMs: command.deadlineMs,
+    });
+    expect(start).not.toHaveBeenCalled();
   });
 
   it("refuses the unchanged admitted generation after a successful stop and start attempt", async () => {
@@ -1128,6 +1181,7 @@ function dependencies(
       hookSpoolDir: "/tmp/station/hooks",
     },
     targetSelector,
+    waitForExit: async () => undefined,
     inspect: async () => ({ status: "absent" }),
     start: async () => runningStatus(exactEvidence()),
     withSession: vi.fn() as ExactObserverConvergenceDependencies["withSession"],

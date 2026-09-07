@@ -269,6 +269,104 @@ describe("update reap authorization", () => {
     });
   });
 
+  it("authorizes exact targets while binding an unrelated missing-worktree record", () => {
+    const input = withUnrelatedSession();
+    expect(authorize(input).targets).toEqual(authorize().targets);
+    expect(input.preflight.evidenceComplete).toBe(false);
+    const changed = withUnrelatedSession();
+    if (
+      changed.preflight.observer.status !== "exact" ||
+      changed.preflight.observer.recovery.status !== "assessed"
+    )
+      throw new Error("Expected assessment");
+    const changedSession = changed.preflight.observer.recovery.assessment.sessions.at(-1);
+    if (changedSession === undefined) throw new Error("Expected session");
+    changedSession.lifecycle = "ended";
+    expect(authorize(changed).digest).not.toBe(authorize(input).digest);
+  });
+
+  it.each([
+    "session",
+    "worktree",
+    "parked",
+    "parked-worktree",
+    "reason",
+    "hook",
+    "handoff",
+    "handle",
+    "parked-unknown",
+    "recovery-authority",
+  ])("refuses incomplete or overlapping %s evidence", (change) => {
+    const input = withUnrelatedSession();
+    const publicObserver = input.preflight.observer;
+    if (publicObserver.status !== "exact" || publicObserver.recovery.status !== "assessed")
+      throw new Error("Expected assessment");
+    const excluded = publicObserver.recovery.assessment.sessions.at(-1);
+    if (excluded === undefined) throw new Error("Expected excluded session");
+    const privateObserver = input.commitments.observer;
+    if (privateObserver.status !== "exact" || privateObserver.recovery.status !== "assessed")
+      throw new Error("Expected private assessment");
+    const retained = privateObserver.recovery.assessment.sessions.at(-1);
+    const selected = privateObserver.recovery.assessment.sessions[0];
+    const disposition = input.preflight.terminalDispositions[0];
+    if (
+      retained === undefined ||
+      selected === undefined ||
+      disposition === undefined ||
+      preflight.host.status !== "inspected" ||
+      preflight.host.terminals[0] === undefined
+    )
+      throw new Error("Expected evidence");
+    if (change === "session") excluded.sessionId = retained.sessionId = terminal.sessionId;
+    if (change === "worktree") {
+      excluded.projectId = retained.projectId = terminal.projectId;
+      excluded.worktreeId = retained.worktreeId = terminal.worktreeId;
+    }
+    if (change === "parked" || change === "parked-worktree") {
+      input.preflight.parkedBridges = {
+        status: "assessed",
+        totalParkedCount: 1,
+        unownedParkedCount: 1,
+        adoptionRequiredCount: 0,
+      };
+      input.commitments.parkedTerminals = [
+        change === "parked"
+          ? { ...preflight.host.terminals[0], sessionId: excluded.sessionId }
+          : {
+              ...preflight.host.terminals[0],
+              projectId: excluded.projectId,
+              worktreeId: excluded.worktreeId,
+            },
+      ];
+    }
+    if (change === "reason") excluded.reasons.push("harness_provider_missing");
+    if (change === "hook")
+      input.preflight.hooks = [
+        {
+          provider: "codex",
+          status: "inspection-failed",
+          error: { tag: "TestError", code: "UNKNOWN", message: "Unknown" },
+          followUp: { action: "run-doctor" },
+        },
+      ];
+    if (change === "handoff") disposition.handoff = "unknown";
+    if (change === "handle")
+      selected.handleResolution = { kind: "unknown", reasons: ["worktree_evidence_missing"] };
+    if (change === "recovery-authority")
+      Object.assign(privateObserver, {
+        recovery: {
+          status: "unknown",
+          error: { tag: "TestError", code: "UNKNOWN", message: "Unknown" },
+        },
+      });
+    if (change === "parked-unknown")
+      input.preflight.parkedBridges = {
+        status: "unknown",
+        error: { tag: "TestError", code: "UNKNOWN", message: "Unknown" },
+      };
+    expect(() => authorize(input)).toThrow();
+  });
+
   it("binds the public plan, exact identities, process group, and selected handle", () => {
     const authorized = authorize();
     expect(authorized.digest).toMatch(/^[0-9a-f]{64}$/u);
@@ -351,4 +449,34 @@ function authorize(overrides: Partial<Parameters<typeof deriveUpdateReapAuthoriz
     processGroups: [processGroup],
     ...overrides,
   });
+}
+
+function withUnrelatedSession() {
+  const unrelated = {
+    sessionId: "session-unrelated",
+    projectId: "project-unrelated",
+    worktreeId: "worktree-missing",
+    lifecycle: "open" as const,
+    harnessProvider: "codex",
+    disposition: "unknown" as const,
+    reasons: ["worktree_evidence_missing" as const],
+    handleResolution: { kind: "unknown" as const, reasons: ["worktree_evidence_missing" as const] },
+  };
+  const aggregate = structuredClone(preflight);
+  if (aggregate.observer.status !== "exact" || aggregate.observer.recovery.status !== "assessed")
+    throw new Error("Expected assessment");
+  aggregate.observer.recovery.assessment.sessions.push(unrelated);
+  aggregate.evidenceComplete = false;
+  const privateObserver = structuredClone(observer);
+  if (privateObserver.status !== "exact" || privateObserver.recovery.status !== "assessed")
+    throw new Error("Expected assessment");
+  privateObserver.recovery.assessment.sessions.push(structuredClone(unrelated));
+  return {
+    preflight: aggregate,
+    commitments: {
+      observer: privateObserver,
+      host,
+      parkedTerminals: [] as import("@station/contracts").UpdateReapTerminalEvidence[],
+    },
+  };
 }

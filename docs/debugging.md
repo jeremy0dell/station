@@ -217,6 +217,10 @@ lock, sends `SIGTERM` only to exact Host-owned process groups, and permits
 `SIGKILL` only for unchanged members of the authorized group. It verifies that
 the incumbent Host has zero PTYs, converges the runtime, and verifies each exact
 resumed Station session.
+An unrelated retained session with only `worktree_evidence_missing` may remain
+unresolved while exact target recovery completes. Its aliased warning remains
+visible even when the final runtime plan is `converged`; missing target evidence
+still refuses before signaling.
 Its public report exposes only aliased terminal and session outcomes. Private
 mode-0600 journals under the configured state directory record restart progress;
 an artifact-changing successor takes ownership of the same lock without exposing
@@ -249,7 +253,12 @@ Apply repeats the complete inventory under the repair lock and refuses a
 changed plan. Terminal repair also takes the update-reap lock and uses its exact
 process-group checks. Recovery resume and prune, and terminal repair because it
 can affect recovery state, create and verify a SQLite-consistent backup before
-mutation. Recovery resume and prune also require the Observer to verify the
+mutation. The backup includes committed WAL rows and prepares only the new
+owner-only copy in DELETE journal mode before read-only verification. The live
+database stays in WAL mode. Backup creation, preparation, and verification
+failures retain distinct typed errors and prevent repair mutation. Rechecking a
+recorded backup never modifies it or replaces its digest.
+Recovery resume and prune also require the Observer to verify the
 active private journal and audit against that backup. Resume resolves the same
 canonical handle again immediately before terminal creation. Recovery resume
 and prune require `feature_flags.session_resume_agent` because they use the

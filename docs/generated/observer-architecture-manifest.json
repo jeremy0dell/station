@@ -4849,7 +4849,7 @@
           "name": "createSqliteRecoveryBackupPort",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Uses SQLite's online backup API so committed WAL rows are included, then reopens the result read-only to verify schema, integrity, size, and recovery inventory before returning an opaque ID."
+          "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest."
         },
         {
           "name": "createTerminalCloseHandler",
@@ -5490,8 +5490,8 @@
         {
           "name": "openObserverSqlite",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "ADAPTER",
+          "purpose": "Opens and initializes Observer SQLite, closing the connection on any pragma or migration failure while retaining the initialization stage and original cause."
         },
         {
           "name": "OpenObserverSqliteOptions",
@@ -8099,7 +8099,7 @@
           "name": "createSqliteRecoveryBackupPort",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Uses SQLite's online backup API so committed WAL rows are included, then reopens the result read-only to verify schema, integrity, size, and recovery inventory before returning an opaque ID."
+          "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest."
         },
         {
           "name": "EventAndObservationIngressDedupeResult",
@@ -8809,7 +8809,7 @@
           "name": "createSqliteRecoveryBackupPort",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Uses SQLite's online backup API so committed WAL rows are included, then reopens the result read-only to verify schema, integrity, size, and recovery inventory before returning an opaque ID."
+          "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest."
         },
         {
           "name": "RecoveryBackupPort",
@@ -8871,7 +8871,7 @@
           "specifier": "node:fs/promises",
           "resolvedPath": "node:fs/promises",
           "edgeKind": "runtime",
-          "bindings": ["chmod", "lstat", "mkdir", "readFile", "rm", "stat"]
+          "bindings": ["chmod", "lstat", "mkdir", "readFile", "rm", "stat", "writeFile"]
         },
         {
           "specifier": "node:path",
@@ -8902,6 +8902,18 @@
             "RepairJournal",
             "RepairRecoveryMutationProof"
           ]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["safeErrorFromUnknown"]
+        },
+        {
+          "specifier": "zod",
+          "resolvedPath": "zod",
+          "edgeKind": "runtime",
+          "bindings": ["z"]
         }
       ]
     },
@@ -14550,8 +14562,8 @@
         {
           "name": "openObserverSqlite",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "ADAPTER",
+          "purpose": "Opens and initializes Observer SQLite, closing the connection on any pragma or migration failure while retaining the initialization stage and original cause."
         },
         {
           "name": "OpenObserverSqliteOptions",
@@ -15822,7 +15834,7 @@
       "declaration": "convergeExactObserverBuild",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Converges exact absence or one revalidated owner and requires an independent final proof.",
+      "purpose": "Converges exact absence or one revalidated owner, waits for that generation to exit after cooperative stop, and requires an independent final proof before reporting success.",
       "dependencies": []
     },
     {
@@ -15861,8 +15873,22 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "declaration": "createLocalObserverProcessEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/protocol/src/client.ts",
           "declaration": "withExactObserverLifecycleSession",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "probeUnixSocket",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -15874,7 +15900,7 @@
       "declaration": "ensureExactObserverBuild",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Preserves standalone exact reuse while wiring local adapters into exact convergence.",
+      "purpose": "Preserves standalone exact reuse while wiring local process-exit, socket, and lifecycle evidence into exact convergence under one absolute deadline.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -15898,13 +15924,35 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "declaration": "createLocalObserverProcessEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/protocol/src/client.ts",
           "declaration": "withExactObserverLifecycleSession",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "probeUnixSocket",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+      "declaration": "ExactObserverExitCapability",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Passively proves exit of the admitted process generation within the activation deadline. Unavailable process or socket evidence never proves exit and grants no signaling authority.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
@@ -16591,7 +16639,7 @@
       "declaration": "deriveUpdateReapAuthorization",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Derives private SHA-256 authority only for one complete canonical reap-required plan whose exact Host child groups and selected recovery handles remain correlated to the private preflight.",
+      "purpose": "Derives private SHA-256 authority for every exact Host child group and selected recovery handle. Only unrelated retained sessions missing worktree evidence may remain unknown; the complete original aggregate, private commitments, and targets remain bound into the digest.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/reapPlan.ts",
@@ -17634,7 +17682,7 @@
       "declaration": "createSqliteRecoveryBackupPort",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Uses SQLite's online backup API so committed WAL rows are included, then reopens the result read-only to verify schema, integrity, size, and recovery inventory before returning an opaque ID.",
+      "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/recoveryBackup.ts",
@@ -18229,6 +18277,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/sqlite.ts",
+          "declaration": "openObserverSqlite",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/stationLogger.ts",
           "declaration": "StationLogger",
           "kind": "interface",
@@ -18764,6 +18819,14 @@
       "kind": "function",
       "role": "POLICY",
       "purpose": "Selects the newest already-eligible recovery candidate by last activity, observation recency, then opaque Station handle identity so automatic recovery is stable across input order and restart without exposing provider-native targets.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/sqlite.ts",
+      "declaration": "openObserverSqlite",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Opens and initializes Observer SQLite, closing the connection on any pragma or migration failure while retaining the initialization stage and original cause.",
       "dependencies": []
     },
     {

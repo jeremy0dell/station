@@ -1,22 +1,28 @@
 import assert from "node:assert/strict";
+import { chmod, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { createSqliteRecoveryBackupPort } from "../../apps/observer/dist/persistence/recoveryBackup.js";
 
 const [, , action, databasePath, expectedLabel] = process.argv;
 assert.ok(
-  action === "seed-v16" || action === "upgrade-write" || action === "read",
+  action === "seed-v16" || action === "upgrade-write" || action === "read" || action === "backup",
   "Expected a seed-v16, upgrade-write, or read action.",
 );
 assert.ok(databasePath, "Expected a SQLite database path.");
 assert.ok(expectedLabel, "Expected a probe label.");
 
-const { createSqliteObserverPersistence, migrations, openObserverSqlite } = await import(
-  new URL("../../apps/observer/dist/internal.js", import.meta.url).href
-);
-const { openSqlDatabase } = await import(
-  new URL("../../apps/observer/dist/sqlite/driver.js", import.meta.url).href
-);
-const { withProviderHookMutationLock } = await import(
-  new URL("../../packages/runtime/dist/providerHookMutationLock.js", import.meta.url).href
-);
+import {
+  createSqliteObserverPersistence,
+  migrations,
+  openObserverSqlite,
+} from "../../apps/observer/dist/internal.js";
+import { openSqlDatabase } from "../../apps/observer/dist/sqlite/driver.js";
+import { withProviderHookMutationLock } from "../../packages/runtime/dist/providerHookMutationLock.js";
+
+if (action === "backup") {
+  await probeRecoveryBackup();
+  process.exit(0);
+}
 
 await probeProviderHookMutationLock(`${databasePath}.provider-hook`);
 
@@ -163,5 +169,63 @@ async function probeProviderHookMutationLock(artifactPath) {
     assert.equal(verificationDatabase.prepare("SELECT 1 AS value").get()?.value, 1);
   } finally {
     verificationDatabase.close();
+  }
+}
+
+async function probeRecoveryBackup() {
+  const stateDir = dirname(databasePath);
+  const sqlite = openObserverSqlite({ path: databasePath });
+  try {
+    sqlite.database.exec("PRAGMA wal_autocheckpoint = 0");
+    sqlite.database.exec("CREATE TABLE backup_payload (value BLOB); BEGIN IMMEDIATE");
+    const insert = sqlite.database.prepare(
+      "INSERT INTO backup_payload VALUES (zeroblob(1024 * 1024))",
+    );
+    for (let index = 0; index < Number(expectedLabel); index += 1) insert.run();
+    sqlite.database.exec("COMMIT");
+    const persistence = createSqliteObserverPersistence({ sqlite });
+    const snapshot = await persistence.readRecoveryRepairSnapshot();
+    const port = createSqliteRecoveryBackupPort({ databasePath, stateDir });
+    const backup = await port.create({
+      expectedRecoveryInventoryDigest: snapshot.recoveryInventoryDigest,
+    });
+    const backupPath = join(stateDir, "repair", "backups", backup.id, "observer.sqlite");
+    assert.equal((await stat(backupPath)).mode & 0o777, 0o600);
+    assert.equal((await stat(dirname(backupPath))).mode & 0o777, 0o700);
+    assert.ok((await stat(`${databasePath}-wal`)).size > 0);
+    assert.equal(sqlite.database.prepare("PRAGMA journal_mode").get().journal_mode, "wal");
+    for (let index = 0; index < 3; index += 1) await port.verify(backup);
+    const copy = openSqlDatabase(backupPath, { readOnly: true });
+    try {
+      assert.equal(copy.prepare("PRAGMA journal_mode").get().journal_mode, "delete");
+      assert.equal(
+        copy.prepare("SELECT COUNT(*) AS count FROM backup_payload").get().count,
+        Number(expectedLabel),
+      );
+    } finally {
+      copy.close();
+    }
+    assert.deepEqual(await readdir(dirname(backupPath)), ["observer.sqlite"]);
+    const limited = createSqliteRecoveryBackupPort({ databasePath, stateDir, maximumBytes: 1 });
+    await assert.rejects(
+      limited.create({ expectedRecoveryInventoryDigest: snapshot.recoveryInventoryDigest }),
+      { tag: "RecoveryBackupCreationError", code: "REPAIR_BACKUP_SIZE_LIMIT" },
+    );
+    await assert.rejects(port.create({ expectedRecoveryInventoryDigest: "f".repeat(64) }), {
+      tag: "RecoveryBackupVerificationError",
+      code: "REPAIR_BACKUP_INVENTORY_CHANGED",
+    });
+    assert.equal((await readdir(join(stateDir, "repair", "backups"))).length, 1);
+    await chmod(backupPath, 0o644);
+    await assert.rejects(port.verify(backup), {
+      tag: "RecoveryBackupVerificationError",
+      code: "REPAIR_BACKUP_FILE_INVALID",
+    });
+    await chmod(backupPath, 0o600);
+    await writeFile(backupPath, "corrupt");
+    await assert.rejects(port.verify(backup), { tag: "RecoveryBackupVerificationError" });
+    assert.equal(await readFile(backupPath, "utf8"), "corrupt");
+  } finally {
+    sqlite.close();
   }
 }

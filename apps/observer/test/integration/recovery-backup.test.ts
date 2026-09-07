@@ -1,18 +1,72 @@
-import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createFilesystemRecoveryRepairAuthorizationPort,
   createSqliteObserverPersistence,
   createSqliteRecoveryBackupPort,
 } from "../../src/persistence/index.js";
 import { readSessionRecoveryHandlesFromBackup } from "../../src/persistence/recoveryArchiveReader.js";
+import * as driver from "../../src/sqlite/driver.js";
 import { openObserverSqlite } from "../../src/sqlite.js";
 
 const now = "2026-09-04T12:00:00.000Z";
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("Observer recovery backup", () => {
+  it("reports a missing source as a path-free creation failure without creating a backup", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-backup-creation-"));
+    const port = createSqliteRecoveryBackupPort({
+      databasePath: join(stateDir, "missing.sqlite"),
+      stateDir,
+    });
+    const failure = await port
+      .create({ expectedRecoveryInventoryDigest: "a".repeat(64) })
+      .catch((error: unknown) => error);
+    expect(failure).toMatchObject({ tag: "RecoveryBackupCreationError", code: "ENOENT" });
+    expect(JSON.stringify(failure)).not.toContain(stateDir);
+    expect(await readdir(stateDir)).toEqual([]);
+  });
+  it.each([
+    "Preparation",
+    "Verification",
+  ])("removes only a new copy after %s fails and retains a path-free SQLite cause", async (phase) => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-backup-phase-"));
+    const databasePath = join(stateDir, "observer.sqlite");
+    const sqlite = openObserverSqlite({ path: databasePath });
+    try {
+      const persistence = createSqliteObserverPersistence({ sqlite });
+      const snapshot = await persistence.readRecoveryRepairSnapshot();
+      const port = createSqliteRecoveryBackupPort({ databasePath, stateDir });
+      const recorded = await port.create({
+        expectedRecoveryInventoryDigest: snapshot.recoveryInventoryDigest,
+      });
+      const originalOpen = driver.openSqlDatabase;
+      vi.spyOn(driver, "openSqlDatabase").mockImplementation((path, options) => {
+        if (
+          path.includes("/backups/") &&
+          (phase === "Verification") === (options?.readOnly === true)
+        ) {
+          throw Object.assign(new Error("private-path-canary: unable to open database file"), {
+            code: "ERR_SQLITE_ERROR",
+            errcode: 14,
+          });
+        }
+        return originalOpen(path, options);
+      });
+      const failure = await port
+        .create({ expectedRecoveryInventoryDigest: snapshot.recoveryInventoryDigest })
+        .catch((error: unknown) => error);
+      expect(failure).toMatchObject({ tag: `RecoveryBackup${phase}Error`, code: "SQLITE_14" });
+      expect(JSON.stringify(failure)).not.toContain("private-path-canary");
+      expect(await readdir(join(stateDir, "repair", "backups"))).toEqual([recorded.id]);
+      expect(sqlite.database.prepare("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
+    } finally {
+      sqlite.close();
+    }
+  });
   it("captures committed WAL rows and verifies a private read-only recovery inventory", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-recovery-backup-"));
     const databasePath = join(stateDir, "observer.sqlite");
@@ -55,6 +109,14 @@ describe("Observer recovery backup", () => {
     expect((await stat(backupPath)).mode & 0o777).toBe(0o600);
     expect(readSessionRecoveryHandlesFromBackup(backupPath)).toEqual([handle]);
     await expect(backupPort.verify(backup)).resolves.toBeUndefined();
+    await expect(backupPort.verify(backup)).resolves.toBeUndefined();
+    const copy = driver.openSqlDatabase(backupPath, { readOnly: true });
+    expect(copy.prepare("PRAGMA journal_mode").get()).toEqual({ journal_mode: "delete" });
+    copy.close();
+    expect(await readdir(join(stateDir, "repair", "backups", backup.id))).toEqual([
+      "observer.sqlite",
+    ]);
+    expect(sqlite.database.prepare("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
 
     const action = {
       kind: "recovery-prune" as const,

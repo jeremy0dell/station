@@ -22,6 +22,30 @@ const backup: RepairBackup = {
 };
 
 describe("repair execution", () => {
+  it.each([
+    "Creation",
+    "Preparation",
+    "Verification",
+  ])("retains the backup %s error and performs zero repair mutation", async (phase) => {
+    const action: RepairAction = { kind: "terminal-reap", terminalTargetId: "terminal-1" };
+    const setup = fixture(action);
+    const error = {
+      tag: `RecoveryBackup${phase}Error`,
+      code: "SQLITE_14",
+      message: "Observer recovery backup failed.",
+    };
+    vi.mocked(setup.deps.authorizeTerminal).mockResolvedValue({
+      target: terminalTarget(),
+      authorizationDigest: "f".repeat(64),
+    });
+    vi.mocked(setup.deps.backup.create).mockRejectedValue(error);
+    const result = await executeRepair(action, planDigest, setup.deps);
+    expect(result).toMatchObject({ status: "refused", error });
+    expect(setup.currentJournal?.phase).toBe("authorized");
+    expect(setup.deps.reapTerminal).not.toHaveBeenCalled();
+    expect(setup.deps.resumeRecovery).not.toHaveBeenCalled();
+    expect(setup.deps.pruneRecovery).not.toHaveBeenCalled();
+  });
   it("audits and refuses a changed locked plan without backup or mutation", async () => {
     const setup = fixture({ kind: "observer-cleanup" });
     const result = await executeRepair({ kind: "observer-cleanup" }, "f".repeat(64), setup.deps);

@@ -134,6 +134,17 @@ group. It resumes eligible sessions after runtime convergence and reports every
 reaped, resumed, retained, or unresolved alias. `stn update --dry-run --reap`
 remains read-only.
 
+If startup reports `OBSERVER_PROCESS_INSTALLED_PATH_REPLACED`, run the update
+preview and apply commands above. When using a separate configuration, preserve
+its scope with `stn --config <path> update`. Ordinary startup does not perform
+recovery. Terminal termination requires explicit `--reap`.
+
+An unrelated retained session whose worktree is missing does not block exact
+recovery targets. Station preserves that record and reports an unresolved
+session warning even when the final runtime plan is `converged`. Missing or
+changed ownership, group membership, or recovery evidence for a target still
+refuses reaping.
+
 Binaries older than the first release that supports `--reap` cannot execute
 this recovery path. Close affected sessions before installing that first
 supporting release, then run the update again.

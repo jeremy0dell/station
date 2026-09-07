@@ -8,7 +8,7 @@ import type {
   UpdateReapJournalTarget,
   UpdateReapRecoveryPreflight,
 } from "@station/contracts";
-import { compareUpdateReapJournalTargets } from "@station/contracts";
+import { compareUpdateReapJournalTargets, updateReapEvidenceIsComplete } from "@station/contracts";
 import type { ExactObserverOwnershipEvidence } from "@station/observer/internal";
 import type { UpdateReapProcess, UpdateReapProcessGroup } from "./reapProcessGroups.js";
 import type { UpdateRecoveryPreflightActionCommitments } from "./recoveryPreflight.js";
@@ -43,8 +43,9 @@ export class UpdateReapAuthorizationEvidenceError extends Error {
 /**
  * POLICY
  *
- * Derives private SHA-256 authority only for one complete canonical reap-required plan whose exact
- * Host child groups and selected recovery handles remain correlated to the private preflight.
+ * Derives private SHA-256 authority for every exact Host child group and selected recovery handle.
+ * Only unrelated retained sessions missing worktree evidence may remain unknown; the complete
+ * original aggregate, private commitments, and targets remain bound into the digest.
  */
 export function deriveUpdateReapAuthorization(input: {
   channel: UpdateChannelId;
@@ -61,7 +62,7 @@ export function deriveUpdateReapAuthorization(input: {
     input.plan.outcome !== "reap-required" ||
     input.plan.phases.terminalConvergence.action !== "reap-required" ||
     input.preflight.boundary.authorization !== "none" ||
-    !input.preflight.evidenceComplete ||
+    !reapEvidenceIsComplete(input.preflight, input.commitments) ||
     input.preflight.host.status !== "inspected"
   ) {
     throw new UpdateReapAuthorizationEvidenceError(
@@ -216,6 +217,70 @@ export function deriveExactTerminalReapAuthorizationEvidence(input: {
     parkedTerminals: input.commitments.parkedTerminals,
     target,
   };
+}
+
+function reapEvidenceIsComplete(
+  preflight: UpdateReapRecoveryPreflight,
+  commitments: UpdateRecoveryPreflightActionCommitments,
+): boolean {
+  const privateAssessment = exactRecoveryAssessment(commitments.observer);
+  if (privateAssessment === undefined) return false;
+  if (preflight.evidenceComplete) return updateReapEvidenceIsComplete(preflight);
+  const observer = preflight.observer;
+  if (
+    observer.status !== "exact" ||
+    observer.recovery.status !== "assessed" ||
+    preflight.host.status !== "inspected" ||
+    preflight.parkedBridges.status !== "assessed" ||
+    preflight.parkedBridges.unownedParkedCount !== (commitments.parkedTerminals?.length ?? 0)
+  )
+    return false;
+  const excluded = observer.recovery.assessment.sessions.filter(
+    (session) => session.disposition === "unknown",
+  );
+  if (
+    excluded.length === 0 ||
+    privateAssessment.sessions.filter((session) => session.disposition === "unknown").length !==
+      excluded.length
+  )
+    return false;
+  const terminals = [...preflight.host.terminals, ...(commitments.parkedTerminals ?? [])];
+  for (const session of excluded) {
+    const retained = privateAssessment.sessions.find(
+      (candidate) => candidate.sessionId === session.sessionId,
+    );
+    if (
+      session.reasons.length !== 1 ||
+      session.reasons[0] !== "worktree_evidence_missing" ||
+      retained?.disposition !== "unknown" ||
+      retained.reasons.length !== 1 ||
+      retained.reasons[0] !== "worktree_evidence_missing" ||
+      retained.projectId !== session.projectId ||
+      retained.worktreeId !== session.worktreeId ||
+      terminals.some(
+        (terminal) =>
+          terminal.sessionId === session.sessionId ||
+          (terminal.projectId === session.projectId && terminal.worktreeId === session.worktreeId),
+      )
+    )
+      return false;
+  }
+  // This projection checks the existing completeness rules; the digest keeps every original fact.
+  return updateReapEvidenceIsComplete({
+    ...preflight,
+    observer: {
+      ...observer,
+      recovery: {
+        status: "assessed",
+        assessment: {
+          ...observer.recovery.assessment,
+          sessions: observer.recovery.assessment.sessions.filter(
+            (session) => session.disposition !== "unknown",
+          ),
+        },
+      },
+    },
+  });
 }
 
 function requireProcessGroup(

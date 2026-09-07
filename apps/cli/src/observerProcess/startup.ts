@@ -15,6 +15,7 @@ import {
   type RuntimeClock,
   type RuntimeTraceContext,
   runRuntimeBoundaryWithTimeout,
+  shellQuote,
 } from "@station/runtime";
 import { normalizeObserverStartupFailure } from "./failureReport.js";
 import {
@@ -175,6 +176,11 @@ export async function startObserverProcess(
     child?.disposeFailureReport?.();
     await disposeObserverBootLog(child);
     return result;
+  }
+  if (startupCause?.code === "OBSERVER_PROCESS_INSTALLED_PATH_REPLACED") {
+    const command =
+      input.configPath === undefined ? "stn" : `stn --config ${shellQuote(input.configPath)}`;
+    result.error.hint = `Preview recovery with ${command} update --dry-run --json, then run ${command} update. If the preview reports reap-required, inspect ${command} update --dry-run --reap --json before explicitly running ${command} update --reap.`;
   }
   startupEvidence ??= await readObserverStartupEvidence(input.paths, child);
   child?.disposeFailureReport?.();

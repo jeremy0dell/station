@@ -299,9 +299,9 @@ describe("release readiness docs", () => {
     ]) {
       expect(normalizedReleasing).toContain(scenario);
     }
-    expect(releasing).toContain("eight staged cases");
+    expect(releasing).toContain("nine staged cases");
     expect(releasing).toContain("Every v6 preview and result");
-    expect(releasing).toContain("same eight cases");
+    expect(releasing).toContain("same nine cases");
     expect(releasing).toContain("correlated `public-*` aliases");
     expect(releasing).toContain("completed final inspection");
     expect(releasing).toContain("plan is `converged`");

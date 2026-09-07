@@ -155,8 +155,14 @@ a later non-target owner refuses without stopping or replacing that owner.
 Installed-path replacement authorizes only this identity-pinned cooperative
 path.
 
+After the stop receipt and peer EOF, the CLI polls read-only process existence
+and socket evidence every 50 ms until the admitted generation exits. Unavailable
+evidence cannot prove exit. This wait adds no signal authority; successor startup
+preserves any new owner under the existing policy.
+
 One absolute deadline shrinks across inspection and OS evidence, the pinned
-session, stop receipt and endpoint closure, preserve-incumbent child startup,
+session, stop receipt and endpoint closure, passive admitted-generation exit
+proof, preserve-incumbent child startup,
 child health, and verification. The replacement child may accept an exact
 successor or claim an absent/proven-stale endpoint, but cannot invoke ordinary
 automatic handoff against a later non-exact owner. After any known or uncertain

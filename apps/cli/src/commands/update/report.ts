@@ -155,8 +155,30 @@ export function updateCommandResult(
   report: UpdateCommandResultReport,
   output: UpdateRequest["output"],
 ): CliRunResult {
+  const aggregate =
+    report.finalInspection?.status === "completed"
+      ? report.finalInspection.aggregate
+      : report.initial;
+  const observer = aggregate.observer;
+  const unresolved =
+    observer.status === "exact" && observer.recovery.status === "assessed"
+      ? observer.recovery.assessment.sessions.filter((session) => session.disposition === "unknown")
+      : [];
   const parsed = parseUpdateCommandReport(
-    projectPublicUpdateReport(report),
+    projectPublicUpdateReport({
+      ...report,
+      warnings: [
+        ...report.warnings,
+        ...unresolved.map((session) => ({
+          tag: "UpdateRecoveryWarning",
+          code: "UPDATE_RETAINED_SESSION_UNRESOLVED",
+          message: "A retained session remains unresolved; its recovery record was preserved.",
+          projectId: session.projectId,
+          worktreeId: session.worktreeId,
+          sessionId: session.sessionId,
+        })),
+      ],
+    }),
   ) as UpdateCommandResultReport;
   const json = output === "json";
   return {
@@ -213,7 +235,9 @@ function renderUpdateReport(report: UpdateCommandResultReport): string {
     }
   }
   for (const warning of report.warnings)
-    lines.push(`warning: ${escapeTerminalBytes(warning.message)}`);
+    lines.push(
+      `warning: ${escapeTerminalBytes(warning.message)}${warning.sessionId === undefined ? "" : ` session=${escapeTerminalBytes(warning.sessionId)}`}`,
+    );
   if (report.error !== undefined)
     lines.push(
       `error: ${escapeTerminalBytes(report.error.message)} (${escapeTerminalBytes(report.error.code)})`,

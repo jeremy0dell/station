@@ -260,6 +260,49 @@ describe("update reap execution", () => {
       unresolved: true,
     });
   });
+
+  it("continues after exit but before the result was journaled without another signal", async () => {
+    const journal = inMemoryJournal();
+    const write = journal.write;
+    journal.write = vi.fn(async (value) => {
+      if (value.targets.some((target) => target.result !== undefined)) {
+        throw new Error("interrupted before result commit");
+      }
+      await write(value);
+    });
+    let alive = true;
+    const signal = vi.fn(() => {
+      alive = false;
+    });
+    const processGroups: UpdateReapProcessGroupPort = {
+      read: async () => (alive ? structuredClone(group) : { members: [] }),
+      signal,
+      wait: async () => undefined,
+    };
+    await expect(
+      executeUpdateReap({
+        expected: expectedTransaction(),
+        authorization,
+        reauthorize: async () => authorization,
+        journal,
+        processGroups,
+      }),
+    ).rejects.toThrow("interrupted before result commit");
+    expect((await journal.findIncomplete())?.phase).toBe("reap-started");
+
+    journal.write = write;
+    const continued = await executeUpdateReap({
+      expected: expectedTransaction(),
+      journal,
+      processGroups,
+    });
+    expect(signal.mock.calls).toEqual([[200, "SIGTERM"]]);
+    expect(continued.recovery.terminals[0]).toMatchObject({
+      terminationOutcome: "already-exited",
+      unresolved: false,
+    });
+    expect(continued.journal.targets[0]?.terminal).toEqual(authorization.targets[0]?.terminal);
+  });
 });
 
 function expectedTransaction() {
