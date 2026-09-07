@@ -8,6 +8,7 @@ import { componentLogPath, createJsonlLogger, toSafeError } from "@station/obser
 import { stationBuildInfo } from "@station/runtime";
 import { convergeStationHost } from "@station/terminal";
 import { Profiler } from "react";
+import { startDevelopmentTimingCleanup } from "./profiling/developmentTiming.js";
 import { loadStationConfig } from "./config/stationConfig.js";
 import {
   loadStationTuiConfig,
@@ -446,6 +447,7 @@ async function startStationMain(
     useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
   });
   rendererForInput = renderer;
+  renderer.on("destroy", startDevelopmentTimingCleanup());
   stationGlobalSlots.__stationHotRenderer = renderer;
   // OpenTUI routes paste events around the sequence handlers above, so the
   // pane would never see a paste without this explicit forward.

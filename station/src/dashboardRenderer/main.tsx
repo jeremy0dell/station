@@ -5,6 +5,7 @@
 // dispatches the same observer commands the Ink TUI did (no Station panes).
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
+import { startDevelopmentTimingCleanup } from "../profiling/developmentTiming.js";
 import { toSafeError } from "@station/client";
 import { createDashboardRuntime } from "@station/dashboard-core/runtime";
 import {
@@ -203,6 +204,7 @@ export async function runDashboardMain(): Promise<void> {
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
     });
     renderer = nextRenderer;
+    nextRenderer.on("destroy", startDevelopmentTimingCleanup());
     const nextThemeController = createStationThemeController(nextRenderer);
     themeController = nextThemeController;
     // The controller begins on the complete fallback; palette I/O must not block the first frame.

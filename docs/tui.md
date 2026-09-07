@@ -60,6 +60,12 @@ Station <version> is available — run `stn update`
 
 Popup and mock renderers do not perform this check.
 
+Compiled binaries use production React. Source renderers clear completed User
+Timing measures after delivery to performance observers, so React development
+tracks do not accumulate for the process lifetime. Marks remain available for
+active spans. Renderer destruction and hot replacement disconnect this cleanup.
+The opt-in React commit log remains available through `STATION_PROFILE=1` in source runs.
+
 ## Authority And Safety Boundaries
 
 ### Observer and provider boundaries
