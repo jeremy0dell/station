@@ -143,10 +143,12 @@ its scope with `stn --config <path> update`. Ordinary startup does not perform
 recovery. Terminal termination requires explicit `--reap`.
 
 An unrelated retained session whose worktree is missing does not block exact
-recovery targets. Station preserves that record and reports an unresolved
-session warning even when the final runtime plan is `converged`. Missing or
-changed ownership, group membership, or recovery evidence for a target still
-refuses reaping.
+recovery targets. Station preserves that record. Missing or changed ownership,
+group membership, or recovery evidence for a target still refuses reaping.
+Update results warn about any retained session whose recovery is unknown in the
+latest available inspection, with or without `--reap`, even when the final runtime
+plan is `converged`. The warning reports recovery status; it does not indicate
+that reap authorization excluded the session.
 
 Binaries older than the first release that supports `--reap` cannot execute
 this recovery path. Close affected sessions before installing that first

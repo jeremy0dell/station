@@ -47,6 +47,7 @@ export interface RecoveryRepairAuthorizationPort {
  * Uses SQLite's online backup API to include committed WAL rows, prepares only the new private
  * copy in DELETE journal mode, then verifies it read-only before returning an opaque ID.
  * Verification of a recorded backup never modifies the copy or its committed digest.
+ * Phase-specific failures preserve bounded native cause codes without exposing raw messages.
  */
 export function createSqliteRecoveryBackupPort(options: {
   databasePath: string;
@@ -282,19 +283,10 @@ function compareIdentity(left: { id: string }, right: { id: string }): number {
 
 type BackupPhase = "Creation" | "Preparation" | "Verification";
 const BackupCauseSchema = z.object({
-  code: z.enum([
-    "ERR_SQLITE_ERROR",
-    "SQLITE_BUSY",
-    "SQLITE_CANTOPEN",
-    "SQLITE_CORRUPT",
-    "SQLITE_NOTADB",
-    "EACCES",
-    "ENOENT",
-    "ENOSPC",
-    "EEXIST",
-  ]),
-  errcode: z.number().int().nonnegative().optional(),
-  errno: z.number().int().optional(),
+  code: z
+    .string()
+    .max(64)
+    .regex(/^(?:E[A-Z0-9_]+|SQLITE_[A-Z0-9_]+)$/),
 });
 
 function backupFailure(phase: BackupPhase, error: unknown): Error {
@@ -305,11 +297,7 @@ function backupFailure(phase: BackupPhase, error: unknown): Error {
   });
   const cause = BackupCauseSchema.safeParse(error);
   if (cause.success) {
-    const number = cause.data.errcode ?? cause.data.errno;
-    normalized.code =
-      cause.data.code === "ERR_SQLITE_ERROR" && number !== undefined
-        ? `SQLITE_${number}`
-        : cause.data.code;
+    normalized.code = cause.data.code;
   } else if (error instanceof z.ZodError) {
     normalized.code = "REPAIR_BACKUP_VALIDATION_FAILED";
   }

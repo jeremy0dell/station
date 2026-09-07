@@ -25,7 +25,11 @@ describe("Observer recovery backup", () => {
     const failure = await port
       .create({ expectedRecoveryInventoryDigest: "a".repeat(64) })
       .catch((error: unknown) => error);
-    expect(failure).toMatchObject({ tag: "RecoveryBackupCreationError", code: "ENOENT" });
+    expect(failure).toMatchObject({
+      tag: "RecoveryBackupCreationError",
+      code: "ENOENT",
+      message: "Observer recovery backup creation failed.",
+    });
     expect(JSON.stringify(failure)).not.toContain(stateDir);
     expect(await readdir(stateDir)).toEqual([]);
   });
@@ -59,10 +63,48 @@ describe("Observer recovery backup", () => {
       const failure = await port
         .create({ expectedRecoveryInventoryDigest: snapshot.recoveryInventoryDigest })
         .catch((error: unknown) => error);
-      expect(failure).toMatchObject({ tag: `RecoveryBackup${phase}Error`, code: "SQLITE_14" });
+      expect(failure).toMatchObject({
+        tag: `RecoveryBackup${phase}Error`,
+        code: "ERR_SQLITE_ERROR",
+        message: `Observer recovery backup ${phase.toLowerCase()} failed.`,
+      });
       expect(JSON.stringify(failure)).not.toContain("private-path-canary");
       expect(await readdir(join(stateDir, "repair", "backups"))).toEqual([recorded.id]);
       expect(sqlite.database.prepare("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
+    } finally {
+      sqlite.close();
+    }
+  });
+  it.each([
+    ["EPERM", "EPERM"],
+    ["EROFS", "EROFS"],
+    ["EMFILE", "EMFILE"],
+    ["SQLITE_READONLY_DIRECTORY", "SQLITE_READONLY_DIRECTORY"],
+    ["private-path-canary", "REPAIR_BACKUP_FAILED"],
+    ["E".repeat(65), "REPAIR_BACKUP_FAILED"],
+  ])("normalizes native backup code %s without exposing its message", async (code, expected) => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-backup-code-"));
+    const databasePath = join(stateDir, "observer.sqlite");
+    const sqlite = openObserverSqlite({ path: databasePath });
+    try {
+      const persistence = createSqliteObserverPersistence({ sqlite });
+      const snapshot = await persistence.readRecoveryRepairSnapshot();
+      vi.spyOn(driver, "openSqlDatabase").mockImplementation(() => {
+        throw Object.assign(new Error("private-path-canary"), { code });
+      });
+      const port = createSqliteRecoveryBackupPort({ databasePath, stateDir });
+      const failure = await port
+        .create({
+          expectedRecoveryInventoryDigest: snapshot.recoveryInventoryDigest,
+        })
+        .catch((error: unknown) => error);
+      expect(failure).toMatchObject({
+        tag: "RecoveryBackupPreparationError",
+        code: expected,
+        message: "Observer recovery backup preparation failed.",
+      });
+      expect(JSON.stringify(failure)).not.toContain("private-path-canary");
+      expect(await readdir(join(stateDir, "repair", "backups"))).toEqual([]);
     } finally {
       sqlite.close();
     }

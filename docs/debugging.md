@@ -218,9 +218,16 @@ lock, sends `SIGTERM` only to exact Host-owned process groups, and permits
 the incumbent Host has zero PTYs, converges the runtime, and verifies each exact
 resumed Station session.
 An unrelated retained session with only `worktree_evidence_missing` may remain
-unresolved while exact target recovery completes. Its aliased warning remains
-visible even when the final runtime plan is `converged`; missing target evidence
-still refuses before signaling.
+unresolved while exact target recovery completes. Missing target evidence still
+refuses before signaling. `UPDATE_RETAINED_SESSION_UNRESOLVED` reports any unknown
+retained-session recovery in the latest completed inspection, or the initial
+inspection if final inspection did not complete. This aliased diagnostic appears
+with or without `--reap`; it does not report an authorization exclusion.
+`UPDATE_REAP_AUTHORIZATION_REFUSED` retains a typed refusal in the report's `cause`
+field when initial or locked authorization fails. Codes such as
+`UPDATE_REAP_RETAINED_SESSION_OVERLAP`, `UPDATE_REAP_RECOVERY_ASSESSMENT_MISMATCH`,
+and `UPDATE_REAP_PROCESS_GROUP_UNAVAILABLE` identify the evidence that refused
+reaping without exposing process IDs or paths.
 Its public report exposes only aliased terminal and session outcomes. Private
 mode-0600 journals under the configured state directory record restart progress;
 an artifact-changing successor takes ownership of the same lock without exposing

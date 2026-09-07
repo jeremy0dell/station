@@ -4,11 +4,13 @@ import {
   ProjectIdSchema,
   type ProviderId,
   ProviderIdSchema,
+  type SessionId,
   SessionIdSchema,
   WorktreeIdSchema,
 } from "./ids.js";
 import { ProviderHookHealthSchema } from "./providerHooks.js";
 import {
+  type ObserverRecoveryAssessment,
   ObserverSessionRecoveryAssessmentSchema,
   ProviderResumeCapabilitySchema,
   SessionRecoveryAssessmentReasonsSchema,
@@ -395,7 +397,16 @@ function strictlySortedStrings(values: readonly string[]): boolean {
   });
 }
 
-export function updateReapEvidenceIsComplete(preflight: UpdateReapEvidenceSet): boolean {
+/**
+ * POLICY
+ *
+ * Checks recovery completeness for the full inventory unless this invocation excludes named
+ * unknown sessions. Exclusions do not grant action authority or change the public completeness flag.
+ */
+export function updateReapEvidenceIsComplete(
+  preflight: UpdateReapEvidenceSet,
+  options?: { excludedSessionIds: ReadonlySet<SessionId> },
+): boolean {
   if (
     preflight.hookProviderIds.length !== preflight.hooks.length ||
     preflight.hookProviderIds.some(
@@ -409,7 +420,8 @@ export function updateReapEvidenceIsComplete(preflight: UpdateReapEvidenceSet): 
   }
   if (
     preflight.observer.recovery.assessment.sessions.some(
-      (session) => session.disposition === "unknown",
+      (session) =>
+        session.disposition === "unknown" && !options?.excludedSessionIds.has(session.sessionId),
     )
   ) {
     return false;
@@ -426,4 +438,41 @@ export function updateReapEvidenceIsComplete(preflight: UpdateReapEvidenceSet): 
   return !preflight.terminalDispositions.some(
     (terminal) => terminal.handoff === "unknown" || terminal.reapRecovery === "unknown",
   );
+}
+
+/** Projects recovery decisions and counts without private inventory or selected handle IDs. */
+export function projectUpdateRecoveryAssessment(
+  assessment: ObserverRecoveryAssessment,
+): UpdateReapRecoveryAssessment {
+  const sessions: UpdateReapRecoveryAssessment["sessions"] = assessment.sessions.map((session) => {
+    const handleResolution = session.handleResolution;
+    const publicHandleResolution =
+      handleResolution.kind === "selected"
+        ? {
+            kind: "selected" as const,
+            eligibleHandleCount: handleResolution.eligibleHandleCount,
+            rejectedHandleCount: handleResolution.rejectedHandleCount,
+            rejectedReasons: handleResolution.rejectedReasons,
+          }
+        : handleResolution;
+    const projected: UpdateReapRecoveryAssessment["sessions"][number] = {
+      sessionId: session.sessionId,
+      projectId: session.projectId,
+      worktreeId: session.worktreeId,
+      lifecycle: session.lifecycle,
+      disposition: session.disposition,
+      reasons: session.reasons,
+      handleResolution: publicHandleResolution,
+    };
+    if (session.harnessProvider !== undefined) {
+      projected.harnessProvider = session.harnessProvider;
+    }
+    return projected;
+  });
+  return {
+    schemaVersion: 1,
+    resumeEnabled: assessment.resumeEnabled,
+    providerCapabilities: assessment.providerCapabilities,
+    sessions,
+  };
 }

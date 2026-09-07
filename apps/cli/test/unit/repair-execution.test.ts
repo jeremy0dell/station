@@ -31,7 +31,7 @@ describe("repair execution", () => {
     const setup = fixture(action);
     const error = {
       tag: `RecoveryBackup${phase}Error`,
-      code: "SQLITE_14",
+      code: "ERR_SQLITE_ERROR",
       message: "Observer recovery backup failed.",
     };
     vi.mocked(setup.deps.authorizeTerminal).mockResolvedValue({

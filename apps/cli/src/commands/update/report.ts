@@ -172,7 +172,8 @@ export function updateCommandResult(
         ...unresolved.map((session) => ({
           tag: "UpdateRecoveryWarning",
           code: "UPDATE_RETAINED_SESSION_UNRESOLVED",
-          message: "A retained session remains unresolved; its recovery record was preserved.",
+          message:
+            "The latest available inspection could not determine recovery for a retained session.",
           projectId: session.projectId,
           worktreeId: session.worktreeId,
           sessionId: session.sessionId,

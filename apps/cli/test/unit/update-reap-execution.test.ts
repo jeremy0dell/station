@@ -5,7 +5,10 @@ import {
   recoveryFromUpdateReapJournal,
 } from "../../src/update/reapExecution.js";
 import type { UpdateReapJournalPort } from "../../src/update/reapJournal.js";
-import type { UpdateReapAuthorization } from "../../src/update/reapPlan.js";
+import {
+  type UpdateReapAuthorization,
+  UpdateReapAuthorizationEvidenceError,
+} from "../../src/update/reapPlan.js";
 import type {
   UpdateReapProcessGroup,
   UpdateReapProcessGroupPort,
@@ -235,6 +238,28 @@ describe("update reap execution", () => {
 
     expect(signal.mock.calls).toEqual([[200, "SIGTERM"]]);
     expect(result.recovery).toMatchObject({ status: "partial", unresolved: true });
+  });
+
+  it("retains a typed locked refusal without writing or signaling", async () => {
+    const journal = inMemoryJournal();
+    const signal = vi.fn();
+    const cause = new UpdateReapAuthorizationEvidenceError(
+      "Private recovery assessments did not match the public preflight.",
+      "recovery-assessment-mismatch",
+    );
+    await expect(
+      executeUpdateReap({
+        expected: expectedTransaction(),
+        authorization,
+        reauthorize: async () => {
+          throw cause;
+        },
+        journal,
+        processGroups: { read: async () => group, signal, wait: async () => undefined },
+      }),
+    ).rejects.toMatchObject({ name: "UpdateReapAuthorizationRefusedError", cause });
+    expect(signal).not.toHaveBeenCalled();
+    expect(journal.writes).toEqual([]);
   });
 
   it("refuses a changed locked authorization before any signal", async () => {

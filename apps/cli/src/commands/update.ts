@@ -474,6 +474,7 @@ async function runReapUpdate(input: {
             error instanceof UpdateReapAuthorizationEvidenceError
               ? error.message
               : "Initial update reap evidence could not be verified.",
+            error instanceof UpdateReapAuthorizationEvidenceError ? { cause: error } : undefined,
           );
         }
       }
@@ -581,6 +582,9 @@ async function runReapUpdate(input: {
           code: "UPDATE_REAP_AUTHORIZATION_REFUSED",
           message: error.message,
         };
+        if (error.cause instanceof UpdateReapAuthorizationEvidenceError) {
+          report.cause = publicSafeErrorFromUnknown(error.cause, error.cause);
+        }
         report.steps.push(
           updateStep("recovery-preparation", "failed", error.message),
           updateStep(

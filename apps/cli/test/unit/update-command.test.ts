@@ -182,6 +182,7 @@ describe("stn update command", () => {
     "changed",
     "unavailable",
     "initial-unavailable",
+    "locked-unavailable",
   ] as const)("reports %s locked reap evidence as an unstarted refusal", async (repeatedEvidence) => {
     const state = await createTempState();
     const fixture = probeFixture("installer-binary", { status: "current" });
@@ -204,28 +205,37 @@ describe("stn update command", () => {
     });
     const signal = vi.fn();
     let authorizationCount = 0;
+    const journal = memoryReapJournal();
+    const resume = vi.fn();
 
     const result = await runUpdateCommand(["--reap", "--json"], commandOptions(state), {
       probes: [fixture.probe],
       buildInfo: () => buildInfo,
       recoveryPreflight: vi.fn().mockResolvedValue(initial),
-      reapJournal: memoryReapJournal(),
+      reapJournal: journal,
       reapProcessGroups: {
         read: async () => ({ members: [] }),
         signal,
         wait: async () => undefined,
       },
-      reapSessionResume: { inspect: async () => "pending", resume: vi.fn() },
+      reapSessionResume: { inspect: async () => "pending", resume },
       deriveReapAuthorization: async () => {
         if (repeatedEvidence === "initial-unavailable") {
           throw new UpdateReapAuthorizationEvidenceError(
             "The exact Host socket owner could not be inspected for update reap.",
+            "host-owner-unavailable",
           );
         }
         if (authorizationCount++ === 0) {
           return { ...currentArtifactReapAuthorization(), digest: "a".repeat(64) };
         }
         if (repeatedEvidence === "unavailable") throw new Error("ps failed");
+        if (repeatedEvidence === "locked-unavailable") {
+          throw new UpdateReapAuthorizationEvidenceError(
+            "The exact Host socket owner could not be inspected for update reap.",
+            "host-owner-unavailable",
+          );
+        }
         return { ...currentArtifactReapAuthorization(), digest: "b".repeat(64) };
       },
     });
@@ -250,7 +260,21 @@ describe("stn update command", () => {
         },
       },
     });
+    if (repeatedEvidence === "initial-unavailable" || repeatedEvidence === "locked-unavailable") {
+      expect(result.output).toMatchObject({
+        cause: {
+          tag: "UpdateReapAuthorizationEvidenceError",
+          code: "UPDATE_REAP_HOST_OWNER_UNAVAILABLE",
+          message: "The exact Host socket owner could not be inspected for update reap.",
+        },
+      });
+    } else {
+      expect(result.output).not.toHaveProperty("cause");
+    }
+    expect(JSON.stringify(result.output)).not.toContain("ps failed");
     expect(signal).not.toHaveBeenCalled();
+    expect(resume).not.toHaveBeenCalled();
+    expect(journal.stored).toBeUndefined();
   });
 
   it("reports a pre-reap continuation whose current plan no longer authorizes reaping", async () => {

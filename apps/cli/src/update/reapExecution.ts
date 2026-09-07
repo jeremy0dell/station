@@ -13,7 +13,7 @@ import {
   updateReapJournalHasReached,
   updateReapJournalTargets,
 } from "./reapJournal.js";
-import type { UpdateReapAuthorization } from "./reapPlan.js";
+import { type UpdateReapAuthorization, UpdateReapAuthorizationEvidenceError } from "./reapPlan.js";
 import {
   type UpdateReapProcessGroupPort,
   updateReapProcessGroupIsAuthorizedRemainder,
@@ -44,6 +44,7 @@ export class UpdateReapAuthorizationRefusedError extends Error {
  *
  * Repeats authorization under the update lock, commits the private restart journal before any
  * signal, and drains only exact journaled process groups through the fixed TERM/KILL policy.
+ * Typed authorization refusals retain their safe cause across locked revalidation.
  */
 export async function executeUpdateReap(input: ExecuteUpdateReapInput): Promise<{
   journal: UpdateReapJournal;
@@ -78,9 +79,10 @@ export async function executeUpdateReap(input: ExecuteUpdateReapInput): Promise<
     let repeated: UpdateReapAuthorization;
     try {
       repeated = await input.reauthorize();
-    } catch {
+    } catch (error) {
       throw new UpdateReapAuthorizationRefusedError(
         "Update reap evidence could not be reverified during locked preflight.",
+        error instanceof UpdateReapAuthorizationEvidenceError ? { cause: error } : undefined,
       );
     }
     if (repeated.digest !== input.authorization.digest) {

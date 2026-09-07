@@ -4,12 +4,18 @@ import type {
   UpdateConvergencePlan,
   UpdateReapRecoveryPreflight,
 } from "@station/contracts";
-import { STATION_SCHEMA_VERSION, UpdateReapJournalTargetSchema } from "@station/contracts";
+import {
+  projectUpdateRecoveryAssessment,
+  STATION_SCHEMA_VERSION,
+  UpdateReapJournalTargetSchema,
+} from "@station/contracts";
 import type { ExactObserverOwnershipEvidence } from "@station/observer/internal";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { executeUpdateReap } from "../../src/update/reapExecution.js";
 import {
   deriveExactTerminalReapAuthorizationEvidence,
   deriveUpdateReapAuthorization,
+  type UpdateReapAuthorizationRefusalReason,
 } from "../../src/update/reapPlan.js";
 
 const now = "2026-09-04T12:00:00.000Z";
@@ -253,6 +259,14 @@ const processGroup = {
 };
 
 describe("update reap authorization", () => {
+  it("preserves the existing authorization digests", () => {
+    expect(authorize().digest).toBe(
+      "d4e26235ecf2e0fd982995f9ae9f5c6dce041e6c067c5b21213baaa36ab2f9dd",
+    );
+    expect(authorize(withUnrelatedSession()).digest).toBe(
+      "eb6774170655c84c1af96ddd2775e6a7759f36843e2ac7fb539cdff9c95f141e",
+    );
+  });
   it("shares one exact-target authorizer with targeted repair", () => {
     const evidence = deriveExactTerminalReapAuthorizationEvidence({
       preflight,
@@ -282,6 +296,9 @@ describe("update reap authorization", () => {
     const changedSession = changed.preflight.observer.recovery.assessment.sessions.at(-1);
     if (changedSession === undefined) throw new Error("Expected session");
     changedSession.lifecycle = "ended";
+    const retained = changed.assessment.sessions.at(-1);
+    if (retained === undefined) throw new Error("Expected retained session");
+    retained.lifecycle = "ended";
     expect(authorize(changed).digest).not.toBe(authorize(input).digest);
   });
 
@@ -339,7 +356,8 @@ describe("update reap authorization", () => {
             },
       ];
     }
-    if (change === "reason") excluded.reasons.push("harness_provider_missing");
+    // Forward compatibility: the Observer currently emits only worktree_evidence_missing here.
+    if (change === "reason") retained.reasons.push("harness_provider_missing");
     if (change === "hook")
       input.preflight.hooks = [
         {
@@ -364,7 +382,162 @@ describe("update reap authorization", () => {
         status: "unknown",
         error: { tag: "TestError", code: "UNKNOWN", message: "Unknown" },
       };
-    expect(() => authorize(input)).toThrow();
+    Object.assign(input.publicAssessment, projectUpdateRecoveryAssessment(input.assessment));
+    const reasons: Record<string, UpdateReapAuthorizationRefusalReason> = {
+      session: "retained-session-overlap",
+      worktree: "retained-session-overlap",
+      parked: "retained-session-overlap",
+      "parked-worktree": "retained-session-overlap",
+      reason: "unsupported-session-uncertainty",
+      hook: "evidence-incomplete",
+      handoff: "evidence-incomplete",
+      handle: "recovery-handle-unavailable",
+      "parked-unknown": "parked-evidence-unavailable",
+      "recovery-authority": "observer-recovery-unavailable",
+    };
+    expect(() => authorize(input)).toThrow(expect.objectContaining({ reason: reasons[change] }));
+  });
+
+  it.each([
+    "resume-enabled",
+    "provider-capability",
+    "session-count",
+    "session-lifecycle",
+    "session-provider",
+    "selected-count",
+    "selected-rejections",
+  ])("refuses a mismatched full public recovery projection: %s", (change) => {
+    const input = withUnrelatedSession();
+    const session = input.publicAssessment.sessions[0];
+    if (session === undefined || session.handleResolution.kind !== "selected")
+      throw new Error("Expected selected session");
+    if (change === "resume-enabled") input.publicAssessment.resumeEnabled = false;
+    if (change === "provider-capability") input.publicAssessment.providerCapabilities = [];
+    if (change === "session-count") input.publicAssessment.sessions.pop();
+    if (change === "session-lifecycle") session.lifecycle = "ended";
+    if (change === "session-provider") session.harnessProvider = "claude";
+    if (change === "selected-count") session.handleResolution.eligibleHandleCount += 1;
+    if (change === "selected-rejections")
+      session.handleResolution.rejectedReasons.push("station_session_mismatch");
+    expect(() => authorize(input)).toThrow(
+      expect.objectContaining({
+        reason: "recovery-assessment-mismatch",
+        code: "UPDATE_REAP_RECOVERY_ASSESSMENT_MISMATCH",
+      }),
+    );
+  });
+
+  it.each([
+    true,
+    false,
+  ])("requires parked commitment coverage when evidenceComplete is %s", (complete) => {
+    const input = withUnrelatedSession();
+    if (complete) {
+      input.assessment.sessions.pop();
+      Object.assign(input.publicAssessment, projectUpdateRecoveryAssessment(input.assessment));
+      input.preflight.evidenceComplete = true;
+    }
+    input.preflight.parkedBridges = {
+      status: "assessed",
+      totalParkedCount: 1,
+      unownedParkedCount: 1,
+      adoptionRequiredCount: 0,
+    };
+    expect(() => authorize(input)).toThrow(
+      expect.objectContaining({ reason: "parked-evidence-mismatch" }),
+    );
+    expect(() =>
+      authorize({
+        ...input,
+        commitments: { observer: input.commitments.observer, host: input.commitments.host },
+      }),
+    ).toThrow(expect.objectContaining({ reason: "parked-evidence-mismatch" }));
+  });
+
+  it.each([
+    "dead-agent",
+    "live-aux",
+    "dead-aux",
+  ])("refuses an excluded session overlapping a %s terminal", (kind) => {
+    const input = withUnrelatedSession();
+    if (input.preflight.host.status !== "inspected") throw new Error("Expected Host");
+    const extra = {
+      ...terminal,
+      kind: kind.endsWith("aux") ? ("aux" as const) : ("agent" as const),
+      alive: kind === "live-aux",
+      terminalTargetId: "terminal-2",
+      ptyId: "pty-2",
+      ptyInstanceId: "instance-2",
+      pid: 201,
+      sessionId: "session-unrelated",
+    };
+    input.commitments.host.terminals.push(extra);
+    input.preflight.host.terminals.push({ ...extra, handoffSupport: "non-releasable" });
+    expect(() => authorize(input)).toThrow(
+      expect.objectContaining({ reason: "retained-session-overlap" }),
+    );
+  });
+
+  it("preserves known non-resumable targets while refusing unknown target recovery", () => {
+    const input = withUnrelatedSession();
+    const disposition = input.preflight.terminalDispositions[0];
+    if (disposition === undefined) throw new Error("Expected terminal disposition");
+    disposition.reapRecovery = "non-resumable";
+    expect(authorize(input).targets[0]?.recovery).toEqual({ kind: "non-resumable" });
+    disposition.reapRecovery = "unknown";
+    expect(() => authorize(input)).toThrow(
+      expect.objectContaining({ reason: "evidence-incomplete" }),
+    );
+  });
+
+  it("refuses changed Host identity and missing group coverage for explicit reasons", () => {
+    const changedHost = structuredClone(host);
+    const changedTerminal = changedHost.terminals[0];
+    if (changedTerminal === undefined) throw new Error("Expected terminal");
+    changedTerminal.ptyInstanceId = "another-instance";
+    expect(() => authorize({ commitments: { observer, host: changedHost } })).toThrow(
+      expect.objectContaining({ reason: "host-evidence-mismatch" }),
+    );
+    expect(() => authorize({ processGroups: [] })).toThrow(
+      expect.objectContaining({ reason: "process-group-coverage-mismatch" }),
+    );
+  });
+
+  it("refuses a reappearing worktree during locked preflight before writing or signaling", async () => {
+    const initial = withUnrelatedSession();
+    const authorization = authorize(initial);
+    const repeated = withUnrelatedSession();
+    const retained = repeated.assessment.sessions.at(-1);
+    if (retained === undefined) throw new Error("Expected retained session");
+    retained.disposition = "non-resumable";
+    retained.reasons = ["no_recovery_handles"];
+    retained.handleResolution = {
+      kind: "none",
+      eligibleHandleCount: 0,
+      rejectedHandleCount: 0,
+      reasons: ["no_recovery_handles"],
+    };
+    Object.assign(repeated.publicAssessment, projectUpdateRecoveryAssessment(repeated.assessment));
+    repeated.preflight.evidenceComplete = true;
+    const write = vi.fn();
+    const signal = vi.fn();
+    await expect(
+      executeUpdateReap({
+        expected: authorization,
+        authorization,
+        reauthorize: async () => authorize(repeated),
+        journal: {
+          findIncomplete: async () => undefined,
+          write,
+          read: vi.fn(),
+          withLock: vi.fn(),
+          takeOverLock: vi.fn(),
+        },
+        processGroups: { read: async () => processGroup, signal, wait: async () => undefined },
+      }),
+    ).rejects.toThrow("changed during locked preflight");
+    expect(write).not.toHaveBeenCalled();
+    expect(signal).not.toHaveBeenCalled();
   });
 
   it("binds the public plan, exact identities, process group, and selected handle", () => {
@@ -379,6 +552,12 @@ describe("update reap authorization", () => {
     });
     expect(() => UpdateReapJournalTargetSchema.parse(authorized.targets[0])).not.toThrow();
     expect(authorize({ installedScopeDigest: "f".repeat(64) }).digest).not.toBe(authorized.digest);
+    const changed = withUnrelatedSession();
+    const selected = changed.assessment.sessions[0];
+    if (selected?.handleResolution.kind !== "selected") throw new Error("Expected selected handle");
+    const before = authorize(changed).digest;
+    selected.handleResolution.selectedHandleId = "another-private-handle";
+    expect(authorize(changed).digest).not.toBe(before);
   });
 
   it("ignores volatile Observer health while retaining its exact process identity", () => {
@@ -420,7 +599,7 @@ describe("update reap authorization", () => {
           },
         ],
       }),
-    ).toThrow("Host-owned child");
+    ).toThrow(expect.objectContaining({ reason: "terminal-process-not-owned" }));
   });
 
   it("refuses a recovery disposition for another session", () => {
@@ -433,7 +612,7 @@ describe("update reap authorization", () => {
           terminalDispositions: [{ ...disposition, sessionId: "session-other" }],
         },
       }),
-    ).toThrow("complete recovery disposition");
+    ).toThrow(expect.objectContaining({ reason: "terminal-recovery-unknown" }));
   });
 });
 
@@ -473,9 +652,11 @@ function withUnrelatedSession() {
   privateObserver.recovery.assessment.sessions.push(structuredClone(unrelated));
   return {
     preflight: aggregate,
+    assessment: privateObserver.recovery.assessment,
+    publicAssessment: aggregate.observer.recovery.assessment,
     commitments: {
       observer: privateObserver,
-      host,
+      host: structuredClone(host),
       parkedTerminals: [] as import("@station/contracts").UpdateReapTerminalEvidence[],
     },
   };

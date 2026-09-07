@@ -4849,7 +4849,7 @@
           "name": "createSqliteRecoveryBackupPort",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest."
+          "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest. Phase-specific failures preserve bounded native cause codes without exposing raw messages."
         },
         {
           "name": "createTerminalCloseHandler",
@@ -8099,7 +8099,7 @@
           "name": "createSqliteRecoveryBackupPort",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest."
+          "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest. Phase-specific failures preserve bounded native cause codes without exposing raw messages."
         },
         {
           "name": "EventAndObservationIngressDedupeResult",
@@ -8809,7 +8809,7 @@
           "name": "createSqliteRecoveryBackupPort",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest."
+          "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest. Phase-specific failures preserve bounded native cause codes without exposing raw messages."
         },
         {
           "name": "RecoveryBackupPort",
@@ -16577,7 +16577,7 @@
       "declaration": "executeUpdateReap",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Repeats authorization under the update lock, commits the private restart journal before any signal, and drains only exact journaled process groups through the fixed TERM/KILL policy.",
+      "purpose": "Repeats authorization under the update lock, commits the private restart journal before any signal, and drains only exact journaled process groups through the fixed TERM/KILL policy. Typed authorization refusals retain their safe cause across locked revalidation.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/reapExecution.ts",
@@ -16639,11 +16639,18 @@
       "declaration": "deriveUpdateReapAuthorization",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Derives private SHA-256 authority for every exact Host child group and selected recovery handle. Only unrelated retained sessions missing worktree evidence may remain unknown; the complete original aggregate, private commitments, and targets remain bound into the digest.",
+      "purpose": "Derives private SHA-256 authority for every exact Host child group and selected recovery handle. Only unrelated retained sessions missing worktree evidence may remain unknown; the complete original aggregate, exact process identities, parked commitments, and selected targets remain bound into the digest. Private recovery assessments must match their full public projection.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/reapPlan.ts",
           "declaration": "deriveExactTerminalReapAuthorizationEvidence",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/updateRecoveryPreflight.ts",
+          "declaration": "updateReapEvidenceIsComplete",
           "kind": "function",
           "role": "POLICY",
           "edgeKind": "runtime"
@@ -16714,6 +16721,13 @@
         {
           "path": "apps/cli/src/update/recoveryTerminalDispositions.ts",
           "declaration": "deriveUpdateRecoveryTerminalDispositions",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/updateRecoveryPreflight.ts",
+          "declaration": "updateReapEvidenceIsComplete",
           "kind": "function",
           "role": "POLICY",
           "edgeKind": "runtime"
@@ -17682,7 +17696,7 @@
       "declaration": "createSqliteRecoveryBackupPort",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest.",
+      "purpose": "Uses SQLite's online backup API to include committed WAL rows, prepares only the new private copy in DELETE journal mode, then verifies it read-only before returning an opaque ID. Verification of a recorded backup never modifies the copy or its committed digest. Phase-specific failures preserve bounded native cause codes without exposing raw messages.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/recoveryBackup.ts",
@@ -19742,6 +19756,14 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Locates provider-owned files required to recover one exact native execution without exposing provider storage conventions to migration orchestration.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/contracts/src/updateRecoveryPreflight.ts",
+      "declaration": "updateReapEvidenceIsComplete",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Checks recovery completeness for the full inventory unless this invocation excludes named unknown sessions. Exclusions do not grant action authority or change the public completeness flag.",
       "dependencies": []
     },
     {
