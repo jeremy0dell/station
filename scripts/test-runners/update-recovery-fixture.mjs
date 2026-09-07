@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   createSqliteObserverPersistence,
@@ -54,8 +54,9 @@ export async function prepareUpdateRecoveryFixture({
     );
   }
   const worktrunk = join(root, "worktrunk-fixture");
+  const canonicalRoot = await realpath(root);
   const worktrees = Array.from({ length: 3 }, (_, index) => ({
-    path: join(root, `worktree-${index}`),
+    path: join(canonicalRoot, `worktree-${index}`),
     branch: `recovery-${index}`,
     dirty: false,
   }));
