@@ -183,6 +183,7 @@ describe("Unix socket NDJSON transport", () => {
       lastOverflowReason: "outbound-frame-bytes",
     });
 
+    const partialFrameLimits = { ...NDJSON_TRANSPORT_LIMITS, maxFrameBytes: 64 * 1024 };
     const { socketPath } = await createTempSocketPath();
     let accepted: Socket | undefined;
     const server = createServer((socket) => {
@@ -192,15 +193,15 @@ describe("Unix socket NDJSON transport", () => {
     server.listen(socketPath);
     await once(server, "listening");
     const client = await connectUnixSocket(socketPath, {
-      transportLimits: NDJSON_TRANSPORT_LIMITS,
+      transportLimits: partialFrameLimits,
     });
     await waitFor(() => accepted !== undefined);
 
     try {
-      const chunk = "x".repeat(1024 * 1024);
+      const chunk = "x".repeat(16 * 1024);
       for (
         let bytes = 0;
-        bytes <= NDJSON_TRANSPORT_LIMITS.maxFrameBytes && accepted?.destroyed === false;
+        bytes <= partialFrameLimits.maxFrameBytes && accepted?.destroyed === false;
         bytes += chunk.length
       ) {
         if (!accepted.write(chunk) && (await waitForDrainOrClose(accepted)) === "closed") break;
