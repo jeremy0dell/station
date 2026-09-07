@@ -1,8 +1,8 @@
 # E2B offline research checks
 
 These checks exercise published SDK behavior, upstream output delivery, and candidate Git result
-return using synthetic fixtures. They create no E2B resources, use no credentials, and upload no
-repository. Research conclusions and acceptance evidence belong in
+return using synthetic fixtures. They create no E2B resources, use no real credentials, and upload
+no real repository. Research conclusions and acceptance evidence belong in
 [#481](https://github.com/jeremy0dell/station/issues/481). These files do not implement a Station
 provider or select a production contract.
 
@@ -113,3 +113,25 @@ Without a UTF-8 locale, the placement test failed on tmux 3.7 and next-3.8. The 
 showed underscores replacing the tab delimiters in its client record. Both versions passed with
 `LANG=en_US.UTF-8`. Use a UTF-8 locale installed on the target; the example uses the research Mac's
 locale.
+
+## Candidate Git authentication
+
+```sh
+python3 research/cloud-e2b-2026-09-07/git-auth-check.py
+```
+
+This check uses a temporary synthetic repository, a loopback HTTP server running Git's standard
+HTTP backend, and a temporary credential helper with a synthetic token file. The helper requires
+an exact protocol, host, and repository path. It does not persist credentials supplied through
+Git's store operation. The Git subprocess environment has no ambient credentials, config, proxy,
+or askpass command; redirects and interactive prompts are disabled.
+
+The check completes a real Git clone, rejects another repository without sending a credential,
+rejects changed protocol/host, fails with a stale token, succeeds after replacing the token file,
+and fails on a dropped fetch response. Tokens remain absent from the recorded Git argv and
+repository configuration. Every server, repository, helper, and synthetic token is removed.
+
+This fixture is not an installable credential helper or a network service. It proves a candidate
+use of Git's existing credential protocol, not GitHub token issuance, E2B secret delivery, OAuth
+refresh, HTTPS verification, or private-repository authorization. Production secret resolution
+and any real transfer remain subject to the user's explicit account and repository scope.
