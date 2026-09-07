@@ -470,7 +470,6 @@ describeRealTmux("real tmux dev popup routing", () => {
       } else if (launcher === "shell") {
         popup = launch(join(checkoutRoot, "integrations/terminal/tmux/bin/stn-popup"), [], {
           ...fixture.env,
-          STATION_FAST_POPUP_NO_FALLBACK: "1",
           STATION_POPUP_WIDTH: "80",
           STATION_POPUP_HEIGHT: "24",
           STATION_POPUP_POSITION: "C",
@@ -491,8 +490,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       await fixture.ptyClient.write(Buffer.from([0x1b]));
       await waitForNestedClientGone(fixture);
       if (popup !== undefined) await expectSuccessfulExit(popup, 10_000);
-      if (launcher !== "shell")
-        await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
+      await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
       expect(await readStyles(true)).toEqual(globalStyles);
       expect(await readStyles(false)).toEqual(windowStyles);
       expect(await readControlColors()).toEqual(controlBefore);
