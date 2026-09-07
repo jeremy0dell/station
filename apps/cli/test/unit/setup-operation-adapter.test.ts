@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ClaudeHookInstallResult } from "@station/claude";
 import type { CodexHookInstallResult, CodexHookRepairResult } from "@station/codex";
@@ -6,6 +7,7 @@ import type { CliSetupHarnessId } from "@station/contracts";
 import type { CursorHookInstallResult } from "@station/cursor";
 import type { OpenCodePluginInstallResult } from "@station/opencode";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
+import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { describe, expect, it } from "vitest";
 import { setupConfigMutationInput } from "../../src/commands/setup/adapters/config.js";
 import {
@@ -15,6 +17,7 @@ import {
 import type { SetupFacts } from "../../src/commands/setup/adapters/inspectionTypes.js";
 import { createSetupOperationAdapter } from "../../src/commands/setup/adapters/operations.js";
 import {
+  tmuxPopupBindingBlock,
   tmuxPopupBindingMarker,
   tmuxPopupRunShellCommand,
 } from "../../src/commands/setup/checks/tmuxBinding.js";
@@ -179,6 +182,112 @@ describe("setup operation adapters", () => {
         stdio: "inherit",
       }),
     ]);
+  });
+
+  it("migrates the legacy inline binding while preserving its key and unrelated config", async () => {
+    const path = "/tmp/station-popup-migration/.tmux.conf";
+    const launcherCommand = "/opt/station/bin/stn-tmux-popup";
+    const legacy = (
+      await readFile(
+        new URL(
+          "../../../../integrations/terminal/tmux/test/fixtures/legacy-popup-binding.txt",
+          import.meta.url,
+        ),
+        "utf8",
+      )
+    ).trim();
+    const before = `set -g mouse on\n${tmuxPopupBindingBlock(launcherCommand, { bindingKey: "M-p", runShellCommand: legacy })}bind-key x display-message keep-me\n`;
+    const current = buildManagedFastPopupRunShellCommand({
+      installedRoot: "/opt/station/bin",
+      fallbackAlias: launcherCommand,
+      tmuxCommand: "/usr/bin/tmux",
+    });
+    const files = new Map([[path, before]]);
+    const facts = tmuxFacts({ path, insideTmux: false, liveStatus: "unknown" });
+    facts.tmuxBinding = {
+      ...facts.tmuxBinding,
+      launcherCommand,
+      runShellCommand: current,
+      bindingKey: "M-p",
+    };
+    const execute = createSetupOperationAdapter({
+      facts,
+      deps: {
+        env: { PATH: "/bin" },
+        fs: tmuxOperationFs({
+          async readFile(file) {
+            const content = files.get(file);
+            if (content === undefined)
+              throw Object.assign(new Error("missing"), { code: "ENOENT" });
+            return content;
+          },
+          async writeFile(file, content) {
+            files.set(file, content);
+          },
+          async rename(from, to) {
+            files.set(to, files.get(from) ?? "");
+            files.delete(from);
+          },
+        }),
+      },
+    });
+
+    await expect(
+      execute({
+        id: "persist-tmux-popup",
+        kind: "configure-tmux-popup",
+        tier: "recommended",
+        selected: true,
+        scope: "persisted",
+      }),
+    ).resolves.toMatchObject({ status: "completed", commit: { changed: true } });
+    expect(files.get(path)).toBe(
+      `set -g mouse on\n${tmuxPopupBindingBlock(launcherCommand, { bindingKey: "M-p", runShellCommand: current })}bind-key x display-message keep-me\n`,
+    );
+    expect(
+      [...files.entries()].some(([file, content]) => file !== path && content === before),
+    ).toBe(true);
+
+    const calls: ExternalCommandInput[] = [];
+    facts.tmuxBinding.insideTmux = true;
+    const load = createSetupOperationAdapter({
+      facts,
+      deps: {
+        env: { PATH: "/bin", TMUX: "/tmp/private.sock,1,0" },
+        fs: tmuxOperationFs({ readFile: async () => before }),
+        runner: async (input) => {
+          calls.push(input);
+          return {
+            command: input.command,
+            args: input.args ?? [],
+            exitCode: 0,
+            stderr: "",
+            stdout:
+              input.args?.[0] === "list-keys"
+                ? (tmuxPopupBindingBlock(launcherCommand, {
+                    bindingKey: "M-p",
+                    runShellCommand: legacy,
+                  })
+                    .split("\n")
+                    .find((line) => line.startsWith("bind-key")) ?? "")
+                : "",
+          };
+        },
+      },
+    });
+    await expect(
+      load({
+        id: "load-tmux-popup",
+        kind: "configure-tmux-popup",
+        tier: "recommended",
+        selected: true,
+        scope: "live",
+      }),
+    ).resolves.toMatchObject({ status: "completed", commit: { changed: true } });
+    expect(calls.at(-1)?.args).toEqual(["bind-key", "M-p", "run-shell", "-b", current]);
+    expect(calls.every((call) => ["list-keys", "bind-key"].includes(call.args?.[0] ?? ""))).toBe(
+      true,
+    );
   });
 
   it("revalidates persisted tmux conflicts immediately before mutation", async () => {

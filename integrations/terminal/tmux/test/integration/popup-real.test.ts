@@ -33,7 +33,7 @@ import {
   ensurePersistentPopupSession,
   openTmuxPopup,
 } from "../../src/popup";
-import { parsePopupActiveClaim } from "../../src/popup/fastProtocol";
+import { buildNormalPopupRoute, parsePopupActiveClaim } from "../../src/popup/fastProtocol";
 import { TmuxProvider } from "../../src/provider";
 import { shellQuote } from "../../src/shell";
 
@@ -1460,6 +1460,154 @@ describeRealTmux("real tmux dev popup routing", () => {
     await triggerPopupBinding(secondClient);
     await waitForTmuxSessionClientCount(fixture, secondSession, 0);
     expect(await clientScopedPopupSessions(fixture)).toEqual(sessions);
+  }, 120_000);
+
+  it("refreshes stale persistent popup metadata through the normal compiled binding and focuses the current target", async () => {
+    const fixture = await createDashboardFixture(tmux);
+    cleanup = () => cleanupDashboardFixture(fixture);
+    const focusCommands: StationCommand[] = [];
+    const snapshot = deterministicDashboardSnapshot(fixture.projectRoot);
+    delete fixture.env.STATION_SOURCE;
+    await tmuxExec(fixture.wrapper, ["new-session", "-d", "-s", "base", "sleep 300"], fixture.env);
+    const destination = await createTmuxFocusDestination(fixture);
+    fixture.observerServer = await startProtocolServer({
+      socketPath: fixture.observerSocketPath,
+      api: focusOutcomeObserver({
+        snapshot,
+        focusCommands,
+        targetId: destination.targetId,
+        tmuxCommand: fixture.wrapper,
+      }),
+    });
+    fixture.ptyClient = await startTmuxPtyClient({
+      tmux: fixture.wrapper,
+      sessionName: "base",
+      env: fixture.env,
+    });
+    const installedRoot = dirname(await realpath(builtBinaryPath));
+    const binding = buildManagedFastPopupRunShellCommand({
+      configPath: fixture.configPath,
+      installedRoot,
+      fallbackAlias: join(installedRoot, "stn-tmux-popup"),
+      tmuxCommand: fixture.wrapper,
+    });
+    await tmuxExec(fixture.wrapper, ["bind-key", "Space", "run-shell", "-b", binding], fixture.env);
+    await triggerPopupBinding(fixture.ptyClient);
+    await waitForHiddenPaneContent(
+      fixture,
+      isAcceptanceDashboardContent,
+      "initial popup did not render",
+    );
+    const before = await readPaneEvidence(fixture);
+    await fixture.ptyClient.write(Buffer.from("Q"));
+    await waitForNestedClientGone(fixture);
+    await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
+
+    const currentSignature = await tmuxSessionOption(fixture, "@station_popup_ui_signature");
+    const staleSignature = currentSignature.replace(
+      /^v2:[^:]+:/,
+      `v2:0.0.0-pre-alpha.14.1+station.${"a".repeat(64)}:`,
+    );
+    expect(staleSignature).not.toBe(currentSignature);
+    const staleRoute = buildNormalPopupRoute({
+      root: installedRoot,
+      sessionName: persistentUiSessionName,
+      signature: staleSignature,
+    });
+    await tmuxExec(
+      fixture.wrapper,
+      ["set-option", "-t", persistentUiSessionName, "@station_popup_ui_signature", staleSignature],
+      fixture.env,
+    );
+    await tmuxExec(
+      fixture.wrapper,
+      ["set-option", "-t", persistentUiSessionName, "@station_popup_ui_lease", staleRoute],
+      fixture.env,
+    );
+    await setGlobalOption(fixture.wrapper, "@station_popup_ui_expected_signature", staleSignature);
+    await setGlobalOption(fixture.wrapper, "@station_popup_ui_route", staleRoute);
+    const extraPane = (
+      await tmuxExec(
+        fixture.wrapper,
+        ["split-window", "-d", "-P", "-F", "#{pane_id}", "-t", "=_station-ui:", "sleep 300"],
+        fixture.env,
+      )
+    ).trim();
+    const protectedFormat = "#{session_id}:#{window_id}:#{pane_id}:#{pane_pid}";
+    const protectedPanes = await tmuxExec(
+      fixture.wrapper,
+      ["list-panes", "-a", "-F", protectedFormat],
+      fixture.env,
+    );
+    const outputBeforeRefusal = fixture.ptyClient.stdout.text();
+    await triggerPopupBinding(fixture.ptyClient);
+    await expect
+      .poll(() => fixture.ptyClient?.stdout.text().slice(outputBeforeRefusal.length), {
+        timeout: 10_000,
+      })
+      .toContain("Station popup failed; run stn popup for details");
+    expect(
+      await tmuxExec(fixture.wrapper, ["list-panes", "-a", "-F", protectedFormat], fixture.env),
+    ).toBe(protectedPanes);
+    expect(await tmuxSessionOption(fixture, "@station_popup_ui_signature")).toBe(staleSignature);
+    await expect(
+      execFileAsync(builtBinaryPath, ["--config", fixture.configPath, "popup"], {
+        env: { ...fixture.env, STATION_FOCUS_CLIENT_ID: fixture.ptyClient.clientName },
+        timeout: 10_000,
+      }),
+    ).rejects.toThrow("not proven to contain only its signed Station dashboard");
+    // Remove only this test's disposable extra pane before exercising successful replacement.
+    await tmuxExec(fixture.wrapper, ["kill-pane", "-t", extraPane], fixture.env);
+    const preservedPanes = await tmuxExec(
+      fixture.wrapper,
+      [
+        "list-panes",
+        "-a",
+        "-F",
+        "#{session_name}:#{session_id}:#{window_id}:#{pane_id}:#{pane_pid}",
+      ],
+      fixture.env,
+    );
+
+    await triggerPopupBinding(fixture.ptyClient);
+    await waitForNestedClient(fixture);
+    await waitForHiddenPaneContent(
+      fixture,
+      isAcceptanceDashboardContent,
+      "refreshed popup did not render",
+    );
+    expect((await readPaneEvidence(fixture)).pid).not.toBe(before.pid);
+    expect(await tmuxSessionOption(fixture, "@station_popup_ui_signature")).toBe(currentSignature);
+    const afterPanes = await tmuxExec(
+      fixture.wrapper,
+      [
+        "list-panes",
+        "-a",
+        "-F",
+        "#{session_name}:#{session_id}:#{window_id}:#{pane_id}:#{pane_pid}",
+      ],
+      fixture.env,
+    );
+    const unrelated = (output: string) =>
+      output
+        .split("\n")
+        .filter((line) => !line.startsWith(`${persistentUiSessionName}:`))
+        .sort();
+    expect(unrelated(afterPanes)).toEqual(unrelated(preservedPanes));
+    const target = snapshot.sessions.find((session) => session.id === "ses_popup_tmux")?.terminal;
+    expect(target?.externallyFocusable).toBe(true);
+    expect(target).not.toHaveProperty("focusable");
+
+    await fixture.ptyClient.write(Buffer.from("1"));
+    await waitForNestedClientGone(fixture);
+    expect(await waitForTmuxClientTarget(fixture, destination)).toMatchObject({
+      paneId: destination.paneId,
+      windowId: destination.windowId,
+    });
+    expect(focusCommands).toMatchObject([
+      { type: "terminal.focus", payload: { sessionId: "ses_popup_tmux" } },
+    ]);
+    await assertWrapperAudit(fixture);
   }, 120_000);
 
   it("compiled managed binding honors dashboard dismissal, reuses the warm UI, and fails without entering view mode", async () => {

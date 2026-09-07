@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { isCompiledBinary } from "@station/runtime";
+import { isCompiledBinary } from "@station/runtime/build-info";
 
 export type SelfExecTarget =
   | "cli"

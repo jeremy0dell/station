@@ -1,15 +1,21 @@
 import type { SafeError } from "@station/contracts";
 import { stationObserverBuildVersion } from "@station/runtime";
+import { z } from "zod";
 import type { TmuxCommandInput } from "../command.js";
 import { shellQuote } from "../shell.js";
 import { defaultTmuxWorkbenchConfig } from "../topology.js";
 import { buildPersistentPopupTuiCommand } from "./args.js";
+import { persistentPopupSignature } from "./signature.js";
+
+export { persistentPopupSignature } from "./signature.js";
+
 import {
   hasTmuxSession,
   popupCommandInput,
   resolveTmuxGlobalOption,
   resolveTmuxOption,
   runTmuxPopupCommand,
+  runTmuxPopupQuery,
   setTmuxGlobalOption,
 } from "./command.js";
 import {
@@ -205,22 +211,92 @@ function registeredRouteMatches(
   });
 }
 
+const persistentPopupPaneSchema = z.tuple([
+  z.string().regex(/^\$[0-9]+$/),
+  z.string().regex(/^%[0-9]+$/),
+  z.literal("1"),
+  z.literal("1"),
+  z.string().min(1).max(4096),
+  z.string().min(1).max(8192),
+]);
+const persistentPopupSignatureSchema = z
+  .string()
+  .regex(/^v(?:1:[^\0\r\n]+|2:[^:\0\r\n]+:[^\0\r\n]+)$/);
+// tmux prints this single shell-command argument in double quotes; never evaluate it as shell code.
+const persistentPopupStartCommandSchema = z
+  .string()
+  .regex(/^"(?:[^"\\\0\r\n]|\\[\\"$])*"$/)
+  .transform((command) => command.slice(1, -1).replace(/\\([\\"$])/g, "$1"));
+
+function signedPopupCommand(
+  signature: string,
+  focusClientId: string | undefined,
+): string | undefined {
+  if (!persistentPopupSignatureSchema.safeParse(signature).success) return undefined;
+  if (signature.startsWith("v1:")) return signature.slice(3);
+  const command = signature.slice(signature.indexOf(":", 3) + 1);
+  if (focusClientId === undefined) return command;
+  const suffix = `:client=${focusClientId}`;
+  return command.endsWith(suffix) ? command.slice(0, -suffix.length) : undefined;
+}
+
 async function killPersistentPopupSessionIfUnchanged(
   input: TmuxCommandInput,
   sessionName: string,
   expectedSignature: string,
+  tuiCommand: string,
+  focusClientId: string | undefined,
 ): Promise<void> {
-  // The kill is compare-and-set on the signature just read: a contender that already
-  // replaced the session must not have its fresh session killed by a stale decision.
-  const signatureMatches = globalOptionEqualsFormat(persistentUiSignatureOption, expectedSignature);
+  const fields = [
+    "session_id",
+    "pane_id",
+    "session_windows",
+    "window_panes",
+    persistentUiSignatureOption,
+    "pane_start_command",
+  ];
+  const result = await runTmuxPopupQuery(input, {
+    args: [
+      "display-message",
+      "-p",
+      "-t",
+      `=${sessionName}:`,
+      fields.map((field) => `#{${field}}`).join("\t"),
+    ],
+    operation: "provider.tmux.popup.inspectPersistentUi",
+    message: "tmux failed to verify the persistent popup session before replacement.",
+    timeoutMessage: "tmux persistent popup ownership inspection timed out.",
+  });
+  const parsed = persistentPopupPaneSchema.safeParse(result.stdout.trimEnd().split("\t"));
+  if (parsed.success && parsed.data[4] !== expectedSignature) return;
+  const signedCommand = signedPopupCommand(expectedSignature, focusClientId);
+  const startCommand = persistentPopupStartCommandSchema.safeParse(parsed.data?.[5]);
+  if (
+    !parsed.success ||
+    signedCommand === undefined ||
+    (signedCommand !== tuiCommand && !signedCommand.endsWith("tui --popup --persistent")) ||
+    !startCommand.success ||
+    startCommand.data !== buildPersistentPopupTuiCommand(signedCommand, focusClientId)
+  ) {
+    throw persistentPopupOwnershipError(
+      `The tmux session ${sessionName} is not proven to contain only its signed Station dashboard.`,
+      "Inspect and preserve its panes before retrying stn popup; Station left the session unchanged.",
+    );
+  }
+  const [sessionId] = parsed.data;
+  const unchanged = fields
+    .map((field, index) => globalOptionEqualsFormat(field, parsed.data[index]))
+    .reduce((left, right) => `#{&&:${left},${right}}`);
+  // Revalidate the exact session, pane, command, and topology in the same tmux queue as removal.
+  // A same-name replacement or added pane must never inherit this removal decision.
   await runTmuxPopupCommand(input, {
     args: [
       "if-shell",
       "-F",
       "-t",
-      `${sessionName}:`,
-      signatureMatches,
-      `kill-session -t ${shellQuote(sessionName)}`,
+      `=${sessionName}:`,
+      unchanged,
+      `kill-session -t ${shellQuote(sessionId)}`,
     ],
     operation: "provider.tmux.popup.killPersistentUi",
     message: "tmux failed to replace the persistent station popup UI.",
@@ -280,16 +356,12 @@ async function configurePersistentPopupSession(
   }
 }
 
-/** Identifies the exact renderer command and build allowed to own the persistent session. */
-export function persistentPopupSignature(
-  tuiCommand: string,
-  buildVersion = stationObserverBuildVersion(),
-  focusClientId?: string,
-): string {
-  const focusIdentity = focusClientId === undefined ? "" : `:client=${focusClientId}`;
-  return `v2:${buildVersion}:${tuiCommand}${focusIdentity}`;
-}
-
+/**
+ * ADAPTER
+ *
+ * Reuses the exact renderer build or replaces only a revalidated dashboard-only tmux session.
+ * Unsigned, repurposed, and concurrently changed sessions retain their processes and panes.
+ */
 export async function ensurePersistentPopupSession(
   options: TmuxPersistentPopupSessionOptions = {},
 ): Promise<TmuxPersistentPopupSessionResult> {
@@ -315,7 +387,13 @@ export async function ensurePersistentPopupSession(
       return { sessionName, created: false };
     }
     if (currentSignature !== undefined) {
-      await killPersistentPopupSessionIfUnchanged(input, sessionName, currentSignature);
+      await killPersistentPopupSessionIfUnchanged(
+        input,
+        sessionName,
+        currentSignature,
+        tuiCommand,
+        options.focusClientId,
+      );
       if (await hasTmuxSession(input, sessionName)) {
         // The CAS kill no-opped, so a concurrent contender owns the session now;
         // only its exact signature is reusable.

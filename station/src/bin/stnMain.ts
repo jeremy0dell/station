@@ -3,20 +3,11 @@ import { dirname, join } from "node:path";
 import { dispatchSelfExec, type SelfExecRunners } from "@station/cli/self-exec";
 import cttyHelperAsset from "../../dist/ctty-helper" with { type: "file" };
 import piExtensionAsset from "../../dist/piExtension.mjs" with { type: "file" };
-import {
-  preparePackagedPiExtension,
-  preparePackagedPtyRuntime,
-} from "./packagedAssets.js";
+const prepareCompiledPtyRuntime = async (stateDir: string) =>
+  (await import("./packagedAssets.js")).preparePackagedPtyRuntime(stateDir, cttyHelperAsset);
 
-const prepareCompiledPtyRuntime = (stateDir: string) =>
-  preparePackagedPtyRuntime(stateDir, cttyHelperAsset);
-
-const prepareCompiledPiExtension = (stateDir: string) =>
-  preparePackagedPiExtension(stateDir, piExtensionAsset);
-
-function popupArgv(argv: readonly string[]): readonly string[] {
-  return argv[0] === "popup" ? argv : ["popup", ...argv];
-}
+const prepareCompiledPiExtension = async (stateDir: string) =>
+  (await import("./packagedAssets.js")).preparePackagedPiExtension(stateDir, piExtensionAsset);
 
 function compiledRunners(installedRoot: string): SelfExecRunners {
   const providerHookIngressLauncher = join(installedRoot, "stn-ingress");
@@ -55,7 +46,11 @@ function compiledRunners(installedRoot: string): SelfExecRunners {
         preparePtyRuntime: prepareCompiledPtyRuntime,
       }),
     tmuxPopup: async (argv) =>
-      (await import("@station/cli/main")).runCliMain(popupArgv(argv), cliOptions),
+      (await import("@station/cli/tmux-popup-main")).runTmuxPopupMain(
+        argv,
+        installedRoot,
+        async (popupArgv) => (await import("@station/cli/main")).runCliMain(popupArgv, cliOptions),
+      ),
   };
 }
 
@@ -64,7 +59,7 @@ function compiledRunners(installedRoot: string): SelfExecRunners {
  *
  * Binds compiled raw arguments to lazy process entries, packaged runtime assets,
  * installed launcher identity, the shared Observer process failure boundary,
- * popup ownership, and setup wiring.
+ * current-build popup reuse, popup ownership, and setup wiring.
  */
 export async function runStationBinaryMain(): Promise<void> {
   const installedRoot = dirname(realpathSync(process.execPath));

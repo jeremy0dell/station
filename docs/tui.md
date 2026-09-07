@@ -49,6 +49,19 @@ layout effects begin. Mock mode is Observer-free and does not perform this
 admission check. An Observer startup failure or renderer spawn failure exits
 nonzero, and a signaled renderer exit is never reported as success.
 
+Managed tmux popup bindings invoke the installed `stn-tmux-popup` executable on
+each toggle. That executable reuses a persistent dashboard only when its exact
+build and renderer command match. A stale dashboard is replaced only after tmux
+revalidates the signed session, its sole pane, and the dashboard command. A
+repurposed session or additional panes/windows prevent automatic replacement and
+produce a diagnostic; agent-bearing and unrelated tmux sessions are preserved.
+
+Run `stn setup` once inside each tmux server that still has an inline popup
+binding from an older installation. Setup preserves the configured key and
+updates the owned binding. Replacing the executable alone cannot refresh an
+already-loaded inline binding. Run `stn popup` from the matching installation to
+inspect a popup launch failure.
+
 Each native launch also starts one process-local, read-only update check with
 no persistent cache. It never applies an update. Only a completed
 version-changing result may print this notice after a normal, unsignaled,

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildManagedFastPopupRunShellCommand } from "../../src/popup";
 import {
@@ -104,6 +105,28 @@ describe("managed tmux popup fast binding", () => {
     expect(await fixture.fallbackCalls()).toEqual([]);
   });
 
+  it("rejects an internally consistent renderer from another build at the same installation", async () => {
+    const fixture = await createFixture();
+    const state = JSON.parse(await readFile(fixture.statePath, "utf8")) as FakeState;
+    state.sessionSignature = persistentPopupSignature(
+      `${shellLiteral(join(state.root, "stn"))} tui --popup --persistent`,
+      `0.0.0-pre-alpha.14.8+station.${"a".repeat(64)}`,
+    );
+    state.route = buildNormalPopupRoute({
+      registrationNonce,
+      root: state.root,
+      sessionName: "_station-ui",
+      signature: state.sessionSignature,
+    });
+    state.lease = state.route;
+    await writeFile(fixture.statePath, JSON.stringify(state));
+
+    expect(fixture.command).not.toContain("expected_signature");
+    await expect(runBinding(fixture)).resolves.toMatchObject({ code: 0 });
+    expect(await fixture.fallbackCalls()).toEqual(["/dev/ttys001"]);
+    expect((await fixture.calls()).some((call) => call.args[0] === "if-shell")).toBe(false);
+  });
+
   it("closes the same client without reopening", async () => {
     const fixture = await createFixture({
       activeClient: "/dev/ttys001",
@@ -155,36 +178,20 @@ describe("managed tmux popup fast binding", () => {
     );
   });
 
-  it("forces fallback for live dev state but ignores a provably dead dev owner", async () => {
-    const live = await createFixture({
+  it.each([
+    ["live", `${process.pid}:test`, true],
+    ["signal-denied", "1:test", true],
+    ["dead", "999999999:test", false],
+  ])("checks a %s dev owner before reusing a normal popup", async (_label, owner, fallback) => {
+    const fixture = await createFixture({
       devCommand: "node dev-ui",
-      devOwner: `${process.pid}:test`,
+      devOwner: owner,
       devRoot: "/worktree",
       devSession: "_station-ui-dev",
     });
-    await expect(runBinding(live)).resolves.toMatchObject({ code: 0 });
-    expect(await live.calls()).toHaveLength(1);
-    expect(await live.fallbackCalls()).toEqual(["/dev/ttys001"]);
-
-    const signalDenied = await createFixture({
-      devCommand: "node dev-ui",
-      devOwner: "1:test",
-      devRoot: "/worktree",
-      devSession: "_station-ui-dev",
-    });
-    await expect(runBinding(signalDenied)).resolves.toMatchObject({ code: 0 });
-    expect(await signalDenied.calls()).toHaveLength(1);
-    expect(await signalDenied.fallbackCalls()).toEqual(["/dev/ttys001"]);
-
-    const stale = await createFixture({
-      devCommand: "node dev-ui",
-      devOwner: "999999999:test",
-      devRoot: "/worktree",
-      devSession: "_station-ui-dev",
-    });
-    await expect(runBinding(stale)).resolves.toMatchObject({ code: 0 });
-    expect(await stale.calls()).toHaveLength(2);
-    expect(await stale.fallbackCalls()).toEqual([]);
+    await expect(runBinding(fixture)).resolves.toMatchObject({ code: 0 });
+    expect(await fixture.calls()).toHaveLength(fallback ? 1 : 2);
+    expect(await fixture.fallbackCalls()).toEqual(fallback ? ["/dev/ttys001"] : []);
   });
 
   it("passes the outer binding caller to first-use fallback when the hidden session is missing", async () => {
@@ -435,12 +442,18 @@ process.exit(0);
   );
   await writeFile(
     fallbackAlias,
-    `#!/bin/sh
-printf '%s\\n' "\${STATION_FOCUS_CLIENT_ID:-}" >> ${shellLiteral(fallbackLogPath)}
-printf '%s\\t%s\\t%s\\n' "\${STATION_CONFIG_PATH:-}" "\${1:-}" "\${2:-}" >> ${shellLiteral(fallbackConfigLogPath)}
-printf 'fallback output that must stay hidden\\n'
-printf 'fallback error that must stay hidden\\n' >&2
-exit \${FAKE_FALLBACK_EXIT:-0}
+    `#!/usr/bin/env node
+import { appendFileSync } from "node:fs";
+import { runManagedFastPopup } from ${JSON.stringify(fileURLToPath(new URL("../../dist/popup/fastLauncher.js", import.meta.url)))};
+if (process.argv[2] === "__managed-popup") {
+  await runManagedFastPopup(process.argv.slice(3), ${JSON.stringify(installedRoot)});
+} else {
+  appendFileSync(${JSON.stringify(fallbackLogPath)}, (process.env.STATION_FOCUS_CLIENT_ID ?? "") + "\\n");
+  appendFileSync(${JSON.stringify(fallbackConfigLogPath)}, [process.env.STATION_CONFIG_PATH ?? "", process.argv[2] ?? "", process.argv[3] ?? ""].join("\\t") + "\\n");
+  process.stdout.write("fallback output that must stay hidden\\n");
+  process.stderr.write("fallback error that must stay hidden\\n");
+  process.exit(Number(process.env.FAKE_FALLBACK_EXIT ?? 0));
+}
 `,
   );
   await chmod(tmuxCommand, 0o700);

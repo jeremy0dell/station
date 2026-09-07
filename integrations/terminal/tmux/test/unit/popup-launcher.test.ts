@@ -9,6 +9,25 @@ const launcherPath = fileURLToPath(new URL("../../bin/stn-popup", import.meta.ur
 const repoRoot = fileURLToPath(new URL("../../../../../", import.meta.url)).replace(/\/$/, "");
 
 describe("tmux popup launcher", () => {
+  it("revalidates a normal popup through the current CLI even when both saved signatures agree", async () => {
+    const fixture = await createFakeTmux();
+    const result = await runLauncher([], {
+      FAKE_FAST_POPUP_EXPECTED_SIGNATURE: "v2:build-a:stn tui --popup --persistent",
+      FAKE_FAST_POPUP_ROOT: repoRoot,
+      FAKE_FAST_POPUP_SESSION_NAME: "_station-ui",
+      FAKE_TMUX_MISSING_DEV_REGISTRATION: "1",
+      TMUX: "/tmp/tmux-501/default,123,0",
+      TMUX_LOG: fixture.logPath,
+      STATION_TMUX_BIN: fixture.tmuxPath,
+      STATION_POPUP_FALLBACK_COMMAND: "printf current-cli",
+    });
+
+    expect(result).toMatchObject({ code: 0, stdout: "current-cli" });
+    expect((await readLog(fixture.logPath)).some((call) => call.startsWith("display-popup"))).toBe(
+      false,
+    );
+  });
+
   it("attaches a registered persistent popup UI without entering the Node CLI", async () => {
     const fixture = await createFakeTmux();
 
@@ -62,43 +81,6 @@ describe("tmux popup launcher", () => {
     );
   });
 
-  it("attaches a registered normal popup UI without entering the Node CLI", async () => {
-    const fixture = await createFakeTmux();
-
-    await expect(
-      runLauncher([], {
-        FAKE_FAST_POPUP_EXPECTED_SIGNATURE: "v1:node normal tui --popup --persistent",
-        FAKE_FAST_POPUP_ROOT: repoRoot,
-        FAKE_FAST_POPUP_SESSION_NAME: "_station-ui",
-        FAKE_TMUX_MISSING_DEV_REGISTRATION: "1",
-        TMUX: "/tmp/tmux-501/default,123,0",
-        TMUX_LOG: fixture.logPath,
-        STATION_TMUX_BIN: fixture.tmuxPath,
-      }),
-    ).resolves.toMatchObject({ code: 0 });
-
-    expect(await readLog(fixture.logPath)).toEqual([
-      "show-options -gqv @station_tui_dev_session_name",
-      "show-options -gqv @station_tui_dev_command",
-      "show-options -gqv @station_popup_ui_session_name",
-      "show-options -gqv @station_popup_ui_expected_signature",
-      "show-options -gqv @station_popup_ui_root",
-      "has-session -t _station-ui",
-      "show-options -t _station-ui -qv @station_popup_ui_signature",
-      "display-message -p #{client_name}",
-      "show-options -gqv @station_popup_client",
-      "set-option -gq @station_popup_client client_1",
-      "set-option -gq @station_popup_focus_client client_1",
-      "set-option -t _station-ui mouse on",
-      "set-option -t _station-ui status off",
-      expect.stringContaining(
-        `display-popup -c client_1 -w 50% -h 50% -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E env -u TMUX '${fixture.tmuxPath}' -T hyperlinks attach-session -t '_station-ui'`,
-      ),
-      "show-options -gqv @station_popup_client",
-      "show-options -gqv @station_popup_focus_client",
-    ]);
-  });
-
   it("keeps popup-local styling with configured geometry", async () => {
     const fixture = await createFakeTmux();
     await expect(
@@ -121,6 +103,7 @@ describe("tmux popup launcher", () => {
     );
     expect(calls.some((call) => /popup-(?:border-)?style/.test(call))).toBe(false);
   });
+
 
   it("only claims bare station and explicit popup invocations", async () => {
     const fixture = await createFakeTmux();
@@ -202,12 +185,6 @@ describe("tmux popup launcher", () => {
     expect(await readLog(fixture.logPath)).toEqual([
       "show-options -gqv @station_tui_dev_session_name",
       "show-options -gqv @station_tui_dev_command",
-      "show-options -gqv @station_popup_ui_session_name",
-      "show-options -gqv @station_popup_ui_expected_signature",
-      "show-options -gqv @station_popup_ui_root",
-      "set-option -gq -u @station_popup_ui_session_name",
-      "set-option -gq -u @station_popup_ui_expected_signature",
-      "set-option -gq -u @station_popup_ui_root",
     ]);
   });
 
@@ -228,12 +205,6 @@ describe("tmux popup launcher", () => {
     expect(await readLog(fixture.logPath)).toEqual([
       "show-options -gqv @station_tui_dev_session_name",
       "show-options -gqv @station_tui_dev_command",
-      "show-options -gqv @station_popup_ui_session_name",
-      "show-options -gqv @station_popup_ui_expected_signature",
-      "show-options -gqv @station_popup_ui_root",
-      "set-option -gq -u @station_popup_ui_session_name",
-      "set-option -gq -u @station_popup_ui_expected_signature",
-      "set-option -gq -u @station_popup_ui_root",
     ]);
   });
 
@@ -258,12 +229,6 @@ describe("tmux popup launcher", () => {
       "show-options -gqv @station_tui_dev_owner",
       "show-options -gqv @station_tui_dev_root",
       "has-session -t _station-ui-dev",
-      "show-options -gqv @station_popup_ui_session_name",
-      "show-options -gqv @station_popup_ui_expected_signature",
-      "show-options -gqv @station_popup_ui_root",
-      "set-option -gq -u @station_popup_ui_session_name",
-      "set-option -gq -u @station_popup_ui_expected_signature",
-      "set-option -gq -u @station_popup_ui_root",
     ]);
   });
 
@@ -285,102 +250,6 @@ describe("tmux popup launcher", () => {
       "show-options -gqv @station_tui_dev_command",
       "show-options -gqv @station_tui_dev_owner",
       "show-options -gqv @station_tui_dev_root",
-      "show-options -gqv @station_popup_ui_session_name",
-      "show-options -gqv @station_popup_ui_expected_signature",
-      "show-options -gqv @station_popup_ui_root",
-      "set-option -gq -u @station_popup_ui_session_name",
-      "set-option -gq -u @station_popup_ui_expected_signature",
-      "set-option -gq -u @station_popup_ui_root",
-    ]);
-  });
-
-  it("falls back and clears when normal popup registration points at another checkout", async () => {
-    const fixture = await createFakeTmux();
-
-    await expect(
-      runLauncher([], {
-        FAKE_FAST_POPUP_EXPECTED_SIGNATURE: "v1:node other-dev tui",
-        FAKE_FAST_POPUP_ROOT: "/other",
-        FAKE_FAST_POPUP_SESSION_NAME: "_station-ui-dev-other",
-        FAKE_TMUX_DEV_ROOT: "/other",
-        FAKE_TMUX_DEV_SESSION_NAME: "_station-ui-dev-other",
-        FAKE_TMUX_OWNER: `${process.pid}:test`,
-        TMUX: "/tmp/tmux-501/default,123,0",
-        TMUX_LOG: fixture.logPath,
-        STATION_POPUP_FALLBACK_COMMAND: "printf fallback",
-        STATION_TMUX_BIN: fixture.tmuxPath,
-      }),
-    ).resolves.toMatchObject({ code: 0, stdout: "fallback" });
-
-    expect(await readLog(fixture.logPath)).toEqual([
-      "show-options -gqv @station_tui_dev_session_name",
-      "show-options -gqv @station_tui_dev_command",
-      "show-options -gqv @station_tui_dev_owner",
-      "show-options -gqv @station_tui_dev_root",
-      "show-options -gqv @station_popup_ui_session_name",
-      "show-options -gqv @station_popup_ui_expected_signature",
-      "show-options -gqv @station_popup_ui_root",
-      "set-option -gq -u @station_popup_ui_session_name",
-      "set-option -gq -u @station_popup_ui_expected_signature",
-      "set-option -gq -u @station_popup_ui_root",
-    ]);
-  });
-
-  it("falls back and clears a stale rootless normal popup registration", async () => {
-    const fixture = await createFakeTmux();
-
-    await expect(
-      runLauncher([], {
-        FAKE_FAST_POPUP_EXPECTED_SIGNATURE: "v1:node normal tui --popup --persistent",
-        FAKE_FAST_POPUP_SESSION_NAME: "_station-ui",
-        FAKE_TMUX_MISSING_DEV_REGISTRATION: "1",
-        TMUX: "/tmp/tmux-501/default,123,0",
-        TMUX_LOG: fixture.logPath,
-        STATION_POPUP_FALLBACK_COMMAND: "printf fallback",
-        STATION_TMUX_BIN: fixture.tmuxPath,
-      }),
-    ).resolves.toMatchObject({ code: 0, stdout: "fallback" });
-
-    expect(await readLog(fixture.logPath)).toEqual([
-      "show-options -gqv @station_tui_dev_session_name",
-      "show-options -gqv @station_tui_dev_command",
-      "show-options -gqv @station_popup_ui_session_name",
-      "show-options -gqv @station_popup_ui_expected_signature",
-      "show-options -gqv @station_popup_ui_root",
-      "set-option -gq -u @station_popup_ui_session_name",
-      "set-option -gq -u @station_popup_ui_expected_signature",
-      "set-option -gq -u @station_popup_ui_root",
-    ]);
-  });
-
-  it("falls back and clears when the normal popup signature differs", async () => {
-    const fixture = await createFakeTmux();
-
-    await expect(
-      runLauncher([], {
-        FAKE_FAST_POPUP_EXPECTED_SIGNATURE: "v1:node normal tui --popup --persistent",
-        FAKE_FAST_POPUP_ROOT: repoRoot,
-        FAKE_FAST_POPUP_SESSION_NAME: "_station-ui",
-        FAKE_SESSION_SIGNATURE: "v1:node stale tui --popup --persistent",
-        FAKE_TMUX_MISSING_DEV_REGISTRATION: "1",
-        TMUX: "/tmp/tmux-501/default,123,0",
-        TMUX_LOG: fixture.logPath,
-        STATION_POPUP_FALLBACK_COMMAND: "printf fallback",
-        STATION_TMUX_BIN: fixture.tmuxPath,
-      }),
-    ).resolves.toMatchObject({ code: 0, stdout: "fallback" });
-
-    expect(await readLog(fixture.logPath)).toEqual([
-      "show-options -gqv @station_tui_dev_session_name",
-      "show-options -gqv @station_tui_dev_command",
-      "show-options -gqv @station_popup_ui_session_name",
-      "show-options -gqv @station_popup_ui_expected_signature",
-      "show-options -gqv @station_popup_ui_root",
-      "has-session -t _station-ui",
-      "show-options -t _station-ui -qv @station_popup_ui_signature",
-      "set-option -gq -u @station_popup_ui_session_name",
-      "set-option -gq -u @station_popup_ui_expected_signature",
-      "set-option -gq -u @station_popup_ui_root",
     ]);
   });
 });
