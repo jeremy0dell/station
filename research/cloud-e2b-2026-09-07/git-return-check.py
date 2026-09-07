@@ -1,10 +1,12 @@
 """Exercise candidate result return with synthetic Git repositories and no network."""
 
 import hashlib
+import io
 import json
 from pathlib import Path
 import subprocess
 import tempfile
+import tarfile
 
 
 def digest(path):
@@ -42,13 +44,39 @@ with tempfile.TemporaryDirectory(prefix="station-cloud-git-") as directory:
     source = root / "source"
     source.mkdir()
     git(source, "init", "-b", "main")
+    (source / "former.secret").write_text("SYNTHETIC_DELETED_HISTORY_VALUE\n")
+    git(source, "add", "former.secret")
+    git(source, "commit", "-m", "Synthetic history")
+    history = value(source, "rev-parse", "HEAD")
+    git(source, "rm", "former.secret")
     (source / "text.txt").write_text("initial\n")
     (source / "remove.txt").write_text("remove me\n")
     (source / "binary.bin").write_bytes(bytes(range(256)))
+    (source / "version.txt").write_text("$Format:%H$\n")
     (source / ".gitignore").write_text("ignored.secret\n")
+    (source / ".gitattributes").write_text("remove.txt export-ignore\nversion.txt export-subst\n")
     git(source, "add", ".")
     git(source, "commit", "-m", "Synthetic base")
     base = value(source, "rev-parse", "HEAD")
+
+    archive = git(source, "archive", "--format=tar", base).stdout
+    with tarfile.open(fileobj=io.BytesIO(archive)) as archived:
+        assert "remove.txt" not in archived.getnames()
+        assert archived.extractfile("version.txt").read().decode().strip() == base
+    assert value(source, "show", base + ":remove.txt") == "remove me"
+    assert value(source, "show", base + ":version.txt") == "$Format:%H$"
+    # The override belongs only to this disposable fixture, never the user's repository.
+    (source / ".git/info/attributes").write_text("* -export-ignore -export-subst\n")
+    exact_archive = git(source, "archive", "--format=tar", base).stdout
+    with tarfile.open(fileobj=io.BytesIO(exact_archive)) as archived:
+        assert archived.extractfile("remove.txt").read() == b"remove me\n"
+        assert archived.extractfile("version.txt").read() == b"$Format:%H$\n"
+    seed_bundle = root / "seed.bundle"
+    git(source, "bundle", "create", str(seed_bundle), "HEAD")
+    seed_receiver = root / "seed-receiver"
+    git(root, "clone", str(seed_bundle), str(seed_receiver))
+    assert not (seed_receiver / "former.secret").exists()
+    assert value(seed_receiver, "show", history + ":former.secret") == "SYNTHETIC_DELETED_HISTORY_VALUE"
 
     remote = root / "remote"
     receiver = root / "receiver"
@@ -131,6 +159,10 @@ with tempfile.TemporaryDirectory(prefix="station-cloud-git-") as directory:
             "binary full-index patch reproduces the exact result tree in a clean receiver",
             "patch application refuses the dirty receiver without changing local bytes",
             "commit artifacts exclude untracked and ignored files; dirty inventory must be explicit",
+            "git archive honors export-ignore and can omit files from the exact committed tree",
+            "git archive honors export-subst and can change committed file content",
+            "disposable repository info/attributes overrides preserve both fixture files exactly",
+            "a full HEAD source bundle includes deleted historical files outside the current tree",
         ],
         "bundleBytes": bundle.stat().st_size,
         "patchBytes": patch.stat().st_size,

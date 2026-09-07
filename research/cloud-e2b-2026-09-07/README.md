@@ -25,6 +25,21 @@ fencing, caller cancellation, and Git credential handling. `networkAttempts` cou
 replaced global fetch; the exercised provider operations use the injected fakes. This does not test
 HTTP transport, E2B deployment behavior, PTY replay, or real cleanup.
 
+The separate HTTP check runs the same SDK versions against a fake server bound to a random loopback
+port. It restricts requests to that origin, uses synthetic account and sandbox tokens, checks both
+REST and Connect RPC serialization, and closes every connection on exit.
+
+```sh
+env -i PATH="$PATH" HOME=/tmp node research/cloud-e2b-2026-09-07/sdk-http-check.mjs /tmp/station-e2b-sdk-check
+env -i PATH="$PATH" HOME=/tmp bun research/cloud-e2b-2026-09-07/sdk-http-check.mjs /tmp/station-e2b-sdk-check
+```
+
+The HTTP check covers lifecycle TTL rounding, the mutating reconnect request, credential separation,
+null inventory, contradictory error status/body, dropped create responses, process deadlines,
+binary framing, and idle-stream cancellation. Injected malformed responses establish SDK boundary
+behavior; they do not establish that E2B returns those responses. A successful fake kill does not
+prove cloud cleanup.
+
 The npm registry integrity values for the inspected packages are:
 
 | Package | SHA-512 integrity |
@@ -61,6 +76,10 @@ disabled. It compares a commit bundle and a binary full-index patch, verifies th
 checks dirty and missing-base receivers, and rejects a truncated artifact with an independent
 digest. It also demonstrates that Git fetch can skip pack validation when all advertised objects
 already exist. It transfers no real repository and defines no production synchronization policy.
+For source preparation, the check demonstrates that `git archive` can omit files through
+`export-ignore` and change bytes through `export-subst`. A disposable repository's `info/attributes`
+override preserves both fixture files exactly. A full HEAD bundle includes deleted history outside
+the selected tree. Source selection and history disclosure therefore require an explicit policy.
 
 ## Existing Station behavior to compare
 
@@ -75,3 +94,22 @@ bun run test:unit -- packages/station-host/test/unit/server.test.ts packages/sta
 These checks use local scripted terminals. They establish reuse candidates for #447's complete
 remote runtime. They do not certify a Linux image, authenticated remote gateway, network failure,
 real native or tmux presentation, or E2B pause/resume.
+
+Two additional existing lanes use real local terminals and clean up their owned fixtures. The PTY
+lane needs the local controlling-terminal helper; the placement lane requires tmux and Python and
+uses a private tmux socket. Run with a disposable HOME and empty environment.
+
+```sh
+bun run --cwd station build:ctty-helper
+env -i PATH="$PATH" HOME=/tmp STATION_PTY_SMOKE=1 STATION_PTY_IMPL=bun \
+  bun test station/src/host/test/ptyTable.smoke.test.ts
+env -i PATH="$PATH" HOME=/tmp SHELL=/bin/sh TERM=xterm-256color LANG=en_US.UTF-8 STATION_REAL_TMUX=1 \
+  bun run test:tmux-popup:real integrations/terminal/tmux/test/integration/placement-real.test.ts
+```
+
+These establish local PTY survival without an attached client and preservation of a real tmux
+client's exact target during placement. They do not test E2B or a cloud agent pane.
+Without a UTF-8 locale, the placement test failed on tmux 3.7 and next-3.8. The next-3.8 diagnostic
+showed underscores replacing the tab delimiters in its client record. Both versions passed with
+`LANG=en_US.UTF-8`. Use a UTF-8 locale installed on the target; the example uses the research Mac's
+locale.
