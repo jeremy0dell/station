@@ -134,6 +134,9 @@ group. It resumes eligible sessions after runtime convergence and reports every
 reaped, resumed, retained, or unresolved alias. `stn update --dry-run --reap`
 remains read-only.
 
+For tmux placement, Station replaces the launch shell with the agent process so
+foreground-process inspection can observe the resumed agent.
+
 If startup reports `OBSERVER_PROCESS_INSTALLED_PATH_REPLACED`, run the update
 preview and apply commands above. When using a separate configuration, preserve
 its scope with `stn --config <path> update`. Ordinary startup does not perform

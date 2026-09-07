@@ -54,7 +54,7 @@ describe("tmux launch providerData", () => {
       "STATION_SESSION_ID=ses_web_feature",
       "-e",
       "STATION_TOKEN=value with spaces",
-      "'/Applications/Codex CLI/codex' --cd '/tmp/station/web/feature' --ask-for-approval on-request 'prompt with spaces'",
+      "exec '/Applications/Codex CLI/codex' --cd '/tmp/station/web/feature' --ask-for-approval on-request 'prompt with spaces'",
     ]);
     expect(args).not.toContain("send-keys");
     expect(args.at(-1)).not.toMatch(/^cd\s/);
@@ -80,7 +80,7 @@ describe("tmux launch providerData", () => {
       "%web-feature-login-main",
       "-c",
       "/tmp/station/web/feature",
-      "codex",
+      "exec codex",
     ]);
   });
 });
