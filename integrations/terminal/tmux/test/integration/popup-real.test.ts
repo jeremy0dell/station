@@ -1179,7 +1179,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     expect(reopenedRuntime.observerPid).toBe(firstRuntime.observerPid);
 
     await fixture.ptyClient.write(Buffer.from("2", "utf8"));
-    const nativeMessage = 'This agent runs in the "native" terminal and';
+    const nativeMessage = `The "native" terminal provider can't be focused from this dashboard.`;
     const nativeFrame = await waitForPaneContent(
       fixture,
       nativePopup,
@@ -2222,7 +2222,7 @@ function isDashboardContent(content: string): boolean {
 function isGroupedManyProjectDashboardContent(content: string): boolean {
   return (
     content.includes("FLEET") &&
-    content.includes("│ ▼ Design refresh") &&
+    content.includes("╭─ ▼ Design refresh") &&
     content.includes("group-contracts") &&
     content.includes("? help")
   );
