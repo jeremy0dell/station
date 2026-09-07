@@ -132,6 +132,36 @@ include_main = true
   const sessions = [];
   let unrelated;
   return {
+    async captureFailure(observer) {
+      const panes = await run(
+        tmux.tmuxPath,
+        [
+          "list-panes",
+          "-a",
+          "-F",
+          "#{pane_id}\t#{pane_current_command}\t#{pane_dead}\t#{pane_pid}\t#{pane_current_path}",
+        ],
+        { env: tmux.env },
+      );
+      const screens = [];
+      for (const row of panes.stdout.trim().split("\n")) {
+        const pane = row.split("\t")[0];
+        const screen = await run(tmux.tmuxPath, ["capture-pane", "-p", "-t", pane], {
+          env: tmux.env,
+        });
+        screens.push({ pane, screen: screen.stdout });
+      }
+      const evidence = {
+        snapshot: await observer.getSnapshot(),
+        resumes: await readFile(resumeLog, "utf8"),
+        panes: panes.stdout,
+        screens,
+      };
+      await writeFile(join(root, "recovery-evidence.json"), JSON.stringify(evidence, null, 2), {
+        mode: 0o600,
+      });
+      process.stderr.write(`Recovery fixture evidence: ${JSON.stringify(evidence)}\n`);
+    },
     async seedAndSpawn(observer, host) {
       const snapshot = await observer.getSnapshot();
       const rows = snapshot.rows.filter((row) => row.branch?.startsWith("recovery-"));

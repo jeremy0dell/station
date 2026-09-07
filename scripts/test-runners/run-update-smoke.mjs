@@ -1024,6 +1024,9 @@ async function runScenario(input) {
   } catch (error) {
     failure = error;
     if (input.recovery) {
+      await recoveryFixture?.captureFailure(observerClient).catch((error) => {
+        process.stderr.write(`Recovery fixture evidence unavailable: ${errorMessage(error)}\n`);
+      });
       const trace = await run(installedBinary, ["debug", "trace", "--latest-failure"], {
         env,
         allowedExitCodes: [0, 1],
