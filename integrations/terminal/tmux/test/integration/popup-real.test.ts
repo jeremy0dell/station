@@ -25,6 +25,8 @@ import {
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { tmuxPopupRunShellCommand } from "../../../../../apps/cli/src/commands/setup/checks/tmuxBinding.js";
+// Reuse the renderer workspace's terminal parser for the outer tmux client output.
+import { Terminal } from "../../../../../station/node_modules/@xterm/headless";
 import { mockObserverSnapshot } from "../../../../../station/src/client/fixtures/mockObserverSnapshot.js";
 import {
   buildManagedFastPopupRunShellCommand,
@@ -315,6 +317,184 @@ describeRealTmux("real tmux dev popup routing", () => {
     cleanup = undefined;
     await currentCleanup?.();
   }, 180_000);
+
+  it.each([
+    "canonical",
+    "shell",
+    "binding",
+  ] as const)("preserves popup-local styling through the %s launcher", async (launcher) => {
+    const fixture = await createDashboardFixture(tmux);
+    const terminal = new Terminal({ cols: 120, rows: 40, allowProposedApi: true });
+    const validConfig = await readFile(fixture.configPath, "utf8");
+    cleanup = async () => {
+      await writeFile(fixture.configPath, validConfig, "utf8");
+      try {
+        await cleanupDashboardFixture(fixture);
+      } finally {
+        terminal.dispose();
+      }
+    };
+    fixture.observerServer = await startProtocolServer({
+      socketPath: fixture.observerSocketPath,
+      api: deterministicPopupObserver(deterministicDashboardSnapshot(fixture.projectRoot)),
+    });
+    delete fixture.env.STATION_SOURCE;
+    await tmuxExec(fixture.wrapper, ["new-session", "-d", "-s", "base", "sleep 300"], fixture.env);
+    fixture.ptyClient = await startTmuxPtyClient({
+      tmux: fixture.wrapper,
+      sessionName: "base",
+      env: fixture.env,
+      onOutput: (chunk) => terminal.write(chunk),
+    });
+    const clientName = fixture.ptyClient.clientName;
+    const launch = (command: string, args: string[], env = fixture.env): TrackedChild => {
+      const child = trackChild(
+        spawn(command, args, {
+          cwd: fixture.projectRoot,
+          env: { ...env, STATION_FOCUS_CLIENT_ID: clientName },
+          stdio: ["ignore", "pipe", "pipe"],
+        }),
+        `${launcher} popup`,
+      );
+      fixture.cliProcesses.push(child);
+      return child;
+    };
+    const openCanonical = (): TrackedChild =>
+      launcher === "binding"
+        ? launch(builtBinaryPath, ["--config", fixture.configPath, "popup"])
+        : launch(process.execPath, [builtCliPath, "--config", fixture.configPath, "popup"]);
+
+    const styleOptions = ["popup-style", "popup-border-style"];
+    const readStyles = (global: boolean): Promise<string[]> =>
+      Promise.all(
+        styleOptions.map((name) =>
+          tmuxExec(
+            fixture.wrapper,
+            ["show-options", global ? "-gwqv" : "-wqv", "-t", "base:0", name],
+            fixture.env,
+          ),
+        ),
+      );
+    const globalStyles = await readStyles(true);
+
+    const firstPopup = openCanonical();
+    await waitForPaneContent(
+      fixture,
+      firstPopup,
+      isAcceptanceDashboardContent,
+      "dashboard did not render",
+    );
+    const firstRuntime = await waitForDashboardRuntimeEvidence(fixture, firstPopup, process.pid);
+    await fixture.ptyClient.write(Buffer.from([0x1b]));
+    await waitForNestedClientGone(fixture);
+    await expectSuccessfulExit(firstPopup, 10_000);
+
+    if (launcher === "binding") {
+      const installedRoot = dirname(await realpath(builtBinaryPath));
+      const command = buildManagedFastPopupRunShellCommand({
+        configPath: fixture.configPath,
+        installedRoot,
+        fallbackAlias: join(installedRoot, "stn-tmux-popup"),
+        tmuxCommand: fixture.wrapper,
+        popupWidth: "80",
+        popupHeight: "24",
+      });
+      await tmuxExec(
+        fixture.wrapper,
+        ["bind-key", "Space", "run-shell", "-b", command],
+        fixture.env,
+      );
+      // A fallback would reject this config, so the assertion must exercise the generated warm command.
+      await writeFile(fixture.configPath, 'schema_version = "malformed"\n', "utf8");
+    }
+
+    for (const customStyle of [false, true]) {
+      if (customStyle) {
+        await tmuxExec(
+          fixture.wrapper,
+          ["set-option", "-w", "-t", "base:0", "popup-style", "fg=green,bg=blue"],
+          fixture.env,
+        );
+        await tmuxExec(
+          fixture.wrapper,
+          ["set-option", "-w", "-t", "base:0", "popup-border-style", "fg=red,bg=yellow"],
+          fixture.env,
+        );
+      }
+      const windowStyles = await readStyles(false);
+      const readControlColors = async () => {
+        const control = launch(fixture.wrapper, [
+          "display-popup",
+          "-c",
+          clientName,
+          "-w",
+          "80",
+          "-h",
+          "24",
+          "-E",
+          "printf '\\033[0m824 control'; read -r line",
+        ]);
+        let colors: Awaited<ReturnType<typeof outerPopupColors>> | undefined;
+        try {
+          await expect
+            .poll(
+              async () => {
+                colors = await outerPopupColors(terminal, "824 control");
+                return colors.borderCharacter;
+              },
+              { timeout: 10_000 },
+            )
+            .toBe("─");
+        } finally {
+          await fixture.ptyClient?.write(Buffer.from("\n"));
+          await expectSuccessfulExit(control, 10_000);
+        }
+        return colors;
+      };
+      const controlBefore = await readControlColors();
+      if (customStyle) {
+        expect(controlBefore).toEqual({
+          background: 4,
+          borderForeground: 1,
+          borderBackground: 3,
+          borderCharacter: "─",
+        });
+      }
+
+      let popup: TrackedChild | undefined;
+      if (launcher === "binding") {
+        await triggerPopupBinding(fixture.ptyClient);
+      } else if (launcher === "shell") {
+        popup = launch(join(checkoutRoot, "integrations/terminal/tmux/bin/stn-popup"), [], {
+          ...fixture.env,
+          STATION_FAST_POPUP_NO_FALLBACK: "1",
+          STATION_POPUP_WIDTH: "80",
+          STATION_POPUP_HEIGHT: "24",
+          STATION_POPUP_POSITION: "C",
+        });
+      } else {
+        popup = openCanonical();
+      }
+      await waitForNestedClient(fixture);
+      await expect
+        .poll(() => outerPopupColors(terminal, "station · overview"), { timeout: 10_000 })
+        .toEqual({
+          background: "default",
+          borderForeground: "default",
+          borderBackground: "default",
+          borderCharacter: "─",
+        });
+      expect((await readPaneEvidence(fixture)).pid).toBe(firstRuntime.panePid);
+      await fixture.ptyClient.write(Buffer.from([0x1b]));
+      await waitForNestedClientGone(fixture);
+      if (popup !== undefined) await expectSuccessfulExit(popup, 10_000);
+      if (launcher !== "shell")
+        await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
+      expect(await readStyles(true)).toEqual(globalStyles);
+      expect(await readStyles(false)).toEqual(windowStyles);
+      expect(await readControlColors()).toEqual(controlBefore);
+    }
+  }, 60_000);
 
   it("plain popup routing attaches the registered dev UI and reuses its process", async () => {
     const root = await makeCheckoutTempRoot();
@@ -1789,6 +1969,7 @@ async function openAndCloseRegisteredPopup(input: {
 async function startTmuxPtyClient(input: {
   env?: NodeJS.ProcessEnv;
   initialDimensions?: Dimensions;
+  onOutput?: (chunk: Buffer) => void;
   sessionName: string;
   tmux: string;
 }): Promise<TmuxPtyClient> {
@@ -1813,6 +1994,7 @@ async function startTmuxPtyClient(input: {
       stdio: ["pipe", "pipe", "pipe", "pipe"],
     },
   );
+  if (input.onOutput !== undefined) child.stdout?.on("data", input.onOutput);
   const control = child.stdio[3];
   if (control === undefined || control === null || !("write" in control)) {
     child.kill("SIGTERM");
@@ -2030,6 +2212,33 @@ async function captureHiddenStyledLine(fixture: DashboardFixture, row: number): 
 }
 
 type CapturedBackgroundIntent = "default" | "explicit";
+
+async function outerPopupColors(terminal: Terminal, needle: string) {
+  await new Promise<void>((resolveWrite) => terminal.write("", resolveWrite));
+  const buffer = terminal.buffer.active;
+  const lines = Array.from(
+    { length: terminal.rows },
+    (_, row) => buffer.getLine(buffer.baseY + row)?.translateToString() ?? "",
+  );
+  const text = paneCell(lines.join("\n"), needle);
+  const canvas = buffer.getLine(buffer.baseY + text.row)?.getCell(text.col);
+  const borderPosition = centeredPopupOuterCell(
+    { columns: 120, rows: 40 },
+    { columns: 78, rows: 22 },
+    { col: 0, row: -1 },
+  );
+  const border = buffer
+    .getLine(buffer.baseY + borderPosition.row - 1)
+    ?.getCell(borderPosition.column - 1);
+  if (canvas === undefined || border === undefined)
+    throw new Error("outer popup cells are missing");
+  return {
+    background: canvas.isBgDefault() ? "default" : canvas.getBgColor(),
+    borderForeground: border.isFgDefault() ? "default" : border.getFgColor(),
+    borderBackground: border.isBgDefault() ? "default" : border.getBgColor(),
+    borderCharacter: border.getChars(),
+  };
+}
 
 async function expectHiddenTextUsesDefaultBackground(
   fixture: DashboardFixture,

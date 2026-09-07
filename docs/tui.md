@@ -37,6 +37,11 @@ Both renderers load `[tui]` when they start. The native renderer also loads
 `[workspace]`. An open renderer does not live-reload the post-create policy;
 see [Configuration](configuration.md) for the complete field contract.
 
+The standalone dashboard preserves a terminal-default canvas, including before
+terminal palette observations arrive. Station's tmux popup body and border use
+popup-local terminal colors so tmux's popup theme cannot replace that canvas.
+Semantic dashboard colors and native Station theming retain their own behavior.
+
 Command-capable native and popup launches require the caller's complete build
 selector to equal the accepted Observer selector. A mismatch reports
 `TUI_OBSERVER_BUILD_MISMATCH` before renderer, reconcile, popup, Host, PTY, or

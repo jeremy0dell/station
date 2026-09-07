@@ -98,6 +98,10 @@ Popup geometry and status-bar settings are captured by the generated popup
 binding; rerun `stn setup` after changing them. Close existing popups
 before changing `popup_scope`.
 
+Station sets terminal-default colors on its popup invocations. It does not change
+tmux's global `popup-style` or `popup-border-style` options; other popups retain
+their configured styles. Rerun `stn setup` to refresh an older generated binding.
+
 ### `[harness.<id>]` — agent harness (optional)
 
 Multiple harness tables may be configured. `[defaults].harness` is the

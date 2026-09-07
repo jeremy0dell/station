@@ -177,9 +177,9 @@ attach_command="env -u TMUX $(quote_shell "$tmux_bin") -T hyperlinks attach-sess
 
 set +e
 if [ -n "$position" ] && [ "$position" != "C" ]; then
-  "$tmux_bin" display-popup -c "$client_id" -w "$width" -h "$height" -x "$position" -E "$attach_command"
+  "$tmux_bin" display-popup -c "$client_id" -w "$width" -h "$height" -x "$position" -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E "$attach_command"
 else
-  "$tmux_bin" display-popup -c "$client_id" -w "$width" -h "$height" -E "$attach_command"
+  "$tmux_bin" display-popup -c "$client_id" -w "$width" -h "$height" -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E "$attach_command"
 fi
 popup_status=$?
 set -e
