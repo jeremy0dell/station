@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   beginHotDisposal,
+  registerHotDisposal,
   type StationHotDisposalSlots,
   waitForHotDisposal,
 } from "./hotDisposalBarrier.js";
@@ -10,6 +11,47 @@ function createSlots(): StationHotDisposalSlots {
 }
 
 describe("Station HMR disposal barrier", () => {
+  it("releases each runtime reload once and waits for cleanup before replacement", async () => {
+    const slots = createSlots();
+    const signal = "SIGHUP";
+    const before = process.listenerCount(signal);
+    for (let generation = 0; generation < 4; generation++) {
+      const listener = (): void => {};
+      const pending = deferred();
+      let releases = 0;
+      process.on(signal, listener);
+      try {
+        const release = registerHotDisposal(
+          slots,
+          () => {
+            releases++;
+            process.off(signal, listener);
+            return pending.promise;
+          },
+          () => {},
+        );
+        expect(process.listenerCount(signal)).toBe(before + 1);
+        slots.__stationHotDispose?.();
+        release();
+        expect(releases).toBe(1);
+        expect(process.listenerCount(signal)).toBe(before);
+        expect(slots.__stationHotDispose).toBeUndefined();
+        let settled = false;
+        const replacement = waitForHotDisposal(slots).then(() => {
+          settled = true;
+        });
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        pending.resolve();
+        await replacement;
+        expect(settled).toBe(true);
+      } finally {
+        process.off(signal, listener);
+        pending.resolve();
+      }
+    }
+  });
+
   it("publishes before cleanup and fulfills after synchronous or asynchronous failure", async () => {
     const slots = createSlots();
     const reported: unknown[] = [];

@@ -40,7 +40,7 @@ import {
   type PopupRuntime,
 } from "./popupRuntime.js";
 import {
-  beginHotDisposal,
+  registerHotDisposal,
   type StationHotDisposalSlots,
   waitForHotDisposal,
 } from "../hmr/hotDisposalBarrier.js";
@@ -67,6 +67,7 @@ type DashboardRendererHotSlots = StationHotDisposalSlots & {
 export async function runDashboardMain(): Promise<void> {
   const env = process.env;
   const hotSlots = globalThis as DashboardRendererHotSlots;
+  hotSlots.__stationHotDispose?.();
   const clipboardEffects = createRuntimeClipboardEffects({
     env,
     platform: process.platform,
@@ -238,15 +239,14 @@ export async function runDashboardMain(): Promise<void> {
     );
     process.on("exit", onProcessExit);
 
+    const disposeForHotReload = registerHotDisposal(
+      hotSlots,
+      () => runtimeLifecycle.dispose(),
+      reportDashboardHotDisposalFailure,
+    );
     if (import.meta.hot) {
       import.meta.hot.accept();
-      import.meta.hot.dispose(() => {
-        beginHotDisposal(
-          hotSlots,
-          () => runtimeLifecycle.dispose(),
-          reportDashboardHotDisposalFailure,
-        );
-      });
+      import.meta.hot.dispose(disposeForHotReload);
     }
   } catch (error) {
     try {
