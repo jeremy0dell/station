@@ -36,7 +36,7 @@ describe("tmux popup launcher", () => {
       "set-option -t _station-ui-dev mouse on",
       "set-option -t _station-ui-dev status off",
       expect.stringContaining(
-        `display-popup -c client_1 -w 50% -h 50% -E env -u TMUX '${fixture.tmuxPath}' -T hyperlinks attach-session -t '_station-ui-dev'`,
+        `display-popup -c client_1 -w 50% -h 50% -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E env -u TMUX '${fixture.tmuxPath}' -T hyperlinks attach-session -t '_station-ui-dev'`,
       ),
       "show-options -gqv @station_popup_client",
       "show-options -gqv @station_popup_focus_client",
@@ -57,7 +57,7 @@ describe("tmux popup launcher", () => {
     ).resolves.toMatchObject({ code: 0 });
 
     expect(await readLog(fixture.logPath)).toContain(
-      "display-popup -c client_from_binding -w 50% -h 50% -E env -u TMUX " +
+      "display-popup -c client_from_binding -w 50% -h 50% -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E env -u TMUX " +
         `'${fixture.tmuxPath}' -T hyperlinks attach-session -t '_station-ui-dev'`,
     );
   });
@@ -92,11 +92,34 @@ describe("tmux popup launcher", () => {
       "set-option -t _station-ui mouse on",
       "set-option -t _station-ui status off",
       expect.stringContaining(
-        `display-popup -c client_1 -w 50% -h 50% -E env -u TMUX '${fixture.tmuxPath}' -T hyperlinks attach-session -t '_station-ui'`,
+        `display-popup -c client_1 -w 50% -h 50% -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E env -u TMUX '${fixture.tmuxPath}' -T hyperlinks attach-session -t '_station-ui'`,
       ),
       "show-options -gqv @station_popup_client",
       "show-options -gqv @station_popup_focus_client",
     ]);
+  });
+
+  it("keeps popup-local styling with configured geometry", async () => {
+    const fixture = await createFakeTmux();
+    await expect(
+      runLauncher([], {
+        FAKE_TMUX_OWNER: `${process.pid}:test`,
+        FAKE_TMUX_DEV_ROOT: repoRoot,
+        TMUX: "/tmp/tmux-501/default,123,0",
+        TMUX_LOG: fixture.logPath,
+        STATION_TMUX_BIN: fixture.tmuxPath,
+        STATION_POPUP_WIDTH: "80",
+        STATION_POPUP_HEIGHT: "24",
+        STATION_POPUP_POSITION: "P",
+      }),
+    ).resolves.toMatchObject({ code: 0 });
+
+    const calls = await readLog(fixture.logPath);
+    expect(calls).toContain(
+      "display-popup -c client_1 -w 80 -h 24 -x P -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E " +
+        `env -u TMUX '${fixture.tmuxPath}' -T hyperlinks attach-session -t '_station-ui-dev'`,
+    );
+    expect(calls.some((call) => /popup-(?:border-)?style/.test(call))).toBe(false);
   });
 
   it("only claims bare station and explicit popup invocations", async () => {

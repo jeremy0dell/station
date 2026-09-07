@@ -94,7 +94,10 @@ describe("managed tmux popup fast binding", () => {
     const claim = /active_claim (v1\.open\.[^ ;]+)/.exec(action)?.[1];
     expect(claim).toBeDefined();
     expect(action).toContain("set-option -t _station-ui status off");
-    expect(action).toContain("display-popup -c /dev/ttys001");
+    expect(action).toContain(
+      "display-popup -c /dev/ttys001 -w 50% -h 50% -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E",
+    );
+    expect(action).not.toMatch(/popup-(?:border-)?style/);
     expect(action).toContain(
       `if-shell -F '#{==:#{@station_popup_active_claim},${claim}}' 'set-option -gq -u @station_popup_active_claim ; if-shell -F "#{==:#{@station_popup_client},/dev/ttys001}" "set-option -gq -u @station_popup_client" ; if-shell -F "#{==:#{@station_popup_focus_client},/dev/ttys001}" "set-option -gq -u @station_popup_focus_client"'`,
     );
@@ -147,7 +150,9 @@ describe("managed tmux popup fast binding", () => {
       action.indexOf("display-popup -c /dev/ttys001 -C"),
     );
     expect(action).toContain("set-option -t _station-ui status off");
-    expect(action).toContain("display-popup -c /dev/ttys002 -w 50% -h 50%");
+    expect(action).toContain(
+      "display-popup -c /dev/ttys002 -w 50% -h 50% -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E",
+    );
   });
 
   it("forces fallback for live dev state but ignores a provably dead dev owner", async () => {
@@ -312,7 +317,9 @@ describe("managed tmux popup fast binding", () => {
     });
     await expect(runBinding(fixture)).resolves.toMatchObject({ code: 0 });
     const action = (await fixture.calls())[1]?.args.at(-2) ?? "";
-    expect(action).toContain("display-popup -c /dev/ttys001 -w 60% -h 70% -x P -E");
+    expect(action).toContain(
+      "display-popup -c /dev/ttys001 -w 60% -h 70% -x P -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E",
+    );
     expect(action).toContain("set-option -t _station-ui status on");
   });
 
@@ -320,7 +327,9 @@ describe("managed tmux popup fast binding", () => {
     const fixture = await createFixture();
     await expect(runBinding(fixture)).resolves.toMatchObject({ code: 0 });
     const action = (await fixture.calls())[1]?.args.at(-2) ?? "";
-    expect(action).toContain("display-popup -c /dev/ttys001 -w 50% -h 50% -E");
+    expect(action).toContain(
+      "display-popup -c /dev/ttys001 -w 50% -h 50% -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E",
+    );
     expect(action).not.toContain(" -x ");
     expect(action).toContain("set-option -t _station-ui status off");
   });

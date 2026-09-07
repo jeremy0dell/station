@@ -27,6 +27,10 @@ describe("tmux popup", () => {
       "50%",
       "-h",
       "50%",
+      "-s",
+      "fg=terminal,bg=terminal",
+      "-S",
+      "fg=terminal,bg=terminal",
       "-E",
       "env -u TMUX tmux -T hyperlinks attach-session -t _station-ui",
     ]);
@@ -38,8 +42,34 @@ describe("tmux popup", () => {
       "50%",
       "-h",
       "50%",
+      "-s",
+      "fg=terminal,bg=terminal",
+      "-S",
+      "fg=terminal,bg=terminal",
       "-E",
       "env STATION_TUI_POPUP=1 STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=client_1 stn tui --popup",
+    ]);
+  });
+
+  it("keeps popup-local styling with configured geometry", () => {
+    expect(
+      buildTmuxPopupArgs({
+        config: { popupWidth: "80", popupHeight: "24", popupPosition: "P" },
+      }),
+    ).toEqual([
+      "display-popup",
+      "-w",
+      "80",
+      "-h",
+      "24",
+      "-x",
+      "P",
+      "-s",
+      "fg=terminal,bg=terminal",
+      "-S",
+      "fg=terminal,bg=terminal",
+      "-E",
+      "env -u TMUX tmux -T hyperlinks attach-session -t _station-ui",
     ]);
   });
 
@@ -251,7 +281,9 @@ describe("tmux popup", () => {
     expect(routeCommitIndex).toBeLessThan(claimIndex);
 
     const display = fake.calls.findLast(claimedPopupAction);
-    expect(display?.args?.[3]).toContain("display-popup -c /dev/ttys001 -w 90% -h 80% -E");
+    expect(display?.args?.[3]).toContain(
+      "display-popup -c /dev/ttys001 -w 90% -h 80% -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E",
+    );
     expect(display?.args?.[3]).toContain("@station_popup_active_claim");
     expect(fake.calls.map((call) => call.args)).toContainEqual([
       "set-option",

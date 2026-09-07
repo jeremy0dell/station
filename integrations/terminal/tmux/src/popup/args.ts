@@ -102,6 +102,8 @@ export function buildTmuxPopupArgs(options: BuildTmuxPopupArgsOptions = {}): str
   if (config.popupPosition.length > 0 && config.popupPosition !== "C") {
     args.push("-x", config.popupPosition);
   }
+  // "default" inherits tmux's popup theme; "terminal" requests the terminal colors.
+  args.push("-s", "fg=terminal,bg=terminal", "-S", "fg=terminal,bg=terminal");
 
   const command = persistent
     ? buildPersistentPopupAttachCommand({

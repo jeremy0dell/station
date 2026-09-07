@@ -300,10 +300,10 @@ run_action() {
   prefix="set-option -gq ${activePopupClaimOption} $new_claim ; set-option -gq ${activePopupClientOption} $claim_target_client ; set-option -gq ${focusPopupClientOption} $claim_target_client"
   case "$action_kind" in
     open)
-      action="$prefix ; set-option -t $session_name mouse on ; set-option -t $session_name status $popup_status ; display-popup -c $client_name -w $popup_width -h $popup_height${includePosition ? " -x $popup_position" : ""} -E $attach_arg ; $finish"
+      action="$prefix ; set-option -t $session_name mouse on ; set-option -t $session_name status $popup_status ; display-popup -c $client_name -w $popup_width -h $popup_height${includePosition ? " -x $popup_position" : ""} -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E $attach_arg ; $finish"
       ;;
     replace)
-      action="$prefix ; display-popup -c $previous_client -C ; set-option -t $session_name mouse on ; set-option -t $session_name status $popup_status ; display-popup -c $client_name -w $popup_width -h $popup_height${includePosition ? " -x $popup_position" : ""} -E $attach_arg ; $finish"
+      action="$prefix ; display-popup -c $previous_client -C ; set-option -t $session_name mouse on ; set-option -t $session_name status $popup_status ; display-popup -c $client_name -w $popup_width -h $popup_height${includePosition ? " -x $popup_position" : ""} -s fg=terminal,bg=terminal -S fg=terminal,bg=terminal -E $attach_arg ; $finish"
       ;;
     close)
       action="$prefix ; display-popup -c $previous_client -C ; $finish"
