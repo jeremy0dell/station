@@ -15053,7 +15053,7 @@
       "declaration": "runPopupCommand",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Owns Observer startup, exact-selector UI admission, popup reconcile, and tmux popup opening.",
+      "purpose": "Owns Observer startup, exact-selector UI admission, and popup reconcile before invoking the selected terminal popup capability.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/stationUiBuildAdmission.ts",
@@ -15070,11 +15070,11 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "integrations/terminal/tmux/src/popup/index.ts",
-          "declaration": "openTmuxPopup",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
+          "path": "packages/contracts/src/terminalPopup.ts",
+          "declaration": "TerminalPopupLauncher",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
         },
         {
           "path": "packages/protocol/src/client.ts",
@@ -15388,7 +15388,7 @@
       "declaration": "runTuiCommand",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Owns one launcher-minted UI run identity per renderer child, Observer startup and exact-selector admission before renderer and reconcile effects, resolved-config propagation, exact child outcome evidence, renderer selection, popup control wiring, background read-only update planning, and post-cleanup normal-exit notices. Unfinished discovery is aborted without joining renderer shutdown.",
+      "purpose": "Owns one launcher-minted UI run identity per renderer child, Observer startup and exact-selector admission before renderer and reconcile effects, resolved-config propagation, exact child outcome evidence, renderer selection, provider-neutral popup control wiring, background read-only update planning, and post-cleanup normal-exit notices. Unfinished discovery is aborted without joining renderer shutdown.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/stationUiBuildAdmission.ts",
@@ -15419,6 +15419,20 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/cli/src/popupComposition.ts",
+          "declaration": "createPopupControl",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/terminalPopup.ts",
+          "declaration": "TerminalPopupControl",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
           "path": "packages/protocol/src/client.ts",
           "declaration": "createObserverClient",
           "kind": "function",
@@ -15432,8 +15446,16 @@
       "declaration": "attachTuiRendererControl",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates strict renderer IPC requests into CLI-owned popup capabilities.",
-      "dependencies": []
+      "purpose": "Translates strict renderer IPC requests into terminal popup capabilities.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/terminalPopup.ts",
+          "declaration": "TerminalPopupControl",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
     },
     {
       "path": "apps/cli/src/commands/update.ts",
@@ -16308,6 +16330,52 @@
           "path": "apps/cli/src/persistedStateReconcile.ts",
           "declaration": "PersistedStateReconcilePort",
           "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/popupComposition.ts",
+      "declaration": "createPopupControl",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Selects popup controls using the launcher provider when present, otherwise the configured provider. Provider provenance selects an adapter; the adapter must still prove ownership before effects.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/tmux/src/popup/control.ts",
+          "declaration": "createTmuxPopupControl",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/terminalPopup.ts",
+          "declaration": "TerminalPopupControl",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/popupComposition.ts",
+      "declaration": "createPopupLauncher",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Selects a terminal popup capability and binds the current CLI renderer command to it. Config-less first-run popup launches retain the tmux route without implying provider readiness.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/tmux/src/popup/index.ts",
+          "declaration": "createTmuxPopupLauncher",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/terminalPopup.ts",
+          "declaration": "TerminalPopupLauncher",
+          "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
         }
@@ -19478,6 +19546,22 @@
       ]
     },
     {
+      "path": "integrations/terminal/tmux/src/popup/control.ts",
+      "declaration": "createTmuxPopupControl",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves popup controls through tmux's current claim and preserves exact dismissal ownership.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/terminalPopup.ts",
+          "declaration": "TerminalPopupControl",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "integrations/terminal/tmux/src/popup/fastBinding.ts",
       "declaration": "buildManagedFastPopupRunShellCommand",
       "kind": "function",
@@ -19492,6 +19576,29 @@
       "role": "ADAPTER",
       "purpose": "Executes popup reuse checks from the current installed build before loading the CLI. CLI composition supplies the renderer command for this invocation. Inconclusive routes enter the same installation's full popup command.",
       "dependencies": []
+    },
+    {
+      "path": "integrations/terminal/tmux/src/popup/index.ts",
+      "declaration": "createTmuxPopupLauncher",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Binds a dashboard invocation to tmux configuration and development registration rules. Installed launches never adopt a checkout's registered development renderer by default.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/tmux/src/popup/index.ts",
+          "declaration": "openTmuxPopup",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/terminalPopup.ts",
+          "declaration": "TerminalPopupLauncher",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
     },
     {
       "path": "integrations/terminal/tmux/src/popup/index.ts",
@@ -19711,6 +19818,22 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Locates provider-owned files required to recover one exact native execution without exposing provider storage conventions to migration orchestration.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/contracts/src/terminalPopup.ts",
+      "declaration": "TerminalPopupControl",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Controls a popup without exposing terminal commands or persistent resource identities. Exact dismissal applies only to the freshly resolved target; uncertain ownership refuses effects.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/contracts/src/terminalPopup.ts",
+      "declaration": "TerminalPopupLauncher",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Opens or toggles the dashboard through a terminal integration. Composition binds the renderer launch inputs; the integration owns persistence, freshness, and replacement.",
       "dependencies": []
     },
     {

@@ -49,6 +49,12 @@ layout effects begin. Mock mode is Observer-free and does not perform this
 admission check. An Observer startup failure or renderer spawn failure exits
 nonzero, and a signaled renderer exit is never reported as success.
 
+CLI composition selects a terminal popup launcher and popup controls. The renderer
+uses the existing IPC channel for dismissal, shell opening, and current focus
+resolution; it does not interpret provider resources. The terminal integration
+owns persistence and exact dismissal. A missing shell capability reports that the
+operation is unavailable without attempting another implementation.
+
 Managed tmux popup bindings invoke the installed `stn-tmux-popup` executable on
 each toggle. That executable reuses a persistent dashboard only when its exact
 build and renderer command match. A stale dashboard is replaced only after tmux

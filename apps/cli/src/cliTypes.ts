@@ -27,6 +27,7 @@ export type CliRunResult = {
 
 export type CliRunOptions = {
   stdin?: string;
+  installedRoot?: string;
   env?: CliEnv;
   observerDeps?: ObserverProcessDeps;
   sessionDeps?: SessionCommandDeps;

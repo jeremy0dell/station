@@ -76,6 +76,15 @@ Changing `managed_root` affects future creates only. Existing linked worktrees
 remain at their registered paths; do not move or delete one that still owns a
 session.
 
+`stn popup` selects the configured terminal provider's popup capability. Only tmux
+currently supplies it; unsupported providers fail before Observer startup or popup
+creation. A config-less first-run popup retains the tmux route.
+
+Popup renderers use `STATION_FOCUS_PROVIDER` only when the incoming launcher sets
+`STATION_TUI_POPUP=1`; otherwise their controls use the configured provider. An
+unsupported or malformed launcher provider never falls back to tmux. Provider
+provenance selects an integration and does not prove ownership of a popup.
+
 ### `[terminal.tmux]` — tmux provider (optional)
 
 Dashboard and CLI session creation use explicit placement requests. See

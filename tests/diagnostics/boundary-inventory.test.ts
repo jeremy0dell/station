@@ -177,6 +177,21 @@ describe("boundary inventory guard", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps popup command and renderer orchestration independent of concrete popup providers", async () => {
+    const paths = [
+      "apps/cli/src/commands/popup.ts",
+      "apps/cli/src/commands/registry/popup.ts",
+      "apps/cli/src/commands/tui.ts",
+      "apps/cli/src/commands/tuiRendererControl.ts",
+    ];
+    for (const path of paths) {
+      const source = await readFile(join(process.cwd(), path), "utf8");
+      expect(source, path).not.toMatch(
+        /@station\/(?:tmux|zellij)|TmuxPopup|TmuxConfig|STATION_TMUX_BIN|@station_popup|@station_tui_dev|popupScope/,
+      );
+    }
+  });
+
   it("keeps Observer logging and project configuration representations at runtime adapters", async () => {
     const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src"))).filter(
       isProductionSourceFile,

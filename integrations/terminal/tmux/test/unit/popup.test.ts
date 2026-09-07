@@ -3,6 +3,7 @@ import type { ExternalCommandInput, ExternalCommandResult } from "@station/runti
 import { describe, expect, it } from "vitest";
 import {
   buildTmuxPopupArgs,
+  createTmuxPopupLauncher,
   dismissTmuxPopup,
   ensurePersistentPopupSession,
   openTmuxPopup,
@@ -10,6 +11,7 @@ import {
   resolveRegisteredDevPopupUi,
   resolveTmuxPopupFocusTarget,
 } from "../../src/popup";
+import { createTmuxPopupControl } from "../../src/popup/control.js";
 import { buildNormalPopupRoute, buildPopupActiveClaim } from "../../src/popup/fastProtocol";
 import { persistentPopupSignature } from "../../src/popup/persistentUi.js";
 import { tmuxCommandResult } from "../support/commands";
@@ -20,6 +22,88 @@ const registrationNonce = "11".repeat(16);
 const actionNonce = "22".repeat(16);
 
 describe("tmux popup", () => {
+  it.each([
+    { configured: "configured-tmux", environment: "env-tmux", expected: "configured-tmux" },
+    { configured: undefined, environment: "env-tmux", expected: "env-tmux" },
+    { configured: undefined, environment: undefined, expected: "tmux" },
+  ])("resolves control commands at the tmux boundary: $expected", async ({
+    configured,
+    environment,
+    expected,
+  }) => {
+    const calls: ExternalCommandInput[] = [];
+    const config = configured === undefined ? {} : { command: configured };
+    const env = environment === undefined ? {} : { STATION_TMUX_BIN: environment };
+    await createTmuxPopupControl({
+      config,
+      env,
+      runner: async (input) => {
+        calls.push(input);
+        return tmuxCommandResult(input);
+      },
+    }).dismissPopup();
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call.command === expected)).toBe(true);
+  });
+
+  it("binds installed popup ownership and refuses development registration by default", async () => {
+    const fake = createPopupTmux({ root: "/opt/station/bin" });
+    const popup = createTmuxPopupLauncher({
+      installedRoot: fake.root,
+      checkoutRoot: "/source-checkout",
+      env: { TMUX: "/tmp/tmux/default,1,0" },
+      runner: fake.runner,
+      buildRendererCommand: () => defaultCommand,
+    });
+    expect(fake.calls).toEqual([]);
+    await expect(popup.open()).resolves.toEqual({ opened: true });
+    expect(fake.globalOptions.get("@station_popup_ui_root")).toBe(fake.root);
+    expect(fake.calls.some((call) => call.args?.includes("@station_tui_dev_command"))).toBe(false);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("prefers registered checkout UI only without explicit development overrides: %j", async (explicit) => {
+    const fake = createPopupTmux({
+      devSession: "_station-ui-dev",
+      devCommand: defaultCommand,
+      devRoot: "/source",
+      devOwner: `${process.pid}:test`,
+    });
+    const env: Record<string, string> = { TMUX: "/tmp/tmux/default,1,0" };
+    if (explicit) {
+      env.STATION_TUI_COMMAND = "custom-ui";
+      env.STATION_TUI_SESSION_NAME = "custom-session";
+    }
+    let receivedOverride: string | undefined;
+    await createTmuxPopupLauncher({
+      checkoutRoot: "/source",
+      env,
+      runner: fake.runner,
+      buildRendererCommand: (override) => {
+        receivedOverride = override;
+        return defaultCommand;
+      },
+    }).open();
+    expect(receivedOverride).toBe(explicit ? "custom-ui" : undefined);
+    expect(fake.sessionSignatures.has(explicit ? "custom-session" : "_station-ui-dev")).toBe(true);
+    expect(fake.calls.some((call) => call.args?.includes("@station_tui_dev_command"))).toBe(
+      !explicit,
+    );
+  });
+
+  it("does not register a filesystem-root installation as popup ownership", async () => {
+    const fake = createPopupTmux();
+    await createTmuxPopupLauncher({
+      installedRoot: "/",
+      env: {},
+      runner: fake.runner,
+      buildRendererCommand: () => defaultCommand,
+    }).open();
+    expect(fake.globalOptions.has("@station_popup_ui_root")).toBe(false);
+  });
+
   it("builds persistent and transient popup commands", () => {
     expect(buildTmuxPopupArgs()).toEqual([
       "display-popup",

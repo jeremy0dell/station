@@ -38,10 +38,10 @@ async function handleTuiConfigError(error: unknown, context: CliCommandConfigErr
   ) {
     return undefined;
   }
-  return runTuiCliCommand({ ...context, config: emptyConfig() });
+  return runTuiCliCommand({ ...context, config: emptyConfig() }, true);
 }
 
-async function runTuiCliCommand(context: CliCommandRunContext) {
+async function runTuiCliCommand(context: CliCommandRunContext, firstRun = false) {
   const tuiDeps: TuiCommandDeps = {};
   if (context.options.tuiDeps !== undefined) Object.assign(tuiDeps, context.options.tuiDeps);
   if (context.options.observerDeps !== undefined) tuiDeps.observer = context.options.observerDeps;
@@ -56,6 +56,10 @@ async function runTuiCliCommand(context: CliCommandRunContext) {
   if (tuiDeps.writeUpdateNotice === undefined) {
     tuiDeps.writeUpdateNotice = (notice) => process.stdout.write(notice);
   }
-  const result = await runTuiCommand(context.args, loadedCommandOptions(context), tuiDeps);
+  const result = await runTuiCommand(
+    context.args,
+    { ...loadedCommandOptions(context), firstRun },
+    tuiDeps,
+  );
   return { code: result.code, output: result };
 }

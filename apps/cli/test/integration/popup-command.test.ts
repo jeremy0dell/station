@@ -1,14 +1,12 @@
-import { realpathSync } from "node:fs";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { runCli } from "@station/cli";
 import {
   type ObserverProcessDeps,
   runPopupCommand,
   shouldSuppressCliProcessOutput,
 } from "@station/cli/internal";
-import type { TmuxPopupOptions, TmuxPopupResult } from "@station/tmux";
+import type { TerminalPopupResult } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
@@ -22,16 +20,11 @@ const tuiObserverBuildMismatchError = {
   message: `Station UI caller selector "${observerBuildVersion}" does not match accepted Observer selector "${higherObserverBuildVersion}"; launch was refused before Station Host-producing work could mix builds.`,
   hint: `Use the matching Observer build "${higherObserverBuildVersion}" to account for live terminals. When hosted work is empty, stop the incumbent Observer and retry, or use isolated Observer state.`,
 } as const;
-const repoRoot = realpathSync(fileURLToPath(new URL("../../../../", import.meta.url))).replace(
-  /\/$/,
-  "",
-);
-const openedPopup = async (): Promise<TmuxPopupResult> => ({ opened: true });
-
+const openedPopup = async (): Promise<TerminalPopupResult> => ({ opened: true });
 describe("CLI popup command", () => {
   it("ensures the observer before opening a config-less first-run popup", async () => {
     const fixture = await createTempState();
-    const calls: TmuxPopupOptions[] = [];
+    const calls: string[] = [];
     const lifecycle: string[] = [];
     let running = false;
     const observerDeps: ObserverProcessDeps = {
@@ -57,31 +50,28 @@ describe("CLI popup command", () => {
         }) as never,
       sleep: async () => undefined,
     };
-
     const result = await withIsolatedHome(fixture.root, () =>
       runCli([], {
         observerDeps,
         popupDeps: {
           env: { TMUX: "/tmp/tmux-501/default,123,0" },
-          openTmuxPopup: async (options) => {
-            lifecycle.push("popup-open");
-            calls.push(options);
-            return { opened: true };
+          popup: {
+            open: async () => {
+              lifecycle.push("popup-open");
+              calls.push("opened");
+              return { opened: true };
+            },
           },
         },
       }),
     );
-
     expect(result).toEqual({ code: 0, output: { opened: true } });
     expect(lifecycle).toEqual(["observer-spawn", "popup-open"]);
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.tuiCommand).toContain("tui --popup --persistent");
-    expect(calls[0]?.tuiCommand).not.toContain("--config");
     await expect(access(join(fixture.root, ".config/station/config.toml"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   });
-
   it("reports slow observer startup before opening the popup", async () => {
     const fixture = await createTempState();
     fixture.config.defaults.terminal = "tmux";
@@ -94,16 +84,14 @@ describe("CLI popup command", () => {
     const healthReady = new Promise<void>((resolve) => {
       releaseHealth = () => resolve();
     });
-    const openTmuxPopup = vi.fn(openedPopup);
+    const openPopup = vi.fn(openedPopup);
     const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     vi.useFakeTimers();
-
     try {
       const resultPromise = runPopupCommand(
         [],
         {
           config: fixture.config,
-          env: { TMUX: "/tmp/tmux-501/default,123,0" },
         },
         {
           observer: {
@@ -129,35 +117,27 @@ describe("CLI popup command", () => {
                 reconcile: async () => emptySnapshot("popup-open"),
               }) as never,
           },
-          openTmuxPopup,
+          popup: { open: openPopup },
         },
       );
-
       await observerSpawned;
-      await vi.advanceTimersByTimeAsync(1_499);
+      await vi.advanceTimersByTimeAsync(1499);
       expect(stderrWrite).not.toHaveBeenCalled();
-      expect(openTmuxPopup).not.toHaveBeenCalled();
-
+      expect(openPopup).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(1);
       expect(stderrWrite).toHaveBeenNthCalledWith(1, "Starting STATION observer…\n");
-
-      await vi.advanceTimersByTimeAsync(3_499);
+      await vi.advanceTimersByTimeAsync(3499);
       expect(stderrWrite).toHaveBeenCalledTimes(1);
-      expect(openTmuxPopup).not.toHaveBeenCalled();
-
+      expect(openPopup).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(1);
       expect(stderrWrite).toHaveBeenNthCalledWith(
         2,
-        `Still waiting for STATION observer; boot log: ${join(
-          fixture.stateDir,
-          "logs/observer-boot.log",
-        )}\n`,
+        `Still waiting for STATION observer; boot log: ${join(fixture.stateDir, "logs/observer-boot.log")}\n`,
       );
-      expect(openTmuxPopup).not.toHaveBeenCalled();
-
+      expect(openPopup).not.toHaveBeenCalled();
       releaseHealth();
       await expect(resultPromise).resolves.toEqual({ opened: true });
-      expect(openTmuxPopup).toHaveBeenCalledOnce();
+      expect(openPopup).toHaveBeenCalledOnce();
     } finally {
       releaseHealth();
       vi.clearAllTimers();
@@ -165,20 +145,17 @@ describe("CLI popup command", () => {
       stderrWrite.mockRestore();
     }
   });
-
   it("keeps warm observer attachment silent", async () => {
     const fixture = await createTempState();
     fixture.config.defaults.terminal = "tmux";
-    const openTmuxPopup = vi.fn(openedPopup);
+    const openPopup = vi.fn(openedPopup);
     const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-
     try {
       await expect(
         runPopupCommand(
           [],
           {
             config: fixture.config,
-            env: { TMUX: "/tmp/tmux-501/default,123,0" },
           },
           {
             observer: {
@@ -198,17 +175,16 @@ describe("CLI popup command", () => {
                   reconcile: async () => emptySnapshot("popup-open"),
                 }) as never,
             },
-            openTmuxPopup,
+            popup: { open: openPopup },
           },
         ),
       ).resolves.toEqual({ opened: true });
       expect(stderrWrite).not.toHaveBeenCalled();
-      expect(openTmuxPopup).toHaveBeenCalledOnce();
+      expect(openPopup).toHaveBeenCalledOnce();
     } finally {
       stderrWrite.mockRestore();
     }
   });
-
   it("refuses a lower-build popup before reconcile or configured, warm, and registered routing", async () => {
     const fixture = await createTempState();
     fixture.config.defaults.terminal = "tmux";
@@ -227,21 +203,12 @@ describe("CLI popup command", () => {
           reconcile,
         }) as never,
     );
-    const openTmuxPopup = vi.fn(openedPopup);
-
+    const openPopup = vi.fn(openedPopup);
     await expect(
       runPopupCommand(
         [],
         {
           config: fixture.config,
-          env: {
-            TMUX: "/tmp/tmux-501/default,123,0",
-            STATION_TUI_COMMAND: "custom-station-ui",
-          },
-          preferRegisteredDevPopup: true,
-          registeredDevPopupRoot: "/warm/station",
-          tuiCommand: "nested-station-dashboard",
-          uiSessionName: "_station-ui-warm",
         },
         {
           observer: {
@@ -249,21 +216,18 @@ describe("CLI popup command", () => {
             clientFactory,
             spawnObserver,
           },
-          openTmuxPopup,
+          popup: { open: openPopup },
         },
       ),
     ).rejects.toEqual(tuiObserverBuildMismatchError);
-
     expect(clientFactory).toHaveBeenCalledOnce();
     expect(spawnObserver).not.toHaveBeenCalled();
     expect(reconcile).not.toHaveBeenCalled();
-    expect(openTmuxPopup).not.toHaveBeenCalled();
+    expect(openPopup).not.toHaveBeenCalled();
   });
-
   it("keeps an explicitly missing popup config as a hard error", async () => {
     const fixture = await createTempState();
     const configPath = join(fixture.root, "missing.toml");
-
     await expect(
       runCli(["--config", configPath, "popup"], {
         observerDeps: {
@@ -273,18 +237,18 @@ describe("CLI popup command", () => {
         },
         popupDeps: {
           env: { TMUX: "/tmp/tmux-501/default,123,0" },
-          openTmuxPopup: async () => {
-            throw new Error("popup should not open for an explicit missing config");
+          popup: {
+            open: async () => {
+              throw new Error("popup should not open for an explicit missing config");
+            },
           },
         },
       }),
     ).rejects.toMatchObject({ code: "CONFIG_FILE_NOT_FOUND", configPath });
   });
-
   it("does not open a first-run popup when the observer exits during startup", async () => {
     const fixture = await createTempState();
-    const openTmuxPopup = vi.fn(openedPopup);
-
+    const openPopup = vi.fn(openedPopup);
     const result = await withIsolatedHome(fixture.root, () =>
       runCli([], {
         observerDeps: {
@@ -302,11 +266,10 @@ describe("CLI popup command", () => {
         },
         popupDeps: {
           env: { TMUX: "/tmp/tmux-501/default,123,0" },
-          openTmuxPopup,
+          popup: { open: openPopup },
         },
       }),
     );
-
     expect(result).toMatchObject({
       code: 1,
       output: {
@@ -317,356 +280,89 @@ describe("CLI popup command", () => {
         },
       },
     });
-    expect(openTmuxPopup).not.toHaveBeenCalled();
+    expect(openPopup).not.toHaveBeenCalled();
   });
-
   it("keeps a malformed implicit popup config as a hard error", async () => {
     const fixture = await createTempState();
     const configPath = join(fixture.root, ".config/station/config.toml");
     await mkdir(join(fixture.root, ".config/station"), { recursive: true });
     await writeFile(configPath, "not = [valid toml", "utf8");
-
     await expect(
       withIsolatedHome(fixture.root, () =>
         runCli([], {
           popupDeps: {
             env: { TMUX: "/tmp/tmux-501/default,123,0" },
-            openTmuxPopup: async () => {
-              throw new Error("popup should not open for malformed config");
+            popup: {
+              open: async () => {
+                throw new Error("popup should not open for malformed config");
+              },
             },
           },
         }),
       ),
     ).rejects.toMatchObject({ code: "CONFIG_TOML_PARSE_FAILED", configPath });
   });
-
-  it("delegates popup opening to the tmux integration", async () => {
-    const fixture = await createTempState();
-    fixture.config.defaults.terminal = "tmux";
-    fixture.config.terminal = {
-      tmux: {
-        popupWidth: "90%",
-        popupHeight: "80%",
-        popupPosition: "C",
-        popupScope: "client",
-        popupStatusBar: true,
-      },
-    };
-    const calls: TmuxPopupOptions[] = [];
-    const reconciles: string[] = [];
-
-    await expect(
-      runPopupCommand(
-        [],
-        {
-          config: fixture.config,
-          env: {
-            TMUX: "/tmp/tmux-501/default,123,0",
-            STATION_PANE: "1",
-          },
-          tuiCommand: "node stn tui --popup --persistent",
-        },
-        {
-          observer: runningObserverDeps(reconciles),
-          openTmuxPopup: async (options) => {
-            calls.push(options);
-            return { opened: true };
-          },
-        },
-      ),
-    ).resolves.toEqual({ opened: true });
-
-    expect(reconciles).toEqual(["popup-open"]);
-    expect(calls).toEqual([
-      {
-        config: {
-          popupWidth: "90%",
-          popupHeight: "80%",
-          popupPosition: "C",
-          popupScope: "client",
-          popupStatusBar: true,
-        },
-        env: {
-          TMUX: "/tmp/tmux-501/default,123,0",
-          STATION_PANE: "1",
-        },
-        tuiCommand: "node stn tui --popup --persistent",
-      },
-    ]);
-  });
-
   it("does not block popup opening on observer reconcile", async () => {
     const fixture = await createTempState();
     fixture.config.defaults.terminal = "tmux";
-    const calls: TmuxPopupOptions[] = [];
+    const calls: string[] = [];
     const reconciles: string[] = [];
-
     const result = await expectWithin(
       runPopupCommand(
         [],
         {
           config: fixture.config,
-          env: {
-            TMUX: "/tmp/tmux-501/default,123,0",
-          },
         },
         {
           observer: nonCompletingReconcileObserverDeps(reconciles),
-          openTmuxPopup: async (options) => {
-            calls.push(options);
-            return { opened: true };
+          popup: {
+            open: async () => {
+              calls.push("opened");
+              return { opened: true };
+            },
           },
         },
       ),
       100,
     );
-
     expect(result).toEqual({ opened: true });
     expect(reconciles).toEqual(["popup-open"]);
     expect(calls).toHaveLength(1);
   });
-
-  it("routes runCli popup through global --config parsing", async () => {
+  it("opens through a non-tmux capability using the public command", async () => {
     const fixture = await createTempState();
-    fixture.config.defaults.terminal = "tmux";
+    fixture.config.defaults.terminal = "fixture-terminal";
     const configPath = await writeConfigToml(fixture.root, fixture.config);
-    const calls: TmuxPopupOptions[] = [];
-    const reconciles: string[] = [];
-
-    await expect(
-      runCli(["--config", configPath, "popup"], {
-        observerDeps: runningObserverDeps(reconciles),
-        popupDeps: {
-          env: {
-            TMUX: "/tmp/tmux-501/default,123,0",
-            STATION_PANE: "1",
-          },
-          openTmuxPopup: async (options) => {
-            calls.push(options);
-            return { opened: true };
-          },
-        },
-      }),
-    ).resolves.toEqual({
-      code: 0,
-      output: { opened: true },
-    });
-
-    expect(reconciles).toEqual(["popup-open"]);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({
-      checkoutRoot: repoRoot,
-      env: {
-        TMUX: "/tmp/tmux-501/default,123,0",
-        STATION_PANE: "1",
-      },
-      preferRegisteredDevPopup: true,
-    });
-    expect(calls[0]?.tuiCommand).toBe(
-      [
-        shellQuote(process.execPath),
-        shellQuote(fileURLToPath(new URL("../../src/main.ts", import.meta.url))),
-        "--config",
-        shellQuote(configPath),
-        "tui",
-        "--popup",
-        "--persistent",
-      ].join(" "),
-    );
-  });
-
-  it("prefers an injected installed popup owner over the source checkout", async () => {
-    const fixture = await createTempState();
-    fixture.config.defaults.terminal = "tmux";
-    const configPath = await writeConfigToml(fixture.root, fixture.config);
-    const calls: TmuxPopupOptions[] = [];
-
+    const openPopup = vi.fn(openedPopup);
     await expect(
       runCli(["--config", configPath, "popup"], {
         observerDeps: runningObserverDeps([]),
-        popupDeps: {
-          checkoutRoot: "/opt/station/current",
-          env: {
-            TMUX: "/tmp/tmux-501/default,123,0",
-          },
-          openTmuxPopup: async (options) => {
-            calls.push(options);
-            return { opened: true };
-          },
-          preferRegisteredDevPopup: false,
-        },
+        popupDeps: { popup: { open: openPopup } },
       }),
-    ).resolves.toEqual({
-      code: 0,
-      output: { opened: true },
-    });
-
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.checkoutRoot).toBe("/opt/station/current");
-    expect(calls[0]?.preferRegisteredDevPopup).toBe(false);
+    ).resolves.toEqual({ code: 0, output: { opened: true } });
+    expect(openPopup).toHaveBeenCalledOnce();
   });
-
-  it("omits an unsafe filesystem-root popup owner", async () => {
+  it("rejects unsupported providers before Observer startup", async () => {
     const fixture = await createTempState();
-    fixture.config.defaults.terminal = "tmux";
+    fixture.config.defaults.terminal = "fixture-terminal";
     const configPath = await writeConfigToml(fixture.root, fixture.config);
-    const calls: TmuxPopupOptions[] = [];
-
+    const spawnObserver = vi.fn();
     await expect(
       runCli(["--config", configPath, "popup"], {
-        observerDeps: runningObserverDeps([]),
-        popupDeps: {
-          checkoutRoot: "/",
-          env: {
-            TMUX: "/tmp/tmux-501/default,123,0",
-          },
-          openTmuxPopup: async (options) => {
-            calls.push(options);
-            return { opened: true };
-          },
-        },
+        observerDeps: { spawnObserver },
       }),
-    ).resolves.toEqual({
-      code: 0,
-      output: { opened: true },
-    });
-
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).not.toHaveProperty("checkoutRoot");
+    ).rejects.toMatchObject({ code: "TERMINAL_POPUP_UNSUPPORTED", provider: "fixture-terminal" });
+    expect(spawnObserver).not.toHaveBeenCalled();
   });
-
-  it("defaults bare station to the popup command when invoked from tmux", async () => {
-    const fixture = await createTempState();
-    fixture.config.defaults.terminal = "tmux";
-    const configPath = await writeConfigToml(fixture.root, fixture.config);
-    const calls: TmuxPopupOptions[] = [];
-    const reconciles: string[] = [];
-
-    await expect(
-      runCli(["--config", configPath], {
-        observerDeps: runningObserverDeps(reconciles),
-        popupDeps: {
-          env: {
-            TMUX: "/tmp/tmux-501/default,123,0",
-            STATION_PANE: "1",
-          },
-          openTmuxPopup: async (options) => {
-            calls.push(options);
-            return { opened: true };
-          },
-        },
-      }),
-    ).resolves.toEqual({
-      code: 0,
-      output: { opened: true },
+  it("preserves the selected capability's error without another launch", async () => {
+    const openPopup = vi.fn(async () => {
+      throw new Error("fixture unavailable");
     });
-
-    expect(reconciles).toEqual(["popup-open"]);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.checkoutRoot).toBe(repoRoot);
-    expect(calls[0]?.preferRegisteredDevPopup).toBe(true);
-  });
-
-  it("uses the configured TUI command and UI session name for dev popup placement", async () => {
-    const fixture = await createTempState();
-    fixture.config.defaults.terminal = "tmux";
-    const configPath = await writeConfigToml(fixture.root, fixture.config);
-    const calls: TmuxPopupOptions[] = [];
-    const reconciles: string[] = [];
-
-    await expect(
-      runCli(["--config", configPath], {
-        observerDeps: runningObserverDeps(reconciles),
-        popupDeps: {
-          env: {
-            TMUX: "/tmp/tmux-501/default,123,0",
-            STATION_TUI_COMMAND: "node --watch --watch-preserve-output apps/cli/dist/main.js",
-            STATION_TUI_SESSION_NAME: "_station-ui-dev",
-          },
-          openTmuxPopup: async (options) => {
-            calls.push(options);
-            return { opened: true };
-          },
-        },
-      }),
-    ).resolves.toEqual({
-      code: 0,
-      output: { opened: true },
-    });
-
-    expect(reconciles).toEqual(["popup-open"]);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.tuiCommand).toBe(
-      [
-        "node --watch --watch-preserve-output apps/cli/dist/main.js",
-        "--config",
-        shellQuote(configPath),
-        "tui",
-        "--popup",
-        "--persistent",
-      ].join(" "),
+    await expect(runPopupCommand([], {}, { popup: { open: openPopup } })).rejects.toThrow(
+      "fixture unavailable",
     );
-    expect(calls[0]?.preferRegisteredDevPopup).toBe(false);
-    expect(calls[0]?.checkoutRoot).toBe(repoRoot);
-    expect(calls[0]?.uiSessionName).toBe("_station-ui-dev");
+    expect(openPopup).toHaveBeenCalledOnce();
   });
-
-  it("reads the dev TUI command from the real process environment", async () => {
-    const fixture = await createTempState();
-    fixture.config.defaults.terminal = "tmux";
-    const configPath = await writeConfigToml(fixture.root, fixture.config);
-    const calls: TmuxPopupOptions[] = [];
-    const reconciles: string[] = [];
-    const previousCommand = process.env.STATION_TUI_COMMAND;
-    const previousSessionName = process.env.STATION_TUI_SESSION_NAME;
-    process.env.STATION_TUI_COMMAND = "node --watch apps/cli/dist/main.js";
-    process.env.STATION_TUI_SESSION_NAME = "_station-ui-dev";
-    try {
-      await expect(
-        runCli(["--config", configPath, "popup"], {
-          observerDeps: runningObserverDeps(reconciles),
-          popupDeps: {
-            openTmuxPopup: async (options) => {
-              calls.push(options);
-              return { opened: true };
-            },
-          },
-        }),
-      ).resolves.toEqual({
-        code: 0,
-        output: { opened: true },
-      });
-    } finally {
-      if (previousCommand === undefined) {
-        delete process.env.STATION_TUI_COMMAND;
-      } else {
-        process.env.STATION_TUI_COMMAND = previousCommand;
-      }
-      if (previousSessionName === undefined) {
-        delete process.env.STATION_TUI_SESSION_NAME;
-      } else {
-        process.env.STATION_TUI_SESSION_NAME = previousSessionName;
-      }
-    }
-
-    expect(reconciles).toEqual(["popup-open"]);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.tuiCommand).toContain("node --watch apps/cli/dist/main.js");
-    expect(calls[0]?.tuiCommand).toContain("tui --popup --persistent");
-    expect(calls[0]?.preferRegisteredDevPopup).toBe(false);
-    expect(calls[0]?.checkoutRoot).toBe(repoRoot);
-    expect(calls[0]?.uiSessionName).toBe("_station-ui-dev");
-  });
-
-  it("rejects popup when the configured terminal provider is not tmux", async () => {
-    const fixture = await createTempState();
-    fixture.config.defaults.terminal = "ghostty";
-
-    await expect(runPopupCommand([], { config: fixture.config })).rejects.toThrow(
-      "Popup is only implemented for tmux, not ghostty.",
-    );
-  });
-
   it("suppresses explicit popup command JSON in the interactive CLI process", () => {
     expect(shouldSuppressCliProcessOutput(["popup"])).toBe(true);
     expect(shouldSuppressCliProcessOutput(["popup", "--config", "/tmp/config.toml"])).toBe(true);
@@ -675,11 +371,6 @@ describe("CLI popup command", () => {
     expect(shouldSuppressCliProcessOutput(["doctor"])).toBe(false);
   });
 });
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
 async function expectWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -695,7 +386,6 @@ async function expectWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<
     }
   }
 }
-
 function runningObserverDeps(reconciles: string[]): ObserverProcessDeps {
   return {
     buildVersion: observerBuildVersion,
@@ -716,7 +406,6 @@ function runningObserverDeps(reconciles: string[]): ObserverProcessDeps {
     sleep: async () => undefined,
   };
 }
-
 function emptySnapshot(reason: string) {
   return {
     schemaVersion: "0.13.0",
@@ -745,7 +434,6 @@ function emptySnapshot(reason: string) {
     },
   };
 }
-
 async function withIsolatedHome<T>(home: string, run: () => Promise<T>): Promise<T> {
   const previousHome = process.env.HOME;
   const previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
@@ -760,7 +448,6 @@ async function withIsolatedHome<T>(home: string, run: () => Promise<T>): Promise
     else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
   }
 }
-
 function nonCompletingReconcileObserverDeps(reconciles: string[]): ObserverProcessDeps {
   return {
     buildVersion: observerBuildVersion,

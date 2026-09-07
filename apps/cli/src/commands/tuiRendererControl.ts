@@ -1,24 +1,12 @@
 import type { ChildProcess } from "node:child_process";
 import {
   type SafeError,
-  type TerminalFocusOrigin,
+  type TerminalPopupControl,
   TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
   TuiRendererControlRequestSchema,
   type TuiRendererControlResponse,
 } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
-
-export type TuiRendererControlAdapters = {
-  dismissPopup: () => Promise<{ dismissed: boolean }>;
-  /** Opens the shell and completes any exact popup dismissal owned by the adapter. */
-  openShell?: (cwd: string) => Promise<{ opened: boolean }>;
-  resolveFocusTarget: () => Promise<TuiRendererFocusTarget | undefined>;
-};
-
-export type TuiRendererFocusTarget = {
-  origin: TerminalFocusOrigin;
-  dismissExact: () => Promise<{ dismissed: boolean }>;
-};
 
 export type TuiRendererControlAttachment = {
   dispose: () => void;
@@ -27,13 +15,13 @@ export type TuiRendererControlAttachment = {
 /**
  * ADAPTER
  *
- * Translates strict renderer IPC requests into CLI-owned popup capabilities.
+ * Translates strict renderer IPC requests into terminal popup capabilities.
  *
  * Malformed or duplicate in-flight IDs close the channel; same-cwd shell effects coalesce.
  */
 export function attachTuiRendererControl(
   child: ChildProcess,
-  adapters: TuiRendererControlAdapters,
+  adapters: TerminalPopupControl,
 ): TuiRendererControlAttachment {
   let closed = false;
   const pendingRequestIds = new Set<string>();
