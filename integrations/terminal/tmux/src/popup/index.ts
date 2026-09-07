@@ -1,4 +1,6 @@
+import { normalize, parse } from "node:path";
 import type { TmuxConfig } from "@station/config";
+import type { TerminalPopupLauncher, TerminalPopupResult } from "@station/contracts";
 import type { TmuxCommandInput } from "../command.js";
 import { tmuxProviderErrorFromUnknown } from "../errors.js";
 import { resolveTmuxWorkbenchConfig } from "../topology.js";
@@ -52,7 +54,6 @@ import type {
   TmuxPopupFocusOriginOptions,
   TmuxPopupFocusTarget,
   TmuxPopupOptions,
-  TmuxPopupResult,
   TmuxPopupState,
 } from "./types.js";
 
@@ -65,7 +66,6 @@ export type {
   TmuxPopupDismissResult,
   TmuxPopupFocusTarget,
   TmuxPopupOptions,
-  TmuxPopupResult,
 } from "./types.js";
 
 type PopupArgsInput = {
@@ -479,7 +479,7 @@ function popupDisplayInput(
  *
  * Coordinates the configured ownership scope and persistent renderer through tmux.
  */
-export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<TmuxPopupResult> {
+export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<TerminalPopupResult> {
   const context = await resolveOpenPopupContext(options);
   const prepared = await preparePersistentPopup(options, context);
   const acquisition = await acquirePopupOwnership(popupOwnershipInput(options, context, prepared));
@@ -565,4 +565,35 @@ export async function dismissTmuxPopup(
   options: TmuxPopupDismissOptions = {},
 ): Promise<TmuxPopupDismissResult> {
   return dismissTmuxPopupWithExpectedClaim(options);
+}
+
+/**
+ * ADAPTER
+ *
+ * Binds a dashboard invocation to tmux configuration and development registration rules.
+ * Installed launches never adopt a checkout's registered development renderer by default.
+ */
+export function createTmuxPopupLauncher(
+  options: TmuxPopupOptions & {
+    installedRoot?: string;
+    buildRendererCommand: (commandOverride: string | undefined, persistent: boolean) => string;
+  },
+): TerminalPopupLauncher {
+  const { installedRoot, buildRendererCommand, ...popup } = options;
+  const env = popup.env ?? process.env;
+  const override = env.STATION_TUI_COMMAND || undefined;
+  const sessionName = popup.uiSessionName ?? (env.STATION_TUI_SESSION_NAME || undefined);
+  const explicitUi =
+    popup.tuiCommand !== undefined || override !== undefined || sessionName !== undefined;
+  popup.tuiCommand ??= buildRendererCommand(override, popup.persistent !== false);
+  popup.preferRegisteredDevPopup ??=
+    installedRoot === undefined && !explicitUi && Boolean(env.TMUX);
+  if (sessionName !== undefined) popup.uiSessionName = sessionName;
+  const root = installedRoot ?? popup.checkoutRoot;
+  if (root !== undefined) {
+    const normalizedRoot = normalize(root);
+    if (normalizedRoot === parse(normalizedRoot).root) delete popup.checkoutRoot;
+    else popup.checkoutRoot = root;
+  }
+  return { open: () => openTmuxPopup(popup) };
 }

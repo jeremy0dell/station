@@ -41,6 +41,7 @@ export * from "./stationBuildIdentity.js";
 export * from "./stationHostConvergence.js";
 export * from "./stationHostInspection.js";
 export * from "./terminalPlacement.js";
+export * from "./terminalPopup.js";
 export * from "./terminalTargets.js";
 export * from "./tuiConfig.js";
 export * from "./tuiRendererControl.js";

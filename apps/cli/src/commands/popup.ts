@@ -1,8 +1,12 @@
 import type { StationConfig } from "@station/config";
-import { POPUP_OPEN_RECONCILE_REASON } from "@station/contracts";
+import {
+  POPUP_OPEN_RECONCILE_REASON,
+  type TerminalPopupLauncher,
+  type TerminalPopupResult,
+} from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import { stationObserverBuildVersion } from "@station/runtime";
-import { openTmuxPopup, type TmuxPopupOptions, type TmuxPopupResult } from "@station/tmux";
+import type { CliEnv } from "../env.js";
 import {
   type ObserverProcessDeps,
   type ObserverStatus,
@@ -11,35 +15,17 @@ import {
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
 import { requireMatchingStationUiObserverBuild } from "./stationUiBuildAdmission.js";
 
-export type PopupCommandDeps = Partial<
-  Pick<
-    TmuxPopupOptions,
-    | "checkoutRoot"
-    | "env"
-    | "preferRegisteredDevPopup"
-    | "registeredDevPopupRoot"
-    | "runner"
-    | "tuiCommand"
-    | "uiSessionName"
-  >
-> & {
+export type PopupCommandDeps = {
   observer?: ObserverProcessDeps;
-  openTmuxPopup?: (options: TmuxPopupOptions) => Promise<TmuxPopupResult>;
+  env?: CliEnv;
+  popup?: TerminalPopupLauncher;
 };
 
 export type PopupCommandOptions = {
   config?: StationConfig;
   configPath?: string;
-  firstRun?: boolean;
-  checkoutRoot?: TmuxPopupOptions["checkoutRoot"];
   timeoutMs?: number;
-  runner?: TmuxPopupOptions["runner"];
-  env?: TmuxPopupOptions["env"];
   observer?: ObserverProcessDeps;
-  preferRegisteredDevPopup?: TmuxPopupOptions["preferRegisteredDevPopup"];
-  registeredDevPopupRoot?: TmuxPopupOptions["registeredDevPopupRoot"];
-  tuiCommand?: TmuxPopupOptions["tuiCommand"];
-  uiSessionName?: TmuxPopupOptions["uiSessionName"];
 };
 
 export type PopupCommandUnavailableResult = {
@@ -52,54 +38,23 @@ export type PopupCommandUnavailableResult = {
 /**
  * COMPOSITION ROOT
  *
- * Owns Observer startup, exact-selector UI admission, popup reconcile, and tmux
- * popup opening.
+ * Owns Observer startup, exact-selector UI admission, and popup reconcile before
+ * invoking the selected terminal popup capability.
  */
 export async function runPopupCommand(
   args: string[],
-  options: PopupCommandOptions = {},
-  deps: PopupCommandDeps = {},
-): Promise<TmuxPopupResult | PopupCommandUnavailableResult> {
+  options: PopupCommandOptions,
+  deps: PopupCommandDeps & { popup: TerminalPopupLauncher },
+): Promise<TerminalPopupResult | PopupCommandUnavailableResult> {
   if (args.length > 0) {
     throw new Error(`Unknown popup option: ${args[0] ?? ""}`);
   }
 
-  const hasFirstRunConfig = options.firstRun === true && options.config?.projects.length === 0;
-  // A config-less launch has no project terminal to validate; the popup route itself selects tmux.
-  if (
-    !hasFirstRunConfig &&
-    options.config?.defaults.terminal !== undefined &&
-    options.config.defaults.terminal !== "tmux"
-  ) {
-    throw new Error(`Popup is only implemented for tmux, not ${options.config.defaults.terminal}.`);
-  }
-
-  const runner = options.runner ?? deps.runner;
-  const checkoutRoot = options.checkoutRoot ?? deps.checkoutRoot;
-  const env = options.env ?? deps.env;
-  const preferRegisteredDevPopup =
-    options.preferRegisteredDevPopup ?? deps.preferRegisteredDevPopup;
-  const registeredDevPopupRoot = options.registeredDevPopupRoot ?? deps.registeredDevPopupRoot;
-  const tuiCommand = options.tuiCommand ?? deps.tuiCommand;
-  const uiSessionName = options.uiSessionName ?? deps.uiSessionName;
   const observer = await prepareObserverForPopup(options, options.observer ?? deps.observer);
   if (observer !== undefined) {
     return observer;
   }
-  const openPopup = deps.openTmuxPopup ?? openTmuxPopup;
-  return openPopup({
-    ...(options.config?.terminal?.tmux === undefined
-      ? {}
-      : { config: options.config.terminal.tmux }),
-    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-    ...(checkoutRoot === undefined ? {} : { checkoutRoot }),
-    ...(env === undefined ? {} : { env }),
-    ...(preferRegisteredDevPopup === undefined ? {} : { preferRegisteredDevPopup }),
-    ...(registeredDevPopupRoot === undefined ? {} : { registeredDevPopupRoot }),
-    ...(runner === undefined ? {} : { runner }),
-    ...(tuiCommand === undefined ? {} : { tuiCommand }),
-    ...(uiSessionName === undefined ? {} : { uiSessionName }),
-  });
+  return deps.popup.open();
 }
 
 async function prepareObserverForPopup(

@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { runCli } from "@station/cli";
 import {
   type ObserverProcessDeps,
-  resolvePopupTmuxCommand,
   runCliMain,
   runTuiCommand,
   type TuiCommandDeps,
@@ -15,6 +14,14 @@ import { readJsonlLog } from "@station/observability";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { resolveStationWorkspaceDir } from "../../src/stationWorkspace.js";
+
+const fixturePopupControl: NonNullable<TuiCommandDeps["popupControl"]> = {
+  dismissPopup: async () => ({ dismissed: true }),
+  resolveFocusTarget: async () => ({
+    origin: { provider: "fixture-terminal", clientId: "fixture-client" },
+    dismissExact: async () => ({ dismissed: true }),
+  }),
+};
 
 const now = "2026-05-20T12:00:00.000Z";
 const buildIdentity = "a".repeat(64);
@@ -183,13 +190,6 @@ describe("CLI tui command", () => {
     else process.env.STATION_PANE = inheritedStationPane;
   });
 
-  it("prefers the configured popup command over the environment and default", () => {
-    expect(resolvePopupTmuxCommand("config-tmux", { STATION_TMUX_BIN: "env-tmux" })).toBe(
-      "config-tmux",
-    );
-    expect(resolvePopupTmuxCommand(undefined, { STATION_TMUX_BIN: "env-tmux" })).toBe("env-tmux");
-    expect(resolvePopupTmuxCommand(undefined, {})).toBe("tmux");
-  });
   it("launches the native first-run TUI without writing an implicit config", async () => {
     const fixture = await createTempState();
     const envs: Array<Record<string, string>> = [];
@@ -200,6 +200,7 @@ describe("CLI tui command", () => {
         env: {},
         observerDeps: runningObserverDeps({ spawns }),
         tuiDeps: {
+          popupControl: fixturePopupControl,
           spawnRenderer: async ({ env }) => {
             envs.push(env);
             return { status: "exited", code: 0 };
@@ -246,6 +247,7 @@ describe("CLI tui command", () => {
       [],
       { config: fixture.config },
       {
+        popupControl: fixturePopupControl,
         observer: observerDeps,
         buildVersion: readBuildVersion,
         spawnRenderer: async ({ env }) => {
@@ -276,6 +278,7 @@ describe("CLI tui command", () => {
       },
     };
     const tuiDeps = {
+      popupControl: fixturePopupControl,
       spawnRenderer: async () => {
         throw new Error("renderer should not start for config errors");
       },
@@ -303,6 +306,7 @@ describe("CLI tui command", () => {
     const result = await runCli(["--config", configPath, "tui"], {
       observerDeps: runningObserverDeps({ reconciles }),
       tuiDeps: {
+        popupControl: fixturePopupControl,
         spawnRenderer: async ({ env }) => {
           envs.push(env);
           return { status: "exited", code: 0 };
@@ -352,6 +356,7 @@ describe("CLI tui command", () => {
       [],
       { config: fixture.config },
       {
+        popupControl: fixturePopupControl,
         observer: runningObserverDeps(),
         spawnRenderer: async () => {
           events.push("renderer-started");
@@ -431,6 +436,7 @@ describe("CLI tui command", () => {
         [],
         { config: fixture.config },
         {
+          popupControl: fixturePopupControl,
           observer: runningObserverDeps(),
           spawnRenderer: async () => {
             await new Promise<void>((resolve) => setImmediate(resolve));
@@ -469,6 +475,7 @@ describe("CLI tui command", () => {
         [],
         { config: fixture.config },
         {
+          popupControl: fixturePopupControl,
           observer: runningObserverDeps(),
           spawnRenderer: async () => {
             await started;
@@ -497,6 +504,7 @@ describe("CLI tui command", () => {
         ["--popup"],
         { config: fixture.config },
         {
+          popupControl: fixturePopupControl,
           observer: runningObserverDeps(),
           spawnRenderer,
           updateProbes,
@@ -508,7 +516,12 @@ describe("CLI tui command", () => {
       runTuiCommand(
         ["--dev-fake-dashboard"],
         { config: fixture.config },
-        { spawnRenderer, updateProbes, writeUpdateNotice },
+        {
+          popupControl: fixturePopupControl,
+          spawnRenderer,
+          updateProbes,
+          writeUpdateNotice,
+        },
       ),
     ).resolves.toEqual({ status: "exited", code: 0 });
 
@@ -540,6 +553,7 @@ describe("CLI tui command", () => {
         [],
         { config: fixture.config },
         {
+          popupControl: fixturePopupControl,
           observer: runningObserverDeps(),
           spawnRenderer: async () => {
             await new Promise<void>((resolve) => setImmediate(resolve));
@@ -574,6 +588,7 @@ describe("CLI tui command", () => {
         [],
         { config: fixture.config },
         {
+          popupControl: fixturePopupControl,
           observer: {
             buildVersion: observerBuildVersion,
             spawnObserver: async () => {
@@ -645,6 +660,7 @@ describe("CLI tui command", () => {
           [],
           { config: fixture.config },
           {
+            popupControl: fixturePopupControl,
             observer: {
               buildVersion: observerBuildVersion,
               spawnObserver: async () => {
@@ -704,6 +720,7 @@ describe("CLI tui command", () => {
           args,
           { config: fixture.config },
           {
+            popupControl: fixturePopupControl,
             observer: {
               buildVersion: observerBuildVersion,
               clientFactory,
@@ -738,6 +755,7 @@ describe("CLI tui command", () => {
       env: {},
       observerDeps: runningObserverDeps(),
       tuiDeps: {
+        popupControl: fixturePopupControl,
         spawnRenderer: async ({ env }) => {
           envs.push(env);
           return { status: "exited", code: 0 };
@@ -793,7 +811,11 @@ describe("CLI tui command", () => {
       runCli(["--config", configPath, ...args], {
         env,
         observerDeps: { clientFactory, spawnObserver },
-        tuiDeps: { spawnRenderer, stationUiInstalled },
+        tuiDeps: {
+          popupControl: fixturePopupControl,
+          spawnRenderer,
+          stationUiInstalled,
+        },
       }),
     ).rejects.toEqual(nestedTuiDisabledError);
 
@@ -831,6 +853,7 @@ describe("CLI tui command", () => {
         },
         observerDeps: runningObserverDeps(),
         tuiDeps: {
+          popupControl: fixturePopupControl,
           spawnRenderer: async ({ entry }) => {
             launches.push({ entry });
             return { status: "exited", code: 0 };
@@ -850,6 +873,7 @@ describe("CLI tui command", () => {
         args,
         { config: fixture.config },
         {
+          popupControl: fixturePopupControl,
           env: { STATION_PANE: "1" },
           observer: runningObserverDeps(),
           spawnRenderer,
@@ -896,6 +920,7 @@ describe("CLI tui command", () => {
         args,
         { config: fixture.config },
         {
+          popupControl: fixturePopupControl,
           env,
           observer: runningObserverDeps(),
           spawnRenderer: async (launch) => {
@@ -995,6 +1020,26 @@ describe("CLI tui command", () => {
     }
   });
 
+  it("refuses an unsupported popup provider before Observer or renderer effects", async () => {
+    const fixture = await createTempState();
+    fixture.config.defaults.terminal = "fixture-terminal";
+    const spawnObserver = vi.fn();
+    const spawnProcess = vi.fn();
+    await expect(
+      runTuiCommand(
+        ["--popup"],
+        { config: fixture.config },
+        {
+          env: {},
+          observer: { spawnObserver },
+          spawnProcess,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "TERMINAL_POPUP_UNSUPPORTED", provider: "fixture-terminal" });
+    expect(spawnObserver).not.toHaveBeenCalled();
+    expect(spawnProcess).not.toHaveBeenCalled();
+  });
+
   it("signals popup mode to the renderer via env", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
@@ -1003,6 +1048,7 @@ describe("CLI tui command", () => {
     const result = await runCli(["--config", configPath, "tui", "--popup"], {
       observerDeps: runningObserverDeps(),
       tuiDeps: {
+        popupControl: fixturePopupControl,
         spawnRenderer: async ({ env }) => {
           envs.push(env);
           return { status: "exited", code: 0 };
@@ -1035,18 +1081,25 @@ describe("CLI tui command", () => {
     await runCli(["--config", configPath], {
       env: {},
       observerDeps: runningObserverDeps(),
-      tuiDeps: { spawnRenderer: captureEntry },
+      tuiDeps: {
+        popupControl: fixturePopupControl,
+        spawnRenderer: captureEntry,
+      },
     });
     // Explicit --popup (the in-tmux path) → the observer-backed pane-free dashboard.
     await runCli(["--config", configPath, "tui", "--popup"], {
       observerDeps: runningObserverDeps(),
-      tuiDeps: { spawnRenderer: captureEntry },
+      tuiDeps: {
+        popupControl: fixturePopupControl,
+        spawnRenderer: captureEntry,
+      },
     });
     // --dev-fake-dashboard previews the dashboard, never the native app.
     await runTuiCommand(
       ["--dev-fake-dashboard"],
       { config: fixture.config },
       {
+        popupControl: fixturePopupControl,
         observer: {
           spawnObserver: async () => {
             throw new Error("observer should not start for fake dashboard mode");
@@ -1100,7 +1153,10 @@ describe("CLI tui command", () => {
     const launchOptions = {
       env: { STATION_CONFIG_PATH: inheritedPath },
       observerDeps: runningObserverDeps(),
-      tuiDeps: { spawnRenderer },
+      tuiDeps: {
+        popupControl: fixturePopupControl,
+        spawnRenderer,
+      },
     };
 
     await runCli(["--config", explicitPath], launchOptions);
@@ -1278,6 +1334,7 @@ describe("CLI tui command", () => {
     const result = await runCli(["--config", configPath, "tui", "--popup", "--persistent"], {
       observerDeps: runningObserverDeps(),
       tuiDeps: {
+        popupControl: fixturePopupControl,
         spawnRenderer: async ({ env }) => {
           envs.push(env);
           return { status: "exited", code: 0 };
@@ -1370,7 +1427,7 @@ describe("CLI tui command", () => {
         protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
         requestId: "resolve-1",
         type: "focus-target",
-        origin: { provider: "tmux", clientId: "client-a" },
+        origin: { provider: "fixture-terminal", clientId: "client-a" },
       });
 
       persistent.child.emit("message", controlRequest("dismiss-1", "dismiss"));
@@ -1387,7 +1444,7 @@ describe("CLI tui command", () => {
         protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
         requestId: "resolve-2",
         type: "focus-target",
-        origin: { provider: "tmux", clientId: "client-b" },
+        origin: { provider: "fixture-terminal", clientId: "client-b" },
       });
       expect(resolveFocusTarget).toHaveBeenCalledTimes(2);
       expect(dismissPopup).toHaveBeenCalledOnce();
@@ -1717,6 +1774,7 @@ describe("CLI tui command", () => {
       runCli(["--config", configPath, "tui", "--popup"], {
         observerDeps: runningObserverDeps({ reconciles, hangReconcile: true }),
         tuiDeps: {
+          popupControl: fixturePopupControl,
           spawnRenderer: async ({ env }) => {
             envs.push(env);
             return { status: "exited", code: 0 };
@@ -1741,6 +1799,7 @@ describe("CLI tui command", () => {
       runCli(["--config", configPath, "tui"], {
         observerDeps: runningObserverDeps({ reconciles, hangReconcile: true }),
         tuiDeps: {
+          popupControl: fixturePopupControl,
           spawnRenderer: async ({ env }) => {
             envs.push(env);
             return { status: "exited", code: 0 };
@@ -1762,6 +1821,7 @@ describe("CLI tui command", () => {
       [],
       { config: fixture.config },
       {
+        popupControl: fixturePopupControl,
         observer: {
           spawnObserver: async () => ({
             pid: 1234,
@@ -1796,6 +1856,7 @@ describe("CLI tui command", () => {
       ["--dev-fake-dashboard", "--fake-projects", "3", "--fake-worktrees-per-project", "5"],
       { config: fixture.config },
       {
+        popupControl: fixturePopupControl,
         observer: {
           spawnObserver: async () => {
             throw new Error("observer should not start for fake dashboard mode");
@@ -1849,6 +1910,7 @@ describe("CLI tui command", () => {
     const result = await runCli(["--config", configPath, "tui"], {
       observerDeps: runningObserverDeps(),
       tuiDeps: {
+        popupControl: fixturePopupControl,
         spawnRenderer: async ({ env }) => {
           envs.push(env);
           return { status: "exited", code: 0 };
@@ -2114,7 +2176,7 @@ function focusTarget(
   dismissExact: () => Promise<{ dismissed: boolean }> = async () => ({ dismissed: true }),
 ) {
   return {
-    origin: { provider: "tmux", clientId },
+    origin: { provider: "fixture-terminal", clientId },
     dismissExact,
   };
 }

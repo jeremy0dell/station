@@ -16,7 +16,6 @@ export type TmuxPopupOptions = {
   uiSessionName?: string;
 };
 
-export type TmuxPopupResult = { opened: true } | { opened: false; closed: true };
 export type TmuxPopupDismissResult = { dismissed: true } | { dismissed: false };
 export type TmuxPopupShellResult = { opened: true } | { opened: false };
 export type TmuxPersistentPopupSessionResult = { sessionName: string; created: boolean };

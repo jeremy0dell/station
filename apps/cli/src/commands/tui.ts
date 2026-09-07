@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:os";
-import type { StationConfig, TmuxConfig } from "@station/config";
+import type { StationConfig } from "@station/config";
 import {
+  type TerminalPopupControl,
   TUI_STARTUP_RECONCILE_REASON,
   type UiRendererEntry,
   type UiRunId,
@@ -16,7 +17,6 @@ import {
   stationObserverBuildVersion,
   systemClock,
 } from "@station/runtime";
-import { dismissTmuxPopup, resolveTmuxPopupFocusTarget } from "@station/tmux";
 import { parsePositiveIntegerOption } from "../args.js";
 import type { CliEnv } from "../env.js";
 import {
@@ -26,6 +26,7 @@ import {
   startObserver,
 } from "../observerProcess.js";
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
+import { createPopupControl } from "../popupComposition.js";
 import { type SelfExecRuntime, selfExecArgv } from "../selfExec.js";
 import {
   isStationUiInstalled,
@@ -34,10 +35,8 @@ import {
 } from "../stationWorkspace.js";
 import { selectUpdateChannel, type UpdateChannelProbe } from "../update/channelDetection.js";
 import { requireMatchingStationUiObserverBuild } from "./stationUiBuildAdmission.js";
-import { attachTuiRendererControl, type TuiRendererControlAdapters } from "./tuiRendererControl.js";
+import { attachTuiRendererControl } from "./tuiRendererControl.js";
 import { createTuiRendererLifecycleWitness } from "./tuiRendererLifecycle.js";
-
-export type { TuiRendererControlAdapters } from "./tuiRendererControl.js";
 
 /** The renderer subprocess exited with this code (the CLI's `tui` result). */
 export type TuiRunResult = {
@@ -65,13 +64,14 @@ export type TuiCommandDeps = {
   spawnProcess?: typeof spawn;
   stationUiInstalled?: () => Promise<boolean>;
   selfExecRuntime?: SelfExecRuntime;
-  popupControl?: TuiRendererControlAdapters;
+  popupControl?: TerminalPopupControl;
   updateProbes?: readonly UpdateChannelProbe[];
   writeUpdateNotice?: (notice: string) => void;
   env?: CliEnv;
 };
 
 export type TuiCommandOptions = {
+  firstRun?: boolean;
   config?: StationConfig;
   configPath?: string;
   timeoutMs?: number;
@@ -98,7 +98,7 @@ const nestedTuiDisabledError = {
  *
  * Owns one launcher-minted UI run identity per renderer child, Observer startup and
  * exact-selector admission before renderer and reconcile effects, resolved-config
- * propagation, exact child outcome evidence, renderer selection, popup control wiring,
+ * propagation, exact child outcome evidence, renderer selection, provider-neutral popup control wiring,
  * background read-only update planning, and post-cleanup normal-exit notices. Unfinished
  * discovery is aborted without joining renderer shutdown.
  */
@@ -123,6 +123,9 @@ export async function runTuiCommand(
   ) {
     throw nestedTuiDisabledError;
   }
+  const popupControl = parsed.popupMode
+    ? (deps.popupControl ?? createPopupControl({ ...options, env }))
+    : undefined;
   const paths = resolveObserverPaths(options.config);
   if (parsed.devFakeDashboard) {
     // The Bun renderer carries its own mock source; the --fake-* counts are
@@ -132,7 +135,7 @@ export async function runTuiCommand(
       deps,
       buildRendererEnv(parsed, { STATION_SOURCE: "mock" }, options.configPath),
       "dashboard",
-      options.config?.terminal?.tmux,
+      popupControl,
       paths.stateDir,
     );
   }
@@ -185,7 +188,7 @@ export async function runTuiCommand(
   // snapshot immediately, and the observer.reconciled event from this reconcile
   // refreshes the live view when the scan lands.
   scheduleReconcileBeforeTui(startupReconcile);
-  // Bare terminal launches native Station with its own panes; a tmux popup uses the
+  // Bare terminal launches native Station with its own panes; a popup uses the
   // observer-backed command-capable dashboard without native Station panes.
   const renderer = runRenderer(
     deps,
@@ -199,7 +202,7 @@ export async function runTuiCommand(
       options.configPath,
     ),
     parsed.popupMode ? "dashboard" : "station",
-    options.config?.terminal?.tmux,
+    popupControl,
     paths.stateDir,
   );
   if (parsed.popupMode || deps.updateProbes === undefined) {
@@ -252,20 +255,20 @@ function runRenderer(
   deps: TuiCommandDeps,
   env: Record<string, string>,
   entry: UiRendererEntry,
-  popupConfig: TmuxConfig | undefined,
+  popupControl: TerminalPopupControl | undefined,
   stateDir: string,
 ): Promise<TuiRunResult> {
   const uiRunId = `ui_${randomUUID()}`;
   const spawnOptions: RendererSpawnOptions = { env, entry, uiRunId };
   return (
-    deps.spawnRenderer?.(spawnOptions) ?? spawnRenderer(spawnOptions, deps, popupConfig, stateDir)
+    deps.spawnRenderer?.(spawnOptions) ?? spawnRenderer(spawnOptions, deps, popupControl, stateDir)
   );
 }
 
 async function spawnRenderer(
   { env, entry, uiRunId }: RendererSpawnOptions,
   deps: TuiCommandDeps,
-  popupConfig: TmuxConfig | undefined,
+  popupControl: TerminalPopupControl | undefined,
   stateDir: string,
 ): Promise<TuiRunResult> {
   const childEnv = {
@@ -346,12 +349,8 @@ async function spawnRenderer(
     );
     return { status: "exited", code: 1 };
   }
-  const control = popupRenderer
-    ? attachTuiRendererControl(
-        child,
-        deps.popupControl ?? defaultPopupControl(deps.env, popupConfig),
-      )
-    : undefined;
+  const control =
+    popupControl === undefined ? undefined : attachTuiRendererControl(child, popupControl);
   return new Promise<TuiRunResult>((resolve) => {
     let settled = false;
     const rendererPid = child.pid;
@@ -421,41 +420,6 @@ function rendererProcessCode(exitCode: number | null, signal: NodeJS.Signals | n
 /** Maps linked source launches to scripts that never build; renderer identity remains fail-closed. */
 function sourceRendererScript(entry: UiRendererEntry): "dashboard:runtime" | "station:runtime" {
   return entry === "dashboard" ? "dashboard:runtime" : "station:runtime";
-}
-
-function defaultPopupControl(
-  env: CliEnv | undefined,
-  config: TmuxConfig | undefined,
-): TuiRendererControlAdapters {
-  const popupEnv = { ...(env ?? process.env) };
-  if ((config?.popupScope ?? "server") === "server") {
-    // A server-scoped renderer follows the current claim rather than its startup client.
-    delete popupEnv.STATION_FOCUS_CLIENT_ID;
-  }
-  const popupOptions = {
-    env: popupEnv,
-    command: resolvePopupTmuxCommand(config?.command, popupEnv),
-    ...(config === undefined ? {} : { config }),
-  };
-  return {
-    dismissPopup: () => dismissTmuxPopup(popupOptions),
-    openShell: async (cwd) => {
-      const target = await resolveTmuxPopupFocusTarget(popupOptions);
-      if (target === undefined) return { opened: false };
-      const shell = await target.openShell(cwd);
-      if (!shell.opened) return shell;
-      const dismissed = await target.dismissExact();
-      return { opened: dismissed.dismissed };
-    },
-    resolveFocusTarget: () => resolveTmuxPopupFocusTarget(popupOptions),
-  };
-}
-
-export function resolvePopupTmuxCommand(
-  configuredCommand: string | undefined,
-  env: CliEnv = process.env,
-): string {
-  return configuredCommand ?? env.STATION_TMUX_BIN ?? "tmux";
 }
 
 function scheduleReconcileBeforeTui(input: {

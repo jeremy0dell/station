@@ -24,6 +24,12 @@ describe("popup renderer command", () => {
     ]);
   });
 
+  it("does not require a persistent renderer when the adapter requests a transient popup", () => {
+    expect(buildPopupRendererCommand(["stn"], undefined, undefined, false)).toBe(
+      "'stn' tui --popup",
+    );
+  });
+
   it("preserves an explicit development command", () => {
     expect(buildPopupRendererCommand(["unused"], undefined, "env DEV=1 custom-ui")).toBe(
       "env DEV=1 custom-ui tui --popup --persistent",

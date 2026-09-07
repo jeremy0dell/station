@@ -134,6 +134,12 @@ or diagnostic evidence into a second source of truth.
 - Setup decisions remain independent of presentation and concrete execution:
   setup-core decides, setup-messages names copy, config owns persistence, and CLI
   composition supplies adapters and interaction.
+- CLI popup composition selects separate terminal launch and control capabilities.
+  Public popup orchestration prepares Observer admission before invoking the launch
+  capability; renderer IPC consumes provider-neutral controls. Integrations own
+  popup scope, development registration, persistence, freshness, and exact
+  replacement or dismissal. The Observer terminal registry does not own popup UI
+  lifetime. Executable aliases may select an integration-specific entrypoint.
 - CLI composition owns native update discovery as one process-local, read-only
   check with no persistent cache. Only a completed version-changing result can
   become a TUI notice; [Install Station](install.md#automatic-update-ownership)

@@ -13,10 +13,7 @@ function compiledRunners(installedRoot: string): SelfExecRunners {
   const providerHookIngressLauncher = join(installedRoot, "stn-ingress");
   const cliOptions = {
     providerHookIngressLauncher,
-    popupDeps: {
-      checkoutRoot: installedRoot,
-      preferRegisteredDevPopup: false,
-    },
+    installedRoot,
     setupDeps: {
       tmuxPopupOwnerRoot: installedRoot,
     },
@@ -59,7 +56,7 @@ function compiledRunners(installedRoot: string): SelfExecRunners {
  *
  * Binds compiled raw arguments to lazy process entries, packaged runtime assets,
  * installed launcher identity, the shared Observer process failure boundary,
- * current-build popup reuse, popup ownership, and setup wiring.
+ * integration entrypoints and setup wiring.
  */
 export async function runStationBinaryMain(): Promise<void> {
   const installedRoot = dirname(realpathSync(process.execPath));
