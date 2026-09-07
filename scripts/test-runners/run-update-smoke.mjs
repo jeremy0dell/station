@@ -45,6 +45,8 @@ import {
   updateReportSchemaVersionForEmitter,
 } from "./composed-update-report.mjs";
 
+import { prepareUpdateRecoveryFixture } from "./update-recovery-fixture.mjs";
+
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const runnerPath = fileURLToPath(import.meta.url);
 const receiptContent = "station-installer-binary-v1\n";
@@ -321,13 +323,24 @@ async function runUpdateSmoke(options) {
       hostState: "busy-compiled-non-bridge",
       reap: true,
     },
+    {
+      name: "current-mixed-build-recovery",
+      socketKey: "cm",
+      invocation: "external",
+      artifactState: "current",
+      hostState: "busy-compiled-non-bridge",
+      reap: true,
+      recovery: true,
+    },
   ];
   const scenarios =
-    options.scenarios === "no-host"
-      ? [predecessorScenarios[2]]
-      : options.scenarios === "release"
-        ? [...predecessorScenarios, ...currentArtifactScenarios]
-        : predecessorScenarios;
+    options.scenarios === "recovery"
+      ? [currentArtifactScenarios.at(-1)]
+      : options.scenarios === "no-host"
+        ? [predecessorScenarios[2]]
+        : options.scenarios === "release"
+          ? [...predecessorScenarios, ...currentArtifactScenarios]
+          : predecessorScenarios;
 
   try {
     for (const scenario of scenarios) {
@@ -400,6 +413,8 @@ async function runScenario(input) {
   let incumbentHostOutput;
   let tmuxServer;
   let spawnedPty;
+  let recoveryFixture;
+  let recoveryReport;
   let ptyIdentity;
   let ptyChildPid;
   let failure;
@@ -475,6 +490,21 @@ async function runScenario(input) {
   const installedBinary = await realpath(join(installDir, "stn"));
 
   try {
+    if (input.recovery) {
+      // tmux preserves its tab-separated protocol fields only with a UTF-8 client locale.
+      env.LANG = process.platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8";
+      env.LC_ALL = env.LANG;
+      tmuxServer = await startTmuxServer(tmuxPath, env, tmuxTempDir, input.name, processIdentities);
+      recoveryFixture = await prepareUpdateRecoveryFixture({
+        root: scenarioRoot,
+        stateDir,
+        configPath,
+        socketPath,
+        env,
+        tmux: tmuxServer,
+        run,
+      });
+    }
     const incumbentVersion = await run(installedBinary, ["--version"], { env });
     assertEqual(
       incumbentVersion.stdout.trim(),
@@ -563,7 +593,22 @@ async function runScenario(input) {
         [incumbentHostProcess.pid],
         `${input.name} incumbent Host holder`,
       );
-      if (scenarioHasBusyHost(input)) {
+      if (recoveryFixture !== undefined) {
+        const sessions = await recoveryFixture.seedAndSpawn(observerClient, incumbentHostClient);
+        for (const [index, session] of sessions.entries()) {
+          const pid = await waitForPtyChild(incumbentHostClient, session);
+          await recordProcessIdentity(
+            processIdentities,
+            index === 0 ? "pty-payload" : `recovery-payload-${index}`,
+            pid,
+          );
+          if (index === 0) {
+            ptyIdentity = session;
+            spawnedPty = session;
+            ptyChildPid = pid;
+          }
+        }
+      } else if (scenarioHasBusyHost(input)) {
         const rawIdentityCanary = randomUUID().replaceAll("-", "");
         ptyIdentity = {
           kind: "agent",
@@ -635,7 +680,7 @@ async function runScenario(input) {
       }
     }
 
-    if (input.invocation === "tmux") {
+    if (input.invocation === "tmux" && tmuxServer === undefined) {
       tmuxServer = await startTmuxServer(tmuxPath, env, tmuxTempDir, input.name, processIdentities);
     }
     const dryRunStateInput = {
@@ -754,6 +799,7 @@ async function runScenario(input) {
     } else {
       const reportJson = parseJson(updateResult.stdout, `${input.name} update report`);
       const report = parseComposedUpdateReport(reportJson, emitterVersion);
+      recoveryReport = report;
       assertUpdateReport(report, reportJson, input, installedBinary, configPath, reportEvidence);
       assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
       completedInstallRefusal = preservedRefusal && report.status === "failed";
@@ -834,7 +880,13 @@ async function runScenario(input) {
       const hostHealth = await targetHostClient.health();
       assertEqual(hostHealth.buildVersion, input.target.version, `${input.name} target Host build`);
       const targetInventory = await targetHostClient.list();
-      if (input.reap) {
+      if (recoveryFixture !== undefined) {
+        assertDeepEqual(
+          targetInventory,
+          [],
+          `${input.name} recovered sessions use configured tmux`,
+        );
+      } else if (input.reap) {
         assertDeepEqual(targetInventory, [], `${input.name} reaped target Host inventory`);
         assertEqual(
           await waitForExactProcessExit(processIdentities.get("pty-payload"), 10_000),
@@ -913,6 +965,9 @@ async function runScenario(input) {
       assertEqual(await pathExists(hostSocketPath), false, `${input.name} skips Host creation`);
     }
 
+    if (recoveryFixture !== undefined) {
+      await recoveryFixture.verify(observerClient, recoveryReport);
+    }
     await verifyBareLaunches({
       installedBinary,
       env,
@@ -968,6 +1023,21 @@ async function runScenario(input) {
     );
   } catch (error) {
     failure = error;
+    if (input.recovery) {
+      await recoveryFixture?.captureFailure(observerClient).catch((error) => {
+        process.stderr.write(`Recovery fixture evidence unavailable: ${errorMessage(error)}\n`);
+      });
+      const trace = await run(installedBinary, ["debug", "trace", "--latest-failure"], {
+        env,
+        allowedExitCodes: [0, 1],
+      }).catch((failure) => ({ stdout: String(failure), stderr: "" }));
+      await writeFile(
+        join(scenarioRoot, "recovery-failure-trace.txt"),
+        `${trace.stdout}\n${trace.stderr}`,
+        { mode: 0o600 },
+      );
+      process.stderr.write(`Recovery fixture trace: ${trace.stdout}\n${trace.stderr}\n`);
+    }
     if (input.evidenceDir !== undefined) {
       await captureFailureEvidence({
         root: input.root,
@@ -1031,6 +1101,9 @@ async function runScenario(input) {
         timeoutMs: 2000,
         expectedBuildVersion: health.buildVersion,
       });
+      if (input.recovery) {
+        for (const terminal of await client.list()) await client.close(terminal.ptyId);
+      }
       if (spawnedPty !== undefined) {
         await client.close(spawnedPty.ptyId).catch(() => undefined);
       }
@@ -1913,6 +1986,11 @@ async function verifyBareLaunches(input) {
 }
 
 function assertUpdateReport(report, reportJson, input, installedBinary, configPath, evidence) {
+  if (input.recovery) {
+    assertEqual(report.status, "current", `${input.name} recovery status`);
+    assertEqual(report.finalInspection?.plan.outcome, "converged", `${input.name} final plan`);
+    return;
+  }
   if (report.schemaVersion === 1) {
     assertLegacyUpdateReport(report, input, installedBinary, configPath);
     return;
@@ -2431,7 +2509,14 @@ function assertPublicIdentityAliases(report, input, evidence) {
     const expectedRaw = raw[field];
     assertDeepEqual(
       [...new Set(values)].sort(),
-      expectedRaw === undefined ? [] : [`public-${label}-00000001`],
+      input.recovery
+        ? Array.from(
+            { length: new Set(values).size },
+            (_, index) => `public-${label}-${String(index + 1).padStart(8, "0")}`,
+          )
+        : expectedRaw === undefined
+          ? []
+          : [`public-${label}-00000001`],
       `${input.name} stable public ${label} aliases`,
     );
     if (expectedRaw !== undefined) {
@@ -2802,8 +2887,13 @@ function parseArgs(argv) {
     throw new Error("Update smoke target must differ from the incumbent version.");
   }
   const scenarios = values.get("--scenarios") ?? "full";
-  if (scenarios !== "full" && scenarios !== "no-host" && scenarios !== "release") {
-    throw new Error("--scenarios must be full, no-host, or release.");
+  if (
+    scenarios !== "full" &&
+    scenarios !== "no-host" &&
+    scenarios !== "release" &&
+    scenarios !== "recovery"
+  ) {
+    throw new Error("--scenarios must be full, no-host, release, or recovery.");
   }
   const busyHostOutcome = values.get("--busy-host-outcome") ?? "full-handoff";
   if (busyHostOutcome !== "full-handoff" && busyHostOutcome !== "preserved-refusal") {
@@ -2838,7 +2928,7 @@ function parseArgs(argv) {
 }
 
 function updateSmokeUsage() {
-  return "Usage: run-update-smoke.mjs --incumbent-binary <path> --incumbent-version <version> (--target-source-version <version> | --target-release-dir <path> --target-tag <tag> --target-build-identity <64-hex> | --public-target-tag <tag> --target-build-identity <64-hex>) [--predecessor-source-dir <path>] [--scenarios full|no-host|release] [--busy-host-outcome full-handoff|preserved-refusal] [--keep-temp]";
+  return "Usage: run-update-smoke.mjs --incumbent-binary <path> --incumbent-version <version> (--target-source-version <version> | --target-release-dir <path> --target-tag <tag> --target-build-identity <64-hex> | --public-target-tag <tag> --target-build-identity <64-hex>) [--predecessor-source-dir <path>] [--scenarios full|no-host|release|recovery] [--busy-host-outcome full-handoff|preserved-refusal] [--keep-temp]";
 }
 
 function assertBuildIdentity(value, label) {

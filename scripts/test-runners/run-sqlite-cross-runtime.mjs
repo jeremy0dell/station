@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +15,32 @@ try {
   runProbe("bun", "seed-v16", join(tempRoot, "bun-created.sqlite"), "created-by-bun");
   runProbe("node", "upgrade-write", join(tempRoot, "bun-created.sqlite"), "created-by-bun");
   runProbe("bun", "read", join(tempRoot, "bun-created.sqlite"), "created-by-bun");
-  console.log("Cross-runtime SQLite compatibility passed for Node and Bun.");
+  const compiledProbe = join(tempRoot, "sqlite-probe");
+  const build = spawnSync("bun", ["build", probePath, "--compile", "--outfile", compiledProbe], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  if (build.status !== 0) throw new Error("Compiled SQLite probe build failed.");
+  for (const [label, runtime] of [
+    ["node", "node"],
+    ["bun", "bun"],
+    ["compiled", compiledProbe],
+  ]) {
+    for (const size of [1, 460]) {
+      const stateDir = join(tempRoot, `${label}-${size}`);
+      mkdirSync(stateDir, { mode: 0o700 });
+      const args = ["backup", join(stateDir, "observer.sqlite"), String(size)];
+      const result = spawnSync(runtime, label === "compiled" ? args : [probePath, ...args], {
+        cwd: repoRoot,
+        stdio: "inherit",
+        timeout: 120_000,
+      });
+      if (result.status !== 0)
+        throw new Error(`${label} ${size} MiB recovery backup probe failed.`);
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  }
+  console.log("Cross-runtime SQLite compatibility passed for Node, Bun, and compiled Bun.");
 } finally {
   rmSync(tempRoot, { recursive: true, force: true });
 }

@@ -5,7 +5,10 @@ import {
   recoveryFromUpdateReapJournal,
 } from "../../src/update/reapExecution.js";
 import type { UpdateReapJournalPort } from "../../src/update/reapJournal.js";
-import type { UpdateReapAuthorization } from "../../src/update/reapPlan.js";
+import {
+  type UpdateReapAuthorization,
+  UpdateReapAuthorizationEvidenceError,
+} from "../../src/update/reapPlan.js";
 import type {
   UpdateReapProcessGroup,
   UpdateReapProcessGroupPort,
@@ -237,6 +240,28 @@ describe("update reap execution", () => {
     expect(result.recovery).toMatchObject({ status: "partial", unresolved: true });
   });
 
+  it("retains a typed locked refusal without writing or signaling", async () => {
+    const journal = inMemoryJournal();
+    const signal = vi.fn();
+    const cause = new UpdateReapAuthorizationEvidenceError(
+      "Private recovery assessments did not match the public preflight.",
+      "recovery-assessment-mismatch",
+    );
+    await expect(
+      executeUpdateReap({
+        expected: expectedTransaction(),
+        authorization,
+        reauthorize: async () => {
+          throw cause;
+        },
+        journal,
+        processGroups: { read: async () => group, signal, wait: async () => undefined },
+      }),
+    ).rejects.toMatchObject({ name: "UpdateReapAuthorizationRefusedError", cause });
+    expect(signal).not.toHaveBeenCalled();
+    expect(journal.writes).toEqual([]);
+  });
+
   it("refuses a changed locked authorization before any signal", async () => {
     const journal = inMemoryJournal();
     const signal = vi.fn();
@@ -259,6 +284,49 @@ describe("update reap execution", () => {
       status: "partial",
       unresolved: true,
     });
+  });
+
+  it("continues after exit but before the result was journaled without another signal", async () => {
+    const journal = inMemoryJournal();
+    const write = journal.write;
+    journal.write = vi.fn(async (value) => {
+      if (value.targets.some((target) => target.result !== undefined)) {
+        throw new Error("interrupted before result commit");
+      }
+      await write(value);
+    });
+    let alive = true;
+    const signal = vi.fn(() => {
+      alive = false;
+    });
+    const processGroups: UpdateReapProcessGroupPort = {
+      read: async () => (alive ? structuredClone(group) : { members: [] }),
+      signal,
+      wait: async () => undefined,
+    };
+    await expect(
+      executeUpdateReap({
+        expected: expectedTransaction(),
+        authorization,
+        reauthorize: async () => authorization,
+        journal,
+        processGroups,
+      }),
+    ).rejects.toThrow("interrupted before result commit");
+    expect((await journal.findIncomplete())?.phase).toBe("reap-started");
+
+    journal.write = write;
+    const continued = await executeUpdateReap({
+      expected: expectedTransaction(),
+      journal,
+      processGroups,
+    });
+    expect(signal.mock.calls).toEqual([[200, "SIGTERM"]]);
+    expect(continued.recovery.terminals[0]).toMatchObject({
+      terminationOutcome: "already-exited",
+      unresolved: false,
+    });
+    expect(continued.journal.targets[0]?.terminal).toEqual(authorization.targets[0]?.terminal);
   });
 });
 

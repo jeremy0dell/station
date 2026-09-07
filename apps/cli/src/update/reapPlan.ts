@@ -1,14 +1,20 @@
 import { createHash } from "node:crypto";
 import type {
   ObserverRecoveryAssessment,
+  SessionId,
   StationHostExactEvidence,
   UpdateArtifact,
   UpdateChannelId,
   UpdateConvergencePlan,
   UpdateReapJournalTarget,
   UpdateReapRecoveryPreflight,
+  UpdateReapTerminalEvidence,
 } from "@station/contracts";
-import { compareUpdateReapJournalTargets } from "@station/contracts";
+import {
+  compareUpdateReapJournalTargets,
+  projectUpdateRecoveryAssessment,
+  updateReapEvidenceIsComplete,
+} from "@station/contracts";
 import type { ExactObserverOwnershipEvidence } from "@station/observer/internal";
 import type { UpdateReapProcess, UpdateReapProcessGroup } from "./reapProcessGroups.js";
 import type { UpdateRecoveryPreflightActionCommitments } from "./recoveryPreflight.js";
@@ -36,15 +42,47 @@ export type ExactTerminalReapAuthorizationEvidence = Readonly<{
   target: UpdateReapJournalTarget;
 }>;
 
+export type UpdateReapAuthorizationRefusalReason =
+  | "invalid-plan"
+  | "observer-recovery-unavailable"
+  | "recovery-assessment-mismatch"
+  | "host-evidence-unavailable"
+  | "host-evidence-mismatch"
+  | "parked-evidence-unavailable"
+  | "parked-evidence-mismatch"
+  | "unsupported-session-uncertainty"
+  | "retained-session-overlap"
+  | "evidence-incomplete"
+  | "host-owner-unavailable"
+  | "host-process-unavailable"
+  | "process-group-unavailable"
+  | "process-group-coverage-mismatch"
+  | "terminal-not-live"
+  | "terminal-process-not-owned"
+  | "terminal-recovery-unknown"
+  | "recovery-handle-unavailable";
+
 export class UpdateReapAuthorizationEvidenceError extends Error {
   override readonly name = "UpdateReapAuthorizationEvidenceError";
+  readonly tag = "UpdateReapAuthorizationEvidenceError";
+  readonly code: string;
+
+  constructor(
+    message: string,
+    readonly reason: UpdateReapAuthorizationRefusalReason,
+  ) {
+    super(message);
+    this.code = `UPDATE_REAP_${reason.replaceAll("-", "_").toUpperCase()}`;
+  }
 }
 
 /**
  * POLICY
  *
- * Derives private SHA-256 authority only for one complete canonical reap-required plan whose exact
- * Host child groups and selected recovery handles remain correlated to the private preflight.
+ * Derives private SHA-256 authority for every exact Host child group and selected recovery handle.
+ * Only unrelated retained sessions missing worktree evidence may remain unknown; the complete
+ * original aggregate, exact process identities, parked commitments, and selected targets remain
+ * bound into the digest. Private recovery assessments must match their full public projection.
  */
 export function deriveUpdateReapAuthorization(input: {
   channel: UpdateChannelId;
@@ -60,15 +98,68 @@ export function deriveUpdateReapAuthorization(input: {
     input.plan.authorization !== "none" ||
     input.plan.outcome !== "reap-required" ||
     input.plan.phases.terminalConvergence.action !== "reap-required" ||
-    input.preflight.boundary.authorization !== "none" ||
-    !input.preflight.evidenceComplete ||
-    input.preflight.host.status !== "inspected"
+    input.preflight.boundary.authorization !== "none"
   ) {
     throw new UpdateReapAuthorizationEvidenceError(
-      "Update reap requires one complete non-authorizing reap-required plan.",
+      "Update reap requires one non-authorizing reap-required plan.",
+      "invalid-plan",
     );
   }
   const host = requireExactHost(input.preflight, input.commitments.host);
+  const assessment = exactRecoveryAssessment(input.commitments.observer);
+  const observerEvidence = input.preflight.observer;
+  if (
+    assessment === undefined ||
+    observerEvidence.status !== "exact" ||
+    observerEvidence.recovery.status !== "assessed"
+  ) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "Exact Observer recovery evidence was unavailable for update reap.",
+      "observer-recovery-unavailable",
+    );
+  }
+  if (
+    canonicalJson(projectUpdateRecoveryAssessment(assessment)) !==
+    canonicalJson(observerEvidence.recovery.assessment)
+  ) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "Private recovery assessments did not match the public preflight.",
+      "recovery-assessment-mismatch",
+    );
+  }
+  const parked = input.preflight.parkedBridges;
+  if (parked.status !== "assessed") {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "Parked terminal evidence was unavailable for update reap.",
+      "parked-evidence-unavailable",
+    );
+  }
+  const parkedTerminals = input.commitments.parkedTerminals ?? [];
+  if (parked.unownedParkedCount !== parkedTerminals.length) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "Private parked terminal commitments did not match the public preflight.",
+      "parked-evidence-mismatch",
+    );
+  }
+  const exclusions = excludableUnknownSessions(assessment, [...host.terminals, ...parkedTerminals]);
+  if (exclusions.status === "refused") {
+    throw new UpdateReapAuthorizationEvidenceError(
+      exclusions.reason === "retained-session-overlap"
+        ? "An unresolved retained session overlaps a Host or parked terminal."
+        : "An unresolved retained session has unsupported recovery uncertainty.",
+      exclusions.reason,
+    );
+  }
+  if (
+    !updateReapEvidenceIsComplete(input.preflight, {
+      excludedSessionIds: exclusions.excludedSessionIds,
+    })
+  ) {
+    throw new UpdateReapAuthorizationEvidenceError(
+      "Update reap evidence remains incomplete after excluding unrelated retained sessions.",
+      "evidence-incomplete",
+    );
+  }
   const liveTerminals = host.terminals.filter((terminal) => terminal.alive);
   if (
     liveTerminals.length === 0 ||
@@ -79,6 +170,7 @@ export function deriveUpdateReapAuthorization(input: {
   ) {
     throw new UpdateReapAuthorizationEvidenceError(
       "Update reap process-group evidence did not cover every live Host terminal.",
+      "process-group-coverage-mismatch",
     );
   }
   const evidence = liveTerminals.map((terminal) =>
@@ -93,7 +185,10 @@ export function deriveUpdateReapAuthorization(input: {
   const targets = evidence.map((entry) => entry.target).sort(compareUpdateReapJournalTargets);
   const privateHost = evidence[0]?.host;
   if (privateHost === undefined) {
-    throw new UpdateReapAuthorizationEvidenceError("Update reap did not select a live terminal.");
+    throw new UpdateReapAuthorizationEvidenceError(
+      "Update reap did not select a live terminal.",
+      "terminal-not-live",
+    );
   }
   const observer = input.commitments.observer;
   const digest = createHash("sha256")
@@ -145,13 +240,17 @@ export function deriveExactTerminalReapAuthorizationEvidence(input: {
   if (input.preflight.observer.status === "exact" && observer?.status !== "exact") {
     throw new UpdateReapAuthorizationEvidenceError(
       "Exact Observer commitments were unavailable for terminal reap.",
+      "observer-recovery-unavailable",
     );
   }
   const terminal = host.terminals.find(
     (candidate) => candidate.alive && candidate.terminalTargetId === input.terminalTargetId,
   );
   if (terminal === undefined) {
-    throw new UpdateReapAuthorizationEvidenceError("The selected terminal was not live.");
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The selected terminal was not live.",
+      "terminal-not-live",
+    );
   }
   const processGroup = input.processGroup;
   if (
@@ -161,6 +260,7 @@ export function deriveExactTerminalReapAuthorizationEvidence(input: {
   ) {
     throw new UpdateReapAuthorizationEvidenceError(
       "The selected terminal was not the exact Host-owned child process-group leader.",
+      "terminal-process-not-owned",
     );
   }
   const disposition = input.preflight.terminalDispositions.find(
@@ -173,6 +273,7 @@ export function deriveExactTerminalReapAuthorizationEvidence(input: {
   if (disposition === undefined || disposition.reapRecovery === "unknown") {
     throw new UpdateReapAuthorizationEvidenceError(
       "The selected terminal did not have a complete recovery disposition.",
+      "terminal-recovery-unknown",
     );
   }
   const selected =
@@ -218,6 +319,32 @@ export function deriveExactTerminalReapAuthorizationEvidence(input: {
   };
 }
 
+function excludableUnknownSessions(
+  assessment: ObserverRecoveryAssessment,
+  terminals: readonly Pick<UpdateReapTerminalEvidence, "sessionId" | "projectId" | "worktreeId">[],
+):
+  | { status: "accepted"; excludedSessionIds: ReadonlySet<SessionId> }
+  | { status: "refused"; reason: "unsupported-session-uncertainty" | "retained-session-overlap" } {
+  const excludedSessionIds = new Set<SessionId>();
+  for (const session of assessment.sessions) {
+    if (session.disposition !== "unknown") continue;
+    if (session.reasons.length !== 1 || session.reasons[0] !== "worktree_evidence_missing") {
+      return { status: "refused", reason: "unsupported-session-uncertainty" };
+    }
+    if (
+      terminals.some(
+        (terminal) =>
+          terminal.sessionId === session.sessionId ||
+          (terminal.projectId === session.projectId && terminal.worktreeId === session.worktreeId),
+      )
+    ) {
+      return { status: "refused", reason: "retained-session-overlap" };
+    }
+    excludedSessionIds.add(session.sessionId);
+  }
+  return { status: "accepted", excludedSessionIds };
+}
+
 function requireProcessGroup(
   groups: readonly UpdateReapProcessGroup[],
   pid: number,
@@ -226,6 +353,7 @@ function requireProcessGroup(
   if (group === undefined) {
     throw new UpdateReapAuthorizationEvidenceError(
       "A reap target did not have exact process-group evidence.",
+      "process-group-unavailable",
     );
   }
   return group;
@@ -274,6 +402,7 @@ function requireExactHost(
   if (host === undefined || preflight.host.status !== "inspected") {
     throw new UpdateReapAuthorizationEvidenceError(
       "Exact Host commitments were unavailable for update reap.",
+      "host-evidence-unavailable",
     );
   }
   if (
@@ -297,6 +426,7 @@ function requireExactHost(
   ) {
     throw new UpdateReapAuthorizationEvidenceError(
       "Private Host commitments did not match the public preflight.",
+      "host-evidence-mismatch",
     );
   }
   return host;
@@ -327,6 +457,7 @@ function selectedRecovery(
   ) {
     throw new UpdateReapAuthorizationEvidenceError(
       "A recoverable reap target lost its exact selected recovery handle.",
+      "recovery-handle-unavailable",
     );
   }
   return {

@@ -98,6 +98,16 @@ export type ExactObserverLifecycleSessionCapability = <T>(
   request: SessionRequest,
   task: (session: ExactObserverLifecycleSession) => Promise<T>,
 ) => Promise<T>;
+/**
+ * DRIVEN PORT
+ *
+ * Passively proves exit of the admitted process generation within the activation deadline.
+ * Unavailable process or socket evidence never proves exit and grants no signaling authority.
+ */
+export type ExactObserverExitCapability = (request: {
+  identity: contracts.ObserverProcessIdentity;
+  deadlineMs: number;
+}) => Promise<void>;
 /** Application-owned evidence, startup, and pinned-session ports for exact convergence. */
 export type ExactObserverConvergenceDependencies = {
   paths: ObserverPaths;
@@ -105,6 +115,7 @@ export type ExactObserverConvergenceDependencies = {
   inspect: (session?: ExactObserverLifecycleSession) => Promise<ExactObserverOwnershipEvidence>;
   start: () => Promise<processTypes.ObserverStatus>;
   withSession: ExactObserverLifecycleSessionCapability;
+  waitForExit: ExactObserverExitCapability;
 };
 
 /** Narrow current-process capability used by callers that already resolved update policy. */
@@ -129,7 +140,8 @@ export function parseExactObserverConvergenceCommand(input: unknown, context: Pa
 /**
  * USE CASE
  *
- * Converges exact absence or one revalidated owner and requires an independent final proof.
+ * Converges exact absence or one revalidated owner, waits for that generation to exit after
+ * cooperative stop, and requires an independent final proof before reporting success.
  */
 export async function convergeExactObserverBuild(
   input: unknown,
@@ -152,7 +164,8 @@ export async function convergeExactObserverBuild(
 /**
  * COMPOSITION ROOT
  *
- * Preserves standalone exact reuse while wiring local adapters into exact convergence.
+ * Preserves standalone exact reuse while wiring local process-exit, socket, and lifecycle
+ * evidence into exact convergence under one absolute deadline.
  */
 export async function ensureExactObserverBuild(
   options: processTypes.ObserverProcessOptions = {},
@@ -212,6 +225,30 @@ function exactDependencies(
         },
         task,
       ),
+    waitForExit: async ({ identity, deadlineMs: exitDeadlineMs }) => {
+      const evidence = observer.createLocalObserverProcessEvidence({
+        evidenceDeadlineMs: exitDeadlineMs,
+      });
+      const clock = processDeps.clock ?? runtime.systemClock;
+      const now = () => clock.now().getTime();
+      while (now() < exitDeadlineMs) {
+        const process = evidence.readProcessExistence(identity.pid);
+        if (
+          process.status === "absent" ||
+          (process.status === "running" && process.osStartTime !== identity.osStartTime)
+        ) {
+          // A new socket owner is preserved by startup policy and independently inspected later.
+          const socket = await protocol.probeUnixSocket(identity.socketPath, {
+            timeoutMs: Math.max(1, Math.min(50, exitDeadlineMs - now())),
+          });
+          if (socket.status !== "inaccessible") return;
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(50, Math.max(1, exitDeadlineMs - now()))),
+        );
+      }
+      throw cause("DEADLINE_EXCEEDED");
+    },
   };
 }
 
@@ -288,6 +325,12 @@ async function converge(
         if (!matches(current, command.expected)) throw evidenceDrift;
         await session.stop();
       });
+      await beforeDeadline(command.deadlineMs, () =>
+        deps.waitForExit({
+          identity: command.expected.processIdentity,
+          deadlineMs: command.deadlineMs,
+        }),
+      );
       start = true;
     } catch (error) {
       failed.phase = "stop";

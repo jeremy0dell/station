@@ -40,30 +40,39 @@ export type OpenObserverSqliteOptions = {
   clock?: RuntimeClock;
 };
 
+/**
+ * ADAPTER
+ *
+ * Opens and initializes Observer SQLite, closing the connection on any pragma or migration
+ * failure while retaining the initialization stage and original cause.
+ */
 export function openObserverSqlite(options: OpenObserverSqliteOptions = {}): ObserverSqliteHandle {
   const path = options.path ?? ":memory:";
   const clock = options.clock ?? systemClock;
   const database = openSqlDatabase(path);
-  // WAL + synchronous=NORMAL keeps an unclean exit (SIGKILL of a wedged observer)
-  // from corrupting the DB or losing committed rows; :memory: ignores WAL.
-  if (path !== ":memory:") {
-    database.exec("PRAGMA journal_mode = WAL");
-  }
-  database.exec("PRAGMA synchronous = NORMAL");
   let open = true;
   let lastError: SafeError | undefined;
   let appliedMigrations: AppliedObserverSqliteMigration[] = [];
-
+  let stage: "pragmas" | "migrations" = "pragmas";
   try {
+    if (path !== ":memory:") database.exec("PRAGMA journal_mode = WAL");
+    database.exec("PRAGMA synchronous = NORMAL");
+    stage = "migrations";
     applyMigrations(database, clock);
     appliedMigrations = readAppliedMigrations(database);
   } catch (error) {
-    lastError = safeErrorFromUnknown(error, {
-      tag: "PersistenceError",
-      code: "PERSISTENCE_MIGRATION_FAILED",
-      message: "Observer SQLite migrations failed.",
-    });
-    throw error;
+    try {
+      database.close();
+    } catch {
+      // Cleanup must preserve the initialization failure.
+    }
+    throw Object.assign(
+      new Error(`Observer SQLite ${stage} initialization failed.`, { cause: error }),
+      {
+        tag: "PersistenceInitializationError",
+        code: stage === "pragmas" ? "PERSISTENCE_PRAGMA_FAILED" : "PERSISTENCE_MIGRATION_FAILED",
+      },
+    );
   }
 
   return {

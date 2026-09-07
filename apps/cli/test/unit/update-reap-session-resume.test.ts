@@ -88,6 +88,30 @@ describe("update reap session resume", () => {
     expect(result.targets[0]?.result?.resumeDisposition).toBe("unresolved");
     expect(resume).not.toHaveBeenCalled();
   });
+
+  it("continues after provider launch but before its receipt was journaled without relaunching", async () => {
+    const port = journalPort();
+    const write = port.write;
+    port.write = async () => {
+      throw new Error("interrupted before resume commit");
+    };
+    let live = false;
+    const resume = vi.fn(async () => {
+      live = true;
+    });
+    const inspect = async () => (live ? ("resumed" as const) : ("pending" as const));
+
+    await expect(
+      executeUpdateReapSessionResume(journal(), port, { inspect, resume }),
+    ).rejects.toThrow("interrupted before resume commit");
+    port.write = write;
+    const retained = await port.read(journal().id);
+    expect(retained.targets[0]?.result?.resumeDisposition).toBe("retained");
+    const result = await executeUpdateReapSessionResume(retained, port, { inspect, resume });
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(result.phase).toBe("sessions-resumed");
+    expect(result.targets[0]?.terminal).toEqual(journal().targets[0]?.terminal);
+  });
 });
 
 function journal(): UpdateReapJournal {

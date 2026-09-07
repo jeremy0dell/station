@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { chmod, lstat, mkdir, readFile, rm, stat } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import {
@@ -13,6 +13,8 @@ import {
   RepairJournalSchema,
   type RepairRecoveryMutationProof,
 } from "@station/contracts";
+import { safeErrorFromUnknown } from "@station/runtime";
+import { z } from "zod";
 import { latestSchemaVersion } from "../migrations/index.js";
 import { recoveryInventoryDigest } from "../sessionRecovery/inventoryDigest.js";
 import { openSqlDatabase } from "../sqlite/driver.js";
@@ -42,8 +44,10 @@ export interface RecoveryRepairAuthorizationPort {
 /**
  * ADAPTER
  *
- * Uses SQLite's online backup API so committed WAL rows are included, then reopens the result
- * read-only to verify schema, integrity, size, and recovery inventory before returning an opaque ID.
+ * Uses SQLite's online backup API to include committed WAL rows, prepares only the new private
+ * copy in DELETE journal mode, then verifies it read-only before returning an opaque ID.
+ * Verification of a recorded backup never modifies the copy or its committed digest.
+ * Phase-specific failures preserve bounded native cause codes without exposing raw messages.
  */
 export function createSqliteRecoveryBackupPort(options: {
   databasePath: string;
@@ -55,19 +59,26 @@ export function createSqliteRecoveryBackupPort(options: {
   const backupRoot = join(options.stateDir, "repair", "backups");
   return {
     async create(input) {
-      await requireRegularFile(options.databasePath);
-      const sourceSize = (await stat(options.databasePath)).size;
-      if (sourceSize > maximumBytes)
-        throw new Error("Observer recovery backup exceeds the size limit.");
-
-      await mkdir(backupRoot, { recursive: true, mode: 0o700 });
-      await chmod(backupRoot, 0o700);
-      await requirePrivateDirectory(backupRoot);
-      const id = (options.backupId ?? randomUUID)();
-      const destinationDirectory = join(backupRoot, id);
-      await mkdir(destinationDirectory, { mode: 0o700 });
-      const destination = join(destinationDirectory, "observer.sqlite");
+      let phase: BackupPhase = "Creation";
+      let destinationDirectory: string | undefined;
       try {
+        await requireRegularFile(options.databasePath);
+        const sourceSize = (await stat(options.databasePath)).size;
+        if (sourceSize > maximumBytes)
+          throw validationFailure(
+            "REPAIR_BACKUP_SIZE_LIMIT",
+            "Observer recovery backup exceeds the size limit.",
+          );
+
+        await mkdir(backupRoot, { recursive: true, mode: 0o700 });
+        await chmod(backupRoot, 0o700);
+        await requirePrivateDirectory(backupRoot);
+        const id = RepairBackupSchema.shape.id.parse((options.backupId ?? randomUUID)());
+        const directory = join(backupRoot, id);
+        await mkdir(directory, { mode: 0o700 });
+        destinationDirectory = directory;
+        const destination = join(directory, "observer.sqlite");
+        await writeFile(destination, "", { flag: "wx", mode: 0o600 });
         const source = new DatabaseSync(options.databasePath, {
           readOnly: true,
         });
@@ -76,10 +87,21 @@ export function createSqliteRecoveryBackupPort(options: {
         } finally {
           source.close();
         }
-        await chmod(destination, 0o600);
+        phase = "Preparation";
+        const copy = openSqlDatabase(destination);
+        try {
+          const mode = z.strictObject({ journal_mode: z.literal("delete") });
+          mode.parse(copy.prepare("PRAGMA journal_mode = DELETE").get());
+        } finally {
+          copy.close();
+        }
+        phase = "Verification";
         const verified = await inspectBackup(destination, maximumBytes);
         if (verified.recoveryInventoryDigest !== input.expectedRecoveryInventoryDigest) {
-          throw new Error("Observer recovery inventory changed before backup verification.");
+          throw validationFailure(
+            "REPAIR_BACKUP_INVENTORY_CHANGED",
+            "Observer recovery inventory changed before backup verification.",
+          );
         }
         return RepairBackupSchema.parse({
           schemaVersion: 1,
@@ -87,24 +109,33 @@ export function createSqliteRecoveryBackupPort(options: {
           ...verified,
         });
       } catch (error) {
-        await rm(destinationDirectory, { recursive: true, force: true });
-        throw error;
+        if (destinationDirectory !== undefined) {
+          await rm(destinationDirectory, { recursive: true, force: true });
+        }
+        throw backupFailure(phase, error);
       }
     },
     async verify(input) {
-      const expected = RepairBackupSchema.parse(input);
-      await requirePrivateDirectory(backupRoot);
-      const destinationDirectory = join(backupRoot, expected.id);
-      await requirePrivateDirectory(destinationDirectory);
-      const verified = await inspectBackup(
-        join(destinationDirectory, "observer.sqlite"),
-        maximumBytes,
-      );
-      if (
-        verified.contentDigest !== expected.contentDigest ||
-        verified.recoveryInventoryDigest !== expected.recoveryInventoryDigest
-      ) {
-        throw new Error("Observer recovery backup proof did not match its private copy.");
+      try {
+        const expected = RepairBackupSchema.parse(input);
+        await requirePrivateDirectory(backupRoot);
+        const destinationDirectory = join(backupRoot, expected.id);
+        await requirePrivateDirectory(destinationDirectory);
+        const verified = await inspectBackup(
+          join(destinationDirectory, "observer.sqlite"),
+          maximumBytes,
+        );
+        if (
+          verified.contentDigest !== expected.contentDigest ||
+          verified.recoveryInventoryDigest !== expected.recoveryInventoryDigest
+        ) {
+          throw validationFailure(
+            "REPAIR_BACKUP_PROOF_MISMATCH",
+            "Observer recovery backup proof did not match its private copy.",
+          );
+        }
+      } catch (error) {
+        throw backupFailure("Verification", error);
       }
     },
   };
@@ -178,7 +209,10 @@ async function inspectBackup(
     metadata.size > maximumBytes ||
     (metadata.mode & 0o777) !== 0o600
   ) {
-    throw new Error("Observer recovery backup file was not private and bounded.");
+    throw validationFailure(
+      "REPAIR_BACKUP_FILE_INVALID",
+      "Observer recovery backup file was not private and bounded.",
+    );
   }
   const database = openSqlDatabase(path, { readOnly: true });
   let recoveryDigest: string;
@@ -187,13 +221,19 @@ async function inspectBackup(
       | { integrity_check: string }
       | undefined;
     if (integrity?.integrity_check !== "ok") {
-      throw new Error("Observer recovery backup failed SQLite integrity verification.");
+      throw validationFailure(
+        "REPAIR_BACKUP_INTEGRITY_FAILED",
+        "Observer recovery backup failed SQLite integrity verification.",
+      );
     }
     const schema = database
       .prepare("SELECT value FROM observer_meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
     if (Number(schema?.value) !== latestSchemaVersion) {
-      throw new Error("Observer recovery backup schema did not match this Station build.");
+      throw validationFailure(
+        "REPAIR_BACKUP_SCHEMA_MISMATCH",
+        "Observer recovery backup schema did not match this Station build.",
+      );
     }
     const snapshot = {
       sessions: correlationStore.listSessions(database).sort(compareIdentity),
@@ -214,14 +254,20 @@ async function inspectBackup(
 async function requireRegularFile(path: string): Promise<void> {
   const metadata = await lstat(path);
   if (!metadata.isFile() || metadata.isSymbolicLink()) {
-    throw new Error("Observer database path was not a regular file.");
+    throw validationFailure(
+      "REPAIR_BACKUP_SOURCE_INVALID",
+      "Observer database path was not a regular file.",
+    );
   }
 }
 
 async function requirePrivateDirectory(path: string): Promise<void> {
   const metadata = await lstat(path);
   if (!metadata.isDirectory() || metadata.isSymbolicLink() || (metadata.mode & 0o077) !== 0) {
-    throw new Error("Observer recovery backup directory was not owner-only.");
+    throw validationFailure(
+      "REPAIR_BACKUP_DIRECTORY_INVALID",
+      "Observer recovery backup directory was not owner-only.",
+    );
   }
 }
 
@@ -233,4 +279,33 @@ async function sha256File(path: string): Promise<string> {
 
 function compareIdentity(left: { id: string }, right: { id: string }): number {
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+type BackupPhase = "Creation" | "Preparation" | "Verification";
+const BackupCauseSchema = z.object({
+  code: z
+    .string()
+    .max(64)
+    .regex(/^(?:E[A-Z0-9_]+|SQLITE_[A-Z0-9_]+)$/),
+});
+
+function backupFailure(phase: BackupPhase, error: unknown): Error {
+  const normalized = safeErrorFromUnknown(error, {
+    tag: `RecoveryBackup${phase}Error`,
+    code: "REPAIR_BACKUP_FAILED",
+    message: `Observer recovery backup ${phase.toLowerCase()} failed.`,
+  });
+  const cause = BackupCauseSchema.safeParse(error);
+  if (cause.success) {
+    normalized.code = cause.data.code;
+  } else if (error instanceof z.ZodError) {
+    normalized.code = "REPAIR_BACKUP_VALIDATION_FAILED";
+  }
+  return Object.assign(new Error(normalized.message), normalized, {
+    tag: `RecoveryBackup${phase}Error`,
+  });
+}
+
+function validationFailure(code: string, message: string): Error {
+  return Object.assign(new Error(message), { tag: "RecoveryBackupValidationError", code });
 }

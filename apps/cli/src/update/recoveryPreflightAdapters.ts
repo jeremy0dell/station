@@ -1,6 +1,5 @@
 import { type StationConfig, stationHostSocketPath } from "@station/config";
 import type {
-  ObserverRecoveryAssessment,
   StationBuildIdentity,
   StationHostConvergenceCommand,
   StationHostExactEvidence,
@@ -11,10 +10,9 @@ import type {
   UpdateConvergencePlan,
   UpdateReapHostEvidence,
   UpdateReapObserverEvidence,
-  UpdateReapRecoveryAssessment,
   UpdateReapTerminalEvidence,
 } from "@station/contracts";
-import { compareCodeUnitStrings } from "@station/contracts";
+import { compareCodeUnitStrings, projectUpdateRecoveryAssessment } from "@station/contracts";
 import {
   type ExactObserverInspectionFailureReason,
   type ExactObserverOwnershipEvidence,
@@ -193,6 +191,7 @@ export async function deriveLocalUpdateReapAuthorization(input: {
   if (host === undefined) {
     throw new UpdateReapAuthorizationEvidenceError(
       "Exact Host evidence was unavailable for update reap.",
+      "host-evidence-unavailable",
     );
   }
   const holderPids = await readUnixSocketHolderPidsAsync(host.endpoint.socketPath, {
@@ -201,17 +200,20 @@ export async function deriveLocalUpdateReapAuthorization(input: {
   }).catch(() => {
     throw new UpdateReapAuthorizationEvidenceError(
       "The exact Host socket owner could not be inspected for update reap.",
+      "host-owner-unavailable",
     );
   });
   if (holderPids.length !== 1) {
     throw new UpdateReapAuthorizationEvidenceError(
       "The exact Host socket did not have one process owner.",
+      "host-owner-unavailable",
     );
   }
   const hostProcess = createLocalProcessEvidence().read(holderPids[0] ?? 0);
   if (hostProcess === undefined) {
     throw new UpdateReapAuthorizationEvidenceError(
       "The Host process identity was unavailable for update reap.",
+      "host-process-unavailable",
     );
   }
   const processGroupObservations = await Promise.all(
@@ -223,12 +225,14 @@ export async function deriveLocalUpdateReapAuthorization(input: {
       error instanceof UpdateReapProcessGroupEvidenceError
         ? error.message
         : "Terminal process-group evidence could not be inspected for update reap.",
+      "process-group-unavailable",
     );
   });
   const processGroups = processGroupObservations.map(exactUpdateReapProcessGroup);
   if (processGroups.some((group) => group === undefined)) {
     throw new UpdateReapAuthorizationEvidenceError(
       "A terminal process-group identity was unavailable for update reap.",
+      "process-group-unavailable",
     );
   }
   return deriveUpdateReapAuthorization({
@@ -259,13 +263,17 @@ export async function deriveLocalExactTerminalReapAuthorizationEvidence(input: {
   if (host === undefined) {
     throw new UpdateReapAuthorizationEvidenceError(
       "Exact Host evidence was unavailable for terminal reap.",
+      "host-evidence-unavailable",
     );
   }
   const terminal = host.terminals.find(
     (candidate) => candidate.alive && candidate.terminalTargetId === input.terminalTargetId,
   );
   if (terminal === undefined) {
-    throw new UpdateReapAuthorizationEvidenceError("The selected terminal was not live.");
+    throw new UpdateReapAuthorizationEvidenceError(
+      "The selected terminal was not live.",
+      "terminal-not-live",
+    );
   }
   const holderPids = await readUnixSocketHolderPidsAsync(host.endpoint.socketPath, {
     deadlineMs: Date.now() + 5_000,
@@ -273,23 +281,27 @@ export async function deriveLocalExactTerminalReapAuthorizationEvidence(input: {
   }).catch(() => {
     throw new UpdateReapAuthorizationEvidenceError(
       "The exact Host socket owner could not be inspected for terminal reap.",
+      "host-owner-unavailable",
     );
   });
   if (holderPids.length !== 1) {
     throw new UpdateReapAuthorizationEvidenceError(
       "The exact Host socket did not have one process owner.",
+      "host-owner-unavailable",
     );
   }
   const hostProcess = createLocalProcessEvidence().read(holderPids[0] ?? 0);
   if (hostProcess === undefined) {
     throw new UpdateReapAuthorizationEvidenceError(
       "The Host process identity was unavailable for terminal reap.",
+      "host-process-unavailable",
     );
   }
   const processGroup = exactUpdateReapProcessGroup(await input.processGroups.read(terminal.pid));
   if (processGroup === undefined) {
     throw new UpdateReapAuthorizationEvidenceError(
       "The terminal process-group identity was unavailable for terminal reap.",
+      "process-group-unavailable",
     );
   }
   return deriveExactTerminalReapAuthorizationEvidence({
@@ -444,7 +456,7 @@ async function inspectObserverRecoveryEvidence(input: {
           }
         : {
             status: "assessed",
-            assessment: publicRecoveryAssessment(inspection.recovery.assessment),
+            assessment: projectUpdateRecoveryAssessment(inspection.recovery.assessment),
           },
   };
   return exact;
@@ -591,42 +603,6 @@ function runtimeBuildRelation(input: {
 
 function updateArtifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
   return left.version === right.version && left.revision === right.revision;
-}
-
-function publicRecoveryAssessment(
-  assessment: ObserverRecoveryAssessment,
-): UpdateReapRecoveryAssessment {
-  const sessions: UpdateReapRecoveryAssessment["sessions"] = assessment.sessions.map((session) => {
-    const handleResolution = session.handleResolution;
-    const publicHandleResolution =
-      handleResolution.kind === "selected"
-        ? {
-            kind: "selected" as const,
-            eligibleHandleCount: handleResolution.eligibleHandleCount,
-            rejectedHandleCount: handleResolution.rejectedHandleCount,
-            rejectedReasons: handleResolution.rejectedReasons,
-          }
-        : handleResolution;
-    const projected: UpdateReapRecoveryAssessment["sessions"][number] = {
-      sessionId: session.sessionId,
-      projectId: session.projectId,
-      worktreeId: session.worktreeId,
-      lifecycle: session.lifecycle,
-      disposition: session.disposition,
-      reasons: session.reasons,
-      handleResolution: publicHandleResolution,
-    };
-    if (session.harnessProvider !== undefined) {
-      projected.harnessProvider = session.harnessProvider;
-    }
-    return projected;
-  });
-  return {
-    schemaVersion: 1,
-    resumeEnabled: assessment.resumeEnabled,
-    providerCapabilities: assessment.providerCapabilities,
-    sessions,
-  };
 }
 
 function observerUnknown(

@@ -13,6 +13,130 @@ import {
 import { deriveUpdateConvergencePlan } from "../../src/update/convergencePlan.js";
 
 describe("public convergence report projection", () => {
+  it.each([
+    [false, "worktree_evidence_missing"],
+    [true, "worktree_evidence_missing"],
+    [false, "harness_provider_missing"],
+  ] as const)("reports retained recovery uncertainty with reap=%s and reason=%s", (reap, reason) => {
+    const artifact = { version: "1.2.3" };
+    const buildIdentity = "a".repeat(64);
+    const selector = `1.2.3+station.${buildIdentity}`;
+    const initial = UpdateReapRecoveryPreflightSchema.parse({
+      schemaVersion: 1,
+      boundary: { authorization: "none", actions: "not-included", digest: "not-included" },
+      installed: artifact,
+      target: artifact,
+      observer: {
+        status: "exact",
+        health: "healthy",
+        buildVersion: selector,
+        relation: "matching-target",
+        recovery: {
+          status: "assessed",
+          assessment: {
+            schemaVersion: 1,
+            resumeEnabled: true,
+            providerCapabilities: [],
+            sessions: [
+              {
+                sessionId: "private-retained",
+                projectId: "private-project",
+                worktreeId: "private-worktree",
+                lifecycle: "open",
+                harnessProvider: "claude",
+                disposition: "unknown",
+                reasons: [reason],
+                handleResolution: { kind: "unknown", reasons: [reason] },
+              },
+            ],
+          },
+        },
+      },
+      host: { status: "absent" },
+      hookProviderIds: [],
+      hooks: [],
+      terminalDispositions: [],
+      parkedBridges: {
+        status: "assessed",
+        totalParkedCount: 0,
+        unownedParkedCount: 0,
+        adoptionRequiredCount: 0,
+      },
+      evidenceComplete: false,
+    });
+    const plan = deriveUpdateConvergencePlan(
+      UpdateConvergencePlanningInputSchema.parse({
+        preflight: initial,
+        targetRuntime: { status: "known", buildIdentity, observerSelector: selector },
+        installation: {
+          whenRequired: "apply",
+          owner: "installer-binary",
+          command: { kind: "none" },
+        },
+        handoff: { action: "preserve", fidelity: "processes" },
+      }),
+    );
+    expect(plan.outcome).toBe("converged");
+    const report: Extract<UpdateCommandReport, { kind: "result" }> = {
+      schemaVersion: 6,
+      kind: "result",
+      channel: "installer-binary",
+      current: artifact,
+      target: artifact,
+      status: "current",
+      initial,
+      plan,
+      finalInspection: { status: "completed", aggregate: initial, plan },
+      hookReconciliations: [],
+      steps: [],
+      warnings: [],
+      recoveryCommands: [],
+    };
+    if (reap)
+      report.reapRecovery = {
+        status: "completed",
+        terminals: [],
+        unresolved: false,
+        recoveryCommands: [],
+      };
+    const result = updateCommandResult(report, "json");
+    expect(result.code).toBe(0);
+    expect(result.output).toMatchObject({
+      warnings: [
+        {
+          code: "UPDATE_RETAINED_SESSION_UNRESOLVED",
+          message:
+            "The latest available inspection could not determine recovery for a retained session.",
+          sessionId: "public-session-00000001",
+        },
+      ],
+    });
+    expect(JSON.stringify(result.output)).not.toContain("private-");
+    const final = structuredClone(initial);
+    if (final.observer.status !== "exact" || final.observer.recovery.status !== "assessed")
+      throw new Error("Expected recovery assessment");
+    final.observer.recovery.assessment.sessions = [];
+    final.evidenceComplete = true;
+    const resolved = updateCommandResult(
+      { ...report, finalInspection: { status: "completed", aggregate: final, plan } },
+      "json",
+    );
+    expect(resolved.output).toMatchObject({ warnings: [] });
+    const failed = updateCommandResult(
+      {
+        ...report,
+        status: "failed",
+        finalInspection: {
+          status: "failed",
+          error: { tag: "TestError", code: "UNKNOWN", message: "Unavailable." },
+        },
+      },
+      "json",
+    );
+    expect(failed.output).toMatchObject({
+      warnings: [{ code: "UPDATE_RETAINED_SESSION_UNRESOLVED" }],
+    });
+  });
   it("aliases only typed structural identities across the aggregate and plan", () => {
     const current = { version: "1.0.0" };
     const target = { version: "1.1.0", revision: "target-revision" };

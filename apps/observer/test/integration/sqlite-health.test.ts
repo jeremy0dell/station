@@ -1,15 +1,50 @@
 import { createFakeTerminalTarget } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createSqliteObserverPersistence,
   latestSchemaVersion,
   migrations,
   openObserverSqlite,
 } from "../../src/internal";
+import * as driver from "../../src/sqlite/driver.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("observer SQLite health", () => {
+  it.each([
+    "PRAGMA journal_mode = WAL",
+    "PRAGMA synchronous = NORMAL",
+    "CREATE TABLE",
+    "DELETE FROM observer_migrations",
+  ])("closes the connection when initialization fails at %s", (statement) => {
+    const database = driver.openSqlDatabase(":memory:");
+    const originalExec = database.exec;
+    const originalPrepare = database.prepare;
+    const failure = new Error("fixture SQLite failure");
+    const close = vi.spyOn(database, "close");
+    vi.spyOn(database, "exec").mockImplementation((sql) => {
+      if (sql.includes(statement)) throw failure;
+      originalExec(sql);
+    });
+    vi.spyOn(database, "prepare").mockImplementation((sql) => {
+      if (sql.includes(statement)) throw failure;
+      return originalPrepare(sql);
+    });
+    vi.spyOn(driver, "openSqlDatabase").mockReturnValue(database);
+    expect(() => openObserverSqlite({ path: "fixture.sqlite" })).toThrow(
+      expect.objectContaining({
+        tag: "PersistenceInitializationError",
+        code: statement.startsWith("PRAGMA")
+          ? "PERSISTENCE_PRAGMA_FAILED"
+          : "PERSISTENCE_MIGRATION_FAILED",
+        cause: failure,
+      }),
+    );
+    expect(close).toHaveBeenCalledOnce();
+    expect(() => originalExec("SELECT 1")).toThrow();
+  });
   it("initializes an in-memory database, reports health, and closes cleanly", () => {
     const sqlite = openObserverSqlite({
       path: ":memory:",

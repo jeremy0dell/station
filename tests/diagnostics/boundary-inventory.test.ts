@@ -46,6 +46,10 @@ const tmuxImplementationMarkers = [
 // Every raw timer exception needs a reason here so new timeout plumbing stays intentional.
 const setTimeoutAllowlist = new Map([
   [
+    "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+    "Passive process-exit polling consumes the activation deadline before an exact Observer successor may start.",
+  ],
+  [
     "apps/observer/src/runtime/main.ts",
     "Shutdown backstop and final exit timers keep a stopped Observer process from lingering.",
   ],

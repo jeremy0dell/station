@@ -7,7 +7,7 @@ import {
   OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES,
   OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES,
 } from "@station/contracts";
-import { stationObserverBuildVersion } from "@station/runtime";
+import { shellQuote, stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState } from "../../../../../tests/support/temp-projects";
 
@@ -616,6 +616,44 @@ describe("CLI observer process startup", () => {
       startupEvidence: { bootLogPath: observerBootLogPath(fixture.stateDir) },
     });
     expect(statusError(result)?.message).not.toContain("super-secret-value");
+  });
+
+  it.each([
+    undefined,
+    "/tmp/config with 'quotes'.toml",
+  ])("directs installed-path replacement to update in config scope %s", async (configPath) => {
+    const fixture = await createTempState();
+    const cause = {
+      tag: "ObserverProcessEvidenceError",
+      code: "OBSERVER_PROCESS_INSTALLED_PATH_REPLACED",
+      message: "The installed Observer path was replaced.",
+    };
+    const result = await startObserver(
+      {
+        config: fixture.config,
+        ...(configPath === undefined ? {} : { configPath }),
+        timeoutMs: 5_000,
+      },
+      {
+        spawnObserver: async () =>
+          fakeChild({
+            exited: Promise.resolve({
+              type: "exit",
+              code: 1,
+              signal: null,
+              report: { schemaVersion: 1, error: cause },
+            }),
+          }),
+        clientFactory: unavailableClientFactory(),
+      },
+    );
+    expect(result).toMatchObject({ cause });
+    const hint = statusError(result)?.hint;
+    expect(hint).toContain("update --dry-run --json");
+    expect(hint).toContain("update --dry-run --reap --json");
+    expect(hint).toContain("update --reap");
+    expect(hint).not.toContain("observer stop");
+    if (configPath !== undefined) expect(hint).toContain(`stn --config ${shellQuote(configPath)}`);
   });
 
   it("preserves a typed stale-evidence refusal from the child report", async () => {

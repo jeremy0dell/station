@@ -33,7 +33,8 @@ export function resolveLaunchPaneTarget(request: TerminalLaunchProcessRequest): 
 
 function renderLaunchCommand(plan: HarnessLaunchPlan): string {
   const args = plan.args.map(quoteArg);
-  return [quoteCommand(plan.command), ...args].join(" ");
+  // Replace the shell so tmux observes the agent as the foreground process on Linux.
+  return ["exec", quoteCommand(plan.command), ...args].join(" ");
 }
 
 // Commands and args have different safe character sets; keep command paths conservative.

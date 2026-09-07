@@ -205,6 +205,44 @@ describe("executeUpdateConvergence", () => {
     );
   });
 
+  it("continues after Observer activation but before its journal commit without starting it twice", async () => {
+    const state = await createTempState();
+    const initial = preflight({ observer: { status: "absent" }, host: { status: "absent" } });
+    const final = preflight({ observer: matchingObserver(), host: matchingHost() });
+    const journalPort = memoryJournal(journalAt("hooks-converged"));
+    const write = journalPort.write;
+    journalPort.write = async (journal) => {
+      if (journal.phase === "observer-converged") throw new Error("interrupted after activation");
+      await write(journal);
+    };
+    const starts = vi.fn();
+    const deps = {
+      inspect: vi.fn().mockResolvedValue(final),
+      inspectInstalled: async () => ({ version: "1.0.0" }),
+      convergeObserver: vi.fn(async ({ action }: { action: string }) => {
+        if (action !== "no-op") starts();
+        return runningObserver(state.config);
+      }),
+      reconcilePersisted: vi.fn(async () => undefined),
+    };
+    const execute = (aggregate: UpdateReapRecoveryPreflight) => {
+      const planning = planningInput(aggregate);
+      const plan = deriveUpdateConvergencePlan(planning);
+      const report = createUpdateReport(selectedChannel(), aggregate, plan);
+      const input = executionInput(state.config, aggregate, plan, planning, report);
+      input.request.reap = true;
+      input.reap = { journal: journalPort.current(), journalPort };
+      return executeUpdateConvergence(input, deps);
+    };
+
+    expect((await execute(initial)).status).toBe("failed");
+    expect(journalPort.current().phase).toBe("hooks-converged");
+    journalPort.write = write;
+    expect((await execute(final)).status).toBe("current");
+    expect(starts).toHaveBeenCalledTimes(1);
+    expect(journalPort.current().phase).toBe("completed");
+  });
+
   it.each([
     ["incumbent-host-empty", "after Host exit"],
     ["artifact-applied", "during hook repair"],

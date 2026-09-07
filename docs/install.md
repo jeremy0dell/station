@@ -134,6 +134,22 @@ group. It resumes eligible sessions after runtime convergence and reports every
 reaped, resumed, retained, or unresolved alias. `stn update --dry-run --reap`
 remains read-only.
 
+For tmux placement, Station replaces the launch shell with the agent process so
+foreground-process inspection can observe the resumed agent.
+
+If startup reports `OBSERVER_PROCESS_INSTALLED_PATH_REPLACED`, run the update
+preview and apply commands above. When using a separate configuration, preserve
+its scope with `stn --config <path> update`. Ordinary startup does not perform
+recovery. Terminal termination requires explicit `--reap`.
+
+An unrelated retained session whose worktree is missing does not block exact
+recovery targets. Station preserves that record. Missing or changed ownership,
+group membership, or recovery evidence for a target still refuses reaping.
+Update results warn about any retained session whose recovery is unknown in the
+latest available inspection, with or without `--reap`, even when the final runtime
+plan is `converged`. The warning reports recovery status; it does not indicate
+that reap authorization excluded the session.
+
 Binaries older than the first release that supports `--reap` cannot execute
 this recovery path. Close affected sessions before installing that first
 supporting release, then run the update again.

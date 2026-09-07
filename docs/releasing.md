@@ -21,7 +21,7 @@ builds the four native targets, creates a six-asset draft, exercises the stamped
 draft installer, binds the exact numeric asset IDs and shared target build
 identity, and records an immutable `accepted-release-candidate-*` artifact. The
 macOS candidate lane selects the newest complete immutable predecessor and runs
-eight staged cases. The predecessor artifact runs external and tmux busy
+nine staged cases. The predecessor artifact runs external and tmux busy
 compiled-Host refusals plus one tmux no-Host update. The refusal cases preserve
 the old Host, PTY, and output, while the no-Host case completes the version
 change. Four more cases start the compiled predecessor runtime, install the
@@ -45,7 +45,15 @@ non-resumable session disposition without raw process identity.
 Every v6 preview and result uses correlated `public-*` aliases instead of local
 project, worktree, session, terminal-target, PTY, and PTY-instance identifiers.
 Successful results include a completed final inspection whose newly derived
-plan is `converged`. `bun run test:ci:binary` runs the same eight cases against
+plan is `converged`. A ninth private compiled case recovers three Codex sessions using a
+fixture-owned Codex executable, a fixed Worktrunk inventory of private Git
+worktrees, and synthetic native recovery artifacts. It verifies
+original Station and provider identities, configured tmux placement, preservation
+of an unrelated missing-worktree record, a real TUI launch into the project view,
+and an idempotent completed rerun. The focused lifecycle and journal tests
+interrupt reap, activation, and resume before their result commits and verify
+continuation without duplicate effects.
+`bun run test:ci:binary` runs the same nine cases against
 deterministic same-source binaries; its source bridge uses the current checkout
 with an explicit test identity override. Only the tagged staged lane proves the
 immutable predecessor-to-candidate release boundary. Post-promotion public update

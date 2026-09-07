@@ -33,7 +33,11 @@ import {
   ObserverProcessIdentitySchema,
   ObserverProcessTokenSchema,
 } from "@station/contracts";
-import { acquireObserverBootClaim, observerBootClaimPath } from "@station/observer/internal";
+import {
+  acquireObserverBootClaim,
+  observerBootClaimPath,
+  openObserverSqlite,
+} from "@station/observer/internal";
 import { createObserverClient, listenUnixSocket, probeUnixSocket } from "@station/protocol";
 import { stationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
@@ -584,6 +588,108 @@ describe("observer lifecycle e2e", () => {
       }
       await terminateFixture(incumbent.child);
       expect(processIsAlive(incumbent.child.pid)).toBe(false);
+    }
+  });
+
+  it.each([
+    { stopDelayMs: 3000, timeoutMs: 10_000, expectedStatus: "running" },
+    { stopDelayMs: 15_000, timeoutMs: 2000, expectedStatus: "unhealthy" },
+  ])("waits for the stopped Observer to release its SQLite write lock: $expectedStatus", async ({
+    stopDelayMs,
+    timeoutMs,
+    expectedStatus,
+  }) => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const incumbent = await startIncumbentFixture({
+      stateDir: fixture.stateDir,
+      socketPath: fixture.socketPath,
+      version: stationObserverBuildVersion({
+        ...stationBuildInfo(),
+        buildIdentity: "f".repeat(64),
+      }),
+      fixturePath: "apps/cli/test/fixtures/observer-delayed-exit-child.mjs",
+      stopDelayMs,
+    });
+    const database = new DatabaseSync(join(fixture.stateDir, "observer.sqlite"));
+    try {
+      // This is the first write in applyMigrations for an already migrated database.
+      const statement =
+        "DELETE FROM observer_migrations WHERE (version = 12 AND name = 'session_harness_executions') OR (version = 13 AND name = 'native_binding_ingress_claims')";
+      expect(() => database.prepare(statement).run()).toThrow("database is locked");
+      const owners = await execFileAsync(
+        process.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof",
+        ["-t", join(fixture.stateDir, "observer.sqlite")],
+      );
+      expect(owners.stdout.split("\n")).toContain(String(incumbent.child.pid));
+      database.close();
+      const activated = await ensureExactObserverBuild({ config, timeoutMs });
+      expect(activated, JSON.stringify(activated)).toMatchObject({ status: expectedStatus });
+      if (expectedStatus === "running") {
+        expect(activated).toMatchObject({ lifecycle: "replaced" });
+        expect(processIsAlive(incumbent.child.pid)).toBe(false);
+      } else {
+        expect(activated).toMatchObject({
+          phase: "stop",
+          incumbentDisposition: "unknown",
+          cause: { code: "OBSERVER_EXACT_DEADLINE_EXCEEDED" },
+        });
+        expect(processIsAlive(incumbent.child.pid)).toBe(true);
+      }
+      expect(
+        JSON.parse(await readFile(join(fixture.stateDir, "lock-holder.json"), "utf8")),
+      ).toEqual({
+        pid: incumbent.child.pid,
+        statement: "BEGIN IMMEDIATE",
+        protocolClosed: true,
+      });
+    } finally {
+      try {
+        database.close();
+      } catch {
+        /* Already closed before successor startup. */
+      }
+      await stopCurrentObserver(fixture.socketPath);
+      await terminateFixture(incumbent.child);
+    }
+  });
+
+  it("refuses a successor while an external process retains the SQLite write lock", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const incumbent = await startIncumbentFixture({
+      stateDir: fixture.stateDir,
+      socketPath: fixture.socketPath,
+      version: stationObserverBuildVersion({
+        ...stationBuildInfo(),
+        buildIdentity: "f".repeat(64),
+      }),
+    });
+    const external = openObserverSqlite({ path: join(fixture.stateDir, "observer.sqlite") });
+    external.database.exec("BEGIN IMMEDIATE");
+    try {
+      const started = Date.now();
+      const activated = await ensureExactObserverBuild({ config, timeoutMs: 5000 });
+      expect(Date.now() - started).toBeLessThan(7000);
+      expect(activated, JSON.stringify(activated)).toMatchObject({
+        status: "unhealthy",
+        phase: "start",
+        incumbentDisposition: "stopped",
+      });
+      expect(processIsAlive(incumbent.child.pid)).toBe(false);
+      await expect(probeUnixSocket(fixture.socketPath)).resolves.toMatchObject({
+        status: "absent",
+      });
+      const owners = await execFileAsync(
+        process.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof",
+        ["-t", join(fixture.stateDir, "observer.sqlite")],
+      );
+      expect(owners.stdout.trim().split("\n")).toEqual([String(process.pid)]);
+    } finally {
+      external.database.exec("ROLLBACK");
+      external.close();
+      await stopCurrentObserver(fixture.socketPath);
+      await terminateFixture(incumbent.child);
     }
   });
 
@@ -1354,6 +1460,7 @@ async function startIncumbentFixture(input: {
   executablePath?: string;
   pidfileVersion?: string;
   mode?: "graceful" | "wedged";
+  fixturePath?: string;
   stopDelayMs?: number;
 }): Promise<{
   child: ChildProcess;
@@ -1362,7 +1469,10 @@ async function startIncumbentFixture(input: {
   const sourceRoot = join(dirname(input.stateDir), "incumbent-runtime");
   const observerEntry = join(sourceRoot, "apps", "cli", "dist", "observerMain.js");
   await mkdir(dirname(observerEntry), { recursive: true });
-  await copyFile(join(process.cwd(), "tests", "support", "observerMain.js"), observerEntry);
+  await copyFile(
+    join(process.cwd(), input.fixturePath ?? "tests/support/observerMain.js"),
+    observerEntry,
+  );
   await writeFile(join(sourceRoot, "package.json"), `${JSON.stringify({ type: "module" })}\n`);
   const args = [
     observerEntry,
