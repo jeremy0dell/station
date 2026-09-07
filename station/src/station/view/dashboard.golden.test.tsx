@@ -212,8 +212,8 @@ describe("dashboard golden frames", () => {
       /Design refresh 2 sessions─+ \[quick session\] \[▾\]─╮$/u,
     );
     const emptyHeader = groupsFirstLines.findIndex((line) => line.includes("▼ Post-launch"));
-    expect(groupsFirstLines[emptyHeader]?.trimEnd()).toMatch(/^╭─.*─╮$/u);
-    expect(groupsFirstLines[emptyHeader + 1]?.trimEnd()).toMatch(/^╰─+╯$/u);
+    expect(groupsFirstLines[emptyHeader]?.trimEnd()).toMatch(/^ ╭.*─╮$/u);
+    expect(groupsFirstLines[emptyHeader + 1]?.trimEnd()).toMatch(/^ ╰─+╯$/u);
     expect(groupsFirstLines[emptyHeader + 2]).toContain("▼ Release train");
 
     const collapsed = await renderDashboard({
@@ -280,9 +280,9 @@ describe("dashboard golden frames", () => {
     expect(group).toBeDefined();
     expect(hasAncestor(pending, "station-dashboard-group:group:group_post_launch")).toBe(true);
     expect(hasAncestor(group, "station-dashboard-project:project:station")).toBe(true);
-    expect(lines[firstLine]?.startsWith("│")).toBe(true);
+    expect(lines[firstLine]?.startsWith(" │")).toBe(true);
     expect(lines[firstLine]?.trimEnd().endsWith("│")).toBe(true);
-    expect(lines[firstLine + 1]?.trimEnd()).toMatch(/^╰─+╯$/u);
+    expect(lines[firstLine + 1]?.trimEnd()).toMatch(/^ ╰─+╯$/u);
   });
 
   it("lays out mixed-height children and follows semantic focus through resize and reflow", async () => {
@@ -441,7 +441,7 @@ describe("dashboard golden frames", () => {
     });
     const lines = setup.captureCharFrame().split("\n");
     const project = lines.find((line) => line.includes("▼ 界e\u0301"));
-    const group = lines.find((line) => line.includes("▼ A 界e\u0301") && line.startsWith("╭─"));
+    const group = lines.find((line) => line.includes("▼ A 界e\u0301") && line.startsWith(" ╭"));
 
     expect(project).toBeDefined();
     expect(group).toBeDefined();
@@ -486,10 +486,10 @@ describe("dashboard golden frames", () => {
       const spans = setup.captureSpans();
       const focusMarkerColumn = line.indexOf("▸");
 
-      expect(spanHex(spanAtFrameCell(spans, row, 0))).toBe(
+      expect(spanHex(spanAtFrameCell(spans, row, 1))).toBe(
         stationColorSnapshotValue(nativeStationTheme.status.working),
       );
-      expect((spanAtFrameCell(spans, row, 0)?.attributes ?? 0) & TextAttributes.DIM).toBe(0);
+      expect((spanAtFrameCell(spans, row, 1)?.attributes ?? 0) & TextAttributes.DIM).toBe(0);
       expect(line.match(/▸/gu)).toHaveLength(1);
       expect(focusMarkerColumn).toBeGreaterThan(0);
       expect(focusMarkerColumn).toBe(markerColumns[cellId as keyof typeof markerColumns]);
@@ -525,7 +525,7 @@ describe("dashboard golden frames", () => {
     const memberRow = memberLines.findIndex((line) => line.includes("group-contracts"));
     const memberColumn = memberLines[memberRow]?.indexOf("group-contracts") ?? -1;
     const spans = member.captureSpans();
-    const ring = spanAtFrameCell(spans, headerRow, 0);
+    const ring = spanAtFrameCell(spans, headerRow, 1);
     const headerRuleColumn = memberLines[headerRow]?.search(/─{2,}/u) ?? -1;
 
     expect(spanHex(ring)).not.toBe(
@@ -537,7 +537,7 @@ describe("dashboard golden frames", () => {
     expect(headerRuleColumn).toBeGreaterThan(-1);
     expect(spanHex(spanAtFrameCell(spans, headerRow, headerRuleColumn))).toBe(spanHex(ring));
     expect(((ring?.attributes ?? 0) & TextAttributes.DIM) !== 0).toBe(false);
-    expect(memberLines[memberRow]).toMatch(/^│ ▏/u);
+    expect(memberLines[memberRow]).toMatch(/^ │▏/u);
     expect(memberLines[memberRow]?.match(/▏/gu)).toHaveLength(1);
     expect(spanBgHex(spanAtFrameCell(spans, memberRow, memberColumn))).toBe(
       stationColorSnapshotValue(nativeStationTheme.interaction.keyboardFocus),
