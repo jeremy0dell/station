@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./popup-fast": {
+      "types": "./dist/popup/fastLauncher.d.ts",
+      "import": "./dist/popup/fastLauncher.js"
     }
   },
   "scripts": {

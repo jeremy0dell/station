@@ -3,4 +3,5 @@ export {
   isCompiledBinary,
   stationBuildInfo,
   stationBuildInfoAsync,
+  stationObserverBuildVersion,
 } from "./buildInfo.js";

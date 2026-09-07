@@ -69,13 +69,13 @@ stdin reads:
 
 ```text
 stn
-├── argv0 stn-tmux-popup -> popup command
+├── argv0 stn-tmux-popup -> current-build popup reuse or full popup command
 ├── __observer         -> Observer process
 ├── __ingress          -> provider-hook ingress
 ├── __tui              -> native TUI renderer
 ├── __dashboard        -> popup dashboard renderer
 ├── __station-host     -> persistent PTY host
-├── __tmux-popup       -> popup command
+├── __tmux-popup       -> current-build popup reuse or full popup command
 └── all other argv     -> normal CLI
 
 stn-ingress
@@ -91,6 +91,12 @@ The installed executable directory is the ownership root for popup registration,
 setup-generated launchers, and the absolute `stn-ingress` path stored in provider
 hooks. A virtual compiled module path and filesystem root `/` are never accepted
 as ownership roots.
+
+Managed popup bindings store the absolute alias, configured geometry, and caller
+context. The installed executable owns the warm-open decision, so a build
+signature captured by setup cannot authorize an older renderer after an upgrade.
+The warm path keeps configuration and full CLI loading behind its fallback.
+See [TUI development](tui.md) for migrating previously loaded inline bindings.
 
 The native ingress launcher does not own provider parsing or lifecycle policy.
 Only provider integrations opt configured events into `--fast`; Claude and

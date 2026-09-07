@@ -136,6 +136,12 @@ describe("tmux popup", () => {
             if (!replacedAlive) throw Object.assign(new Error("missing"), { code: 1 });
             return tmuxCommandResult(input);
           }
+          if (input.args?.[0] === "display-message") {
+            return tmuxCommandResult(
+              input,
+              '$7\t%8\t1\t1\tv1:node stale tui --popup --persistent\t"env STATION_TUI_POPUP=1 STATION_FOCUS_PROVIDER=tmux node stale tui --popup --persistent"\n',
+            );
+          }
           if (input.args?.[0] === "if-shell") {
             replacedAlive = false;
             return tmuxCommandResult(input);
@@ -152,10 +158,36 @@ describe("tmux popup", () => {
       "if-shell",
       "-F",
       "-t",
-      "station ui:",
-      "#{==:#{@station_popup_ui_signature},v1:node stale tui --popup --persistent}",
-      "kill-session -t 'station ui'",
+      "=station ui:",
+      expect.stringContaining("#{==:#{session_id},$7}"),
+      "kill-session -t '$7'",
     ]);
+  });
+
+  it("replaces a signed dashboard whose printed command contains shell quoting", async () => {
+    const command = String.raw`'/opt/station $HOME/quote'\''back\slash"#/stn' tui --popup --persistent`;
+    const signature = `v1:${command}`;
+    const printed = `"env STATION_TUI_POPUP=1 STATION_FOCUS_PROVIDER=tmux ${command.replace(/[\\"$]/g, "\\$&")}"`;
+    let alive = true;
+    const calls: ExternalCommandInput[] = [];
+    await expect(
+      ensurePersistentPopupSession({
+        runner: async (input) => {
+          calls.push(input);
+          if (input.args?.[0] === "has-session" && !alive)
+            throw Object.assign(new Error("missing"), { code: 1 });
+          if (input.args?.[0] === "display-message")
+            return tmuxCommandResult(input, `$7\t%8\t1\t1\t${signature}\t${printed}\n`);
+          if (input.args?.[0] === "if-shell") alive = false;
+          if (input.args?.includes("@station_popup_ui_signature"))
+            return tmuxCommandResult(input, `${signature}\n`);
+          return tmuxCommandResult(input);
+        },
+      }),
+    ).resolves.toEqual({ created: true, sessionName: "_station-ui" });
+    expect(calls.find((call) => call.args?.[0] === "if-shell")?.args?.at(-1)).toBe(
+      "kill-session -t '$7'",
+    );
   });
 
   it("pins a client-scoped persistent renderer to its owning client", async () => {
@@ -224,6 +256,47 @@ describe("tmux popup", () => {
     ).toBe(false);
   });
 
+  it.each([
+    [
+      "extra window",
+      "2",
+      "1",
+      '"env STATION_TUI_POPUP=1 STATION_FOCUS_PROVIDER=tmux stn tui --popup --persistent"',
+    ],
+    [
+      "extra pane",
+      "1",
+      "2",
+      '"env STATION_TUI_POPUP=1 STATION_FOCUS_PROVIDER=tmux stn tui --popup --persistent"',
+    ],
+    ["repurposed pane", "1", "1", '"important-agent"'],
+    ["malformed command", "1", "1", '"env STATION_TUI_POPUP=1\\q"'],
+    ["multiple command arguments", "1", "1", '"env" "STATION_TUI_POPUP=1"'],
+  ])("preserves a signed popup session containing an %s", async (_label, windows, panes, command) => {
+    const calls: ExternalCommandInput[] = [];
+    const signature = "v1:stn tui --popup --persistent";
+    await expect(
+      ensurePersistentPopupSession({
+        runner: async (input) => {
+          calls.push(input);
+          if (input.args?.[0] === "display-message") {
+            return tmuxCommandResult(
+              input,
+              `${[`$7`, `%8`, windows, panes, signature, command].join("\t")}\n`,
+            );
+          }
+          if (input.args?.includes("@station_popup_ui_signature")) {
+            return tmuxCommandResult(input, `${signature}\n`);
+          }
+          return tmuxCommandResult(input);
+        },
+      }),
+    ).rejects.toMatchObject({ code: "TERMINAL_POPUP_FAILED" });
+    expect(calls.some((call) => call.args?.some((arg) => arg.includes("kill-session")))).toBe(
+      false,
+    );
+  });
+
   it("reuses a concurrent replacement winner instead of killing its session", async () => {
     let signature = "v1:node stale tui --popup --persistent";
     const concurrentCalls: ExternalCommandInput[] = [];
@@ -231,6 +304,14 @@ describe("tmux popup", () => {
       ensurePersistentPopupSession({
         runner: async (input) => {
           concurrentCalls.push(input);
+          if (input.args?.[0] === "display-message") {
+            return tmuxCommandResult(
+              input,
+              "$7\t%8\t1\t1\t" +
+                signature +
+                '\t"env STATION_TUI_POPUP=1 STATION_FOCUS_PROVIDER=tmux node stale tui --popup --persistent"\n',
+            );
+          }
           if (input.args?.[0] === "if-shell") {
             // The CAS no-ops: a contender already swapped in this exact build's session.
             signature = defaultSignature;
@@ -977,6 +1058,24 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
     if (args[0] === "display-message" && args.includes("#{client_name}")) {
       return tmuxCommandResult(input, `${clientName}\n`);
     }
+    if (args[0] === "display-message" && args.at(-1)?.includes("#{pane_start_command}")) {
+      const name = (args[args.indexOf("-t") + 1] ?? "").replace(/^=/, "").replace(/:$/, "");
+      const signature = sessionSignatures.get(name) ?? "";
+      const command = signature.startsWith("v1:")
+        ? signature.slice(3)
+        : signature.slice(signature.indexOf(":", 3) + 1);
+      return tmuxCommandResult(
+        input,
+        `${[
+          `$7`,
+          `%8`,
+          "1",
+          "1",
+          signature,
+          `"env STATION_TUI_POPUP=1 STATION_FOCUS_PROVIDER=tmux ${command.replace(/[\\"$]/g, "\\$&")}"`,
+        ].join("\t")}\n`,
+      );
+    }
     if (args[0] === "has-session") {
       const sessionName = args[2] ?? "";
       if (killedSessions.has(sessionName) || !sessionSignatures.has(sessionName)) {
@@ -1021,7 +1120,8 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
       const command = args[args.indexOf("-t") >= 0 ? 5 : 3] ?? "";
       if (command.startsWith("kill-session -t ")) {
         const targetIndex = args.indexOf("-t");
-        const target = targetIndex < 0 ? "" : (args[targetIndex + 1] ?? "").replace(/:$/, "");
+        const target =
+          targetIndex < 0 ? "" : (args[targetIndex + 1] ?? "").replace(/^=/, "").replace(/:$/, "");
         const expected = extractComparedValue(condition, "@station_popup_ui_signature");
         if ((sessionSignatures.get(target) ?? "") === expected) {
           killedSessions.add(target);

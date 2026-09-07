@@ -38,12 +38,6 @@ clear_popup_client_if_current() {
   fi
 }
 
-clear_normal_fast_popup_registration() {
-  "$tmux_bin" set-option -gq -u @station_popup_ui_session_name 2>/dev/null || true
-  "$tmux_bin" set-option -gq -u @station_popup_ui_expected_signature 2>/dev/null || true
-  "$tmux_bin" set-option -gq -u @station_popup_ui_root 2>/dev/null || true
-}
-
 fallback_or_exit() {
   case "${STATION_FAST_POPUP_NO_FALLBACK:-}" in
     1|true|yes) exit 1 ;;
@@ -100,36 +94,6 @@ try_registered_dev_ui() {
   try_ui_candidate "$candidate_session" "v1:$candidate_command" "$candidate_owner"
 }
 
-try_registered_normal_ui() {
-  candidate_session=$("$tmux_bin" show-options -gqv @station_popup_ui_session_name 2>/dev/null || true)
-  candidate_signature=$("$tmux_bin" show-options -gqv @station_popup_ui_expected_signature 2>/dev/null || true)
-  candidate_root=$("$tmux_bin" show-options -gqv @station_popup_ui_root 2>/dev/null || true)
-  if [ -z "$candidate_session" ] || [ -z "$candidate_signature" ] || [ -z "$candidate_root" ]; then
-    clear_normal_fast_popup_registration
-    return 1
-  fi
-  if [ "$candidate_root" != "$root" ]; then
-    clear_normal_fast_popup_registration
-    return 1
-  fi
-  if ! "$tmux_bin" has-session -t "$candidate_session" >/dev/null 2>&1; then
-    clear_normal_fast_popup_registration
-    return 1
-  fi
-  if ! signature_matches_expected "$candidate_session" "$candidate_signature"; then
-    clear_normal_fast_popup_registration
-    return 1
-  fi
-  session_name=$candidate_session
-  return 0
-}
-
-select_registered_ui() {
-  try_registered_dev_ui && return 0
-  try_registered_normal_ui && return 0
-  return 1
-}
-
 case "${STATION_DISABLE_FAST_POPUP:-}" in
   1|true|yes) fallback_or_exit ;;
 esac
@@ -146,7 +110,7 @@ fi
 tmux_bin=${STATION_TMUX_BIN:-tmux}
 command -v "$tmux_bin" >/dev/null 2>&1 || fallback_or_exit
 
-select_registered_ui || fallback_or_exit
+try_registered_dev_ui || fallback_or_exit
 
 client_id=${STATION_FOCUS_CLIENT_ID:-}
 if [ -z "$client_id" ]; then

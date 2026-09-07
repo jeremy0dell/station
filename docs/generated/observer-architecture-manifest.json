@@ -16354,6 +16354,14 @@
       "dependencies": []
     },
     {
+      "path": "apps/cli/src/tmuxPopupMain.ts",
+      "declaration": "runTmuxPopupMain",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Supplies the current renderer command to the popup adapter before loading the CLI fallback.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/update/convergenceExecution.ts",
       "declaration": "executeUpdateConvergence",
       "kind": "function",
@@ -19474,7 +19482,15 @@
       "declaration": "buildManagedFastPopupRunShellCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates the server-scoped installed popup owner into a silent tmux warm-path command that falls back to the exact compiled alias whenever its versioned route cannot be acted on safely. Configured popup geometry and status bar are baked into the warm-path `display-popup`, defaulting to `defaultTmuxWorkbenchConfig`; only `popup_scope = \"client\"` needs the runtime config-aware path.",
+      "purpose": "Pins popup configuration and caller context to the installed alias. The alias checks its current build on each invocation; the persisted binding contains no build or route decision.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/terminal/tmux/src/popup/fastLauncher.ts",
+      "declaration": "runManagedFastPopup",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Executes popup reuse checks from the current installed build before loading the CLI. CLI composition supplies the renderer command for this invocation. Inconclusive routes enter the same installation's full popup command.",
       "dependencies": []
     },
     {
@@ -19483,6 +19499,22 @@
       "kind": "function",
       "role": "ADAPTER",
       "purpose": "Coordinates the configured ownership scope and persistent renderer through tmux.",
+      "dependencies": [
+        {
+          "path": "integrations/terminal/tmux/src/popup/persistentUi.ts",
+          "declaration": "ensurePersistentPopupSession",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/tmux/src/popup/persistentUi.ts",
+      "declaration": "ensurePersistentPopupSession",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Reuses the exact renderer build or replaces only a revalidated dashboard-only tmux session. Unsigned, repurposed, and concurrently changed sessions retain their processes and panes.",
       "dependencies": []
     },
     {

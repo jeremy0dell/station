@@ -31,6 +31,10 @@
     "./ingress-main": {
       "types": "./dist/ingressMain.d.ts",
       "import": "./dist/ingressMain.js"
+    },
+    "./tmux-popup-main": {
+      "types": "./dist/tmuxPopupMain.d.ts",
+      "import": "./dist/tmuxPopupMain.js"
     }
   },
   "bin": {

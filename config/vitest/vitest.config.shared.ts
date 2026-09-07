@@ -58,11 +58,11 @@ export const stationAliases = {
   "@station/protocol": fileURLToPath(
     new URL("../../packages/protocol/src/index.ts", import.meta.url),
   ),
-  "@station/runtime": fileURLToPath(
-    new URL("../../packages/runtime/src/index.ts", import.meta.url),
-  ),
   "@station/runtime/build-info": fileURLToPath(
     new URL("../../packages/runtime/src/buildInfoEntry.ts", import.meta.url),
+  ),
+  "@station/runtime": fileURLToPath(
+    new URL("../../packages/runtime/src/index.ts", import.meta.url),
   ),
   "@station/scripted-harness": fileURLToPath(
     new URL("../../integrations/harness/scripted/src/index.ts", import.meta.url),
@@ -81,6 +81,9 @@ export const stationAliases = {
   ),
   "@station/terminal": fileURLToPath(
     new URL("../../integrations/terminal/station/src/index.ts", import.meta.url),
+  ),
+  "@station/tmux/popup-fast": fileURLToPath(
+    new URL("../../integrations/terminal/tmux/src/popup/fastLauncher.ts", import.meta.url),
   ),
   "@station/tmux": fileURLToPath(
     new URL("../../integrations/terminal/tmux/src/index.ts", import.meta.url),
