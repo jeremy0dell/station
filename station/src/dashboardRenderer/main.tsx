@@ -5,6 +5,7 @@
 // dispatches the same observer commands the Ink TUI did (no Station panes).
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
+import { startDevelopmentTimingCleanup } from "../profiling/developmentTiming.js";
 import { toSafeError } from "@station/client";
 import { createDashboardRuntime } from "@station/dashboard-core/runtime";
 import {
@@ -39,7 +40,7 @@ import {
   type PopupRuntime,
 } from "./popupRuntime.js";
 import {
-  beginHotDisposal,
+  registerHotDisposal,
   type StationHotDisposalSlots,
   waitForHotDisposal,
 } from "../hmr/hotDisposalBarrier.js";
@@ -66,6 +67,7 @@ type DashboardRendererHotSlots = StationHotDisposalSlots & {
 export async function runDashboardMain(): Promise<void> {
   const env = process.env;
   const hotSlots = globalThis as DashboardRendererHotSlots;
+  hotSlots.__stationHotDispose?.();
   const clipboardEffects = createRuntimeClipboardEffects({
     env,
     platform: process.platform,
@@ -203,6 +205,7 @@ export async function runDashboardMain(): Promise<void> {
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
     });
     renderer = nextRenderer;
+    nextRenderer.on("destroy", startDevelopmentTimingCleanup());
     const nextThemeController = createStationThemeController(nextRenderer);
     themeController = nextThemeController;
     // The controller begins on the complete fallback; palette I/O must not block the first frame.
@@ -236,15 +239,14 @@ export async function runDashboardMain(): Promise<void> {
     );
     process.on("exit", onProcessExit);
 
+    const disposeForHotReload = registerHotDisposal(
+      hotSlots,
+      () => runtimeLifecycle.dispose(),
+      reportDashboardHotDisposalFailure,
+    );
     if (import.meta.hot) {
       import.meta.hot.accept();
-      import.meta.hot.dispose(() => {
-        beginHotDisposal(
-          hotSlots,
-          () => runtimeLifecycle.dispose(),
-          reportDashboardHotDisposalFailure,
-        );
-      });
+      import.meta.hot.dispose(disposeForHotReload);
     }
   } catch (error) {
     try {

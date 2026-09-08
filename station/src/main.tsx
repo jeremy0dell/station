@@ -8,6 +8,7 @@ import { componentLogPath, createJsonlLogger, toSafeError } from "@station/obser
 import { stationBuildInfo } from "@station/runtime";
 import { convergeStationHost } from "@station/terminal";
 import { Profiler } from "react";
+import { startDevelopmentTimingCleanup } from "./profiling/developmentTiming.js";
 import { loadStationConfig } from "./config/stationConfig.js";
 import {
   loadStationTuiConfig,
@@ -18,7 +19,7 @@ import { createNodeFolderService } from "./folderNavigation/nodeFolderService.js
 import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "./copy/runtimeClipboard.js";
 import { devRenderProfilePath } from "./host/devPaths.js";
-import { beginHotDisposal, waitForHotDisposal } from "./hmr/hotDisposalBarrier.js";
+import { registerHotDisposal, waitForHotDisposal } from "./hmr/hotDisposalBarrier.js";
 import {
   getOrCreateStationHotRuntime,
   STATION_HOT_RUNTIME_VERSION,
@@ -147,6 +148,7 @@ async function startStationMain(
 ): Promise<boolean> {
   const env = process.env;
   const stationGlobalSlots = stationHotSlots();
+  stationGlobalSlots.__stationHotDispose?.();
   // A prior renderer releases process-global stdin synchronously before dashboard settlement is awaited.
   await invokeCleanup(() => stationGlobalSlots.__stationHotRenderer?.destroy()).catch(
     reportNativeHotDisposalFailure,
@@ -446,6 +448,7 @@ async function startStationMain(
     useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
   });
   rendererForInput = renderer;
+  renderer.on("destroy", startDevelopmentTimingCleanup());
   stationGlobalSlots.__stationHotRenderer = renderer;
   // OpenTUI routes paste events around the sequence handlers above, so the
   // pane would never see a paste without this explicit forward.
@@ -480,39 +483,38 @@ async function startStationMain(
   stopSurfaceObservation = observeUiSurfaceLifecycle({ store, witness: uiLifecycle });
   processLifecycle.install();
 
+  const disposeForHotReload = registerHotDisposal(
+    stationGlobalSlots,
+    () =>
+      settleCleanupSteps(
+        [
+          () => processLifecycle?.dispose(),
+          () => {
+            if (
+              nativePlacementEndpoint !== undefined &&
+              nativePlacementGeneration !== undefined
+            ) {
+              nativePlacementEndpoint.suspend(nativePlacementGeneration);
+            }
+          },
+          // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
+          () => stopSurfaceObservation?.(),
+          () => root.unmount(),
+          () => renderer.destroy(),
+          () => releaseHotRendererIfCurrent(stationGlobalSlots, renderer),
+          () => station.disposeForHotReload(),
+        ],
+        "Native Station HMR cleanup failed.",
+      ),
+    (error) => {
+      void uiLifecycle.fatal(error).catch(() => {
+        // HMR replacement ordering cannot depend on diagnostic persistence.
+      });
+    },
+  );
   if (import.meta.hot) {
     import.meta.hot.accept();
-    import.meta.hot.dispose(() => {
-      beginHotDisposal(
-        stationGlobalSlots,
-        () =>
-          settleCleanupSteps(
-            [
-              () => processLifecycle?.dispose(),
-              () => {
-                if (
-                  nativePlacementEndpoint !== undefined &&
-                  nativePlacementGeneration !== undefined
-                ) {
-                  nativePlacementEndpoint.suspend(nativePlacementGeneration);
-                }
-              },
-              // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
-              () => stopSurfaceObservation?.(),
-              () => root.unmount(),
-              () => renderer.destroy(),
-              () => releaseHotRendererIfCurrent(stationGlobalSlots, renderer),
-              () => station.disposeForHotReload(),
-            ],
-            "Native Station HMR cleanup failed.",
-          ),
-        (error) => {
-          void uiLifecycle.fatal(error).catch(() => {
-            // HMR replacement ordering cannot depend on diagnostic persistence.
-          });
-        },
-      );
-    });
+    import.meta.hot.dispose(disposeForHotReload);
   }
   return true;
 }

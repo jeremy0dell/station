@@ -167,6 +167,8 @@ async function main() {
         autoloadBunfig: false,
       },
       define: {
+        // Bun otherwise embeds development React regardless of launch-time NODE_ENV.
+        "process.env.NODE_ENV": JSON.stringify("production"),
         STATION_BUILD_VERSION: JSON.stringify(version),
         STATION_BUILD_COMPILED: "true",
         STATION_BUILD_IDENTITY: JSON.stringify(buildIdentity),
