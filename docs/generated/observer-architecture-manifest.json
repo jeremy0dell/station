@@ -15562,6 +15562,14 @@
       "dependencies": []
     },
     {
+      "path": "apps/cli/src/executionRuntime.ts",
+      "declaration": "resolveExecutionRuntime",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves and verifies a Linux runtime before compute creation. Released clients use their exact immutable release; development archives require a checksum and embedded source manifest.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/ingress/command.ts",
       "declaration": "runProviderIngressCommand",
       "kind": "function",
@@ -16230,8 +16238,15 @@
       "declaration": "createProviderRegistry",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Constructs concrete provider adapters, including the packaged Pi extension path plus canonical provider-hook launcher and artifact owner supplied by CLI composition, and assigns their Observer roles. Terminal placement authority remains in those adapters; native renderer placement is registered beside the configured terminal role, and Observer use cases receive only driven ports.",
+      "purpose": "Constructs concrete provider adapters, including the packaged Pi extension path plus canonical provider-hook launcher and artifact owner supplied by CLI composition, and assigns their Observer roles. Terminal placement authority remains in those adapters; native renderer placement is registered beside the configured terminal role, and Observer use cases receive only driven ports. Cloud configuration makes Host available lazily without enabling persistence for local launches.",
       "dependencies": [
+        {
+          "path": "apps/cli/src/executionRuntime.ts",
+          "declaration": "resolveExecutionRuntime",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
         {
           "path": "integrations/agent-execution/e2b/src/provider.ts",
           "declaration": "E2bExecutionProvider",
@@ -19015,11 +19030,18 @@
       "declaration": "E2bExecutionProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Runs an ordinary Station runtime in one E2B sandbox per canonical local session. Durable launch attempts precede cloud effects; reconnect never launches an agent and destruction retains a verified final patch before releasing compute. Failed launches retain a sanitized error across Observer restarts. The Observer owns this adapter.",
+      "purpose": "Runs an ordinary Station runtime in one E2B sandbox per canonical local session. Durable launch attempts precede cloud effects; reconnect never launches an agent and destruction retains a verified final patch before releasing compute. Failed launches retain a sanitized error across Observer restarts. The Observer owns grants and lifecycle; native terminal bytes bypass it.",
       "dependencies": [
         {
           "path": "integrations/agent-execution/e2b/src/bridge.ts",
           "declaration": "createExecutionBridge",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/agent-execution/e2b/src/terminalBroker.ts",
+          "declaration": "createTerminalBroker",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -19032,6 +19054,30 @@
           "edgeKind": "type-only"
         }
       ]
+    },
+    {
+      "path": "integrations/agent-execution/e2b/src/terminalBroker.ts",
+      "declaration": "createTerminalBroker",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Grants attachment credentials over a private local socket. Established terminal traffic bypasses this broker and survives its disposal; Stop explicitly signals registered relays.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/agent-execution/e2b/src/terminalGateway.ts",
+      "declaration": "createTerminalGateway",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Exposes only attachment to one recorded remote Host terminal. Tickets expire after 60 seconds and are consumed before attachment. Revocation blocks grants before awaiting Host detach.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/agent-execution/e2b/src/terminalRelay.ts",
+      "declaration": "runTerminalRelay",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Runs as a local Host child and streams directly to the remote attachment gateway. Disconnect clears all pending input; each retry obtains a new single-use ticket.",
+      "dependencies": []
     },
     {
       "path": "integrations/harness/claude/src/provider.ts",
@@ -19641,7 +19687,7 @@
       "declaration": "StationPlacementService",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Proves one native renderer/pane from exact socket and process ancestry, issues one-shot authority, and coordinates bounded generation-safe reserve/commit/finalize/release lifecycle.",
+      "purpose": "Proves one native renderer/pane from exact socket and process ancestry, issues one-shot authority, and coordinates bounded generation-safe reserve/commit/finalize/release lifecycle. Host-backed detached placement needs no renderer.",
       "dependencies": [
         {
           "path": "integrations/terminal/station/src/host/closeExactStationHostPty.ts",
@@ -19678,7 +19724,7 @@
       "declaration": "StationTerminalProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle, opaque attachment identity, and reconciled tri-state attachment evidence. Native presentation remains locally owned by Station and is never externally focusable. Attachment evidence is false for UI-owned targets, true only when the latest Host listing applies, and absent for cached Host targets after an uncertain read. Reconcile-aware discovery declares cached fallback indeterminate so it cannot masquerade as current debug evidence. Deterministic targets are released only when their current Station session and, for managed launch attempts, opaque binding generation match.",
+      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle, opaque attachment identity, and reconciled tri-state attachment evidence. Native presentation remains locally owned by Station and is never externally focusable. Launches requiring persistence refuse UI fallback. Attachment evidence is false for UI-owned targets, true only when the latest Host listing applies, and absent for cached Host targets after an uncertain read. Reconcile-aware discovery declares cached fallback indeterminate so it cannot masquerade as current debug evidence. Deterministic targets are released only when their current Station session and, for managed launch attempts, opaque binding generation match.",
       "dependencies": [
         {
           "path": "integrations/terminal/station/src/placement/service.ts",
@@ -19825,7 +19871,7 @@
       "declaration": "AgentExecutionProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Owns remote agent execution independently of local terminal presentation. The session retains placement; adapters retain opaque remote identity and never retry an uncertain launch as a new one.",
+      "purpose": "Owns remote agent execution independently of local terminal presentation. The session retains placement; adapters retain opaque remote identity and never retry an uncertain launch as a new one. Adapters may require a persistent local terminal without giving Host remote process authority.",
       "dependencies": []
     },
     {

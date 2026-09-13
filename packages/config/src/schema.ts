@@ -292,6 +292,11 @@ export const E2bConfigSchema = z
   .object({
     template: nonEmptyStringSchema.default("base"),
     setupCommand: nonEmptyStringSchema.optional(),
+    runtimeArchive: nonEmptyStringSchema.optional(),
+    runtimeArchiveSha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     apiKeyEnv: z
       .string()
       .regex(/^[A-Z_][A-Z0-9_]*$/)
@@ -305,7 +310,13 @@ export const E2bConfigSchema = z
       )
       .default({}),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) => (value.runtimeArchive === undefined) === (value.runtimeArchiveSha256 === undefined),
+    {
+      message: "runtime_archive and runtime_archive_sha256 must be configured together.",
+    },
+  );
 export type E2bConfig = z.infer<typeof E2bConfigSchema>;
 
 export const StationConfigSchema = z

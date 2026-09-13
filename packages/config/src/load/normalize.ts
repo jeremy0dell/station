@@ -24,6 +24,8 @@ export function normalizeGlobalConfig(value: unknown): unknown {
                 timeout_minutes: "timeoutMinutes",
                 max_sandboxes: "maxSandboxes",
                 setup_command: "setupCommand",
+                runtime_archive: "runtimeArchive",
+                runtime_archive_sha256: "runtimeArchiveSha256",
                 harness_env: "harnessEnv",
               }),
           },

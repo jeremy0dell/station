@@ -28,6 +28,7 @@ export const CollectSessionCommandSchema = z
  *
  * Owns remote agent execution independently of local terminal presentation. The session retains
  * placement; adapters retain opaque remote identity and never retry an uncertain launch as a new one.
+ * Adapters may require a persistent local terminal without giving Host remote process authority.
  */
 export interface AgentExecutionProvider {
   readonly id: string;

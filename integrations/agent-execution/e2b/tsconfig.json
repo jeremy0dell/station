@@ -5,7 +5,8 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "paths": {
-      "@station/contracts": ["../../../packages/contracts/dist/index.d.ts"]
+      "@station/contracts": ["../../../packages/contracts/dist/index.d.ts"],
+      "@station/host": ["../../../packages/station-host/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts"]

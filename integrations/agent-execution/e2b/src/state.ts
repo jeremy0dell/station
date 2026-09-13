@@ -4,8 +4,9 @@ import { join } from "node:path";
 import type { SafeError } from "@station/contracts";
 import { SafeErrorSchema } from "@station/contracts";
 import { z } from "zod";
+import { GatewayConfigSchema, RuntimeArtifactSchema } from "./terminalProtocol.js";
 
-export const ExecutionRecordSchema = z
+const LegacyExecutionRecordSchema = z
   .object({
     version: z.literal(1),
     sessionId: z.string().regex(/^ses_[a-zA-Z0-9_-]+$/),
@@ -36,6 +37,20 @@ export const ExecutionRecordSchema = z
     launchError: SafeErrorSchema.optional(),
   })
   .strict();
+export const NativeExecutionRecordSchema = LegacyExecutionRecordSchema.extend({
+  version: z.literal(2),
+  transport: z.literal("host-websocket"),
+  runtime: RuntimeArtifactSchema,
+  gateway: GatewayConfigSchema.optional(),
+  remoteRuntime: z
+    .object({ version: z.string(), buildIdentity: z.string().regex(/^[a-f0-9]{64}$/) })
+    .strict()
+    .optional(),
+}).strict();
+export const ExecutionRecordSchema = z.discriminatedUnion("version", [
+  LegacyExecutionRecordSchema,
+  NativeExecutionRecordSchema,
+]);
 export type ExecutionRecord = z.infer<typeof ExecutionRecordSchema>;
 
 export function executionError(code: string, message: string): SafeError {
@@ -57,7 +72,7 @@ export class ExecutionStore {
   constructor(readonly directory: string) {}
 
   async read(sessionId: string): Promise<ExecutionRecord> {
-    const id = ExecutionRecordSchema.shape.sessionId.parse(sessionId);
+    const id = LegacyExecutionRecordSchema.shape.sessionId.parse(sessionId);
     return ExecutionRecordSchema.parse(
       JSON.parse(await readFile(join(this.directory, `${id}.json`), "utf8")),
     );

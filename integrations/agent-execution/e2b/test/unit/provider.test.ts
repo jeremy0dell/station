@@ -69,6 +69,29 @@ async function fixture() {
               },
             ],
           });
+        if (command.includes("gateway.json.ready") && command.includes("cat"))
+          stdout = JSON.stringify({
+            config: {
+              version: 1,
+              execution: "ses_test",
+              identity: {
+                kind: "agent",
+                terminalTargetId: "station:remote",
+                worktreeId: "wt_remote",
+                projectId: "cloud",
+                sessionId: "ses_remote",
+                worktreePath: `${ROOT}/worktrees/agent`,
+                harnessProvider: "scripted",
+                ptyId: "pty_remote",
+                ptyInstanceId: "11111111-1111-4111-8111-111111111111",
+              },
+              hostSocket: `${ROOT}/station-host.sock`,
+              controlSocket: `${ROOT}/gateway.sock`,
+              port: 8080,
+            },
+            runtime: { version: "test", buildIdentity: "a".repeat(64) },
+          });
+        if (command.includes("execution revoke")) stdout = '{"type":"revoked"}';
         if (command.includes("sha256sum"))
           stdout = `${patch.length}\n${"a".repeat(40)}\n${createHash("sha256").update(patch).digest("hex")}  result.patch\n`;
         return { exitCode: 0, stdout, stderr: "" };
@@ -101,7 +124,15 @@ async function fixture() {
       return true;
     }),
   };
+  const runtimeArchive = Buffer.from("test-runtime");
   const options = {
+    resolveRuntime: async () => ({
+      artifact: {
+        version: "test",
+        sha256: createHash("sha256").update(runtimeArchive).digest("hex"),
+      },
+      archive: runtimeArchive,
+    }),
     stateDir: join(root, "state"),
     bridgeDirectory: join(root, "bridge"),
     bridgeCommand: ["stn"] as const,
@@ -163,6 +194,12 @@ it("launches once, reconnects after Observer restart, and saves verified results
   expect(plan.command).toBe("/usr/bin/env");
   expect(plan.args).toEqual([
     "-u",
+    "E2B_API_KEY",
+    "-u",
+    "OPENAI_API_KEY",
+    "-u",
+    "CODEX_AUTH_JSON",
+    "-u",
     "COMPUTE_KEY",
     "stn",
     "execution",
@@ -171,6 +208,7 @@ it("launches once, reconnects after Observer restart, and saves verified results
     "ses_test",
   ]);
   const before = await f.store.read("ses_test");
+  await f.provider.dispose();
   const recovered = new E2bExecutionProvider(f.options);
   providers.push(recovered);
   await recovered.attach("ses_test");
@@ -191,6 +229,7 @@ it("retains a lost create attempt across restart and refuses an automatic replac
   await expect(f.provider.launch(f.request)).rejects.toMatchObject({
     code: "TERMINAL_CLEANUP_UNCERTAIN",
   });
+  await f.provider.dispose();
   const recovered = new E2bExecutionProvider(f.options);
   providers.push(recovered);
   await expect(recovered.launch(f.request)).rejects.toMatchObject({ code: "EXECUTION_CAPACITY" });
@@ -284,6 +323,7 @@ it("preserves a sanitized Codex launch failure through observation and Observer 
     code: "HARNESS_CODEX_UNAVAILABLE",
     message: expect.stringContaining("not installed or authenticated"),
   });
+  await f.provider.dispose();
   const recovered = new E2bExecutionProvider(f.options);
   providers.push(recovered);
   expect(await recovered.observe("ses_test")).toMatchObject({
@@ -316,4 +356,55 @@ it("passes only explicitly selected agent credentials to the trusted setup comma
     expect.objectContaining({ envs: expect.objectContaining({ AGENT_API_KEY: "agent-secret" }) }),
   );
   expect(JSON.stringify(f.sandbox.commands.run.mock.calls)).not.toContain("compute-secret");
+});
+
+it("keeps the remote worktree for collection and starts the gateway privately without tmux", async () => {
+  const f = await fixture();
+  const plan = await f.provider.launch(f.request);
+  expect(plan.args).toContain("E2B_API_KEY");
+  expect(plan.args).toContain("OPENAI_API_KEY");
+  expect(f.operations.some((command) => command.includes("install -d -m 700"))).toBe(true);
+  expect(f.operations.some((command) => command.includes("tmux"))).toBe(false);
+  await f.provider.stop(f.request.sessionId);
+  expect(f.operations.find((command) => command.includes("session close"))).toContain(
+    "--mode harness",
+  );
+});
+
+it("preserves legacy journal transport without converting or relaunching it", async () => {
+  const f = await fixture();
+  await f.provider.launch(f.request);
+  const native = await f.store.read(f.request.sessionId);
+  if (native.version !== 2) throw new Error("Expected native journal");
+  const {
+    runtime: _,
+    transport: _transport,
+    gateway: _gateway,
+    remoteRuntime: _remoteRuntime,
+    ...legacy
+  } = native;
+  await f.store.write({ ...legacy, version: 1 });
+  await f.provider.dispose();
+  const recovered = new E2bExecutionProvider(f.options);
+  providers.push(recovered);
+  expect((await recovered.attach(f.request.sessionId)).requiresPersistentTerminal).toBeUndefined();
+  expect((await f.store.read(f.request.sessionId)).version).toBe(1);
+  expect(f.sdk.create).toHaveBeenCalledTimes(1);
+});
+
+it("retains stopping state when remote revocation is unconfirmed", async () => {
+  const f = await fixture();
+  await f.provider.launch(f.request);
+  const original = f.sandbox.commands.run.getMockImplementation();
+  if (original === undefined) throw new Error("Missing fake command");
+  f.sandbox.commands.run.mockImplementation(async (command) => {
+    if (command.includes("execution revoke")) throw new Error("Lost response");
+    return original(command);
+  });
+  await expect(f.provider.stop(f.request.sessionId)).rejects.toMatchObject({
+    code: "EXECUTION_REMOTE_COMMAND_FAILED",
+  });
+  expect((await f.store.read(f.request.sessionId)).phase).toBe("stopping");
+  expect(f.operations.some((command) => command.includes("session close"))).toBe(false);
+  expect(f.sdk.kill).not.toHaveBeenCalled();
 });

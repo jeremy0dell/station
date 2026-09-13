@@ -44,23 +44,20 @@ export const RemoteLaunchResultSchema = z.discriminatedUnion("status", [
     .passthrough(),
 ]);
 
-// These public release artifacts are pinned independently of the local executable architecture.
-export const installRuntime = `set -eu
+export function installRuntime(sha256: string): string {
+  return `set -eu
 mkdir -p '${ROOT}/bin' '${ROOT}/source' '${ROOT}/worktrees'
-if ! command -v tmux >/dev/null || ! command -v lsof >/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq tmux lsof; fi
-if ! test -x '${ROOT}/bin/stn'; then
-  curl --fail --silent --show-error --location 'https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.14.8/stn-v0.0.0-pre-alpha.14.8-linux-x64.tar.gz' -o '${ROOT}/stn.tar.gz'
-  echo '3f7dd96b3d6885bf433a79df25b729f87c00bf23d96e1029a76d9924af726888  ${ROOT}/stn.tar.gz' | sha256sum -c -
-  tar -xzf '${ROOT}/stn.tar.gz' -C '${ROOT}/bin'
-  curl --fail --silent --show-error --location 'https://github.com/max-sixty/worktrunk/releases/download/v0.64.0/worktrunk-x86_64-unknown-linux-musl.tar.xz' -o '${ROOT}/wt.tar.xz'
-  echo 'f5dda9b8139289eeb159e710e08ccf58495d385016fd94a0b4fe3212e13936af  ${ROOT}/wt.tar.xz' | sha256sum -c -
-  tar -xJf '${ROOT}/wt.tar.xz' -C '${ROOT}/bin' --strip-components=1
-fi
+echo '${sha256}  ${ROOT}/stn.tar.gz' | sha256sum -c -
+tar -xzf '${ROOT}/stn.tar.gz' -C '${ROOT}/bin'
+if ! command -v lsof >/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq lsof; fi
+curl --fail --silent --show-error --location 'https://github.com/max-sixty/worktrunk/releases/download/v0.64.0/worktrunk-x86_64-unknown-linux-musl.tar.xz' -o '${ROOT}/wt.tar.xz'
+echo 'f5dda9b8139289eeb159e710e08ccf58495d385016fd94a0b4fe3212e13936af  ${ROOT}/wt.tar.xz' | sha256sum -c -
+tar -xJf '${ROOT}/wt.tar.xz' -C '${ROOT}/bin' --strip-components=1
 command -v git
 '${ROOT}/bin/stn' --version
 '${ROOT}/bin/wt' --version
-tmux -S '${ROOT}/tmux.sock' new-session -d -s station-cloud -n control
 `;
+}
 
 export type RemoteHarnessSettings = {
   profile?: string | undefined;
@@ -85,16 +82,15 @@ state_dir = "${ROOT}/state"
 socket_path = "${ROOT}/observer.sock"
 [defaults]
 worktree_provider = "worktrunk"
-terminal = "tmux"
+terminal = "native"
 harness = ${JSON.stringify(harness)}
 layout = "agent-only"
 [worktree.worktrunk]
 managed_root = "${ROOT}/worktrees"
 use_lifecycle_hooks = false
 hook_mode = "disabled"
-[terminal.tmux]
-workbench_socket_path = "${ROOT}/tmux.sock"
-workbench_session = "station-cloud"
+[feature_flags]
+station_persistent_agents = true
 [harness.${harness}]
 command = ${JSON.stringify(harness)}
 enabled = true

@@ -56,6 +56,7 @@ import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { createStationHostController, StationTerminalProvider } from "@station/terminal";
 import { TmuxProvider } from "@station/tmux";
 import { WorktrunkProvider, worktrunkHookAdapter } from "@station/worktrunk";
+import { resolveExecutionRuntime } from "./executionRuntime.js";
 import { selfExecArgv } from "./selfExec.js";
 import {
   createProviderHookRuntime,
@@ -140,6 +141,7 @@ export async function probeHarnessHooksStatus(
  * composition, and assigns their Observer roles. Terminal placement authority
  * remains in those adapters; native renderer placement is registered beside
  * the configured terminal role, and Observer use cases receive only driven ports.
+ * Cloud configuration makes Host available lazily without enabling persistence for local launches.
  *
  * Observer application use cases are composed by the Observer runtime, not
  * stored in the provider registry.
@@ -148,6 +150,7 @@ export function createProviderRegistry(
   config: StationConfig,
   options: CreateProviderRegistryOptions = {},
 ): ProviderRegistry {
+  const executionConfig = config.execution?.e2b;
   const worktree = createWorktreeProvider(config, options);
   const terminalRoles = createTerminalProvider(config);
   const harnesses = createHarnessProviders(config, options);
@@ -160,7 +163,8 @@ export function createProviderRegistry(
   const hostSocketPath = stationHostSocketPath(config);
   const station = new StationTerminalProvider({
     placement: { stateDir: observerPaths.stateDir, hostSocketPath },
-    ...(config.featureFlags?.stationPersistentAgents === true
+    persistentAgents: config.featureFlags?.stationPersistentAgents === true,
+    ...(config.featureFlags?.stationPersistentAgents === true || executionConfig !== undefined
       ? {
           host: createStationHostController({
             socketPath: hostSocketPath,
@@ -176,15 +180,16 @@ export function createProviderRegistry(
   ];
   return new ProviderRegistry({
     worktree,
-    terminal: terminalRoles.terminal,
+    terminal: config.defaults.terminal === station.id ? station : terminalRoles.terminal,
     terminalPlacements,
     managedTerminal: station,
     executions:
-      config.execution?.e2b === undefined
+      executionConfig === undefined
         ? []
         : [
             new E2bExecutionProvider({
-              ...config.execution.e2b,
+              ...executionConfig,
+              resolveRuntime: () => resolveExecutionRuntime(executionConfig),
               harnessSettings: Object.fromEntries(
                 harnesses.map((harness) => {
                   const selected = config.harness?.[harness.id];

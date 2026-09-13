@@ -389,6 +389,7 @@ export const HarnessLaunchPlanSchema = z
     env: z.record(nonEmptyStringSchema, z.string()).optional(),
     mode: HarnessModeSchema,
     displayTitle: nonEmptyStringSchema.optional(),
+    requiresPersistentTerminal: z.literal(true).optional(),
     providerData: z.unknown().optional(),
   })
   .strict();

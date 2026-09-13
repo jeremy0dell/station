@@ -32,8 +32,17 @@ import {
   executionError,
   privateDirectory,
 } from "./state.js";
+import { createTerminalBroker } from "./terminalBroker.js";
+import {
+  GatewayReadySchema,
+  GatewayResponseSchema,
+  type RuntimeArtifact,
+  type TerminalGrant,
+  TerminalGrantSchema,
+} from "./terminalProtocol.js";
 
 export type E2bProviderOptions = {
+  resolveRuntime: () => Promise<{ artifact: RuntimeArtifact; archive: Uint8Array }>;
   stateDir: string;
   bridgeDirectory: string;
   bridgeCommand: readonly [string, ...string[]];
@@ -55,7 +64,7 @@ type LaunchRequest = BuildHarnessLaunchRequest & { sessionId: string; harness: s
  * Runs an ordinary Station runtime in one E2B sandbox per canonical local session. Durable
  * launch attempts precede cloud effects; reconnect never launches an agent and destruction
  * retains a verified final patch before releasing compute. Failed launches retain a sanitized
- * error across Observer restarts. The Observer owns this adapter.
+ * error across Observer restarts. The Observer owns grants and lifecycle; native terminal bytes bypass it.
  */
 export class E2bExecutionProvider implements AgentExecutionProvider {
   readonly id = "e2b";
@@ -63,6 +72,7 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
   private readonly sdk: typeof Sandbox;
   private readonly environment: NodeJS.ProcessEnv;
   private bridge: Awaited<ReturnType<typeof createExecutionBridge>> | undefined;
+  private broker: Awaited<ReturnType<typeof createTerminalBroker>> | undefined;
   private mutations: Promise<void> = Promise.resolve();
   private readonly revoked = new Set<string>();
   private readonly connections = new Map<string, Sandbox>();
@@ -94,9 +104,15 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
     return this.serial(async () => {
       await this.preflight(request.harness ?? request.project.defaults.harness);
       const harness = request.harness ?? request.project.defaults.harness;
+      const runtime = await this.options.resolveRuntime();
+      if (createHash("sha256").update(runtime.archive).digest("hex") !== runtime.artifact.sha256) {
+        throw executionError("EXECUTION_RUNTIME_INVALID", "The cloud runtime checksum changed.");
+      }
       const source = await sourceArchive(request.worktree.path);
       const record: ExecutionRecord = {
-        version: 1,
+        version: 2,
+        transport: "host-websocket",
+        runtime: runtime.artifact,
         sessionId: request.sessionId,
         token: randomUUID(),
         projectId: request.project.id,
@@ -125,7 +141,9 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
         record.phase = "preparing";
         await this.store.write(record);
         this.connections.set(record.sessionId, sandbox);
-        await this.run(sandbox, installRuntime, 180_000);
+        await this.run(sandbox, `install -d -m 700 '${ROOT}'`);
+        await sandbox.files.write(`${ROOT}/stn.tar.gz`, new Uint8Array(runtime.archive).buffer);
+        await this.run(sandbox, installRuntime(runtime.artifact.sha256), 180_000);
         if (this.options.setupCommand !== undefined)
           await this.run(
             sandbox,
@@ -152,7 +170,7 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
             projectId: "cloud",
             branch: "agent",
             placement: { intent: "detached" },
-            terminal: { provider: "tmux", layout: "agent-only" },
+            terminal: { provider: "native", layout: "agent-only" },
             harness: {
               provider: harness,
               mode: request.mode,
@@ -178,6 +196,27 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
             "EXECUTION_LAUNCH_UNCERTAIN",
             "Remote session creation did not return a discoverable session.",
           );
+        await sandbox.files.write(
+          `${ROOT}/gateway.json`,
+          JSON.stringify({
+            version: 1,
+            execution: record.sessionId,
+            remoteSessionId: record.remoteSessionId,
+            hostSocket: `${ROOT}/station-host.sock`,
+            controlSocket: `${ROOT}/gateway.sock`,
+            port: 8080,
+          }),
+        );
+        await sandbox.commands.run(`'${ROOT}/bin/stn' execution serve '${ROOT}/gateway.json'`, {
+          envs: REMOTE_ENV,
+          background: true,
+          timeoutMs: 0,
+        });
+        await this.run(
+          sandbox,
+          `for i in $(seq 1 30); do test ! -s '${ROOT}/gateway.json.ready' || exit 0; sleep 0.5; done; exit 1`,
+        );
+        await this.recoverGateway(record, sandbox);
         record.phase = "running";
         await this.store.write(record);
         return this.launchPlan(record);
@@ -353,6 +392,7 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
 
   async dispose(): Promise<void> {
     await this.bridge?.dispose();
+    await this.broker?.dispose();
     this.connections.clear();
   }
 
@@ -525,6 +565,7 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
 
   private async stopRecord(record: ExecutionRecord): Promise<void> {
     this.bridge?.revoke(record.sessionId);
+    this.broker?.revoke(record.sessionId);
     if (record.phase === "stopped") return;
     const sandbox = await this.connection(record);
     await this.recoverRemoteSession(record, sandbox);
@@ -535,9 +576,20 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
       );
     record.phase = "stopping";
     await this.store.write(record);
+    if (record.version === 2) {
+      await this.recoverGateway(record, sandbox);
+      const revoked = GatewayResponseSchema.parse(
+        JSON.parse(await this.run(sandbox, `stn execution revoke '${ROOT}/gateway-control.json'`)),
+      );
+      if (revoked.type !== "revoked")
+        throw executionError(
+          "EXECUTION_REVOKE_UNCERTAIN",
+          "Remote input revocation is unconfirmed; the stopping session was retained.",
+        );
+    }
     await this.run(
       sandbox,
-      `stn --config '${CONFIG}' session close ${shellQuote(record.remoteSessionId)} --mode all --force --json`,
+      `stn --config '${CONFIG}' session close ${shellQuote(record.remoteSessionId)} --mode harness --force --json`,
     );
     record.phase = "stopped";
     await this.store.write(record);
@@ -632,31 +684,103 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
   }
 
   private async launchPlan(record: ExecutionRecord): Promise<HarnessLaunchPlan> {
-    this.bridge ??= await createExecutionBridge(
-      this.options.bridgeDirectory,
-      (id, cols, rows, output) => this.openAttachment(id, cols, rows, output),
-    );
-    const bridge = this.bridge;
+    let path: string;
+    if (record.version === 2) {
+      this.broker ??= await createTerminalBroker(this.options.bridgeDirectory, (id) =>
+        this.grantTerminal(id),
+      );
+      path = this.broker.path;
+    } else {
+      this.bridge ??= await createExecutionBridge(
+        this.options.bridgeDirectory,
+        (id, cols, rows, output) => this.openAttachment(id, cols, rows, output),
+      );
+      path = this.bridge.path;
+    }
     const [command, ...args] = this.options.bridgeCommand;
     return {
       provider: record.harness,
       command: "/usr/bin/env",
       args: [
         ...[
+          "E2B_API_KEY",
+          "OPENAI_API_KEY",
+          "CODEX_AUTH_JSON",
           this.options.apiKeyEnv,
-          ...Object.values(this.options.harnessEnv[record.harness] ?? {}),
+          ...Object.values(this.options.harnessEnv).flatMap((references) =>
+            Object.values(references),
+          ),
         ].flatMap((name) => ["-u", name]),
         command,
         ...args,
         "execution",
         "attach",
-        bridge.path,
+        path,
         record.sessionId,
       ],
       cwd: record.worktreePath,
       mode: "interactive",
       displayTitle: "[cloud] Agent",
+      ...(record.version === 2 ? { requiresPersistentTerminal: true as const } : {}),
     };
+  }
+
+  private async recoverGateway(record: ExecutionRecord, sandbox: Sandbox): Promise<void> {
+    if (record.version !== 2) return;
+    const ready = GatewayReadySchema.parse(
+      JSON.parse(await this.run(sandbox, `cat '${ROOT}/gateway.json.ready'`)),
+    );
+    if (
+      ready.config.execution !== record.sessionId ||
+      ready.config.identity.sessionId !== record.remoteSessionId ||
+      ready.config.identity.harnessProvider !== record.harness ||
+      ready.runtime.version !== record.runtime.version ||
+      (record.runtime.buildIdentity !== undefined &&
+        ready.runtime.buildIdentity !== record.runtime.buildIdentity) ||
+      (record.gateway !== undefined &&
+        JSON.stringify(record.gateway) !== JSON.stringify(ready.config))
+    ) {
+      throw executionError(
+        "EXECUTION_IDENTITY_CONFLICT",
+        "The remote terminal or runtime identity changed.",
+      );
+    }
+    record.gateway = ready.config;
+    record.remoteRuntime = ready.runtime;
+    await sandbox.files.write(`${ROOT}/gateway-control.json`, JSON.stringify(ready.config));
+    await this.store.write(record);
+  }
+
+  private grantTerminal(sessionId: string): Promise<TerminalGrant> {
+    return this.serial(() => this.grantTerminalRecord(sessionId));
+  }
+
+  private async grantTerminalRecord(sessionId: string): Promise<TerminalGrant> {
+    const record = await this.store.read(sessionId);
+    if (record.version !== 2 || record.phase !== "running" || this.revoked.has(sessionId))
+      throw executionError("EXECUTION_NOT_RUNNING", "Cloud attachment is unavailable.");
+    const sandbox = await this.connection(record);
+    await this.recoverGateway(record, sandbox);
+    if (record.gateway === undefined)
+      throw executionError("EXECUTION_TERMINAL_MISSING", "The original terminal is unavailable.");
+    const response = GatewayResponseSchema.parse(
+      JSON.parse(await this.run(sandbox, `stn execution grant '${ROOT}/gateway-control.json'`)),
+    );
+    if (
+      response.type !== "ticket" ||
+      this.revoked.has(sessionId) ||
+      (await this.store.read(sessionId)).phase !== "running"
+    )
+      throw executionError("EXECUTION_NOT_RUNNING", "Cloud attachment was revoked.");
+    return TerminalGrantSchema.parse({
+      version: 1,
+      execution: sessionId,
+      identity: record.gateway.identity,
+      address: `wss://${sandbox.getHost(record.gateway.port)}`,
+      trafficToken: sandbox.trafficAccessToken,
+      ticket: response.ticket,
+      deadline: response.deadline,
+    });
   }
 
   private async openAttachment(
@@ -782,6 +906,7 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
   private revoke(sessionId: string): void {
     this.revoked.add(sessionId);
     this.bridge?.revoke(sessionId);
+    this.broker?.revoke(sessionId);
   }
 
   private serial<T>(operation: () => Promise<T>): Promise<T> {

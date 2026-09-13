@@ -495,6 +495,9 @@ The optional global `[execution.e2b]` section enables cloud execution in New
 Session and `stn session create --execution e2b`. Fields are `template` (default
 `base`), `api_key_env` (default `E2B_API_KEY`), `timeout_minutes` (5–1440, default
 60), `max_sandboxes` (1–20, default 1), and optional `setup_command`.
+Development runtimes require paired `runtime_archive` (local Linux x64 archive path)
+and `runtime_archive_sha256` (64 lowercase hexadecimal characters). Released clients
+use the exact installed immutable release when these settings are absent.
 `[execution.e2b.harness_env.<provider>]` maps remote environment-variable names
 to local environment-variable references. Values are references, not secrets.
 E2B account limits may impose a shorter maximum lifetime.

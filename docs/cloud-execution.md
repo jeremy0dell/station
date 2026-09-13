@@ -68,7 +68,8 @@ Select a configured Station agent integration, such as `claude` or `codex`. The 
 `setup_command` must install its executable on `PATH`. `setup_command` is trusted
 configuration and runs once before project source is uploaded. A custom E2B
 Linux x64 template can preinstall dependencies to reduce startup time. Station
-installs checksum-pinned Linux Station and Worktrunk releases plus tmux and lsof.
+installs a verified Linux x64 Station archive, a pinned Worktrunk release, and lsof.
+New sandboxes do not install or launch tmux.
 
 The compute key selects the E2B account; the key ID is not required. Agent login
 homes and local project environment files are not copied. Station carries the selected agent's permission, approval, sandbox, and profile
@@ -94,14 +95,18 @@ specific error code, such as `HARNESS_CODEX_UNAVAILABLE`, and setup instructions
 across Observer restarts. Reopening the session reports that failure instead of
 starting another agent.
 
-The primary agent terminal connects to remote tmux. Input and resize reach the
-existing remote agent. Closing the local terminal detaches it; the sandbox
-continues running until stopped or expired. Reopen the session to reconnect.
-If a disconnected bridge remains visible, close its local terminal first:
+New primary terminals connect directly to a remote Station Host terminal through
+an encrypted WebSocket gateway. Local Host owns the attachment relay, so closing
+and reopening the renderer preserves the relay and remote agent. Native cloud
+terminals require Host even when persistence is disabled for ordinary local agents.
+Observer authorizes attachments but carries no terminal bytes; an Observer restart
+leaves established traffic running. Existing version-1 executions retain tmux.
 
-```sh
-stn session close <sessionId> --mode terminal
-```
+On disconnect, Station clears pending input and reports unconfirmed delivery.
+Input typed while disconnected is rejected visibly. Station obtains fresh tickets
+for up to six reconnect attempts, then asks you to reopen the same session.
+Reattachment resets the display and applies remote replay before live output.
+It never starts a replacement remote agent.
 
 Ordinary shell splits run in the Mac worktree. They do not show cloud edits.
 Cloud sessions cannot switch execution provider, start a replacement agent, or
@@ -151,6 +156,36 @@ result patches each have a 64 MiB limit.
 
 Collection includes tracked changes and nonignored new files, including binary
 files. It exports their final contents, not the agent's commit history. Remote
-terminal continuity comes from the original tmux session and its bounded
-scrollback. Pause/resume, remote shell splits, automatic patch application, and
+terminal continuity comes from the original remote Host PTY and bounded replay. Pause/resume, remote shell splits, automatic patch application, and
 coding-agent authentication setup are outside this execution provider.
+
+## Runtime archives
+
+Packaged clients download the Linux x64 archive for their exact installed immutable
+release and verify its published checksum. Development checkouts require both settings:
+
+```toml
+[execution.e2b]
+runtime_archive = "/absolute/path/station-linux-x64.tar.gz"
+runtime_archive_sha256 = "<64 lowercase hexadecimal characters>"
+```
+
+The Linux binary CI lane publishes the archive, checksum, and embedded source-commit
+manifest. Station verifies the archive before creating compute and compares its
+version and build identity with the remote runtime before permitting attachment.
+
+## Attachment ownership and limits
+
+The gateway exposes attachment to one recorded terminal. Its private control socket
+issues single-use tickets valid for 60 seconds. E2B public traffic stays restricted;
+the relay sends the traffic token in a header and receives no compute or agent key.
+Replacing a controller revokes the former controller's input authority at remote Host.
+Stop blocks new grants before persisting `stopping`, then requires confirmed remote
+revocation before agent shutdown and final collection. Uncertain revocation retains
+the stopping session.
+
+Input frames carry at most 32 KiB within a 64 KiB unacknowledged window. Acknowledgement
+means remote Host accepted the input; the relay pipelines frames without waiting after
+each keystroke. Resize and input share one ordered stream. Pending queues are bounded
+at 1 MiB; overflow disconnects the attachment and keeps the agent available for replay.
+Remote Host process crash recovery does not automatically replace the agent.

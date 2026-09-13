@@ -324,6 +324,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
 
   function createSink(): FrameSink {
     const queue: HostFrame[] = [];
+    let queuedBytes = 0;
     const waiters: Array<(result: IteratorResult<HostFrame>) => void> = [];
     let ended = false;
     let ptyId: string | undefined;
@@ -336,7 +337,9 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         if (waiter === undefined) {
           break;
         }
-        waiter(frameIteratorResult(queue.shift()));
+        const frame = queue.shift();
+        if (frame !== undefined) queuedBytes -= Buffer.byteLength(JSON.stringify(frame));
+        waiter(frameIteratorResult(frame));
       }
     };
     const pullFrame = (): Promise<IteratorResult<HostFrame>> =>
@@ -398,6 +401,21 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
             role: "viewer",
           });
         }
+        const bytes = Buffer.byteLength(JSON.stringify(frame));
+        if (queuedBytes + bytes > 1024 * 1024) {
+          queue.length = 0;
+          queuedBytes = 0;
+          const current = connection;
+          teardown(
+            new StationHostProviderError(
+              "HOST_UNREACHABLE",
+              "Host attachment output exceeded 1 MiB; reconnect for replay.",
+            ),
+          );
+          current?.close();
+          return;
+        }
+        queuedBytes += bytes;
         queue.push(frame);
         drain();
       },
@@ -410,6 +428,8 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         drain();
       },
       release: () => {
+        queue.length = 0;
+        queuedBytes = 0;
         if (ptyId !== undefined && sinksByPty.get(ptyId) === sink) {
           sinksByPty.delete(ptyId);
         }
