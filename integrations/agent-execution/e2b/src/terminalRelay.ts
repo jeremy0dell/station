@@ -180,9 +180,11 @@ export async function runTerminalRelay(path: string, sessionId: string): Promise
             if (error) socket.terminate();
           });
         };
+        const outputAbort = new AbortController();
         const closed = new Promise<void>((resolve) => {
           socket.once("close", () => {
             connected = false;
+            outputAbort.abort();
             resolve();
           });
         });
@@ -202,7 +204,8 @@ export async function runTerminalRelay(path: string, sessionId: string): Promise
           });
         });
         const output = async (data: string) => {
-          if (!process.stdout.write(data)) await once(process.stdout, "drain");
+          if (!process.stdout.write(data))
+            await once(process.stdout, "drain", { signal: outputAbort.signal });
         };
         socket.on("message", (data, binary) => {
           const bytes = Buffer.byteLength(data.toString());
@@ -263,6 +266,8 @@ export async function runTerminalRelay(path: string, sessionId: string): Promise
             });
         });
         await closed;
+        // Release the retired output queue before another attachment allocates its queue.
+        await pending;
         clearTimeout(timeout);
         if (active?.disconnect())
           notice("Input delivery was unconfirmed. Pending input will not be replayed.");
