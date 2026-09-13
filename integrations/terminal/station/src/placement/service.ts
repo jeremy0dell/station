@@ -40,7 +40,7 @@ type NativePlacementOwner = {
 };
 
 type PendingPlacement = {
-  proof: NativePrivateProof;
+  proof?: NativePrivateProof;
   targetId: TerminalTargetId;
   sessionId: string;
   bindingToken: string;
@@ -54,6 +54,7 @@ type PendingPlacement = {
 };
 
 export type StationPlacementServiceOptions = {
+  allowDetached?: boolean;
   stateDir: string;
   hostSocketPath?: string;
   owner: NativePlacementOwner;
@@ -72,11 +73,11 @@ export type StationPlacementServiceOptions = {
  *
  * Proves one native renderer/pane from exact socket and process ancestry,
  * issues one-shot authority, and coordinates bounded generation-safe
- * reserve/commit/finalize/release lifecycle.
+ * reserve/commit/finalize/release lifecycle. Host-backed detached placement needs no renderer.
  */
 export class StationPlacementService implements TerminalPlacementPort {
   readonly id: ProviderId = STATION_TERMINAL_PROVIDER_ID;
-  readonly supportedIntents = ["sibling"] as const;
+  readonly supportedIntents: readonly ("sibling" | "detached")[];
 
   readonly #owner: NativePlacementOwner;
   readonly #clock: RuntimeClock;
@@ -89,6 +90,7 @@ export class StationPlacementService implements TerminalPlacementPort {
   readonly #pending = new Map<string, PendingPlacement>();
 
   constructor(options: StationPlacementServiceOptions) {
+    this.supportedIntents = options.allowDetached ? ["sibling", "detached"] : ["sibling"];
     this.#owner = options.owner;
     this.#clock = options.clock ?? systemClock;
     this.#authorities =
@@ -133,23 +135,43 @@ export class StationPlacementService implements TerminalPlacementPort {
   }
 
   async validatePlacement(placement: TerminalPlacementRequest): Promise<void> {
+    if (placement.intent === "detached" && this.supportedIntents.includes("detached")) return;
     if (placement.intent !== "sibling")
-      throw placementRejected("Native placement is sibling-only.");
+      throw placementRejected("Detached native placement requires Host.");
     await this.#resolveAuthority(placement.source, false);
   }
 
   async openPlacedWorkspace(
     request: OpenPlacedWorkspaceRequest,
   ): Promise<OpenPlacedWorkspaceResult> {
-    if (request.placement.intent !== "sibling") {
-      throw placementRejected("Native placement is sibling-only.");
-    }
     const sessionId = request.sessionId;
     if (sessionId === undefined) {
       throw placementRejected("Placed native workspaces require an explicit session identity.");
     }
     if (this.#pending.size >= this.#pendingCapacity) {
       throw placementRejected("Native placement cleanup capacity is exhausted.");
+    }
+    if (request.placement.intent === "detached") {
+      await this.validatePlacement(request.placement);
+      const opened = await this.#owner.openManagedWorkspace(request);
+      const generation = opened.bindingToken;
+      this.#pending.set(opened.bindingToken, {
+        targetId: opened.target.targetId,
+        sessionId,
+        bindingToken: opened.bindingToken,
+        generation,
+        committed: false,
+      });
+      return {
+        ...opened,
+        placement: {
+          intent: "detached",
+          provider: this.id,
+          targetId: opened.target.targetId,
+          generation,
+          presentation: "detached",
+        },
+      };
     }
     const proof = await this.#resolveAuthority(request.placement.source, true);
     const opened = await this.#owner.openManagedWorkspace(request);
@@ -194,6 +216,11 @@ export class StationPlacementService implements TerminalPlacementPort {
     return { ...opened, placement };
   }
 
+  isDetachedBinding(bindingToken: string): boolean {
+    const pending = this.#pending.get(bindingToken);
+    return pending !== undefined && pending.proof === undefined;
+  }
+
   hasPendingBinding(bindingToken: string): boolean {
     return this.#pending.has(bindingToken);
   }
@@ -204,6 +231,10 @@ export class StationPlacementService implements TerminalPlacementPort {
     this.#assertPendingMatches(pending, request);
     if (!pending.committed) {
       throw cleanupUncertain("Native placement was finalized before its process was committed.");
+    }
+    if (pending.proof === undefined) {
+      this.#pending.delete(request.bindingToken);
+      return;
     }
     const value = await this.#request(pending.proof.socketPath, {
       type: "finalize",
@@ -249,6 +280,11 @@ export class StationPlacementService implements TerminalPlacementPort {
         terminal,
       };
     }
+    if (pending.proof === undefined) {
+      if (options.host === undefined) throw placementRejected("Detached placement requires Host.");
+      pending.committed = true;
+      return true;
+    }
     const value = await this.#request(pending.proof.socketPath, {
       type: "commit",
       bindingToken: pending.bindingToken,
@@ -288,10 +324,13 @@ export class StationPlacementService implements TerminalPlacementPort {
       }
       await this.#closeHostPty({ expectedHost: host.evidence, expectedPty: host.terminal });
     }
-    const value = await this.#request(pending.proof.socketPath, {
-      type: "release",
-      bindingToken: pending.bindingToken,
-    });
+    const value =
+      pending.proof === undefined
+        ? { type: "released", status: "released" }
+        : await this.#request(pending.proof.socketPath, {
+            type: "release",
+            bindingToken: pending.bindingToken,
+          });
     if (value.type !== "released") {
       throw cleanupUncertain("Native renderer did not confirm exact placed-pane cleanup.");
     }

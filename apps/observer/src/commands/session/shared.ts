@@ -254,6 +254,7 @@ export async function seedSession(input: {
   projectId: string;
   worktreeId: string;
   initialTitle: string;
+  executionProvider?: string;
   harness: ProviderId;
   terminalProvider: ProviderId;
   group?: SessionSeedGroupPlacement;
@@ -265,6 +266,9 @@ export async function seedSession(input: {
     projectId: input.projectId,
     worktreeId: input.worktreeId,
     initialTitle: input.initialTitle.trim(),
+    ...(input.executionProvider === undefined
+      ? {}
+      : { executionProvider: input.executionProvider }),
     harness: input.harness,
     terminalProvider: input.terminalProvider,
     createdAt: seededAt,

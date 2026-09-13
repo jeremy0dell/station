@@ -76,7 +76,12 @@ export async function executeObserverCommand<TCommand extends StationCommand>(
   }
 
   try {
-    const completion = await service.waitForCommandCompletion(receipt.commandId);
+    const cloudCommand =
+      (command.type === "session.create" && command.payload.execution !== undefined) ||
+      command.type === "session.collect";
+    const completion = cloudCommand
+      ? await service.waitForCommandCompletion(receipt.commandId, 600_000)
+      : await service.waitForCommandCompletion(receipt.commandId);
     assertCompletionIdentity(receipt, completion);
     const commandResult =
       completion.status === "succeeded"

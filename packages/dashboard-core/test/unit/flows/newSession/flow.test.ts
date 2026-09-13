@@ -203,3 +203,31 @@ describe("New Session flow", () => {
     expect(chooseNewSessionAgentById(picker, snapshot, "ghost")).toBe(picker);
   });
 });
+
+it("keeps cloud execution through edits and validates the remote agent independently of local installation", async () => {
+  const { validateNewSessionCreate } = await import(
+    "../../../../src/flows/newSession/validation.js"
+  );
+  const { newSessionReviewContent } = await import(
+    "../../../../src/components/NewSessionBottomSheet/content.js"
+  );
+  const snapshot = {
+    ...createHarnessSnapshot({ codex: "unavailable" }),
+    executionProviders: ["e2b"],
+  };
+  const local = createNewSessionFlow(snapshot, "cloud1");
+  if (local === undefined) throw new Error("Expected flow");
+  expect(validateNewSessionCreate(snapshot, local).ok).toBe(false);
+  const cloud = applyInput(local, "E");
+  if (cloud.mode !== "review") throw new Error("Expected review");
+  expect(validateNewSessionCreate(snapshot, cloud).ok).toBe(true);
+  expect(newSessionReviewContent(snapshot, cloud).fields).toContainEqual(
+    expect.objectContaining({ id: "execution", value: "Cloud · e2b" }),
+  );
+  const edit = transitionNewSessionFlow(cloud, { type: "editName" });
+  if (edit?.mode !== "editName") throw new Error("Expected edit");
+  const renamed = transitionNewSessionFlow(typeName(edit, "Cloud task"), { type: "commitName" });
+  expect(renamed).toMatchObject({ selectedExecution: "e2b", title: "Cloud task" });
+  expect(applyInput(cloud, "E").selectedExecution).toBeUndefined();
+  expect(validateNewSessionCreate({ ...snapshot, executionProviders: [] }, cloud).ok).toBe(false);
+});

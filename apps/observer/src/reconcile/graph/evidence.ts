@@ -41,6 +41,7 @@ export type ObserverSessionMetadata = {
   projectId: string;
   worktreeId: string;
   lifecycle: "legacy" | "open" | "ended";
+  executionProvider?: string;
   title?: string;
   harness?: string;
   terminalProvider?: string;

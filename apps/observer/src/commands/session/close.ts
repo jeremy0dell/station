@@ -34,7 +34,8 @@ export type CreateSessionCloseHandlerOptions = {
  *
  * Closes one canonical session and serializes its terminal and durable lifecycle
  * mutation against native activation for the same configured worktree. Terminal
- * cleanup is idempotent when the provider target is already absent or retired.
+ * cleanup is idempotent when the provider target is already absent or retired. Cloud terminal
+ * closure detaches; full closure saves results and confirms compute destruction before retirement.
  */
 export function createSessionCloseHandler(
   options: CreateSessionCloseHandlerOptions,
@@ -58,12 +59,17 @@ export function createSessionCloseHandler(
         session,
         row,
         mode: payload.mode,
+        discardResults: payload.discardResults,
         force: payload.force === true,
         context,
         clock: options.clock,
       });
       throwIfAborted(context.signal);
-      if (session.origin === "station" && payload.mode !== "harness") {
+      if (
+        session.origin === "station" &&
+        payload.mode !== "harness" &&
+        (session.execution === undefined || payload.mode === "all")
+      ) {
         await options.persistence.markSessionsEnded({
           subject: { kind: "session", sessionId: session.id },
           endedAt: nowIso(options.clock),

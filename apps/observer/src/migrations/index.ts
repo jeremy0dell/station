@@ -22,6 +22,8 @@ import { renameTerminalExternalFocusMigration } from "./020_rename_terminal_exte
 /** @knipignore Retains the historical migration type import surface. */
 export type { ObserverSqliteMigration } from "./migration.js";
 
+import { sessionExecutionMigration } from "./021_session_execution.js";
+
 export const migrations = [
   observerMetaMigration,
   persistenceHistoryMigration,
@@ -43,6 +45,7 @@ export const migrations = [
   commandResultsMigration,
   dropLegacyProviderHealthObservationsMigration,
   renameTerminalExternalFocusMigration,
+  sessionExecutionMigration,
 ] as const;
 
 export const latestSchemaVersion = migrations[migrations.length - 1]?.version ?? 0;

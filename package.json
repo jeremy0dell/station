@@ -110,7 +110,8 @@
     "test:ci:station": "bun run --cwd station typecheck && bun run --cwd station test && bun run --cwd station test:pty && bun run --cwd station test:pty:bun && bun run test:e2e:host-upgrade",
     "test:ci:binary": "bun run build:binary -- --version 0.0.0-local && bun run smoke:binary -- --expected-version 0.0.0-local && bun run smoke:update -- --incumbent-binary station/dist/bin/stn --incumbent-version 0.0.0-local --target-source-version 0.0.1-local --scenarios release --busy-host-outcome preserved-refusal",
     "test:all": "bun run build && bun run typecheck && bun run lint && bun run test:unit && bun run test:contracts && bun run test:integration && bun run test:diagnostics && bun run test:agent:scripted && bun run test:e2e:setup && bun run test:e2e:observer && bun run smoke:install",
-    "test:pre-push": "bun run lint"
+    "test:pre-push": "bun run lint",
+    "test:e2e:cloud-terminal:real": "STATION_REAL_E2B=1 vitest run --config config/vitest/vitest.real-e2e.config.ts tests/e2e/real/real-cloud-terminal.test.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.4",
@@ -124,6 +125,9 @@
     "turbo": "2.10.11",
     "typescript": "7.0.2",
     "vitest": "^3.2.4",
-    "zod": "^4.1.12"
+    "zod": "^4.1.12",
+    "ws": "8.21.0",
+    "@types/ws": "^8.18.1",
+    "@xterm/headless": "6.0.0"
   }
 }

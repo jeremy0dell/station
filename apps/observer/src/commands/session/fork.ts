@@ -93,6 +93,17 @@ export function createSessionForkHandler(
     );
 
     const snapshot = options.core.getSnapshot();
+    if (
+      snapshot.sessions.some(
+        (session) =>
+          session.worktreeId === payload.sourceWorktreeId && session.execution !== undefined,
+      )
+    )
+      throw {
+        tag: "AgentExecutionError",
+        code: "EXECUTION_FORK_REFUSED",
+        message: "Collect and review cloud changes before creating a new session from them.",
+      };
     const sourceRow = snapshot.rows.find((candidate) => candidate.id === payload.sourceWorktreeId);
     validateSnapshotRow(sourceRow, payload.projectId);
     if (sourceRow === undefined) {

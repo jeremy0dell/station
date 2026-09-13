@@ -89,7 +89,6 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
   const scopeChains = new Map<string, Promise<void>>();
   const pending = new Set<Promise<void>>();
   const controllers = new Set<AbortController>();
-  const commandTimeoutMs = options.commandTimeoutMs ?? 30_000;
   let shuttingDown = false;
 
   const queue: CommandQueue = {
@@ -158,7 +157,9 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
             ...(options.eventBus === undefined ? {} : { eventBus: options.eventBus }),
             ...(options.logger === undefined ? {} : { logger: options.logger }),
             signal: controller.signal,
-            commandTimeoutMs,
+            ...(options.commandTimeoutMs === undefined
+              ? {}
+              : { commandTimeoutMs: options.commandTimeoutMs }),
           },
         ),
       );
@@ -245,6 +246,11 @@ async function executeCommand(
   runtime?.eventBus?.publish(startedEvent);
 
   const handler = handlers.get(context.command.type);
+  const cloudOperation =
+    (context.command.type === "session.create" &&
+      context.command.payload.execution !== undefined) ||
+    context.command.type === "session.collect" ||
+    context.command.type === "session.close";
   let commitStarted = false;
   const handlerState: {
     execution: Promise<unknown> | undefined;
@@ -254,7 +260,7 @@ async function executeCommand(
     {
       operation: `command.${context.command.type}`,
       clock,
-      timeoutMs: runtime?.commandTimeoutMs ?? 30_000,
+      timeoutMs: runtime?.commandTimeoutMs ?? (cloudOperation ? 600_000 : 30_000),
       error: {
         tag: "CommandExecutionError",
         code: "COMMAND_EXECUTION_FAILED",
@@ -429,6 +435,7 @@ function commandScope(command: StationCommand): string {
     case "terminal.focus":
     case "terminal.close":
       return terminalCommandScope(command.payload);
+    case "session.collect":
     case "session.close":
     case "session.rename":
     case "session.acknowledgeTurn":

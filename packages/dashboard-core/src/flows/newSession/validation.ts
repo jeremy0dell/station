@@ -61,7 +61,19 @@ export function validateNewSessionCreate(
   const harness = selectNewSessionHarnessOptions(snapshot, project).find(
     (option) => option.id === state.selectedHarness,
   );
-  if (harness?.status === "unavailable") {
+  if (
+    state.selectedExecution !== undefined &&
+    !snapshot.executionProviders?.includes(state.selectedExecution)
+  )
+    return {
+      ok: false,
+      error: {
+        tag: "AgentExecutionError",
+        code: "EXECUTION_UNAVAILABLE",
+        message: "The selected cloud execution provider is unavailable.",
+      },
+    };
+  if (state.selectedExecution === undefined && harness?.status === "unavailable") {
     return {
       ok: false,
       error:

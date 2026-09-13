@@ -84,6 +84,15 @@ function renderSessionSummary(session: SessionSummary): string {
     `  harness provider: ${escapeTerminalBytes(session.harness.provider)}`,
     `  harness mode: ${escapeTerminalBytes(session.harness.mode)}`,
   ];
+  if (session.execution !== undefined) {
+    lines.push(
+      `  execution: ${escapeTerminalBytes(session.execution.provider)} (${session.execution.state})`,
+    );
+    if (session.execution.expiresAt !== undefined)
+      lines.push(`  expires: ${escapeTerminalBytes(session.execution.expiresAt)}`);
+    if (session.execution.resultDirectory !== undefined)
+      lines.push(`  results: ${escapeTerminalBytes(session.execution.resultDirectory)}`);
+  }
   if (session.harness.pid !== undefined) lines.push(`  harness pid: ${session.harness.pid}`);
   if (session.harness.runId !== undefined) {
     lines.push(`  harness run: ${escapeTerminalBytes(session.harness.runId)}`);

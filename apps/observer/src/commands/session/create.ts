@@ -63,7 +63,8 @@ export type CreateSessionCreateHandlerOptions = {
  * worktree mutation and revalidation before terminal mutation. Shared branch ownership spans the
  * complete seed, launch, publication, and rollback transaction while per-project capacity spans
  * only provider creation. Rollback removes only state owned by this command. Success returns the
- * exact created identities, resolved Group identity when grouped, and placement projection.
+ * exact created identities, resolved Group identity when grouped, and placement projection. Cloud
+ * execution is seeded before launch and retained when terminal creation or attachment fails.
  */
 export function createSessionCreateHandler(
   options: CreateSessionCreateHandlerOptions,
@@ -87,10 +88,22 @@ export function createSessionCreateHandler(
       payload.placement,
     );
     const harness = resolveHarnessProviderOrThrow(options.providers, payload.harness.provider);
-    await options.launchPreflight(payload.harness.provider, {
-      signal: context.signal,
-      beginMutation: context.beginCommit,
-    });
+    const execution =
+      payload.execution === undefined
+        ? undefined
+        : options.providers.executions.get(payload.execution.provider);
+    if (payload.execution !== undefined && execution === undefined)
+      throw {
+        tag: "AgentExecutionError",
+        code: "EXECUTION_UNAVAILABLE",
+        message: "Configure the selected cloud execution provider before creating a cloud session.",
+      };
+    if (execution !== undefined) await execution.preflight(payload.harness.provider);
+    else
+      await options.launchPreflight(payload.harness.provider, {
+        signal: context.signal,
+        beginMutation: context.beginCommit,
+      });
     const sessionId = idFactory.sessionId();
     const group = sessionSeedGroupPlacement(payload.group, idFactory.sessionGroupId);
     const runtime = {
@@ -149,6 +162,9 @@ export function createSessionCreateHandler(
           worktreeId: worktree.id,
           initialTitle: payload.title ?? payload.branch,
           harness: payload.harness.provider,
+          ...(payload.execution === undefined
+            ? {}
+            : { executionProvider: payload.execution.provider }),
           terminalProvider: payload.terminal.provider,
           ...(group === undefined ? {} : { group }),
           clock: options.clock,
@@ -160,6 +176,7 @@ export function createSessionCreateHandler(
         const resolvedPlacement = await ensureAgentWorkspace({
           terminal,
           harness,
+          execution,
           launchPreflight: options.launchPreflight,
           project,
           worktree,
@@ -175,7 +192,7 @@ export function createSessionCreateHandler(
         });
         placementResult = commandPlacementResult(payload.placement, resolvedPlacement);
       } catch (error) {
-        if (isTerminalCleanupUncertain(error)) {
+        if (isTerminalCleanupUncertain(error) || (execution !== undefined && sessionSeeded)) {
           try {
             await reconcileAndPublish({
               core: options.core,

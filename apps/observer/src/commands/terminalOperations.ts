@@ -1,4 +1,5 @@
 import type {
+  AgentExecutionProvider,
   BuildHarnessLaunchRequest,
   HarnessProvider,
   HarnessResumeOptions,
@@ -56,6 +57,8 @@ type EnsureAgentWorkspaceInput = {
   placementPort?: TerminalPlacementPort | undefined;
   placement?: TerminalPlacementRequest | undefined;
   harness: HarnessProvider;
+  execution?: AgentExecutionProvider | undefined;
+  attachExecution?: boolean;
   launchPreflight: HarnessLaunchPreflight;
   project: ProviderProjectConfig;
   worktree: WorktreeObservation;
@@ -92,10 +95,11 @@ export async function ensureAgentWorkspace(
   input: EnsureAgentWorkspaceInput,
 ): Promise<ResolvedTerminalPlacement | undefined> {
   throwIfAborted(input.context.signal);
-  await input.launchPreflight(input.harness.id, {
-    signal: input.context.signal,
-    beginMutation: input.context.beginCommit,
-  });
+  if (input.execution === undefined)
+    await input.launchPreflight(input.harness.id, {
+      signal: input.context.signal,
+      beginMutation: input.context.beginCommit,
+    });
   const resume =
     input.revalidateResume === undefined ? input.resume : await input.revalidateResume();
   const runtime = operationRuntime(input);
@@ -160,7 +164,16 @@ export async function ensureAgentWorkspace(
           provider: input.harness.id,
         },
       },
-      () => input.harness.buildLaunch(buildLaunchRequest({ ...input, resume }, terminalTarget)),
+      () =>
+        input.execution === undefined
+          ? input.harness.buildLaunch(buildLaunchRequest({ ...input, resume }, terminalTarget))
+          : input.attachExecution === true
+            ? input.execution.attach(input.sessionId)
+            : input.execution.launch({
+                ...buildLaunchRequest(input, terminalTarget),
+                sessionId: input.sessionId,
+                harness: input.harness.id,
+              }),
     );
     throwIfAborted(input.context.signal);
 

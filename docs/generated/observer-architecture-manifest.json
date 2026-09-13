@@ -1163,6 +1163,12 @@
           "bindings": ["createSessionCloseHandler"]
         },
         {
+          "specifier": "./session/collect.js",
+          "resolvedPath": "apps/observer/src/commands/session/collect.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createSessionCollectHandler"]
+        },
+        {
           "specifier": "./session/create.js",
           "resolvedPath": "apps/observer/src/commands/session/create.ts",
           "edgeKind": "runtime",
@@ -1400,7 +1406,7 @@
           "name": "createSessionCloseHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Closes one canonical session and serializes its terminal and durable lifecycle mutation against native activation for the same configured worktree. Terminal cleanup is idempotent when the provider target is already absent or retired."
+          "purpose": "Closes one canonical session and serializes its terminal and durable lifecycle mutation against native activation for the same configured worktree. Terminal cleanup is idempotent when the provider target is already absent or retired. Cloud terminal closure detaches; full closure saves results and confirms compute destruction before retirement."
         },
         {
           "name": "CreateSessionCloseHandlerOptions",
@@ -1497,13 +1503,80 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/session/collect.ts",
+      "exports": [
+        {
+          "name": "createSessionCollectHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Retrieves a cloud session's changes into an isolated local result directory and publishes its location. Collection never applies patches or changes the local worktree."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../assertCommand.js",
+          "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
+          "edgeKind": "runtime",
+          "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../cleanup/index.js",
+          "resolvedPath": "apps/observer/src/commands/cleanup/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveSessionOrThrow"]
+        },
+        {
+          "specifier": "../queue.js",
+          "resolvedPath": "apps/observer/src/commands/queue.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CommandHandler"]
+        },
+        {
+          "specifier": "../reconcile.js",
+          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileAndPublish"]
+        },
+        {
+          "specifier": "../../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "../../runtime/eventBus.js",
+          "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverEventBus"]
+        },
+        {
+          "specifier": "../../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeMutationCoordinator"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RuntimeClock"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/session/create.ts",
       "exports": [
         {
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation. Shared branch ownership spans the complete seed, launch, publication, and rollback transaction while per-project capacity spans only provider creation. Rollback removes only state owned by this command. Success returns the exact created identities, resolved Group identity when grouped, and placement projection."
+          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation. Shared branch ownership spans the complete seed, launch, publication, and rollback transaction while per-project capacity spans only provider creation. Rollback removes only state owned by this command. Success returns the exact created identities, resolved Group identity when grouped, and placement projection. Cloud execution is seeded before launch and retained when terminal creation or attachment fails."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -2991,6 +3064,7 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
+            "AgentExecutionProvider",
             "BuildHarnessLaunchRequest",
             "HarnessProvider",
             "HarnessResumeOptions",
@@ -7561,6 +7635,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/021_session_execution.ts",
+      "exports": [
+        {
+          "name": "sessionExecutionMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -7702,6 +7795,12 @@
           "resolvedPath": "apps/observer/src/migrations/020_rename_terminal_external_focus.ts",
           "edgeKind": "runtime",
           "bindings": ["renameTerminalExternalFocusMigration"]
+        },
+        {
+          "specifier": "./021_session_execution.js",
+          "resolvedPath": "apps/observer/src/migrations/021_session_execution.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sessionExecutionMigration"]
         },
         {
           "specifier": "./migration.js",
@@ -10135,6 +10234,7 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
+            "AgentExecutionProvider",
             "HarnessProvider",
             "HarnessVersionInfo",
             "ManagedTerminalLifecycle",
@@ -11213,7 +11313,7 @@
           "name": "runReconcileOnce",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session persistence. The same resolved title records feed snapshot composition and persistence."
+          "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session persistence. Cloud adapters supply remote agent status independently of local terminal state. The same resolved title records feed snapshot composition and persistence."
         }
       ],
       "imports": [
@@ -11314,6 +11414,12 @@
           "resolvedPath": "apps/observer/src/reconcile/terminalSnapshotDebug.ts",
           "edgeKind": "runtime",
           "bindings": ["buildTerminalSnapshotDebug"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeDisplayForAgentState"]
         },
         {
           "specifier": "@station/contracts",
@@ -15456,6 +15562,14 @@
       "dependencies": []
     },
     {
+      "path": "apps/cli/src/executionRuntime.ts",
+      "declaration": "resolveExecutionRuntime",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves and verifies a Linux runtime before compute creation. Released clients use their exact immutable release; development archives require a checksum and embedded source manifest.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/ingress/command.ts",
       "declaration": "runProviderIngressCommand",
       "kind": "function",
@@ -16124,8 +16238,22 @@
       "declaration": "createProviderRegistry",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Constructs concrete provider adapters, including the packaged Pi extension path plus canonical provider-hook launcher and artifact owner supplied by CLI composition, and assigns their Observer roles. Terminal placement authority remains in those adapters; native renderer placement is registered beside the configured terminal role, and Observer use cases receive only driven ports.",
+      "purpose": "Constructs concrete provider adapters, including the packaged Pi extension path plus canonical provider-hook launcher and artifact owner supplied by CLI composition, and assigns their Observer roles. Terminal placement authority remains in those adapters; native renderer placement is registered beside the configured terminal role, and Observer use cases receive only driven ports. Cloud configuration makes Host available lazily without enabling persistence for local launches.",
       "dependencies": [
+        {
+          "path": "apps/cli/src/executionRuntime.ts",
+          "declaration": "resolveExecutionRuntime",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/agent-execution/e2b/src/provider.ts",
+          "declaration": "E2bExecutionProvider",
+          "kind": "class",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
         {
           "path": "integrations/harness/claude/src/provider.ts",
           "declaration": "createClaudeHarnessProvider",
@@ -17071,6 +17199,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/commands/session/collect.ts",
+          "declaration": "createSessionCollectHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/commands/session/create.ts",
           "declaration": "createSessionCreateHandler",
           "kind": "function",
@@ -17161,7 +17296,15 @@
       "declaration": "createSessionCloseHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Closes one canonical session and serializes its terminal and durable lifecycle mutation against native activation for the same configured worktree. Terminal cleanup is idempotent when the provider target is already absent or retired.",
+      "purpose": "Closes one canonical session and serializes its terminal and durable lifecycle mutation against native activation for the same configured worktree. Terminal cleanup is idempotent when the provider target is already absent or retired. Cloud terminal closure detaches; full closure saves results and confirms compute destruction before retirement.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/session/collect.ts",
+      "declaration": "createSessionCollectHandler",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Retrieves a cloud session's changes into an isolated local result directory and publishes its location. Collection never applies patches or changes the local worktree.",
       "dependencies": []
     },
     {
@@ -17169,7 +17312,7 @@
       "declaration": "createSessionCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation. Shared branch ownership spans the complete seed, launch, publication, and rollback transaction while per-project capacity spans only provider creation. Rollback removes only state owned by this command. Success returns the exact created identities, resolved Group identity when grouped, and placement projection.",
+      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation. Shared branch ownership spans the complete seed, launch, publication, and rollback transaction while per-project capacity spans only provider creation. Rollback removes only state owned by this command. Success returns the exact created identities, resolved Group identity when grouped, and placement projection. Cloud execution is seeded before launch and retained when terminal creation or attachment fails.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",
@@ -17315,6 +17458,13 @@
         {
           "path": "apps/observer/src/stationLogger.ts",
           "declaration": "StationLogger",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/agentExecution.ts",
+          "declaration": "AgentExecutionProvider",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
@@ -17752,7 +17902,7 @@
       "declaration": "runReconcileOnce",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session persistence. The same resolved title records feed snapshot composition and persistence.",
+      "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session persistence. Cloud adapters supply remote agent status independently of local terminal state. The same resolved title records feed snapshot composition and persistence.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -18868,6 +19018,68 @@
       "dependencies": []
     },
     {
+      "path": "integrations/agent-execution/e2b/src/bridge.ts",
+      "declaration": "createExecutionBridge",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Serves bounded terminal attachments on a private local socket. It carries no cloud credentials; replacing an attachment or stopping the Observer revokes input before remote detach completes.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/agent-execution/e2b/src/provider.ts",
+      "declaration": "E2bExecutionProvider",
+      "kind": "class",
+      "role": "ADAPTER",
+      "purpose": "Runs an ordinary Station runtime in one E2B sandbox per canonical local session. Durable launch attempts precede cloud effects; reconnect never launches an agent and destruction retains a verified final patch before releasing compute. Failed launches retain a sanitized error across Observer restarts. The Observer owns grants and lifecycle; native terminal bytes bypass it.",
+      "dependencies": [
+        {
+          "path": "integrations/agent-execution/e2b/src/bridge.ts",
+          "declaration": "createExecutionBridge",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/agent-execution/e2b/src/terminalBroker.ts",
+          "declaration": "createTerminalBroker",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/agentExecution.ts",
+          "declaration": "AgentExecutionProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "integrations/agent-execution/e2b/src/terminalBroker.ts",
+      "declaration": "createTerminalBroker",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Grants attachment credentials over a private local socket. Established terminal traffic bypasses this broker and survives its disposal; Stop explicitly signals registered relays.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/agent-execution/e2b/src/terminalGateway.ts",
+      "declaration": "createTerminalGateway",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Exposes only attachment to one recorded remote Host terminal. Tickets expire after 60 seconds and are consumed before attachment. Revocation blocks grants before awaiting Host detach.",
+      "dependencies": []
+    },
+    {
+      "path": "integrations/agent-execution/e2b/src/terminalRelay.ts",
+      "declaration": "runTerminalRelay",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Runs as a local Host child and streams directly to the remote attachment gateway. Disconnect clears all pending input; each retry obtains a new single-use ticket.",
+      "dependencies": []
+    },
+    {
       "path": "integrations/harness/claude/src/provider.ts",
       "declaration": "createClaudeHarnessProvider",
       "kind": "function",
@@ -19475,7 +19687,7 @@
       "declaration": "StationPlacementService",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Proves one native renderer/pane from exact socket and process ancestry, issues one-shot authority, and coordinates bounded generation-safe reserve/commit/finalize/release lifecycle.",
+      "purpose": "Proves one native renderer/pane from exact socket and process ancestry, issues one-shot authority, and coordinates bounded generation-safe reserve/commit/finalize/release lifecycle. Host-backed detached placement needs no renderer.",
       "dependencies": [
         {
           "path": "integrations/terminal/station/src/host/closeExactStationHostPty.ts",
@@ -19512,7 +19724,7 @@
       "declaration": "StationTerminalProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle, opaque attachment identity, and reconciled tri-state attachment evidence. Native presentation remains locally owned by Station and is never externally focusable. Attachment evidence is false for UI-owned targets, true only when the latest Host listing applies, and absent for cached Host targets after an uncertain read. Reconcile-aware discovery declares cached fallback indeterminate so it cannot masquerade as current debug evidence. Deterministic targets are released only when their current Station session and, for managed launch attempts, opaque binding generation match.",
+      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle, opaque attachment identity, and reconciled tri-state attachment evidence. Native presentation remains locally owned by Station and is never externally focusable. Launches requiring persistence refuse UI fallback. Attachment evidence is false for UI-owned targets, true only when the latest Host listing applies, and absent for cached Host targets after an uncertain read. Reconcile-aware discovery declares cached fallback indeterminate so it cannot masquerade as current debug evidence. Deterministic targets are released only when their current Station session and, for managed launch attempts, opaque binding generation match.",
       "dependencies": [
         {
           "path": "integrations/terminal/station/src/placement/service.ts",
@@ -19653,6 +19865,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "packages/contracts/src/agentExecution.ts",
+      "declaration": "AgentExecutionProvider",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Owns remote agent execution independently of local terminal presentation. The session retains placement; adapters retain opaque remote identity and never retry an uncertain launch as a new one. Adapters may require a persistent local terminal without giving Host remote process authority.",
+      "dependencies": []
     },
     {
       "path": "packages/contracts/src/agentStatus.ts",

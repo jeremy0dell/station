@@ -45,7 +45,10 @@ export type ObserverService = {
   loadSnapshot(): Promise<StationSnapshot>;
   subscribeEvents(): AsyncIterable<StationEvent>;
   dispatch(command: StationCommand): Promise<CommandReceipt>;
-  waitForCommandCompletion(commandId: CommandId): Promise<StationClientCommandCompletion>;
+  waitForCommandCompletion(
+    commandId: CommandId,
+    timeoutMs?: number,
+  ): Promise<StationClientCommandCompletion>;
   reconcile(reason?: string): Promise<StationSnapshot>;
   /**
    * Ask the observer to mint a STATION identity for an externally-hosted (e.g.

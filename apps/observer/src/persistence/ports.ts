@@ -191,6 +191,7 @@ export interface SessionStore {
     projectId: string;
     worktreeId: string;
     initialTitle: string;
+    executionProvider?: string;
     harness: ProviderId;
     terminalProvider: ProviderId;
     createdAt: string;

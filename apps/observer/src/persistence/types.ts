@@ -253,6 +253,7 @@ export type PersistedSession = {
   projectId: string;
   worktreeId: string;
   lifecycle: PersistedSessionLifecycle;
+  executionProvider?: string;
   title?: string;
   harness?: string;
   terminalProvider?: string;

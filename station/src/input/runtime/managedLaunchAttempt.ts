@@ -37,6 +37,7 @@ export type ManagedLaunchTarget = {
   title?: string;
   /** Harness selected for a fresh session; row activation lets Observer inherit it. */
   harness?: ProviderId;
+  execution?: { provider: string };
   group?: FreshSessionGroupPlacementIntent;
   /** Explicit consent to replace one exact interrupted provider execution. */
   freshStart?: { expectedSessionId: SessionId };
@@ -201,6 +202,7 @@ function buildPrepareParams(
     projectId: target.projectId,
     worktreeId: target.worktreeId,
   };
+  if (target.execution !== undefined) params.execution = target.execution;
   if (target.harness !== undefined) {
     params.harness = target.harness;
   }

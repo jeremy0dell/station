@@ -98,7 +98,11 @@ export function createTerminalCloseHandler(
       clock: options.clock,
     });
     throwIfAborted(context.signal);
-    if (resolved.session?.origin === "station" && options.persistence !== undefined) {
+    if (
+      resolved.session?.origin === "station" &&
+      resolved.session.execution === undefined &&
+      options.persistence !== undefined
+    ) {
       await options.persistence.markSessionsEnded({
         subject: { kind: "session", sessionId: resolved.session.id },
         endedAt: nowIso(options.clock),

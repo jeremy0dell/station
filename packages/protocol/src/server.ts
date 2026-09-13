@@ -39,7 +39,8 @@ import {
 
 const defaultRequestTimeoutMs = 5000;
 const diagnosticRequestTimeoutMs = 30_000;
-const externalLaunchRequestTimeoutMs = 30_000;
+// Cloud preparation can install the remote runtime before creating its agent terminal.
+const externalLaunchRequestTimeoutMs = 600_000;
 
 export type ProtocolServerOptions = {
   socketPath: string;

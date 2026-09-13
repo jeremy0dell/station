@@ -163,3 +163,15 @@ contract or procedure.
 If implementation and a living document disagree, determine which is stale and
 correct it in the same change. Historical plans, release narratives, audit
 findings, and old acceptance evidence are context only, never current authority.
+
+## Agent execution placement
+
+An optional execution provider runs a canonical session's agent outside the
+local terminal host. The session persists immutable execution placement.
+`AgentExecutionProvider` owns remote launch, observation, attachment, collection,
+and cleanup. The E2B adapter runs an ordinary remote Station runtime and maps
+its typed session status into the local snapshot. Local Host owns a relay whose
+private broker obtains narrowly scoped attachment credentials from Observer. Terminal
+bytes travel directly to the remote terminal gateway; compute credentials remain
+with Observer. The gateway permits attachment to one exact remote Host terminal.
+See [cloud execution](cloud-execution.md) for the supported workflow and limits.

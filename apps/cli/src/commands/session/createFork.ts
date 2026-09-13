@@ -122,7 +122,13 @@ async function runCreateSession(
   deps: ObserverProcessDeps,
 ): Promise<Extract<SessionCommandResult, { action: "create" }>> {
   const harnessProvider = parsed.harness ?? project.defaults.harness;
-  validateHarnessProvider(snapshot, harnessProvider);
+  if (parsed.execution === undefined) validateHarnessProvider(snapshot, harnessProvider);
+  else if (!snapshot.executionProviders?.includes(parsed.execution))
+    throw {
+      tag: "AgentExecutionError",
+      code: "EXECUTION_UNAVAILABLE",
+      message: "Configure the cloud execution provider before creating a session.",
+    };
   const group = resolveCreateGroup(snapshot, project, parsed);
   const command = createCommand(
     parsed,
@@ -224,6 +230,7 @@ function createCommand(
     terminal: { provider: terminalProvider },
     placement,
   };
+  if (parsed.execution !== undefined) payload.execution = { provider: parsed.execution };
   if (parsed.title !== undefined) payload.title = parsed.title;
   if (parsed.base !== undefined) payload.base = parsed.base;
   if (parsed.layout !== undefined) payload.terminal.layout = parsed.layout;

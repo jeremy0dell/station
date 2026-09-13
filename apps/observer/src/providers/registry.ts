@@ -1,4 +1,5 @@
 import type {
+  AgentExecutionProvider,
   HarnessProvider,
   HarnessVersionInfo,
   ManagedTerminalLifecycle,
@@ -30,6 +31,7 @@ function registerTerminal(
 
 export type ProviderRegistryInput = {
   worktree: WorktreeProvider;
+  executions?: Iterable<AgentExecutionProvider>;
   /** The default terminal provider (used for project-config back-compat). */
   terminal: TerminalProvider;
   /** Terminal lifecycle used by Station's external-launch handshake. */
@@ -49,6 +51,7 @@ export type ProviderRegistryInput = {
 
 export class ProviderRegistry {
   readonly worktree: WorktreeProvider;
+  readonly executions: Map<string, AgentExecutionProvider>;
   /** All registered terminal providers, keyed by provider id. */
   readonly terminals: Map<string, TerminalProvider>;
   /** The default terminal provider id (project-config back-compat). */
@@ -63,6 +66,9 @@ export class ProviderRegistry {
 
   constructor(input: ProviderRegistryInput) {
     this.worktree = input.worktree;
+    this.executions = new Map(
+      Array.from(input.executions ?? [], (provider) => [provider.id, provider]),
+    );
 
     this.defaultTerminalId = input.terminal.id;
     this.terminals = new Map();

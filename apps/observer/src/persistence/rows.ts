@@ -79,6 +79,7 @@ export type SqliteSessionRow = {
   title: string | null;
   harness: string | null;
   terminal_provider: string | null;
+  execution_provider: string | null;
   state: string | null;
   created_at: string;
   ended_at: string | null;
@@ -197,6 +198,7 @@ export function sessionFromRow(row: SqliteSessionRow): PersistedSession {
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
   };
+  if (row.execution_provider != null) session.executionProvider = row.execution_provider;
   if (row.title !== null) session.title = row.title;
   if (row.harness !== null) session.harness = row.harness;
   if (row.terminal_provider !== null) session.terminalProvider = row.terminal_provider;

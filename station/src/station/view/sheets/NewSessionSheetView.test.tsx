@@ -250,3 +250,19 @@ function collectTextRenderables(renderable: BaseRenderable): TextRenderable[] {
   }
   return collected;
 }
+
+it("renders the cloud selector and its native mouse action without local agent health", async () => {
+  const snapshot = {...snapshotWithCodexStatus("unavailable"),executionProviders:["e2b"]};
+  const initial = createNewSessionFlow(snapshot,"cloud1");
+  if (initial === undefined) throw new Error("Expected flow");
+  const cloud = transitionNewSessionFlow(initial,{type:"cycleExecution"});
+  if (cloud === undefined) throw new Error("Expected cloud flow");
+  const {setup,targets} = await render(snapshot,cloud);
+  const lines = setup.captureCharFrame().split("\n");
+  const index = lines.findIndex((line)=>line.includes("Execution (E)"));
+  expect(index).toBeGreaterThanOrEqual(0);
+  expect(lines[index]).toContain("Cloud · e2b");
+  expect(setup.captureCharFrame()).not.toContain("codex ● unavailable");
+  await setup.mockMouse.click(lines[index]?.indexOf("Execution") ?? 0,index,MouseButtons.LEFT);
+  expect(targets.at(-1)).toEqual({kind:"newSessionAction",actionId:"review.execution"});
+});

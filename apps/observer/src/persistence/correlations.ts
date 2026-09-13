@@ -193,12 +193,17 @@ export function seedSession(
     projectId: string;
     worktreeId: string;
     initialTitle: string;
+    executionProvider?: string;
     harness: ProviderId;
     terminalProvider: ProviderId;
     createdAt: string;
     lastSeenAt: string;
   },
 ): PersistedSession {
+  const existing = getSession(database, input.sessionId);
+  if (existing !== undefined && existing.executionProvider !== input.executionProvider) {
+    throw new Error("Session execution placement cannot change.");
+  }
   const title = resolveWorktreeDisplayTitle({
     projectId: input.projectId,
     worktreeId: input.worktreeId,
@@ -225,8 +230,8 @@ export function seedSession(
     .prepare(
       `
         INSERT INTO sessions
-          (id, project_id, worktree_id, title, harness, terminal_provider, created_at, ended_at, last_seen_at, lifecycle)
-        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 'open')
+          (id, project_id, worktree_id, title, harness, terminal_provider, execution_provider, created_at, ended_at, last_seen_at, lifecycle)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'open')
         ON CONFLICT(id) DO UPDATE SET
           project_id = excluded.project_id,
           worktree_id = excluded.worktree_id,
@@ -247,6 +252,7 @@ export function seedSession(
       canonical.title,
       input.harness,
       input.terminalProvider,
+      input.executionProvider ?? null,
       input.createdAt,
       input.lastSeenAt,
     );

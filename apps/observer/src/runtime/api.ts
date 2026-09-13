@@ -650,6 +650,7 @@ async function buildStop(
   await harnessIngressQueue.shutdown();
   await metadataRefresh?.shutdown();
   await providerHealthStopped;
+  for (const execution of options.providers?.executions.values() ?? []) await execution.dispose();
   await options.onStop?.();
   return {
     schemaVersion: STATION_SCHEMA_VERSION,

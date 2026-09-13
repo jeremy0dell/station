@@ -44,6 +44,7 @@ type SessionCreationArgs = {
   promptStdin: boolean;
   base?: string;
   harness?: ProviderId;
+  execution?: string;
   layout?: "default" | "agent-only" | "agent-build-shell";
   timeoutMs?: number;
   title?: string;
@@ -165,6 +166,7 @@ function parseCreationOptions(args: string[], action: "create" | "fork"): Parsed
   let promptStdin = false;
   let base: string | undefined;
   let harness: ProviderId | undefined;
+  let execution: string | undefined;
   let layout: SessionCreationArgs["layout"];
   let timeoutMs: number | undefined;
   let title: string | undefined;
@@ -207,6 +209,14 @@ function parseCreationOptions(args: string[], action: "create" | "fork"): Parsed
     if (option === "--base") {
       claimOption(seen, option, command);
       base = parseSessionOptionValue(args[index + 1], option);
+      index += 1;
+      continue;
+    }
+    if (option === "--execution") {
+      ensureCreateOption(action, option);
+      claimOption(seen, option, command);
+      const value = parseProviderId(args[index + 1], option);
+      execution = value === "local" ? undefined : value;
       index += 1;
       continue;
     }
@@ -295,6 +305,7 @@ function parseCreationOptions(args: string[], action: "create" | "fork"): Parsed
   };
   if (base !== undefined) values.base = base;
   if (harness !== undefined) values.harness = harness;
+  if (execution !== undefined) values.execution = execution;
   if (layout !== undefined) values.layout = layout;
   if (timeoutMs !== undefined) values.timeoutMs = timeoutMs;
   if (title !== undefined) values.title = title;
@@ -431,6 +442,7 @@ function parseCloseArgs(args: string[]): Extract<ParsedSessionArgs, { action: "c
   let outputFormat: SessionOutputFormat = "text";
   let mode: "harness" | "terminal" | "all" | undefined;
   let force = false;
+  let discardResults = false;
   let timeoutMs: number | undefined;
   for (let index = 1; index < args.length; index += 1) {
     const option = args[index];
@@ -443,6 +455,11 @@ function parseCloseArgs(args: string[]): Extract<ParsedSessionArgs, { action: "c
       claimOption(seen, option, "session close");
       mode = parseCloseMode(args[index + 1]);
       index += 1;
+      continue;
+    }
+    if (option === "--discard-results") {
+      claimOption(seen, option, "session close");
+      discardResults = true;
       continue;
     }
     if (option === "--force") {
@@ -461,8 +478,10 @@ function parseCloseArgs(args: string[]): Extract<ParsedSessionArgs, { action: "c
   if (mode === undefined) {
     throw new Error("session close requires --mode <harness|terminal|all>.");
   }
-  const payload: { sessionId: SessionId; mode: typeof mode; force?: true } = { sessionId, mode };
+  const payload: { sessionId: SessionId; mode: typeof mode; force?: true; discardResults?: true } =
+    { sessionId, mode };
   if (force) payload.force = true;
+  if (discardResults) payload.discardResults = true;
   const command = CloseSessionCommandSchema.parse({ type: "session.close", payload });
   const parsed: Extract<ParsedSessionArgs, { action: "close" }> = {
     action: "close",

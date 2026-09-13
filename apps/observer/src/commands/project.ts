@@ -47,6 +47,21 @@ export function createProjectRemoveHandler(
 ): CommandHandler {
   return async (context) => {
     assertCommandType(context, "project.remove");
+    if (
+      options.core
+        .getSnapshot()
+        .sessions.some(
+          (session) =>
+            session.projectId === context.command.payload.projectId &&
+            session.execution !== undefined,
+        )
+    ) {
+      throw {
+        tag: "AgentExecutionError",
+        code: "EXECUTION_PROJECT_REMOVE_REFUSED",
+        message: "Close cloud sessions before removing their project.",
+      };
+    }
     const config = await options.projectConfigWriter.removeProject(context.command.payload);
     options.core.updateConfig(config);
     await reconcileAndPublish({

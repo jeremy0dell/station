@@ -220,6 +220,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: ./.github/actions/setup-ci
         with:
           station-dependencies: "true"
@@ -229,6 +230,21 @@ jobs:
         env:
           STATION_BINARY_SMOKE_EVIDENCE_DIR: ${{ runner.temp }}/station-binary-smoke-evidence
         run: bun run test:ci:binary
+      - name: Package tested cloud runtime
+        run: |
+          node --input-type=module -e 'import {readFileSync,writeFileSync} from "node:fs"; import {execFileSync} from "node:child_process"; writeFileSync("station/dist/bin/runtime-manifest.json", JSON.stringify({version:"0.0.0-local",target:"linux-x64",sourceCommit:execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),buildIdentity:readFileSync("packages/runtime/dist/station-build-id","utf8").trim()}));'
+          tar -czf station-linux-x64.tar.gz -C station/dist/bin stn stn-ingress stn-tmux-popup LICENSE runtime-manifest.json
+          sha256sum station-linux-x64.tar.gz > station-linux-x64.sha256
+      - name: Upload tested cloud runtime
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: station-cloud-linux-x64-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            station-linux-x64.tar.gz
+            station-linux-x64.sha256
+            station/dist/bin/runtime-manifest.json
+          retention-days: 7
+          if-no-files-found: error
       - name: Upload binary smoke failure evidence
         if: ${{ failure() && steps.binary_smoke_run.outcome == 'failure' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
