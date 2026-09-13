@@ -9,6 +9,7 @@ import { E2bExecutionProvider } from "../../src/provider.js";
 import { ROOT } from "../../src/remote.js";
 import { git } from "../../src/source.js";
 import { ExecutionStore } from "../../src/state.js";
+import { requestTerminalGrant } from "../../src/terminalBroker.js";
 
 const roots: string[] = [];
 const providers: E2bExecutionProvider[] = [];
@@ -211,6 +212,11 @@ it("launches once, reconnects after Observer restart, and saves verified results
   await f.provider.dispose();
   const recovered = new E2bExecutionProvider(f.options);
   providers.push(recovered);
+  await recovered.observe("ses_test");
+  const broker = await requestTerminalGrant(plan.args.at(-2)!, "ses_test", () => {});
+  // The fake gateway cannot grant tickets, but the restarted broker must answer.
+  expect(broker.response.type).toBe("unavailable");
+  broker.close();
   await recovered.attach("ses_test");
   expect(f.sdk.create).toHaveBeenCalledTimes(1);
   expect((await f.store.read("ses_test")).remoteSessionId).toBe(before.remoteSessionId);

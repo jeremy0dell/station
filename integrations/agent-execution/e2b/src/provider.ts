@@ -286,6 +286,8 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
       return { execution, status };
     }
     try {
+      // Reconciliation restores the broker before a surviving relay needs a fresh ticket.
+      if (record.version === 2) await this.launchPlan(record);
       if (record.launchError !== undefined) throw record.launchError;
       const sandbox = await this.connection(record);
       if (record.phase === "launching") await this.recoverRemoteSession(record, sandbox, true);
