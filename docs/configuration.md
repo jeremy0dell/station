@@ -495,6 +495,8 @@ The optional global `[execution.e2b]` section enables cloud execution in New
 Session and `stn session create --execution e2b`. Fields are `template` (default
 `base`), `api_key_env` (default `E2B_API_KEY`), `timeout_minutes` (5–1440, default
 60), `max_sandboxes` (1–20, default 1), and optional `setup_command`.
+Native Codex requires a Linux x64 template with at least 2048 MiB of memory; E2B fixes this allocation when the template is built. Set `template` to that template name.
+
 Development runtimes require paired `runtime_archive` (local Linux x64 archive path)
 and `runtime_archive_sha256` (64 lowercase hexadecimal characters). Released clients
 use the exact installed immutable release when these settings are absent.

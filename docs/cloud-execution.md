@@ -21,11 +21,16 @@ setup_command = "sudo npm install --global @anthropic-ai/claude-code"
 ANTHROPIC_API_KEY = "STATION_CLOUD_ANTHROPIC_API_KEY"
 ```
 
+For native Codex, build a Linux x64 E2B template with at least 2048 MiB of memory.
+Remote Observer, Host, the terminal gateway, and Codex share that allocation.
+E2B fixes memory when the template is built; see [custom sandbox compute](https://e2b.dev/resources/customize-sandbox-compute).
+Set `template` to the name of that template, such as `station-cloud-terminal-2gb`.
+
 For Codex with an OpenAI API key, use this setup instead:
 
 ```toml
 [execution.e2b]
-template = "base"
+template = "station-cloud-terminal-2gb"
 timeout_minutes = 60
 max_sandboxes = 1
 setup_command = "sudo npm install --global @openai/codex && printenv OPENAI_API_KEY | codex login --with-api-key"

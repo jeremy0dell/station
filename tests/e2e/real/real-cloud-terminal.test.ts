@@ -6,6 +6,7 @@ import { join } from "node:path";
 import * as timers from "node:timers/promises";
 import { loadConfig } from "@station/config";
 import type { BuildHarnessLaunchRequest } from "@station/contracts";
+import { Terminal } from "@xterm/headless";
 import { expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { resolveExecutionRuntime } from "../../../apps/cli/src/executionRuntime.js";
@@ -17,7 +18,7 @@ import { TerminalServerFrameSchema } from "../../../integrations/agent-execution
 import { TerminalInputWindow } from "../../../integrations/agent-execution/e2b/src/terminalRelay.js";
 
 it.skipIf(process.env.STATION_REAL_E2B !== "1")(
-  "retains one authenticated cloud agent across attachment and Observer replacement, then collects and destroys",
+  "retains one authenticated cloud agent across attachment and provider replacement, then collects and destroys",
   async () => {
     const configPath = process.env.STATION_E2B_ACCEPTANCE_CONFIG;
     if (!configPath)
@@ -82,6 +83,7 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
     const store = new ExecutionStore(join(options.stateDir, "executions/e2b"));
     const timings: number[] = [];
     let socket: WebSocket | undefined;
+    let terminal: Terminal | undefined;
     let broker: Awaited<ReturnType<typeof requestTerminalGrant>> | undefined;
     const connect = async () => {
       const plan = await provider.attach(sessionId);
@@ -123,13 +125,27 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
       const sent = new Map<number, number>();
       let acceptedBytes = 0;
       let transportFailure: string | undefined;
+      let submittedBytes = 0;
       const input = new TerminalInputWindow((operation) => {
         sent.set(operation.seq, performance.now());
         first.socket.send(JSON.stringify(operation));
       });
+      const writeInput = (data: string) => {
+        submittedBytes += Buffer.byteLength(data);
+        input.input(data);
+      };
+      terminal = new Terminal({ cols: original.cols, rows: original.rows, scrollback: 1000 });
+      terminal.onData(writeInput);
+      for (const event of original.replay.events) {
+        if (event.type === "data") terminal.write(event.data);
+        else terminal.resize(event.cols, event.rows);
+      }
       first.socket.on("message", (data) => {
         const frame = TerminalServerFrameSchema.parse(JSON.parse(String(data)));
-        if (frame.type === "frame") output = (output + JSON.stringify(frame.frame)).slice(-65536);
+        if (frame.type === "frame") {
+          output = (output + JSON.stringify(frame.frame)).slice(-65536);
+          if (frame.frame.type === "data") terminal?.write(frame.frame.data);
+        }
         if (frame.type === "failure") transportFailure = frame.message;
         if (frame.type === "accepted") {
           const started = sent.get(frame.seq);
@@ -142,11 +158,11 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
       for (let attempt = 0; !output.includes("Yes, continue") && attempt < 120; attempt++)
         await timers.setTimeout(250);
       expect(output).toContain("Yes, continue");
-      input.input("\r");
+      writeInput("\r");
       let trustedHooks = false;
       for (let attempt = 0; attempt < 60; attempt++) {
         if (!trustedHooks && output.includes("Hooks need review")) {
-          input.input("2\r");
+          writeInput("2\r");
           trustedHooks = true;
         }
         await provider.collect(sessionId);
@@ -161,18 +177,18 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
         if (attempt === 59) throw new Error("Codex did not produce the expected fixture patch.");
         await timers.setTimeout(1000);
       }
-      input.resize(100, 30);
-      input.input(`\x1b[200~${"x".repeat(1024 * 1024)}\x1b[201~`);
-      for (
-        let attempt = 0;
-        acceptedBytes < 1024 * 1024 + 13 + (trustedHooks ? 2 : 0) && attempt < 120;
-        attempt++
-      )
+      timings.length = 0;
+      writeInput(`\x1b[200~${"x".repeat(1024 * 1024)}\x1b[201~`);
+      const pasteEnd = submittedBytes;
+      for (let attempt = 0; acceptedBytes < pasteEnd && attempt < 120; attempt++)
         await timers.setTimeout(250);
       expect(transportFailure).toBeUndefined();
       expect(first.socket.readyState).toBe(WebSocket.OPEN);
-      expect(acceptedBytes).toBe(1024 * 1024 + 13 + (trustedHooks ? 2 : 0));
-      input.input("\x15");
+      expect(acceptedBytes).toBeGreaterThanOrEqual(pasteEnd);
+      writeInput("\x15");
+      terminal.resize(100, 30);
+      input.resize(100, 30);
+      await timers.setTimeout(1000);
       first.socket.terminate();
       broker?.close();
       const second = await connect();
@@ -215,6 +231,7 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
       console.log(`Cloud terminal evidence: ${root}/acceptance.json`);
     } finally {
       socket?.terminate();
+      terminal?.dispose();
       broker?.close();
       try {
         await provider.destroy(sessionId);
