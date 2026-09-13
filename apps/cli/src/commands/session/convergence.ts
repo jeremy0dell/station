@@ -163,6 +163,7 @@ function closeEffectObserved(
     refreshed.terminal.state === "none" ||
     refreshed.terminal.state === "stale";
   if (mode === "harness") return harnessStopped;
+  if (target.execution !== undefined && mode === "terminal") return terminalRetired;
   if (target.origin === "station") return false;
   return mode === "terminal" ? terminalRetired : harnessStopped && terminalRetired;
 }

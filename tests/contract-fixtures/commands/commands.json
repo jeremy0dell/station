@@ -286,5 +286,11 @@
       "groupId": "grp_active",
       "expectedVersion": 3
     }
+  },
+  "collectSession": {
+    "type": "session.collect",
+    "payload": {
+      "sessionId": "ses_web_feature"
+    }
   }
 }

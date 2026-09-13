@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentExecutionViewSchema } from "./agentExecution.js";
 import { AgentStatusLabelSchema } from "./agentStatus.js";
 import { ClientFeatureFlagsSchema } from "./featureFlags.js";
 import {
@@ -163,6 +164,7 @@ export const SessionViewSchema = z
   .object({
     id: SessionIdSchema,
     origin: SessionOriginSchema,
+    execution: AgentExecutionViewSchema.optional(),
     projectId: ProjectIdSchema,
     worktreeId: WorktreeIdSchema,
     createdAt: TimestampSchema,
@@ -373,6 +375,7 @@ export const StationSnapshotSchema = z
     projects: z.array(ProjectViewSchema),
     rows: z.array(WorktreeRowSchema),
     sessions: z.array(SessionViewSchema),
+    executionProviders: z.array(ProviderIdSchema).optional(),
     sessionGroups: z.array(SessionGroupViewSchema),
     counts: z
       .object({

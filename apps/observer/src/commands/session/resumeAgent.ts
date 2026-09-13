@@ -91,6 +91,21 @@ export function createSessionResumeAgentHandler(
     }
 
     const payload = context.command.payload;
+    if (
+      (await options.persistence.listSessions()).some(
+        (session) =>
+          session.projectId === payload.projectId &&
+          session.worktreeId === payload.worktreeId &&
+          session.lifecycle !== "ended" &&
+          session.executionProvider !== undefined,
+      )
+    ) {
+      throw {
+        tag: "AgentExecutionError",
+        code: "EXECUTION_LOCAL_RESTART_REFUSED",
+        message: "Reopen the cloud session to reconnect. Close it before starting a local agent.",
+      };
+    }
     const repairProof = payload.repair;
     const repairAction: Extract<RepairAction, { kind: "recovery-resume" }> | undefined =
       repairProof === undefined

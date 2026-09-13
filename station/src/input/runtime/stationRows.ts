@@ -35,6 +35,7 @@ export function unreachableTerminalRow(
   store: StationClientStateSource,
   worktreeId: string,
 ): { label: string; provider: string; state: string } | undefined {
+  if (store.getState().snapshot?.sessions.some((session) => session.worktreeId === worktreeId && session.execution !== undefined)) return undefined;
   const row = findWorktreeRowById(store, worktreeId);
   const terminal = row?.terminal;
   if (row === undefined || terminal === undefined) {

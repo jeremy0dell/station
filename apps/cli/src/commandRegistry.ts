@@ -4,6 +4,7 @@ import { commandCliCommand } from "./commands/registry/command.js";
 import { debugCliCommand } from "./commands/registry/debug.js";
 import { doctorCliCommand } from "./commands/registry/doctor.js";
 import { eventHooksCliCommand } from "./commands/registry/eventHooks.js";
+import { executionCliCommand } from "./commands/registry/execution.js";
 import { groupCliCommand } from "./commands/registry/group.js";
 import { hooksCliCommand } from "./commands/registry/hooks.js";
 import { hostCliCommand } from "./commands/registry/host.js";
@@ -55,6 +56,7 @@ export const cliCommandRegistry: CliCommandNode = {
   verification: ["stn --help", "stn doctor --help", "stn project add --man"],
   children: [
     commandCliCommand,
+    executionCliCommand,
     debugCliCommand,
     doctorCliCommand,
     eventHooksCliCommand,

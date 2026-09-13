@@ -34,6 +34,7 @@ import type { CommandQueue, ObserverCommandHandlers } from "./queue.js";
 import { createObserverReconcileHandler } from "./reconcile.js";
 import { createSessionAcknowledgeTurnHandler } from "./session/acknowledgeTurn.js";
 import { createSessionCloseHandler } from "./session/close.js";
+import { createSessionCollectHandler } from "./session/collect.js";
 import { createSessionCreateHandler } from "./session/create.js";
 import { createSessionForkHandler } from "./session/fork.js";
 import { createSessionImportRecoveryHandleHandler } from "./session/importRecoveryHandle.js";
@@ -221,6 +222,13 @@ export function registerObserverCommandHandlers(
       persistence: options.persistence,
       eventBus: options.eventBus,
       clock: options.clock,
+    }),
+    "session.collect": createSessionCollectHandler({
+      core: options.core,
+      providers: options.providers,
+      eventBus: options.eventBus,
+      clock: options.clock,
+      worktreeMutations,
     }),
     "session.close": createSessionCloseHandler({
       providers: options.providers,

@@ -25,6 +25,7 @@ export type SessionSummary = {
   harness: SessionView["harness"];
   status: SessionView["status"];
   terminal?: TerminalAttachment;
+  execution?: SessionView["execution"];
 };
 
 export type SessionFilters = {
@@ -75,6 +76,7 @@ export function summarizeSession(snapshot: StationSnapshot, session: SessionView
     harness: copyHarness(session.harness),
     status: { ...session.status },
   };
+  if (session.execution !== undefined) summary.execution = { ...session.execution };
   if (session.terminal !== undefined) {
     summary.terminal = { ...session.terminal };
   }

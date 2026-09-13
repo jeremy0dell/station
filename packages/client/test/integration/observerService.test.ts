@@ -546,6 +546,8 @@ describe("observer client service", () => {
     await service.waitForCommandCompletion("cmd_done");
 
     expect(observedTimeoutMs).toBe(35_000);
+    await service.waitForCommandCompletion("cmd_cloud", 600_000);
+    expect(observedTimeoutMs).toBe(600_000);
   });
 
   it("maps failed terminal command records and preserves SafeError diagnostic context", async () => {

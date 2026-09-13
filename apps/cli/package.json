@@ -63,7 +63,8 @@
     "@station/terminal": "workspace:*",
     "@station/tmux": "workspace:*",
     "@station/worktrunk": "workspace:*",
-    "zod": "^4.1.12"
+    "zod": "^4.1.12",
+    "@station/e2b": "workspace:*"
   },
   "devDependencies": {
     "@station/testing": "workspace:*"

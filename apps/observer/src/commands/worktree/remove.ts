@@ -96,6 +96,21 @@ async function removeValidatedWorktree(
   validation: WorktreeRemovalValidation,
 ): Promise<void> {
   const { row, project, target, previousSessionId, force } = validation;
+  if (
+    (await options.persistence.listSessions()).some(
+      (session) =>
+        session.projectId === row.projectId &&
+        session.worktreeId === row.id &&
+        session.lifecycle !== "ended" &&
+        session.executionProvider !== undefined,
+    )
+  )
+    throw {
+      tag: "AgentExecutionError",
+      code: "EXECUTION_CLOSE_REQUIRED",
+      message:
+        "Close the cloud session with mode all to retrieve its changes and destroy its sandbox before removing this worktree.",
+    } satisfies SafeError;
   if (validation.externalTerminalExitRequired) {
     throw externalTerminalExitRequiredError(row.projectId, row.id);
   }

@@ -50,6 +50,9 @@ export function createNewSessionFlow(
     reviewFocus: "create",
     selectedProjectId: project.id,
     selectedHarness: harness.id,
+    ...(snapshot.executionProviders === undefined
+      ? {}
+      : { executionProviders: snapshot.executionProviders }),
     title: branch,
     branch,
     titleSource: "generated",
@@ -66,6 +69,18 @@ export function transitionNewSessionFlow(
   action: NewSessionFlowAction,
 ): NewSessionFlowState | undefined {
   switch (action.type) {
+    case "cycleExecution": {
+      if (state.mode !== "review" || !state.executionProviders?.length) return state;
+      const selected =
+        state.selectedExecution === undefined
+          ? -1
+          : state.executionProviders.indexOf(state.selectedExecution);
+      const next = state.executionProviders[selected + 1];
+      const result = toReviewState(state, "execution");
+      if (next === undefined) delete result.selectedExecution;
+      else result.selectedExecution = next;
+      return result;
+    }
     case "cancel":
       return cancelNewSessionStep(state);
     case "editName":
@@ -117,7 +132,14 @@ export function transitionNewSessionFlow(
         : state;
     case "reviewFocus":
       return state.mode === "review"
-        ? { ...state, reviewFocus: cycleReviewFocus(state.reviewFocus, action.dir) }
+        ? {
+            ...state,
+            reviewFocus: cycleReviewFocus(
+              state.reviewFocus,
+              action.dir,
+              (state.executionProviders?.length ?? 0) > 0,
+            ),
+          }
         : state;
     case "editNameFocusSet":
       return state.mode === "editName" ? { ...state, editNameFocus: action.focus } : state;
@@ -251,6 +273,12 @@ function baseState(state: NewSessionBaseState): NewSessionBaseState {
     stepHistory: state.stepHistory,
     selectedProjectId: state.selectedProjectId,
     selectedHarness: state.selectedHarness,
+    ...(state.selectedExecution === undefined
+      ? {}
+      : { selectedExecution: state.selectedExecution }),
+    ...(state.executionProviders === undefined
+      ? {}
+      : { executionProviders: state.executionProviders }),
     title: state.title,
     branch: state.branch,
     titleSource: state.titleSource,
@@ -258,8 +286,14 @@ function baseState(state: NewSessionBaseState): NewSessionBaseState {
   };
 }
 
-function cycleReviewFocus(current: NewSessionReviewFocus, dir: -1 | 1): NewSessionReviewFocus {
-  const fields: readonly NewSessionReviewFocus[] = ["project", "name", "agent", "group", "create"];
+function cycleReviewFocus(
+  current: NewSessionReviewFocus,
+  dir: -1 | 1,
+  cloud: boolean,
+): NewSessionReviewFocus {
+  const fields: NewSessionReviewFocus[] = ["project", "name", "agent"];
+  if (cloud) fields.push("execution");
+  fields.push("group", "create");
   const index = fields.indexOf(current);
   const next = (index + dir + fields.length) % fields.length;
   return fields[next] ?? current;

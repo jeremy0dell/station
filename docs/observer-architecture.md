@@ -480,3 +480,14 @@ register.
 For ordinary work, current code, tests, runtime evidence, and these living docs
 supersede historical planning material. When they disagree, verify the current
 path and update the stale source of guidance.
+
+## Remote agent execution
+
+The `AgentExecutionProvider` driven port separates remote agent lifetime from
+local terminal presentation. Session commands preserve execution placement and
+retain uncertain cloud launches. Reconcile consumes provider-neutral execution
+and agent status. The E2B adapter owns its SDK, credentials, durable sandbox
+identity, private terminal broker, source transfer, and verified result files.
+Closing a terminal detaches a cloud session; closing all resources collects
+results before destroying compute. Explicit result abandonment is a separate
+command option. The CLI composition root registers configured execution adapters.

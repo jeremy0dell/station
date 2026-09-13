@@ -46,7 +46,8 @@
       "@station/host": ["./packages/station-host/src/index.ts"],
       "@station/testing": ["./packages/testing/src/index.ts"],
       "@station/tmux": ["./integrations/terminal/tmux/src/index.ts"],
-      "@station/worktrunk": ["./integrations/worktree/worktrunk/src/index.ts"]
+      "@station/worktrunk": ["./integrations/worktree/worktrunk/src/index.ts"],
+      "@station/e2b": ["./integrations/agent-execution/e2b/src/index.ts"]
     }
   }
 }

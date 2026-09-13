@@ -8,6 +8,7 @@ import { runSessionCommand } from "../session/command.js";
 import type { SessionCommandOptions } from "../session/options.js";
 import { sessionCommandExitCode, sessionCreationCorrelation } from "../session/result.js";
 import { renderSessionCommandText } from "../session/text.js";
+import { collectSessionCliCommand } from "./sessionCollect.js";
 
 const currentExamples = ["stn session current"] as const;
 const currentNotes = [
@@ -51,6 +52,7 @@ export const sessionCliCommand: CliCommandNode = {
     "Close requires an explicit harness, terminal, or all mode. It never deletes the worktree, branch, checkout, or panes and never dispatches worktree.remove.",
   ],
   children: [
+    collectSessionCliCommand,
     {
       name: "current",
       description: "Print the verified invoking terminal context as JSON.",
@@ -108,9 +110,13 @@ export const sessionCliCommand: CliCommandNode = {
       name: "create",
       description: "Create one complete Observer-managed session.",
       usage: [
-        "stn session create <projectId> --branch <branch> (--from-current | --terminal tmux) [--title <title>] [--base <ref>] [--harness <providerId>] [--layout <default|agent-only|agent-build-shell>] [--group <groupId> | --new-group <name> | --ungrouped] [--prompt-stdin] [--timeout-ms <ms>] [--json]",
+        "stn session create <projectId> --branch <branch> (--from-current | --terminal tmux) [--title <title>] [--base <ref>] [--harness <providerId>] [--execution <local|e2b>] [--layout <default|agent-only|agent-build-shell>] [--group <groupId> | --new-group <name> | --ungrouped] [--prompt-stdin] [--timeout-ms <ms>] [--json]",
       ],
       options: [
+        {
+          name: "--execution <provider>",
+          description: "Run the agent in a configured execution provider, such as e2b.",
+        },
         { name: "--branch <branch>", description: "Set the exact new worktree branch." },
         {
           name: "--from-current",
@@ -234,6 +240,10 @@ export const sessionCliCommand: CliCommandNode = {
         "stn session close <sessionId> --mode <harness|terminal|all> [--force] [--timeout-ms <ms>] [--json]",
       ],
       options: [
+        {
+          name: "--discard-results",
+          description: "Acknowledge loss of cloud changes when closing all resources.",
+        },
         {
           name: "--mode <harness|terminal|all>",
           description: "Choose exactly which non-destructive lifecycle resources to close.",

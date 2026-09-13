@@ -42,6 +42,7 @@ import {
   createCursorHarnessProvider,
   cursorHookAdapter,
 } from "@station/cursor";
+import { E2bExecutionProvider } from "@station/e2b";
 import { GithubRepositoryProvider } from "@station/github-repository";
 import { ProviderRegistry } from "@station/observer/internal";
 import {
@@ -178,6 +179,35 @@ export function createProviderRegistry(
     terminal: terminalRoles.terminal,
     terminalPlacements,
     managedTerminal: station,
+    executions:
+      config.execution?.e2b === undefined
+        ? []
+        : [
+            new E2bExecutionProvider({
+              ...config.execution.e2b,
+              harnessSettings: Object.fromEntries(
+                harnesses.map((harness) => {
+                  const selected = config.harness?.[harness.id];
+                  return [
+                    harness.id,
+                    {
+                      profile: selected?.profile,
+                      permissionMode:
+                        selected?.permissionMode ?? config.defaults.harnessPermissionMode,
+                      approvalPolicy: selected?.approvalPolicy,
+                      sandboxMode: selected?.sandboxMode,
+                    },
+                  ];
+                }),
+              ),
+              stateDir: observerPaths.stateDir,
+              bridgeDirectory: join(dirname(observerPaths.socketPath), "execution"),
+              bridgeCommand: selfExecArgv("cli", [
+                process.execPath,
+                fileURLToPath(new URL("./bootstrap.js", import.meta.url)),
+              ]),
+            }),
+          ],
     harnesses,
     repositories,
     hookAdapters: [

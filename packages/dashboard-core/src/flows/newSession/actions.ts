@@ -15,6 +15,7 @@ export type NewSessionFlowAction =
   | { type: "commitName" }
   | { type: "pickProject" }
   | { type: "pickAgent" }
+  | { type: "cycleExecution" }
   | { type: "pickGroup" }
   | { type: "editGroupDraft" }
   | { type: "editGroupDraftInput"; action: EditableTextEditAction }
@@ -63,6 +64,7 @@ type NewSessionActionDefinition =
   | { mode: "review"; intent: "submit" };
 
 const NEW_SESSION_ACTIONS = {
+  "review.execution": { mode: "review", intent: "transition", action: { type: "cycleExecution" } },
   "review.project": { mode: "review", intent: "transition", action: { type: "pickProject" } },
   "review.name": { mode: "review", intent: "transition", action: { type: "editName" } },
   "review.agent": { mode: "review", intent: "transition", action: { type: "pickAgent" } },
@@ -162,6 +164,8 @@ export function newSessionActionForInput(
     if (input.input === "P") return "review.project";
     if (input.input === "N") return "review.name";
     if (input.input === "A") return "review.agent";
+    if (input.input === "E" && (state.executionProviders?.length ?? 0) > 0)
+      return "review.execution";
     if (input.input === "G") return "review.group";
     return input.input === "C" ? "review.create" : undefined;
   }

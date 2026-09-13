@@ -357,7 +357,7 @@ describe("SQLite-only Observer persistence behavior", () => {
     const upgraded = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
     try {
       expect(upgraded.health()).toMatchObject({
-        schemaVersion: 20,
+        schemaVersion: 21,
         migrations: expect.arrayContaining([
           expect.objectContaining({ version: 20, name: "rename_terminal_external_focus" }),
         ]),
@@ -874,6 +874,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         [18, "command_results"],
         [19, "drop_legacy_provider_health_observations"],
         [20, "rename_terminal_external_focus"],
+        [21, "session_execution"],
       ]);
       await expect(persistence.listSessions()).resolves.toEqual([
         expect.objectContaining({
@@ -1061,3 +1062,37 @@ function ids() {
     observationId: () => `atomic_obs_${++observation}`,
   };
 }
+
+it("persists immutable execution placement across SQLite reopen", async () => {
+  const root = await mkdtemp(join(tmpdir(), "station-execution-db-"));
+  const path = join(root, "observer.sqlite");
+  let sqlite = openObserverSqlite({ path });
+  const seed = {
+    sessionId: "ses_cloud",
+    projectId: "web",
+    worktreeId: "wt_cloud",
+    initialTitle: "Cloud",
+    harness: "codex",
+    terminalProvider: "tmux",
+    executionProvider: "e2b",
+    createdAt: now,
+    lastSeenAt: now,
+  };
+  try {
+    await createSqliteObserverPersistence({ sqlite }).seedSession(seed);
+    sqlite.close();
+    sqlite = openObserverSqlite({ path });
+    const persistence = createSqliteObserverPersistence({ sqlite });
+    expect(await persistence.listSessions()).toContainEqual(
+      expect.objectContaining({ id: "ses_cloud", executionProvider: "e2b" }),
+    );
+    const { executionProvider: _execution, ...local } = seed;
+    await expect(persistence.seedSession(local)).rejects.toThrow("PERSISTENCE_TRANSACTION_FAILED");
+    expect(await persistence.listSessions()).toContainEqual(
+      expect.objectContaining({ id: "ses_cloud", executionProvider: "e2b" }),
+    );
+  } finally {
+    sqlite.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

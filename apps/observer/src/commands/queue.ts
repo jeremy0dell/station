@@ -245,6 +245,11 @@ async function executeCommand(
   runtime?.eventBus?.publish(startedEvent);
 
   const handler = handlers.get(context.command.type);
+  const cloudOperation =
+    (context.command.type === "session.create" &&
+      context.command.payload.execution !== undefined) ||
+    context.command.type === "session.collect" ||
+    context.command.type === "session.close";
   let commitStarted = false;
   const handlerState: {
     execution: Promise<unknown> | undefined;
@@ -254,7 +259,7 @@ async function executeCommand(
     {
       operation: `command.${context.command.type}`,
       clock,
-      timeoutMs: runtime?.commandTimeoutMs ?? 30_000,
+      timeoutMs: runtime?.commandTimeoutMs ?? (cloudOperation ? 600_000 : 30_000),
       error: {
         tag: "CommandExecutionError",
         code: "COMMAND_EXECUTION_FAILED",
@@ -429,6 +434,7 @@ function commandScope(command: StationCommand): string {
     case "terminal.focus":
     case "terminal.close":
       return terminalCommandScope(command.payload);
+    case "session.collect":
     case "session.close":
     case "session.rename":
     case "session.acknowledgeTurn":

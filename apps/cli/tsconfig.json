@@ -22,7 +22,8 @@
       "@station/setup-core": ["../../packages/setup-core/dist/index.d.ts"],
       "@station/setup-messages": ["../../packages/setup-messages/dist/index.d.ts"],
       "@station/tmux": ["../../integrations/terminal/tmux/dist/index.d.ts"],
-      "@station/worktrunk": ["../../integrations/worktree/worktrunk/dist/index.d.ts"]
+      "@station/worktrunk": ["../../integrations/worktree/worktrunk/dist/index.d.ts"],
+      "@station/e2b": ["../../integrations/agent-execution/e2b/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts"]

@@ -123,6 +123,7 @@ async function runDashboardCapabilityOperation(input: {
           title: operation.title,
           hiddenBranch: operation.hiddenBranch,
           harness: operation.harness,
+          ...(operation.execution === undefined ? {} : { execution: operation.execution }),
           ...(operation.group === undefined ? {} : { group: operation.group }),
         };
         handle =
