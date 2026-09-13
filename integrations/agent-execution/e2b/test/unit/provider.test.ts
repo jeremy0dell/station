@@ -213,7 +213,9 @@ it("launches once, reconnects after Observer restart, and saves verified results
   const recovered = new E2bExecutionProvider(f.options);
   providers.push(recovered);
   await recovered.observe("ses_test");
-  const broker = await requestTerminalGrant(plan.args.at(-2)!, "ses_test", () => {});
+  const brokerPath = plan.args.at(-2);
+  if (brokerPath === undefined) throw new Error("Missing attachment broker path");
+  const broker = await requestTerminalGrant(brokerPath, "ses_test", () => {});
   // The fake gateway cannot grant tickets, but the restarted broker must answer.
   expect(broker.response.type).toBe("unavailable");
   broker.close();
