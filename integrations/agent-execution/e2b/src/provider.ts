@@ -589,7 +589,7 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
     }
     await this.run(
       sandbox,
-      `stn --config '${CONFIG}' session close ${shellQuote(record.remoteSessionId)} --mode harness --force --json`,
+      `stn --config '${CONFIG}' session close ${shellQuote(record.remoteSessionId)} --mode terminal --force --json`,
     );
     record.phase = "stopped";
     await this.store.write(record);

@@ -119,6 +119,7 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
       const original = first.ack;
       await provider.dispose();
       provider = new E2bExecutionProvider(options);
+      let output = JSON.stringify(original.replay);
       const sent = new Map<number, number>();
       let acceptedBytes = 0;
       const input = new TerminalInputWindow((operation) => {
@@ -127,6 +128,7 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
       });
       first.socket.on("message", (data) => {
         const frame = TerminalServerFrameSchema.parse(JSON.parse(String(data)));
+        if (frame.type === "frame") output += JSON.stringify(frame.frame);
         if (frame.type === "accepted") {
           const started = sent.get(frame.seq);
           if (started !== undefined) timings.push(performance.now() - started);
@@ -134,11 +136,38 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
           input.acknowledge(frame.seq, frame.bytes);
         }
       });
+      // Only this test-created repository is trusted; production prompts remain interactive.
+      for (let attempt = 0; !output.includes("Yes, continue") && attempt < 120; attempt++)
+        await timers.setTimeout(250);
+      expect(output).toContain("Yes, continue");
+      input.input("\r");
+      let trustedHooks = false;
+      for (let attempt = 0; attempt < 60; attempt++) {
+        if (!trustedHooks && output.includes("Hooks need review")) {
+          input.input("2\r");
+          trustedHooks = true;
+        }
+        await provider.collect(sessionId);
+        const record = await store.read(sessionId);
+        if (
+          record.resultDirectory !== undefined &&
+          (await readFile(join(record.resultDirectory, "changes.patch"), "utf8")).includes(
+            "cloud-terminal-proof",
+          )
+        )
+          break;
+        if (attempt === 59) throw new Error("Codex did not produce the expected fixture patch.");
+        await timers.setTimeout(1000);
+      }
       input.resize(100, 30);
       input.input(`\x1b[200~${"x".repeat(1024 * 1024)}\x1b[201~`);
-      for (let attempt = 0; acceptedBytes < 1024 * 1024 + 12 && attempt < 120; attempt++)
+      for (
+        let attempt = 0;
+        acceptedBytes < 1024 * 1024 + 13 + (trustedHooks ? 2 : 0) && attempt < 120;
+        attempt++
+      )
         await timers.setTimeout(250);
-      expect(acceptedBytes).toBe(1024 * 1024 + 12);
+      expect(acceptedBytes).toBe(1024 * 1024 + 13 + (trustedHooks ? 2 : 0));
       input.input("\x15");
       first.socket.terminate();
       broker?.close();
@@ -172,7 +201,8 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
             median: timings[Math.floor(timings.length / 2)],
             p95: timings[Math.floor(timings.length * 0.95)],
           },
-          pasteBytes: acceptedBytes,
+          pasteBytes: 1024 * 1024 + 12,
+          queueHighWaterMarks: input.highWaterMarks,
           collected: true,
           destroyed: true,
         }),

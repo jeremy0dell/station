@@ -367,7 +367,7 @@ it("keeps the remote worktree for collection and starts the gateway privately wi
   expect(f.operations.some((command) => command.includes("tmux"))).toBe(false);
   await f.provider.stop(f.request.sessionId);
   expect(f.operations.find((command) => command.includes("session close"))).toContain(
-    "--mode harness",
+    "--mode terminal",
   );
 });
 
