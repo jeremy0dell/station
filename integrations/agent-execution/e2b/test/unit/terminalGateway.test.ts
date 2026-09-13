@@ -14,6 +14,8 @@ const fake = vi.hoisted(() => ({
   writes: [] as string[],
   operations: [] as string[],
   attaches: 0,
+  beforeWrite: async () => {},
+  replay: "history",
 }));
 vi.mock("@station/host", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@station/host")>();
@@ -44,7 +46,7 @@ vi.mock("@station/host", async (importOriginal) => {
               kind: "raw-complete",
               initialCols: 80,
               initialRows: 24,
-              events: [{ type: "data", data: "history" }],
+              events: [{ type: "data", data: fake.replay }],
             },
           },
           frames: {
@@ -58,6 +60,7 @@ vi.mock("@station/host", async (importOriginal) => {
             },
           },
           async write(data: string) {
+            await fake.beforeWrite();
             if (detached || epoch !== fake.epoch) throw new Error("Revoked");
             fake.writes.push(data);
             fake.operations.push(`input:${data}`);
@@ -81,6 +84,8 @@ afterEach(async () => {
   fake.writes = [];
   fake.operations = [];
   fake.attaches = 0;
+  fake.beforeWrite = async () => {};
+  fake.replay = "history";
 });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "e2b-gateway-"));
@@ -125,7 +130,12 @@ async function fixture() {
       socket.terminate();
     });
     await once(socket, "open");
-    const response = once(socket, "message");
+    const response = Promise.race([
+      once(socket, "message"),
+      once(socket, "close").then(() => {
+        throw new Error("Attachment disconnected");
+      }),
+    ]);
     socket.send(
       JSON.stringify({ type: "attach", version: 1, execution: config.execution, identity, ticket }),
     );
@@ -175,4 +185,88 @@ it("revokes old controller input and blocks all grants after Stop", async () => 
     }),
   ).toEqual({ type: "revoked" });
   expect(await f.grant()).toEqual({ type: "error" });
+});
+
+it("disconnects overflowing queued input without accepting stale operations", async () => {
+  const f = await fixture();
+  const ticket = await f.grant();
+  if (ticket.type !== "ticket") throw new Error("Missing ticket");
+  const { socket } = await f.connect(ticket.ticket);
+  let release = () => {};
+  let entered = false;
+  fake.beforeWrite = () => {
+    entered = true;
+    return new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  };
+  const failure = once(socket, "message");
+  socket.send(JSON.stringify({ type: "input", seq: 1, data: "first" }));
+  await vi.waitFor(() => expect(entered).toBe(true));
+  for (let seq = 2; seq < 40; seq++)
+    socket.send(JSON.stringify({ type: "input", seq, data: "x".repeat(32768) }));
+  try {
+    expect(JSON.parse(String((await failure)[0]))).toMatchObject({
+      type: "failure",
+      code: "overflow",
+    });
+    await vi.waitFor(() => expect(socket.readyState).toBe(WebSocket.CLOSED));
+  } finally {
+    release();
+  }
+  expect(fake.writes).toEqual([]);
+});
+
+it("does not confirm Stop until in-flight Host acceptance and detachment settle", async () => {
+  const f = await fixture();
+  const ticket = await f.grant();
+  if (ticket.type !== "ticket") throw new Error("Missing ticket");
+  const { socket } = await f.connect(ticket.ticket);
+  let release = () => {};
+  let entered = false;
+  fake.beforeWrite = () => {
+    entered = true;
+    return new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  };
+  socket.send(JSON.stringify({ type: "input", seq: 1, data: "before-stop" }));
+  await vi.waitFor(() => expect(entered).toBe(true));
+  let confirmed = false;
+  const stopped = requestGateway(f.config.controlSocket, {
+    type: "revoke",
+    execution: f.config.execution,
+    identity: f.config.identity,
+  }).then((response) => {
+    confirmed = true;
+    return response;
+  });
+  try {
+    await vi.waitFor(async () => expect(await f.grant()).toEqual({ type: "error" }));
+    expect(confirmed).toBe(false);
+  } finally {
+    release();
+  }
+  expect(await stopped).toEqual({ type: "revoked" });
+});
+
+it("rejects tickets from another gateway lifetime", async () => {
+  const first = await fixture();
+  const ticket = await first.grant();
+  if (ticket.type !== "ticket") throw new Error("Missing ticket");
+  const restarted = await fixture();
+  expect((await restarted.connect(ticket.ticket)).response.type).toBe("failure");
+  expect(fake.attaches).toBe(0);
+});
+
+it("disconnects oversized replay while retaining the agent for another attachment", async () => {
+  const f = await fixture();
+  fake.replay = "x".repeat(1024 * 1024);
+  const ticket = await f.grant();
+  if (ticket.type !== "ticket") throw new Error("Missing ticket");
+  await expect(f.connect(ticket.ticket)).rejects.toThrow("Attachment disconnected");
+  fake.replay = "history";
+  const next = await f.grant();
+  if (next.type !== "ticket") throw new Error("Missing ticket");
+  expect((await f.connect(next.ticket)).response.ack.pid).toBe(42);
 });
