@@ -254,3 +254,66 @@ it("does not attach to a retained remote seed when launch completion is missing"
   expect(f.sdk.create).toHaveBeenCalledTimes(1);
   expect((await f.store.read("ses_test")).remoteSessionId).toBeUndefined();
 });
+
+it("preserves a sanitized Codex launch failure through observation and Observer restart", async () => {
+  const f = await fixture();
+  f.request.harness = "codex";
+  const run = f.sandbox.commands.run.getMockImplementation();
+  if (run === undefined) throw new Error("Missing sandbox command fixture");
+  f.sandbox.commands.run.mockImplementation(async (command) => {
+    if (command.includes("cat") && command.includes("launch-result.json"))
+      return {
+        exitCode: 0,
+        stdout: JSON.stringify({
+          status: "failed",
+          command: {
+            status: "failed",
+            error: {
+              tag: "HarnessError",
+              code: "HARNESS_CODEX_UNAVAILABLE",
+              message: "remote-agent-secret",
+              hint: "compute-secret",
+            },
+          },
+        }),
+        stderr: "",
+      };
+    return run(command);
+  });
+  await expect(f.provider.launch(f.request)).rejects.toMatchObject({
+    code: "HARNESS_CODEX_UNAVAILABLE",
+    message: expect.stringContaining("not installed or authenticated"),
+  });
+  const recovered = new E2bExecutionProvider(f.options);
+  providers.push(recovered);
+  expect(await recovered.observe("ses_test")).toMatchObject({
+    execution: { state: "unavailable" },
+    status: { value: "unknown", reason: expect.stringContaining("HARNESS_CODEX_UNAVAILABLE") },
+  });
+  await expect(recovered.attach("ses_test")).rejects.toMatchObject({
+    code: "HARNESS_CODEX_UNAVAILABLE",
+  });
+  const record = await f.store.read("ses_test");
+  expect(record.remoteSessionId).toBeUndefined();
+  expect(JSON.stringify(record)).not.toContain("remote-agent-secret");
+  expect(JSON.stringify(record)).not.toContain("compute-secret");
+  expect(f.sdk.create).toHaveBeenCalledTimes(1);
+  expect(f.sdk.kill).not.toHaveBeenCalled();
+});
+
+it("passes only explicitly selected agent credentials to the trusted setup command", async () => {
+  const f = await fixture();
+  const provider = new E2bExecutionProvider({
+    ...f.options,
+    setupCommand: "install-and-authenticate-agent",
+    harnessEnv: { scripted: { AGENT_API_KEY: "CLOUD_AGENT_KEY" } },
+    environment: { COMPUTE_KEY: "compute-secret", CLOUD_AGENT_KEY: "agent-secret" },
+  });
+  providers.push(provider);
+  await provider.launch(f.request);
+  expect(f.sandbox.commands.run).toHaveBeenCalledWith(
+    expect.stringContaining("install-and-authenticate-agent"),
+    expect.objectContaining({ envs: expect.objectContaining({ AGENT_API_KEY: "agent-secret" }) }),
+  );
+  expect(JSON.stringify(f.sandbox.commands.run.mock.calls)).not.toContain("compute-secret");
+});

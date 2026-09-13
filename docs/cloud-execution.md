@@ -21,7 +21,28 @@ setup_command = "sudo npm install --global @anthropic-ai/claude-code"
 ANTHROPIC_API_KEY = "STATION_CLOUD_ANTHROPIC_API_KEY"
 ```
 
-Select a configured Station agent integration, such as `claude`. The template or
+For Codex with an OpenAI API key, use this setup instead:
+
+```toml
+[execution.e2b]
+template = "base"
+timeout_minutes = 60
+max_sandboxes = 1
+setup_command = "sudo npm install --global @openai/codex && printenv OPENAI_API_KEY | codex login --with-api-key"
+
+[execution.e2b.harness_env.codex]
+OPENAI_API_KEY = "STATION_CLOUD_OPENAI_API_KEY"
+```
+
+Set `STATION_CLOUD_OPENAI_API_KEY` in the Observer environment. Station passes
+only the selected integration's explicit credential references to the trusted
+setup command and remote launch. The E2B key does not authenticate Codex.
+Codex must pass `codex login status` before remote Station can launch it.
+ChatGPT subscription authentication requires a separate login in the template;
+Station does not copy the Mac's login cache. See
+[Codex authentication](https://developers.openai.com/codex/auth).
+
+Select a configured Station agent integration, such as `claude` or `codex`. The template or
 `setup_command` must install its executable on `PATH`. `setup_command` is trusted
 configuration and runs once before project source is uploaded. A custom E2B
 Linux x64 template can preinstall dependencies to reduce startup time. Station
@@ -46,6 +67,10 @@ popup. `E` cycles Local/e2b. Cloud dashboard titles have an `[e2b]` prefix.
 Session details show execution state, expiry, and the most recent collected
 result directory. A disconnected cloud session reports unknown agent status;
 disconnection does not prove that the agent exited.
+If remote Station rejects an unavailable agent, session details retain the
+specific error code, such as `HARNESS_CODEX_UNAVAILABLE`, and setup instructions
+across Observer restarts. Reopening the session reports that failure instead of
+starting another agent.
 
 The primary agent terminal connects to remote tmux. Input and resize reach the
 existing remote agent. Closing the local terminal detaches it; the sandbox

@@ -1,3 +1,4 @@
+import { SafeErrorSchema } from "@station/contracts";
 import { z } from "zod";
 import { shellQuote } from "./source.js";
 import type { ExecutionRecord } from "./state.js";
@@ -16,6 +17,32 @@ export const RuntimeSessionSchema = z
     harness: z.object({ provider: z.string() }).passthrough(),
   })
   .passthrough();
+
+export const RemoteLaunchResultSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("succeeded"),
+      command: z
+        .object({
+          status: z.literal("succeeded"),
+          result: z.object({ sessionId: z.string().min(1) }).passthrough(),
+        })
+        .passthrough(),
+    })
+    .passthrough(),
+  z
+    .object({
+      status: z.literal("failed"),
+      command: z.object({ status: z.literal("failed"), error: SafeErrorSchema }).passthrough(),
+    })
+    .passthrough(),
+  z
+    .object({
+      status: z.literal("rejected"),
+      receipt: z.object({ accepted: z.literal(false), error: SafeErrorSchema }).passthrough(),
+    })
+    .passthrough(),
+]);
 
 // These public release artifacts are pinned independently of the local executable architecture.
 export const installRuntime = `set -eu

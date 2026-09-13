@@ -19,6 +19,7 @@ import {
   materializeSource,
   REMOTE_ENV,
   type RemoteHarnessSettings,
+  RemoteLaunchResultSchema,
   ROOT,
   RuntimeSessionSchema,
   runtimeConfig,
@@ -53,7 +54,8 @@ type LaunchRequest = BuildHarnessLaunchRequest & { sessionId: string; harness: s
  *
  * Runs an ordinary Station runtime in one E2B sandbox per canonical local session. Durable
  * launch attempts precede cloud effects; reconnect never launches an agent and destruction
- * retains a verified final patch before releasing compute. The Observer owns this adapter.
+ * retains a verified final patch before releasing compute. Failed launches retain a sanitized
+ * error across Observer restarts. The Observer owns this adapter.
  */
 export class E2bExecutionProvider implements AgentExecutionProvider {
   readonly id = "e2b";
@@ -125,7 +127,12 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
         this.connections.set(record.sessionId, sandbox);
         await this.run(sandbox, installRuntime, 180_000);
         if (this.options.setupCommand !== undefined)
-          await this.run(sandbox, this.options.setupCommand, 180_000);
+          await this.run(
+            sandbox,
+            this.options.setupCommand,
+            180_000,
+            this.agentEnvironment(harness),
+          );
         await sandbox.files.write(`${ROOT}/source.tar`, new Uint8Array(source.archive).buffer);
         await this.run(sandbox, materializeSource(record));
         await sandbox.files.write(
@@ -161,7 +168,7 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
         await sandbox.files.write(`${ROOT}/launch.json`, JSON.stringify(command));
         await this.run(
           sandbox,
-          `stn --config '${CONFIG}' command dispatch --stdin --wait --timeout-ms 120000 < '${ROOT}/launch.json' > '${ROOT}/launch-result.json'`,
+          `stn --config '${CONFIG}' command dispatch --stdin --wait --timeout-ms 120000 < '${ROOT}/launch.json' > '${ROOT}/launch-result.json' || test -s '${ROOT}/launch-result.json'`,
           150_000,
           this.agentEnvironment(harness),
         );
@@ -175,6 +182,7 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
         await this.store.write(record);
         return this.launchPlan(record);
       } catch {
+        if (record.launchError !== undefined) throw record.launchError;
         throw executionError(
           "TERMINAL_CLEANUP_UNCERTAIN",
           `Cloud launch is incomplete (${record.phase}). Session ${record.sessionId} was retained for inspection and cleanup; no replacement agent will be launched.`,
@@ -189,6 +197,7 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
 
   private async attachRecord(sessionId: string): Promise<HarnessLaunchPlan> {
     const record = await this.store.read(sessionId);
+    if (record.launchError !== undefined) throw record.launchError;
     if (record.phase !== "running" && record.phase !== "launching")
       throw executionError(
         "EXECUTION_NOT_RUNNING",
@@ -238,6 +247,7 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
       return { execution, status };
     }
     try {
+      if (record.launchError !== undefined) throw record.launchError;
       const sandbox = await this.connection(record);
       if (record.phase === "launching") await this.recoverRemoteSession(record, sandbox, true);
       if (record.remoteSessionId === undefined) return { execution, status };
@@ -255,7 +265,8 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
       return { execution, status: remote.status };
     } catch {
       execution.state = "unavailable";
-      status.reason = "Cloud connection unavailable; agent exit is unconfirmed.";
+      status.reason =
+        record.launchError?.message ?? "Cloud connection unavailable; agent exit is unconfirmed.";
       return { execution, status };
     }
   }
@@ -475,18 +486,20 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
     let completedSessionId: string | undefined;
     if (requireCompletedLaunch) {
       const output = await this.run(sandbox, `cat '${ROOT}/launch-result.json'`);
-      const result = z
-        .object({
-          status: z.literal("succeeded"),
-          command: z
-            .object({
-              status: z.literal("succeeded"),
-              result: z.object({ sessionId: z.string().min(1) }).passthrough(),
-            })
-            .passthrough(),
-        })
-        .passthrough()
-        .parse(JSON.parse(output));
+      const result = RemoteLaunchResultSchema.parse(JSON.parse(output));
+      if (result.status !== "succeeded") {
+        const error = result.status === "failed" ? result.command.error : result.receipt.error;
+        const unavailable = error.code === `HARNESS_${record.harness.toUpperCase()}_UNAVAILABLE`;
+        // Remote diagnostics can contain credentials; expose only a recognized code and local copy.
+        record.launchError = executionError(
+          unavailable ? error.code : "EXECUTION_REMOTE_LAUNCH_FAILED",
+          unavailable
+            ? `Cloud ${record.harness} is not installed or authenticated (${error.code}). Configure its installation and login in the E2B template or execution.e2b.setup_command. The session was retained; no replacement agent was started.`
+            : "Remote Station rejected the cloud agent launch. The session was retained; no replacement agent was started.",
+        );
+        await this.store.write(record);
+        throw record.launchError;
+      }
       completedSessionId = result.command.result.sessionId;
     }
     const output = await this.run(

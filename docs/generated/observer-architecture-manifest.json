@@ -19015,7 +19015,7 @@
       "declaration": "E2bExecutionProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Runs an ordinary Station runtime in one E2B sandbox per canonical local session. Durable launch attempts precede cloud effects; reconnect never launches an agent and destruction retains a verified final patch before releasing compute. The Observer owns this adapter.",
+      "purpose": "Runs an ordinary Station runtime in one E2B sandbox per canonical local session. Durable launch attempts precede cloud effects; reconnect never launches an agent and destruction retains a verified final patch before releasing compute. Failed launches retain a sanitized error across Observer restarts. The Observer owns this adapter.",
       "dependencies": [
         {
           "path": "integrations/agent-execution/e2b/src/bridge.ts",

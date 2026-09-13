@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readdir, readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import type { SafeError } from "@station/contracts";
+import { SafeErrorSchema } from "@station/contracts";
 import { z } from "zod";
 
 export const ExecutionRecordSchema = z
@@ -32,6 +33,7 @@ export const ExecutionRecordSchema = z
     baseTree: z.string().regex(/^[a-f0-9]{40}$/),
     resultDirectory: z.string().min(1).optional(),
     finalResultSaved: z.boolean().optional(),
+    launchError: SafeErrorSchema.optional(),
   })
   .strict();
 export type ExecutionRecord = z.infer<typeof ExecutionRecordSchema>;
