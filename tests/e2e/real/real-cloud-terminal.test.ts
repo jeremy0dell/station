@@ -122,13 +122,15 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
       let output = JSON.stringify(original.replay);
       const sent = new Map<number, number>();
       let acceptedBytes = 0;
+      let transportFailure: string | undefined;
       const input = new TerminalInputWindow((operation) => {
         sent.set(operation.seq, performance.now());
         first.socket.send(JSON.stringify(operation));
       });
       first.socket.on("message", (data) => {
         const frame = TerminalServerFrameSchema.parse(JSON.parse(String(data)));
-        if (frame.type === "frame") output += JSON.stringify(frame.frame);
+        if (frame.type === "frame") output = (output + JSON.stringify(frame.frame)).slice(-65536);
+        if (frame.type === "failure") transportFailure = frame.message;
         if (frame.type === "accepted") {
           const started = sent.get(frame.seq);
           if (started !== undefined) timings.push(performance.now() - started);
@@ -167,6 +169,8 @@ it.skipIf(process.env.STATION_REAL_E2B !== "1")(
         attempt++
       )
         await timers.setTimeout(250);
+      expect(transportFailure).toBeUndefined();
+      expect(first.socket.readyState).toBe(WebSocket.OPEN);
       expect(acceptedBytes).toBe(1024 * 1024 + 13 + (trustedHooks ? 2 : 0));
       input.input("\x15");
       first.socket.terminate();

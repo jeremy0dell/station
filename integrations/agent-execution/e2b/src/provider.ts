@@ -698,19 +698,20 @@ export class E2bExecutionProvider implements AgentExecutionProvider {
       path = this.bridge.path;
     }
     const [command, ...args] = this.options.bridgeCommand;
+    const credentialNames = [
+      "E2B_API_KEY",
+      "OPENAI_API_KEY",
+      "CODEX_AUTH_JSON",
+      this.options.apiKeyEnv,
+      ...Object.values(this.options.harnessEnv).flatMap((references) => Object.values(references)),
+    ];
     return {
       provider: record.harness,
       command: "/usr/bin/env",
+      // Clear inherited credentials before Host serializes its PTY bridge launch, then unset them in the relay.
+      env: Object.fromEntries(credentialNames.map((name) => [name, ""])),
       args: [
-        ...[
-          "E2B_API_KEY",
-          "OPENAI_API_KEY",
-          "CODEX_AUTH_JSON",
-          this.options.apiKeyEnv,
-          ...Object.values(this.options.harnessEnv).flatMap((references) =>
-            Object.values(references),
-          ),
-        ].flatMap((name) => ["-u", name]),
+        ...credentialNames.flatMap((name) => ["-u", name]),
         command,
         ...args,
         "execution",

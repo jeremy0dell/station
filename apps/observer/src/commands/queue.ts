@@ -89,7 +89,6 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
   const scopeChains = new Map<string, Promise<void>>();
   const pending = new Set<Promise<void>>();
   const controllers = new Set<AbortController>();
-  const commandTimeoutMs = options.commandTimeoutMs ?? 30_000;
   let shuttingDown = false;
 
   const queue: CommandQueue = {
@@ -158,7 +157,9 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
             ...(options.eventBus === undefined ? {} : { eventBus: options.eventBus }),
             ...(options.logger === undefined ? {} : { logger: options.logger }),
             signal: controller.signal,
-            commandTimeoutMs,
+            ...(options.commandTimeoutMs === undefined
+              ? {}
+              : { commandTimeoutMs: options.commandTimeoutMs }),
           },
         ),
       );

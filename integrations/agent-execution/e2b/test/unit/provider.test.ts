@@ -363,6 +363,7 @@ it("keeps the remote worktree for collection and starts the gateway privately wi
   const plan = await f.provider.launch(f.request);
   expect(plan.args).toContain("E2B_API_KEY");
   expect(plan.args).toContain("OPENAI_API_KEY");
+  expect(plan.env).toMatchObject({ E2B_API_KEY: "", OPENAI_API_KEY: "", CODEX_AUTH_JSON: "" });
   expect(f.operations.some((command) => command.includes("install -d -m 700"))).toBe(true);
   expect(f.operations.some((command) => command.includes("tmux"))).toBe(false);
   await f.provider.stop(f.request.sessionId);
