@@ -38,8 +38,30 @@ Set `STATION_CLOUD_OPENAI_API_KEY` in the Observer environment. Station passes
 only the selected integration's explicit credential references to the trusted
 setup command and remote launch. The E2B key does not authenticate Codex.
 Codex must pass `codex login status` before remote Station can launch it.
-ChatGPT subscription authentication requires a separate login in the template;
-Station does not copy the Mac's login cache. See
+
+For a ChatGPT subscription, create a separate cloud login and approve its device
+code in your browser:
+
+```sh
+CODEX_HOME="$HOME/.config/e2b/codex" codex login --device-auth
+export STATION_CLOUD_CODEX_AUTH_JSON="$(cat "$HOME/.config/e2b/codex/auth.json")"
+```
+
+Use these settings instead of the API-key setup and credential mapping above:
+
+```toml
+[execution.e2b]
+setup_command = "sudo npm install --global @openai/codex && install -d -m 700 \"$HOME/.codex\" && (umask 077; printf '%s\\n' \"$CODEX_AUTH_JSON\" > \"$HOME/.codex/auth.json\") && codex login status"
+
+[execution.e2b.harness_env.codex]
+CODEX_AUTH_JSON = "STATION_CLOUD_CODEX_AUTH_JSON"
+```
+
+The Observer must inherit this reference when it starts. Keep the cloud login
+file private; it contains account tokens. If Codex later rejects the cached
+login, repeat device sign-in and reload the reference before the next launch.
+Station does not implicitly copy your existing Mac login or synchronize remote
+token refreshes back to the cloud login file. See
 [Codex authentication](https://developers.openai.com/codex/auth).
 
 Select a configured Station agent integration, such as `claude` or `codex`. The template or
