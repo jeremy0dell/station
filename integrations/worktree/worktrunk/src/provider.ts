@@ -116,7 +116,7 @@ export class WorktrunkProvider implements WorktreeProvider {
     this.#configPath = options.configPath;
     this.#useLifecycleHooks = options.useLifecycleHooks;
     this.#hookExpectation = options.hookExpectation;
-    this.#timeoutMs = options.timeoutMs ?? 5000;
+    this.#timeoutMs = options.timeoutMs ?? 30_000;
     this.#runner = options.runner;
     this.#clock = options.clock ?? systemClock;
     this.#resolveRegistrationIdentity =

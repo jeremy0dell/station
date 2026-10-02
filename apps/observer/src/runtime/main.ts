@@ -102,7 +102,7 @@ import {
 // Ceiling on a graceful stop; a wedged drain (a handler ignoring its abort)
 // force-exits at this point instead of keeping the observer alive forever.
 const STOP_BACKSTOP_MS = 5000;
-const DEFAULT_STARTUP_TIMEOUT_MS = 10_000;
+const DEFAULT_STARTUP_TIMEOUT_MS = 60_000;
 const MIN_STARTUP_BUDGET_MS = 1;
 const HANDOFF_PARENT_RESERVE_RATIO = 0.3;
 const HANDOFF_PARENT_RESERVE_MIN_MS = 2000;

@@ -159,7 +159,7 @@ async function startObserverWithPolicy(
   incumbentPolicy?: "preserve",
 ): Promise<ObserverStatus> {
   const paths = options.paths ?? resolveObserverPaths(options.config);
-  const timeoutMs = options.timeoutMs ?? 10_000;
+  const timeoutMs = options.timeoutMs ?? 60_000;
   const clock = deps.clock ?? systemClock;
   const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
   const trace = createTraceContext({ operation: "cli.observer.start" });

@@ -173,7 +173,7 @@ export async function ensureExactObserverBuild(
 ): Promise<processTypes.ExactObserverBuildStatus> {
   const paths = options.paths ?? resolveObserverPaths(options.config);
   const targetSelector = processDeps.buildVersion ?? runtime.stationObserverBuildVersion();
-  const deadlineMs = Date.now() + (options.timeoutMs ?? 10_000);
+  const deadlineMs = Date.now() + (options.timeoutMs ?? 60_000);
   const deps = exactDependencies({ ...options, paths }, targetSelector, deadlineMs, processDeps);
   let initial: ExactObserverOwnershipEvidence;
   try {

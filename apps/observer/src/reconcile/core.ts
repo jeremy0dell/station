@@ -115,7 +115,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
   const startedAt = toIsoTimestamp(clock.now());
   const pid = input.pid ?? process.pid;
   const version = input.version ?? "0.0.0";
-  const providerTimeoutMs = input.providerTimeoutMs ?? 5000;
+  const providerTimeoutMs = input.providerTimeoutMs ?? 30_000;
   const providerReadRetries = input.providerReadRetries ?? 1;
   let config = input.config;
   let projects = providerProjectsFromConfig(config);
