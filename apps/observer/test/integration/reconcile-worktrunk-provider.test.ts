@@ -8,6 +8,32 @@ import { createObserverCore, ProviderRegistry } from "../../src/internal";
 const now = "2026-05-21T12:00:00.000Z";
 
 describe("observer reconcile with Worktrunk provider", () => {
+  it("retains worktrees when a complete provider scan takes more than five seconds", async () => {
+    const runner = createFakeWorktrunkRunner({
+      listJson: [{ path: "/tmp/station/web/feature-auth", branch: "feature/auth" }],
+    });
+    const providers = new ProviderRegistry({
+      worktree: new WorktrunkProvider({
+        resolveRegistrationIdentity: async () => "git-registration:feature-auth",
+        runner: async (input) => {
+          if (input.args?.includes("list")) {
+            await new Promise((resolve) => setTimeout(resolve, 6000));
+          }
+          return runner(input);
+        },
+      }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+    });
+    const core = createObserverCore({ config, providers, providerReadRetries: 0 });
+
+    const snapshot = await core.reconcile("slow-complete-worktrunk-scan");
+
+    expect(snapshot.rows).toHaveLength(1);
+    expect(snapshot.rows[0]?.branch).toBe("feature/auth");
+    expect(core.getHealth().lastReconcile?.errors).toEqual([]);
+  }, 15_000);
+
   it("reconciles Worktrunk observations into provider-neutral rows", async () => {
     const calls: string[][] = [];
     const providers = new ProviderRegistry({

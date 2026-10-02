@@ -819,7 +819,7 @@ describe("CLI observer process startup", () => {
   });
 
   it.each([
-    { label: "the 10s default", timeoutMs: undefined, beforeMs: 9_999, finalMs: 2 },
+    { label: "the 60s default", timeoutMs: undefined, beforeMs: 59_999, finalMs: 2 },
     { label: "an explicit override", timeoutMs: 12_000, beforeMs: 10_000, finalMs: 2_001 },
   ])("uses $label and kills only its spawned child on timeout", async (testCase) => {
     const fixture = await createTempState();
