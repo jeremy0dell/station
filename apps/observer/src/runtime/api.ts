@@ -229,6 +229,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     clock,
     requestReconcile: reconcileScheduler.request,
     requestProjectedReconcile: reconcileScheduler.requestAfterQuiet,
+    withheldIdentityRequests: new Map(),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   };
   if (providerHealthCache !== undefined) {

@@ -19,9 +19,17 @@ export type HarnessReportProcessorDeps = {
   requestReconcile: (reason: string) => void;
   /** Requests quiet-period convergence after immediate projection establishes visible state. */
   requestProjectedReconcile: (reason: string) => void;
+  /** Last status that requested a reconcile for each native session with a withheld Station identity. */
+  withheldIdentityRequests: Map<string, WithheldIdentityRequest>;
   refreshProviderHealth?: (providerId: string) => Promise<void>;
   logger?: StationLogger;
 };
+
+export type WithheldIdentityRequest = { statusKey: string; requestedAtMs: number };
+
+// Well inside the 15-minute busy-status decay, so a repeated status still refreshes before it can expire.
+const withheldIdentityRepeatIntervalMs = 2 * 60 * 1000;
+const withheldIdentityPruneThreshold = 256;
 
 function reportDecisionFields(report: HarnessEventReport): Record<string, unknown> {
   const fields: Record<string, unknown> = {
@@ -44,11 +52,45 @@ function reportDecisionFields(report: HarnessEventReport): Record<string, unknow
   return fields;
 }
 
+// A report whose Station identity was withheld stays diagnostic-only, so a reconcile cannot
+// project it; one only helps when the session's status changes, and repeats wait for the interval.
+function shouldRequestReconcileForUnprojected(
+  deps: HarnessReportProcessorDeps,
+  report: HarnessEventReport,
+): boolean {
+  const nativeSessionId = report.correlation?.nativeSessionId;
+  if (report.diagnostics?.correlationIssue === undefined || nativeSessionId === undefined) {
+    return true;
+  }
+  const requests = deps.withheldIdentityRequests;
+  const nowMs = deps.clock.now().getTime();
+  const key = `${report.provider}:${nativeSessionId}`;
+  const statusKey = `${report.status?.value}:${report.status?.attention}`;
+  const previous = requests.get(key);
+  if (
+    previous?.statusKey === statusKey &&
+    nowMs - previous.requestedAtMs < withheldIdentityRepeatIntervalMs
+  ) {
+    return false;
+  }
+  if (requests.size >= withheldIdentityPruneThreshold) {
+    for (const [staleKey, request] of requests) {
+      if (nowMs - request.requestedAtMs >= withheldIdentityRepeatIntervalMs) {
+        requests.delete(staleKey);
+      }
+    }
+  }
+  requests.set(key, { statusKey, requestedAtMs: nowMs });
+  return true;
+}
+
 /**
  * USE CASE
  *
  * Persists one normalized report, projects authorized live status, publishes derived events,
- * revalidates contradictory provider health, and requests canonical convergence.
+ * revalidates contradictory provider health, and requests canonical convergence. An unprojected
+ * report with a withheld Station identity requests it only when its session's status changes or
+ * the same status has not requested one for two minutes.
  */
 export async function processHarnessIngressReport(
   deps: HarnessReportProcessorDeps,
@@ -128,7 +170,7 @@ export async function processHarnessIngressReport(
   }
   if (projection.value.projected) {
     deps.requestProjectedReconcile(reconcileReason);
-  } else {
+  } else if (shouldRequestReconcileForUnprojected(deps, report)) {
     deps.requestReconcile(reconcileReason);
   }
   return receipt;

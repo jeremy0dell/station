@@ -77,6 +77,7 @@ describe("harness report processor logging", () => {
       clock: { now: () => new Date(now) },
       requestReconcile: () => undefined,
       requestProjectedReconcile: () => undefined,
+      withheldIdentityRequests: new Map(),
       logger,
     };
 
@@ -206,11 +207,104 @@ describe("harness report provider health revalidation", () => {
   });
 });
 
+describe("harness report reconcile requests for a withheld Station identity", () => {
+  const mismatch = "station_identity_cwd_mismatch" as const;
+
+  it("requests one reconcile per status change and skips repeats within the interval", async () => {
+    const clock = steppingClock();
+    const { deps, requestReconcile } = healthRevalidationDeps({ projected: false, clock });
+    const process = (reportId: string, status: "starting" | "working") =>
+      processHarnessIngressReport(
+        deps,
+        report({
+          reportId,
+          nativeSessionId: "native_child",
+          cwd: "/tmp/station/web/child",
+          correlationIssue: mismatch,
+          status,
+        }),
+      );
+
+    await process("report_1", "starting");
+    await process("report_2", "working");
+    clock.advanceMs(1_000);
+    await process("report_3", "working");
+    await process("report_4", "working");
+
+    expect(requestReconcile).toHaveBeenCalledTimes(2);
+  });
+
+  it("requests again for the same status once the interval has passed", async () => {
+    const clock = steppingClock();
+    const { deps, requestReconcile } = healthRevalidationDeps({ projected: false, clock });
+    const processWorking = (reportId: string) =>
+      processHarnessIngressReport(
+        deps,
+        report({
+          reportId,
+          nativeSessionId: "native_child",
+          cwd: "/tmp/station/web/child",
+          correlationIssue: mismatch,
+        }),
+      );
+
+    await processWorking("report_1");
+    clock.advanceMs(119_000);
+    await processWorking("report_2");
+    clock.advanceMs(1_000);
+    await processWorking("report_3");
+
+    expect(requestReconcile).toHaveBeenCalledTimes(2);
+  });
+
+  it("tracks native sessions independently", async () => {
+    const { deps, requestReconcile } = healthRevalidationDeps({ projected: false });
+
+    for (const nativeSessionId of ["native_a", "native_b", "native_a", "native_b"]) {
+      await processHarnessIngressReport(
+        deps,
+        report({
+          reportId: `report_${nativeSessionId}_${requestReconcile.mock.calls.length}`,
+          nativeSessionId,
+          cwd: "/tmp/station/web/child",
+          correlationIssue: mismatch,
+        }),
+      );
+    }
+
+    expect(requestReconcile).toHaveBeenCalledTimes(2);
+  });
+
+  it("requests a reconcile for every unprojected report without a withheld identity", async () => {
+    const { deps, requestReconcile } = healthRevalidationDeps({ projected: false });
+
+    for (const reportId of ["report_1", "report_2", "report_3"]) {
+      await processHarnessIngressReport(
+        deps,
+        report({ reportId, nativeSessionId: "native_plain", cwd: "/tmp/station/web" }),
+      );
+    }
+
+    expect(requestReconcile).toHaveBeenCalledTimes(3);
+  });
+});
+
+function steppingClock() {
+  let nowMs = Date.parse(now);
+  return {
+    now: () => new Date(nowMs),
+    advanceMs: (ms: number) => {
+      nowMs += ms;
+    },
+  };
+}
+
 function healthRevalidationDeps(input: {
   healthStatus?: "healthy" | "unavailable" | "unknown";
   projected?: boolean;
   accepted?: boolean;
   deduped?: boolean;
+  clock?: { now(): Date };
 }) {
   const snapshot = emptyStationSnapshot(now);
   if (input.healthStatus !== undefined) {
@@ -269,9 +363,10 @@ function healthRevalidationDeps(input: {
     harnessEventReportIngestion,
     core,
     eventBus,
-    clock: { now: () => new Date(now) },
+    clock: input.clock ?? { now: () => new Date(now) },
     requestReconcile,
     requestProjectedReconcile,
+    withheldIdentityRequests: new Map(),
     refreshProviderHealth,
   };
   return { deps, refreshProviderHealth, requestReconcile, requestProjectedReconcile };

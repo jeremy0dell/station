@@ -12375,7 +12375,13 @@
           "name": "processHarnessIngressReport",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and requests canonical convergence."
+          "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and requests canonical convergence. An unprojected report with a withheld Station identity requests it only when its session's status changes or the same status has not requested one for two minutes."
+        },
+        {
+          "name": "WithheldIdentityRequest",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         }
       ],
       "imports": [
@@ -18076,7 +18082,7 @@
       "declaration": "processHarnessIngressReport",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and requests canonical convergence.",
+      "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and requests canonical convergence. An unprojected report with a withheld Station identity requests it only when its session's status changes or the same status has not requested one for two minutes.",
       "dependencies": [
         {
           "path": "apps/observer/src/reconcile/statusProjection.ts",
