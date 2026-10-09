@@ -133,6 +133,9 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    Station project, worktree, session, terminal, and run correlation when its
    own origin evidence contradicts the Station stamp. It retains provider-native
    identity and diagnostic origin evidence so the report remains inspectable.
+   Such a report is never projected, so a repeat of an unchanged status requests
+   canonical convergence at most once every two minutes per native session; a
+   status change requests it immediately.
 10. **Native settlement outranks low-level completion.** A producer that marks
     itself settlement-aware keeps each low-level run end `working` because
     retries, automatic compaction, or queued follow-ups may continue. Automatic
