@@ -79,6 +79,22 @@ An indeterminate provider read excludes that provider's targets from both the
 normalized graph and the debug envelope. Activation must resolve any managed
 attachment again from current authority.
 
+## Reconcile load
+
+When commands time out or hooks spool because the Observer answers slowly, check what
+keeps requesting reconciles:
+
+```bash
+stn debug logs "Reconcile scheduler profile" --component observer
+```
+
+The Observer writes one record per scheduled reconcile that took at least a second,
+coalesced 25 or more requests, or left requests queued. `sources` counts the coalesced
+requests by origin, such as `hook:codex`, `harness-report:codex`, `metadata:git-ref`, or
+`command:session.create`, while `reason` collapses several distinct requests into a batch size
+such as `scheduled:batch(48)`. `waitMs` is how long the oldest request waited, and `queuedAfter`
+is the backlog left behind.
+
 ## Observer and state ownership
 
 [Observer singleton lifecycle](observer-singleton.md) is authoritative for

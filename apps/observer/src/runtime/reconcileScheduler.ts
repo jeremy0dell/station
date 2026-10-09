@@ -28,6 +28,8 @@ export type CreateReconcileSchedulerOptions = {
 
 export type ReconcileSchedulerFlushProfile = {
   reason: string;
+  /** Requests in this flush by source (`hook:codex`, `metadata:checks`), which `reason` collapses into a batch. */
+  sources: Record<string, number>;
   queuedCount: number;
   queuedWhileRunning: number;
   waitMs: number;
@@ -158,7 +160,9 @@ export function createReconcileScheduler(
       return;
     }
     const queuedAt = Math.min(...ready.map((queued) => queued.queuedAt));
-    const reason = summarizeReasons(ready.map((queued) => queued.reason));
+    const reasons = ready.map((queued) => queued.reason);
+    const reason = summarizeReasons(reasons);
+    const sources = countSources(reasons);
     const startedAt = Date.now();
 
     running = true;
@@ -169,6 +173,7 @@ export function createReconcileScheduler(
       running = false;
       reportFlushFinish({
         reason,
+        sources,
         queuedCount: ready.length,
         queuedWhileRunning: queuedAfter,
         waitMs: Math.max(0, startedAt - queuedAt),
@@ -257,6 +262,16 @@ function summarizeReasons(reasons: string[]): string {
     return `hook:batch(${reasons.length})`;
   }
   return `scheduled:batch(${reasons.length})`;
+}
+
+// Keeps only the first two `:` segments so per-event and per-worktree reasons stay bounded in logs.
+function countSources(reasons: readonly string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const reason of reasons) {
+    const source = reason.split(":", 2).join(":");
+    counts[source] = (counts[source] ?? 0) + 1;
+  }
+  return counts;
 }
 
 async function sleep(ms: number): Promise<void> {
