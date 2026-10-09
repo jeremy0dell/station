@@ -137,7 +137,9 @@ export async function startObserverServer(
           ? {}
           : { requestGuard: lifecycleRequestGuard(options.guardOperation) }),
         onConnectionDiagnostics: (diagnostics) => {
-          if (diagnostics.overflowCount === 0 && diagnostics.outboundBackpressureCount === 0) {
+          // One blocked write that later drains is normal for short-lived clients; only a
+          // connection that overflowed its queue was discarded for overload.
+          if (diagnostics.overflowCount === 0) {
             return;
           }
           void options.logger
