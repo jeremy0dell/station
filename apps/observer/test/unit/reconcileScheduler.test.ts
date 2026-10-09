@@ -75,6 +75,37 @@ describe("reconcile scheduler", () => {
     ]);
   });
 
+  it("counts the requests behind a batched reason by source", async () => {
+    const profiles: unknown[] = [];
+    const scheduler = createReconcileScheduler({
+      debounceMs: 0,
+      reconcile: async () => undefined,
+      onFlushFinish: (profile) => {
+        profiles.push(profile);
+      },
+    });
+
+    scheduler.request("hook:codex:PreToolUse");
+    scheduler.request("hook:codex:PostToolUse");
+    scheduler.request("metadata:git-ref:wt_a");
+    scheduler.request("metadata:git-ref:wt_b");
+    scheduler.request("metadata:checks");
+    scheduler.request("agent.reportExternalExit");
+    await drainMicrotasks();
+
+    expect(profiles).toEqual([
+      expect.objectContaining({
+        reason: "scheduled:batch(6)",
+        sources: {
+          "hook:codex": 2,
+          "metadata:git-ref": 2,
+          "metadata:checks": 1,
+          "agent.reportExternalExit": 1,
+        },
+      }),
+    ]);
+  });
+
   it("reports queued requests that arrive while a reconcile is running", async () => {
     const profiles: unknown[] = [];
     const firstReconcile = deferred<void>();
