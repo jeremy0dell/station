@@ -188,7 +188,7 @@ jobs:
             echo "floor=$floor"
             echo "buildIdentity=$(cat packages/runtime/dist/station-build-id)"
           } > "platform-metadata-$TARGET.txt"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-${{ matrix.target }}
           path: |
@@ -378,7 +378,7 @@ jobs:
               checksumFileSha256: $checksumFileSha256,
               targetBuildIdentity: $targetBuildIdentity
             }' > candidate/manifest.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-candidate-input-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
           path: release/candidate
@@ -767,7 +767,7 @@ jobs:
           done
           cmp candidate/SHA256SUMS downloaded/SHA256SUMS
           (cd downloaded && sha256sum -c SHA256SUMS)
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: accepted-release-candidate-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
           path: candidate
