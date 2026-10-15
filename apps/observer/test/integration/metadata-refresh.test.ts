@@ -851,6 +851,48 @@ describe("observer worktree metadata refresh use case", () => {
     fixture.sqlite.close();
   });
 
+  it("shares one pull request lookup per repository, branch, and HEAD and skips detached heads", async () => {
+    const fixture = createFixture(undefined, [
+      { id: "wt_web_feature_copy", branch: "feature" },
+      { id: "wt_web_detached", branch: "detached:2222222" },
+    ]);
+    let currentTime = Date.parse(now);
+    fixture.clock.now = () => new Date(currentTime);
+    const lookups: string[] = [];
+    const repository = new FakeRepositoryProvider({
+      clock: fixture.clock,
+      supportsRemote: supportsGithubRemote,
+      discover: async (request) => {
+        lookups.push(request.branch);
+        return null;
+      },
+    });
+    const service = createTestWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: () => undefined,
+      clock: fixture.clock,
+      runner: gitRunner({
+        "rev-parse --verify HEAD^{commit}": headSha,
+        remote: "origin\n",
+        "remote get-url origin": "git@github.com:example/web.git\n",
+      }),
+      repositoryProviders: [repository],
+    });
+
+    await service.refresh(await fixture.core.reconcile("metadata-lookup-cache-first"));
+    expect(lookups).toEqual(["feature"]);
+
+    currentTime += 9 * 60 * 1000;
+    await service.refresh(await fixture.core.reconcile("metadata-lookup-cache-fresh"));
+    expect(lookups).toEqual(["feature"]);
+
+    currentTime += 2 * 60 * 1000;
+    await service.refresh(await fixture.core.reconcile("metadata-lookup-cache-expired"));
+    expect(lookups).toEqual(["feature", "feature"]);
+    fixture.sqlite.close();
+  });
+
   it("aborts in-flight repository refresh work on shutdown", async () => {
     const fixture = createFixture();
     let started = false;
@@ -926,6 +968,7 @@ function createTestWorktreeMetadataRefreshService(options: TestMetadataRefreshOp
 
 function createFixture(
   remote: RepositoryRemote = { host: "github.com", owner: "example", repo: "web" },
+  extraWorktrees: Array<{ id: string; branch: string }> = [],
 ) {
   const clock = { now: () => new Date(now) };
   const providers = new ProviderRegistry({
@@ -941,6 +984,16 @@ function createFixture(
           headSha,
           now,
         }),
+        ...extraWorktrees.map((worktree) =>
+          createFakeWorktree({
+            ...worktree,
+            projectId: "web",
+            path: `/tmp/station/web/${worktree.id}`,
+            remote,
+            headSha,
+            now,
+          }),
+        ),
       ],
     }),
     terminal: new FakeTerminalProvider({ now }),
