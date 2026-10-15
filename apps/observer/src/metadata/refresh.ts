@@ -88,6 +88,8 @@ export function createWorktreeMetadataRefreshService(
     repositoryOptions.negativeBackoffMs = options.repositoryNegativeBackoffMs;
   }
   const repositoryRefresher = createRepositoryMetadataRefresher(repositoryOptions);
+  // Idle worktrees whose git base cannot be resolved are not re-read until this time; a changed branch or registration re-reads at once.
+  const unavailableUntilMs = new Map<string, number>();
   let pendingSnapshot: StationSnapshot | undefined;
   let running: Promise<void> | undefined;
   let shutdownRequested = false;
@@ -216,6 +218,12 @@ export function createWorktreeMetadataRefreshService(
     if (!active && input.existing !== undefined && !input.existing.expired) {
       return;
     }
+    if (
+      !active &&
+      (unavailableUntilMs.get(unavailableKey(input.row)) ?? 0) > clock.now().getTime()
+    ) {
+      return;
+    }
     const ttlMs = active ? (options.ttlMs ?? defaultTtlMs) : idleChangeSummaryTtlMs;
 
     try {
@@ -246,6 +254,12 @@ export function createWorktreeMetadataRefreshService(
         case "superseded":
           return;
         case "unavailable":
+          if (!active) {
+            unavailableUntilMs.set(
+              unavailableKey(input.row),
+              clock.now().getTime() + idleChangeSummaryTtlMs,
+            );
+          }
           await deleteExistingChangeSummary(input.row.id, input.existing, input.signal);
           return;
         case "available":
@@ -259,6 +273,8 @@ export function createWorktreeMetadataRefreshService(
       ) {
         return;
       }
+      const unchangedEvidence =
+        input.existing !== undefined && input.existing.cacheKey === result.evidence.cacheKey;
 
       await options.persistence.upsertWorktreeMetadataCurrent({
         worktreeId: input.row.id,
@@ -269,7 +285,7 @@ export function createWorktreeMetadataRefreshService(
         expiresAt: addMs(result.evidence.summary.checkedAt, ttlMs),
       });
       if (input.signal.aborted || shutdownRequested) return;
-      options.requestReconcile("metadata:change_summary");
+      if (!unchangedEvidence) options.requestReconcile("metadata:change_summary");
     } catch (error) {
       if (!input.signal.aborted) {
         await handleLocalRefreshFailure(input, error);
@@ -353,6 +369,10 @@ export function createWorktreeMetadataRefreshService(
       error: safeError,
     });
   }
+}
+
+function unavailableKey(row: StationSnapshot["rows"][number]): string {
+  return `${row.id}\0${row.branch}\0${row.registrationIdentity ?? ""}`;
 }
 
 function worktreeMetadataTargetFromRow(
