@@ -76,6 +76,61 @@ export function createSessionStartAgentHandler(
       const snapshot = options.core.getSnapshot();
       const row = snapshot.rows.find((candidate) => candidate.id === payload.worktreeId);
       validateSnapshotRow(row, payload.projectId);
+      const cloud = (await options.persistence.listSessions()).find(
+        (session) =>
+          session.projectId === payload.projectId &&
+          session.worktreeId === payload.worktreeId &&
+          session.lifecycle !== "ended" &&
+          session.executionProvider !== undefined,
+      );
+      if (cloud !== undefined) {
+        if (
+          payload.freshStart !== undefined ||
+          payload.initialPrompt !== undefined ||
+          (payload.harness?.provider !== undefined && payload.harness.provider !== cloud.harness)
+        )
+          throw {
+            tag: "AgentExecutionError",
+            code: "EXECUTION_RESTART_REFUSED",
+            message:
+              "Cloud activation reconnects the existing agent. Close the session before creating a replacement.",
+          } satisfies SafeError;
+        const execution = options.providers.executions.get(cloud.executionProvider ?? "");
+        if (execution === undefined || row === undefined || cloud.harness === undefined)
+          throw {
+            tag: "AgentExecutionError",
+            code: "EXECUTION_UNAVAILABLE",
+            message: "Restore the cloud provider configuration and worktree before reconnecting.",
+          } satisfies SafeError;
+        await ensureAgentWorkspace({
+          terminal,
+          harness: resolveHarnessProviderOrThrow(options.providers, cloud.harness),
+          execution,
+          attachExecution: true,
+          launchPreflight: options.launchPreflight,
+          project,
+          worktree: worktreeObservationFromRow(
+            row,
+            options.providers.worktree.id,
+            nowIso(options.clock),
+          ),
+          sessionId: cloud.id,
+          layout: payload.terminal?.layout ?? project.defaults.layout,
+          focus: payload.terminal?.focus,
+          origin: payload.terminal?.origin,
+          context,
+          clock: options.clock,
+          logger: options.logger,
+        });
+        await reconcileAndPublish({
+          core: options.core,
+          eventBus: options.eventBus,
+          clock: options.clock,
+          reason: "command:session.startAgent",
+          trace: context.trace,
+        });
+        return;
+      }
       assertNoCurrentAgent(row);
       if (row === undefined) {
         throw worktreeMissingError({

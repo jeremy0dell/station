@@ -339,7 +339,9 @@ function sessionPayload(
   row: DashboardSessionRow,
   state: DashboardViewState,
 ): DashboardSessionPayload {
-  const displayTitle = sessionRowDisplayTitle(row, state.localRows);
+  const title = sessionRowDisplayTitle(row, state.localRows);
+  const displayTitle =
+    row.session.execution === undefined ? title : `[${row.session.execution.provider}] ${title}`;
   const pendingRemove = state.localRows.pendingRemove.find(
     (localRow) => localRow.worktreeId === row.worktree.id,
   );

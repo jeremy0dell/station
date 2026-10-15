@@ -71,6 +71,9 @@ export function createObserverService(options: CreateObserverServiceOptions): Ob
   const prepareExternalLaunchClient =
     options.client ??
     createClient(options, prepareExternalLaunchTimeoutMs, recordConnectionDiagnostics);
+  const cloudLaunchTimeoutMs = options.prepareExternalLaunchTimeoutMs ?? 600_000;
+  const cloudLaunchClient =
+    options.client ?? createClient(options, cloudLaunchTimeoutMs, recordConnectionDiagnostics);
   const copy = createObserverServiceCopy(options.clientLabel);
 
   return {
@@ -78,15 +81,15 @@ export function createObserverService(options: CreateObserverServiceOptions): Ob
     loadSnapshot: () => loadSnapshot(client, timeoutMs, copy),
     subscribeEvents: () => wrapSubscription(client.subscribe()),
     dispatch: (command: StationCommand) => dispatchCommand(client, command, timeoutMs, copy),
-    waitForCommandCompletion: (commandId: CommandId) =>
-      waitForCommandCompletion(client, commandId, commandWaitTimeoutMs, copy),
+    waitForCommandCompletion: (commandId: CommandId, requestedTimeoutMs?: number) =>
+      waitForCommandCompletion(client, commandId, requestedTimeoutMs ?? commandWaitTimeoutMs, copy),
     reconcile: (reason?: string) =>
       requestReconcile(reconcileClient, reason, reconcileTimeoutMs, copy),
     prepareExternalLaunch: (params: AgentPrepareExternalLaunchParams) =>
       prepareExternalLaunch(
-        prepareExternalLaunchClient,
+        params.execution === undefined ? prepareExternalLaunchClient : cloudLaunchClient,
         params,
-        prepareExternalLaunchTimeoutMs,
+        params.execution === undefined ? prepareExternalLaunchTimeoutMs : cloudLaunchTimeoutMs,
         copy,
       ),
     reportExternalExit: (params: AgentReportExternalExitParams) =>

@@ -28,6 +28,7 @@ export type CreateSessionCommandInput = {
   title: string;
   branch: string;
   harnessProvider: ProviderId;
+  execution?: { provider: string };
   initialPrompt?: string;
   group?: SessionGroupPlacementIntent;
 };
@@ -200,6 +201,7 @@ export function buildCreateSessionCommand(input: CreateSessionCommandInput): Sta
     },
     placement: { intent: "detached" },
   };
+  if (input.execution !== undefined) payload.execution = input.execution;
   if (input.initialPrompt !== undefined && input.initialPrompt.length > 0) {
     payload.initialPrompt = input.initialPrompt;
   }

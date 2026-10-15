@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CollectSessionCommandSchema } from "./agentExecution.js";
 import { ObserverReconcileCommandSchema } from "./commands/observer.js";
 import {
   AddProjectCommandSchema,
@@ -51,6 +52,7 @@ export const StationCommandTypeSchema = z.enum([
   "terminal.focus",
   "terminal.close",
   "session.close",
+  "session.collect",
   "session.rename",
   "session.acknowledgeTurn",
   "observer.reconcile",
@@ -77,6 +79,7 @@ export const StationCommandSchema = z.discriminatedUnion("type", [
   TerminalFocusCommandSchema,
   TerminalCloseCommandSchema,
   CloseSessionCommandSchema,
+  CollectSessionCommandSchema,
   RenameSessionCommandSchema,
   AcknowledgeTurnCommandSchema,
   ObserverReconcileCommandSchema,

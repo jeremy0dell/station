@@ -355,6 +355,33 @@ describe("createPtyTable", () => {
     await frames.return?.();
   });
 
+  it("refuses controller activation when output overflows during replay capture", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const capture = Promise.withResolvers<string[]>();
+    const table = createPtyTable({
+      createTerminal: () => scripted.terminal,
+      createSemanticTerminal: () => ({
+        write() {},
+        resize() {},
+        capture: () => capture.promise,
+        dispose() {},
+      }),
+      maxScrollbackBytes: 5,
+    });
+    const { ptyId } = table.spawn(baseParams);
+    scripted.helpers.emitData("before");
+    scripted.helpers.emitData("truncate");
+    const attaching = attach(table, liveRef(table, ptyId), "controller");
+    for (let index = 0; index < 40; index++) {
+      scripted.helpers.emitData("x".repeat(32 * 1024));
+    }
+    capture.resolve(["snapshot"]);
+    await expect(attaching).rejects.toMatchObject({ code: "HOST_CONTROL_REVOKED" });
+    expect(scripted.helpers.isDisposed()).toBe(false);
+    expect(table.list()).toHaveLength(1);
+    table.disposeAll();
+  });
+
   it("keeps the live sink and reports boundary reset data when exact capture is unavailable", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
@@ -855,6 +882,28 @@ describe("createPtyTable", () => {
     await (await attach(table, liveRef(table, ptyId))).frames[Symbol.asyncIterator]().return?.();
     expect(table.list()[0]).toMatchObject({ ptyId, alive: true });
     expect(scripted.helpers.isDisposed()).toBe(false);
+  });
+
+  it("disconnects overflowing output without killing or replacing the agent", async () => {
+    const { table, scripted } = singleTable();
+    const { ptyId } = table.spawn(baseParams);
+    const original = liveRef(table, ptyId);
+    const controller = await attach(table, original, "controller");
+    for (let index = 0; index < 40; index++) {
+      scripted.helpers.emitData("x".repeat(32 * 1024));
+    }
+    await expect(controller.frames[Symbol.asyncIterator]().next()).rejects.toMatchObject({ message: "Host attachment output exceeded 1 MiB; reconnect to recover terminal history." });
+    expect(() => controller.write(controller.controlState.controlEpoch, "stale")).toThrow();
+    expect(() => controller.claimControl()).toThrow(/detached attachment/);
+    expect(scripted.helpers.writes).toEqual([]);
+    expect(scripted.helpers.isDisposed()).toBe(false);
+    expect(liveRef(table, ptyId).ptyInstanceId).toBe(original.ptyInstanceId);
+    const replacement = await attach(table, original, "controller");
+    expect(replacement.ack.replay.kind).toBe("semantic-truncation-recovery");
+    replacement.write(replacement.controlState.controlEpoch, "accepted");
+    expect(scripted.helpers.writes).toEqual(["accepted"]);
+    await replacement.frames[Symbol.asyncIterator]().return?.();
+    table.disposeAll();
   });
 
   it("close kills the PTY, broadcasts exit to attachments, and drops it from the table", async () => {

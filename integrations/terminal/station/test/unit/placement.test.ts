@@ -67,6 +67,56 @@ describe("StationPlacementService", () => {
     expect(openManagedWorkspace).not.toHaveBeenCalled();
   });
 
+  it("registers detached placement without renderer authority when Host is available", async () => {
+    const opened: ManagedOpenWorkspaceResult = {
+      target: {
+        provider: "native",
+        targetId: "native:wt-feature",
+        projectId: "web",
+        worktreeId: worktree.id,
+        sessionId: "session-feature",
+      },
+      agentEndpointId: "native:wt-feature",
+      bindingToken: "detached-binding",
+    };
+    const request = vi.fn();
+    const releaseTarget = vi.fn(async () => true);
+    const service = new StationPlacementService({
+      stateDir: "/unused",
+      allowDetached: true,
+      owner: { openManagedWorkspace: async () => opened, releaseTarget },
+      request,
+    });
+    const result = await service.openPlacedWorkspace({
+      project,
+      worktree,
+      harness: "codex",
+      layout: "agent-only",
+      sessionId: "session-feature",
+      placement: { intent: "detached" },
+    });
+    expect(result.placement).toMatchObject({ intent: "detached", presentation: "detached" });
+    expect(service.isDetachedBinding(opened.bindingToken)).toBe(true);
+    await expect(
+      service.commitPlacedProcess({
+        project,
+        worktree,
+        terminalTarget: opened.target,
+        agentEndpointId: opened.agentEndpointId,
+        bindingToken: opened.bindingToken,
+        launchPlan: { provider: "codex", command: "codex", args: [], mode: "interactive" },
+      }),
+    ).rejects.toMatchObject({ code: "TERMINAL_PLACEMENT_REJECTED" });
+    await service.releasePlacedTarget({
+      targetId: opened.target.targetId,
+      sessionId: "session-feature",
+      bindingToken: opened.bindingToken,
+      generation: result.placement.generation,
+    });
+    expect(request).not.toHaveBeenCalled();
+    expect(releaseTarget).toHaveBeenCalledOnce();
+  });
+
   it("keeps the representative native socket path within Darwin's limit", () => {
     const socketPath = nativePlacementSocketPath(
       "/Users/station-user/.local/state/station",

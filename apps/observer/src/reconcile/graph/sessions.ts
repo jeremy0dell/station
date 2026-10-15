@@ -218,6 +218,8 @@ function sessionView(input: {
     title: input.title,
     tags: [],
   };
+  const placement = input.input.sessionMetadataById.get(input.id)?.executionProvider;
+  if (placement !== undefined) session.execution = { provider: placement, state: "unavailable" };
   if (input.status.attention !== undefined) session.status.attention = input.status.attention;
   if (input.terminal !== undefined) {
     session.terminal = terminalAttachment(

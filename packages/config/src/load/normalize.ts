@@ -13,6 +13,23 @@ export function normalizeGlobalConfig(value: unknown): unknown {
       worktree: normalizeWorktreeProvidersConfig,
       terminal: normalizeTerminalProvidersConfig,
       harness: normalizeHarnessProvidersConfig,
+      execution: (value) =>
+        normalizeObject(
+          value,
+          {},
+          {
+            e2b: (config) =>
+              normalizeObject(config, {
+                api_key_env: "apiKeyEnv",
+                timeout_minutes: "timeoutMinutes",
+                max_sandboxes: "maxSandboxes",
+                setup_command: "setupCommand",
+                runtime_archive: "runtimeArchive",
+                runtime_archive_sha256: "runtimeArchiveSha256",
+                harness_env: "harnessEnv",
+              }),
+          },
+        ),
       featureFlags: normalizeFeatureFlagsConfig,
       hooks: normalizeHooksConfig,
       tui: normalizeTuiConfig,

@@ -236,6 +236,12 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     attachment: PtyAttachment,
     reason: "controller_attached" | "control_claimed",
   ): HostControlState {
+    if (entry.attachments.get(attachment.attachmentId) !== attachment) {
+      throw new StationHostProviderError(
+        "HOST_CONTROL_REVOKED",
+        "Station Host cannot grant control to a detached attachment.",
+      );
+    }
     if (entry.controllerAttachmentId === attachment.attachmentId) {
       emit("pty.control.granted", {
         ptyId: entry.ptyId,

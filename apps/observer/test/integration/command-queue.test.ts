@@ -1,5 +1,5 @@
 import type { StationCommand } from "@station/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCommandQueue } from "../../src/commands/queue";
 import { createSqliteObserverPersistence } from "../../src/persistence";
 import { openObserverSqlite } from "../../src/sqlite";
@@ -595,6 +595,29 @@ describe("observer command queue", () => {
     await queue.drain();
     expect(starts).toEqual(["cmd_1", "cmd_3", "cmd_2"]);
     sqlite.close();
+  });
+
+  it("keeps cloud collection running beyond the ordinary command deadline", async () => {
+    vi.useFakeTimers();
+    const { sqlite, persistence, queue } = createPersistenceAndQueue();
+    let finish = () => {};
+    const blocked = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    queue.registerHandler("session.collect", async () => blocked);
+    try {
+      await queue.dispatch({ type: "session.collect", payload: { sessionId: "ses_cloud" } });
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(await persistence.getCommand("cmd_1")).toMatchObject({ status: "started" });
+      finish();
+      await queue.drain();
+      expect(await persistence.getCommand("cmd_1")).toMatchObject({ status: "succeeded" });
+    } finally {
+      finish();
+      await queue.drain();
+      sqlite.close();
+      vi.useRealTimers();
+    }
   });
 
   it("times out hung commands and persists a typed failure", async () => {

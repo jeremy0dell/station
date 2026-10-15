@@ -26,6 +26,7 @@ export type CreateManagedSessionOperation = {
   title: string;
   hiddenBranch: string;
   harness: ProviderId;
+  execution?: { provider: ProviderId };
   targetGroupId?: SessionGroupId;
   group?: SessionGroupPlacementIntent;
 };

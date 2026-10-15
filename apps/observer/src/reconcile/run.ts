@@ -11,6 +11,7 @@ import type {
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
+import { worktreeDisplayForAgentState } from "@station/contracts";
 import { durationMs, toIsoTimestamp } from "@station/runtime";
 import type {
   EventJournal,
@@ -70,7 +71,8 @@ type ReconcileOnceResult = {
  * Orchestrates provider reads and their completeness evidence, relationship correlation, durable
  * harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and
  * projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session
- * persistence. The same resolved title records feed snapshot composition and persistence.
+ * persistence. Cloud adapters supply remote agent status independently of local terminal state.
+ * The same resolved title records feed snapshot composition and persistence.
  */
 export async function runReconcileOnce(input: ReconcileOnceInput): Promise<ReconcileOnceResult> {
   const started = toIsoTimestamp(input.read.clock.now());
@@ -148,6 +150,54 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     generatedAt: finishedAt,
     errors,
   });
+  if (input.providers.executions.size > 0)
+    snapshot.executionProviders = [...input.providers.executions.keys()];
+  for (const session of snapshot.sessions) {
+    if (session.execution === undefined) continue;
+    const provider = input.providers.executions.get(session.execution.provider);
+    session.status = {
+      value: "unknown",
+      confidence: "low",
+      source: "reconcile",
+      reason: "Cloud provider is unavailable.",
+      updatedAt: finishedAt,
+    };
+    if (provider !== undefined) {
+      try {
+        const observation = await provider.observe(session.id);
+        session.execution = observation.execution;
+        session.status = observation.status;
+      } catch {
+        session.execution.state = "unavailable";
+        session.status = {
+          value: "unknown",
+          confidence: "low",
+          source: "reconcile",
+          reason: "Cloud state is unavailable; no local agent will be started.",
+          updatedAt: finishedAt,
+        };
+      }
+    }
+    delete session.harness.pid;
+    delete session.harness.runId;
+    const row = snapshot.rows.find(
+      (candidate) =>
+        candidate.id === session.worktreeId && candidate.projectId === session.projectId,
+    );
+    if (row !== undefined) {
+      row.agent = {
+        harness: session.harness.provider,
+        sessionId: session.id,
+        state: session.status.value,
+        confidence: session.status.confidence,
+        reason: session.status.reason,
+        updatedAt: session.status.updatedAt,
+      };
+      if (session.status.attention !== undefined) row.agent.attention = session.status.attention;
+      row.display = worktreeDisplayForAgentState(session.status.value);
+      delete row.recovery;
+    }
+  }
   const debug: StationSnapshotDebug = {
     terminal: buildTerminalSnapshotDebug({
       reconciledAt: observations.observedAt,

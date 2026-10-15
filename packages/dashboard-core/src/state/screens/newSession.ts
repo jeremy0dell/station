@@ -167,6 +167,9 @@ function submitNewSession(state: DashboardState): TuiTransition {
         title: validation.title,
         hiddenBranch: validation.branch,
         harness: validation.harnessProvider,
+        ...(state.screen.flow.selectedExecution === undefined
+          ? {}
+          : { execution: { provider: state.screen.flow.selectedExecution } }),
         ...(validation.group === undefined ? {} : { group: validation.group }),
       },
     ],

@@ -544,6 +544,9 @@ export function createInMemoryObserverPersistence(
             title: canonical.title,
             harness: input.harness,
             terminalProvider: input.terminalProvider,
+            ...(input.executionProvider === undefined
+              ? {}
+              : { executionProvider: input.executionProvider }),
             createdAt: input.createdAt,
             lastSeenAt: input.lastSeenAt,
           };

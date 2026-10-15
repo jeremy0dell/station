@@ -127,7 +127,26 @@ async function prepareExternalLaunchForWorktree(
 
   // One worktree, one live agent: an unattachable external or UI-owned target still wins over
   // application recovery. A stale `unknown` falls through via worktreeHasLiveAgent.
-  if (worktreeHasLiveAgent(row)) {
+  const cloudSession = snapshot.sessions.find(
+    (session) =>
+      session.worktreeId === row.id &&
+      session.projectId === project.id &&
+      session.execution !== undefined,
+  );
+  const persistedCloud = (await deps.persistence.listSessions()).find(
+    (session) =>
+      session.worktreeId === row.id &&
+      session.projectId === project.id &&
+      session.lifecycle !== "ended" &&
+      session.executionProvider !== undefined,
+  );
+  if (persistedCloud !== undefined && cloudSession === undefined)
+    throw {
+      tag: "AgentExecutionError",
+      code: "EXECUTION_RECONCILE_REQUIRED",
+      message: "Refresh Station to reconnect to the retained cloud session.",
+    } satisfies SafeError;
+  if (cloudSession === undefined && worktreeHasLiveAgent(row)) {
     const agent = row.agent;
     if (agent?.sessionId === undefined) {
       throw sessionAlreadyHasAgentError(row.id);
@@ -185,11 +204,37 @@ async function prepareExternalLaunchForWorktree(
       sessionId: freshStart.expectedSessionId,
     });
   }
+  if (cloudSession !== undefined && freshStart !== undefined)
+    throw {
+      tag: "AgentExecutionError",
+      code: "EXECUTION_LOCAL_RESTART_REFUSED",
+      message: "Close the cloud session before starting another agent.",
+    } satisfies SafeError;
+  if (
+    retainedSession !== undefined &&
+    params.execution !== undefined &&
+    params.execution.provider !== retainedSession.execution?.provider
+  )
+    throw {
+      tag: "AgentExecutionError",
+      code: "EXECUTION_PLACEMENT_IMMUTABLE",
+      message: "An existing session cannot change execution placement.",
+    } satisfies SafeError;
+  const executionId = retainedSession?.execution?.provider ?? params.execution?.provider;
+  const execution =
+    executionId === undefined ? undefined : deps.providers.executions.get(executionId);
+  if (executionId !== undefined && execution === undefined)
+    throw {
+      tag: "AgentExecutionError",
+      code: "EXECUTION_UNAVAILABLE",
+      message: "Restore the cloud provider configuration to reconnect.",
+    } satisfies SafeError;
   const recovery =
-    retainedSession === undefined || freshStart !== undefined
+    execution !== undefined || retainedSession === undefined || freshStart !== undefined
       ? undefined
       : await resolveAutomaticRecovery(deps, retainedSession, worktree, params.projectId);
   const harnessProviderId =
+    cloudSession?.harness.provider ??
     recovery?.harness.id ??
     (freshStart === undefined ? undefined : retainedSession?.harness.provider) ??
     params.harness ??
@@ -203,11 +248,14 @@ async function prepareExternalLaunchForWorktree(
   const harness =
     recovery?.harness ?? resolveHarnessProviderOrThrow(deps.providers, harnessProviderId);
 
-  await assertHarnessLaunchPreconditionsOrThrow({
-    providers: deps.providers,
-    providerId: harnessProviderId,
-    ...(deps.configPath === undefined ? {} : { stationConfigPath: deps.configPath }),
-  });
+  if (execution !== undefined && retainedSession === undefined)
+    await execution.preflight(harnessProviderId);
+  if (execution === undefined)
+    await assertHarnessLaunchPreconditionsOrThrow({
+      providers: deps.providers,
+      providerId: harnessProviderId,
+      ...(deps.configPath === undefined ? {} : { stationConfigPath: deps.configPath }),
+    });
 
   if (managedTerminal === undefined) {
     throw managedTerminalUnavailableError();
@@ -249,6 +297,7 @@ async function prepareExternalLaunchForWorktree(
         worktreeId: worktree.id,
         initialTitle: params.title ?? row.title,
         harness: harnessProviderId,
+        ...(executionId === undefined ? {} : { executionProvider: executionId }),
         terminalProvider: managedTerminal.id,
         ...(group === undefined ? {} : { group }),
         clock: deps.clock,
@@ -277,13 +326,19 @@ async function prepareExternalLaunchForWorktree(
       worktree,
       observedAt: nowIso(deps.clock),
     });
-    const launchPlan = await harness.buildLaunch({
+    const launchRequest = {
       project,
       worktree,
       terminalTarget,
       sessionId,
       ...(recovery === undefined ? {} : { resume: recovery.resume }),
-    });
+    };
+    const launchPlan =
+      execution === undefined
+        ? await harness.buildLaunch(launchRequest)
+        : freshSession
+          ? await execution.launch({ ...launchRequest, harness: harnessProviderId })
+          : await execution.attach(sessionId);
 
     // The managed result requires an attachment exactly when it starts the process,
     // so a remote spawn can never be advertised as eligible for local fallback.
@@ -381,7 +436,7 @@ async function prepareExternalLaunchForWorktree(
       sessionId,
       logger: deps.logger,
     });
-    if (freshSession && sessionSeeded && targetReleaseConfirmed) {
+    if (execution === undefined && freshSession && sessionSeeded && targetReleaseConfirmed) {
       await discardSessionSeedBestEffort(deps, {
         sessionId,
         ...(groupProvenance === undefined ? {} : { groupProvenance }),

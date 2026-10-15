@@ -72,6 +72,7 @@ export function createDashboardCapabilities(
       title: request.title,
       branch: request.hiddenBranch,
       harness: request.harness,
+      ...(request.execution === undefined ? {} : { execution: request.execution }),
       ...(request.group === undefined ? {} : { group: request.group }),
     });
   const createManagedSession: DashboardCapabilities["managedSessions"]["create"] = (request) =>

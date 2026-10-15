@@ -355,6 +355,7 @@ function trackingPersistence() {
   const renamed: Array<Parameters<SessionStore["renameSession"]>[0]> = [];
   const discarded: Array<Parameters<SessionStore["discardSessionSeed"]>[0]> = [];
   const store = {
+    listSessions: async () => [],
     findRememberedHarnessProviderForWorktree: async () => undefined,
     seedSession: async (input: Parameters<SessionStore["seedSession"]>[0]) => {
       seeded.push(input);
@@ -2204,4 +2205,74 @@ describe("prepareExternalLaunch managed attachments", () => {
     if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
     expect(result.outcome.attachment).toBeUndefined();
   });
+});
+
+it("prepares a cloud attachment without launching a local harness and retains placement on host failure", async () => {
+  const station = new FakeManagedTerminalLifecycle({
+    launchFailure: {
+      tag: "TerminalProviderError",
+      code: "TEST_HOST_FAILED",
+      message: "Host failed",
+    },
+  });
+  const localHarness = new FakeHarnessProvider({ id: "fake-harness", now: () => new Date(now) });
+  const localLaunch = vi.spyOn(localHarness, "buildLaunch");
+  const persistence = trackingPersistence();
+  const runtime = deps([row()], station, [localHarness], persistence.store);
+  const cloud = {
+    id: "e2b",
+    preflight: vi.fn(async () => {}),
+    launch: vi.fn(async () => ({
+      provider: "fake-harness",
+      command: "/usr/bin/env",
+      args: ["stn", "execution", "attach", "/tmp/test.sock", "ses_test"],
+      mode: "interactive" as const,
+    })),
+    attach: vi.fn(),
+    observe: vi.fn(),
+    collect: vi.fn(),
+    stop: vi.fn(),
+    destroy: vi.fn(),
+    dispose: vi.fn(),
+  };
+  runtime.providers.executions.set("e2b", cloud);
+  await expect(
+    prepareExternalLaunch(runtime, { ...prepareParams, execution: { provider: "e2b" } }),
+  ).rejects.toMatchObject({ code: "TEST_HOST_FAILED" });
+  expect(cloud.launch).toHaveBeenCalledTimes(1);
+  expect(localLaunch).not.toHaveBeenCalled();
+  expect(persistence.seeded[0]).toMatchObject({ executionProvider: "e2b" });
+  expect(persistence.discarded).toEqual([]);
+});
+
+it("reattaches the original cloud agent even when local recovery is disabled", async () => {
+  const localHarness = new FakeHarnessProvider({ id: "fake-harness", now: () => new Date(now) });
+  const localLaunch = vi.spyOn(localHarness, "buildLaunch");
+  const session = retainedSession({ execution: { provider: "e2b", state: "unavailable" } });
+  const runtime = deps([row()], new FakeManagedTerminalLifecycle(), [localHarness], undefined, {
+    sessions: [session],
+  });
+  const cloud = {
+    id: "e2b",
+    preflight: vi.fn(),
+    launch: vi.fn(),
+    attach: vi.fn(async () => ({
+      provider: "fake-harness",
+      command: "stn",
+      args: ["execution", "attach", "/tmp/test.sock", session.id],
+      mode: "interactive" as const,
+    })),
+    observe: vi.fn(),
+    collect: vi.fn(),
+    stop: vi.fn(),
+    destroy: vi.fn(),
+    dispose: vi.fn(),
+  };
+  runtime.providers.executions.set("e2b", cloud);
+  await expect(prepareExternalLaunch(runtime, prepareParams)).resolves.toMatchObject({
+    outcome: { kind: "prepared", sessionId: session.id },
+  });
+  expect(cloud.attach).toHaveBeenCalledWith(session.id);
+  expect(cloud.launch).not.toHaveBeenCalled();
+  expect(localLaunch).not.toHaveBeenCalled();
 });

@@ -14,7 +14,7 @@ import { selectNewSessionHarnessOptions } from "../../selectors/harnessChoices.j
 import { selectNewSessionProject } from "../../selectors/projectChoices.js";
 import type { DashboardSnapshotView } from "../../state/types.js";
 
-export type NewSessionReviewFieldId = "project" | "name" | "agent" | "group";
+export type NewSessionReviewFieldId = "project" | "name" | "agent" | "execution" | "group";
 
 export type NewSessionStatusContent = {
   glyph: "●";
@@ -79,6 +79,14 @@ const REVIEW_CONTROLS: {
     accelerator: "A",
     focusId: "agent",
     helper: "Enter choose agent",
+  },
+  execution: {
+    actionId: "review.execution",
+    label: "Execution",
+    accelerator: "E",
+    focusId: "execution",
+    helper:
+      "Enter switch Local / Cloud. Cloud uploads the committed tree; shell splits stay local.",
   },
   group: {
     actionId: "review.group",
@@ -186,10 +194,19 @@ export function newSessionReviewContent(
       enabled: true,
       id: "agent",
       value: harness?.label ?? state.selectedHarness,
-      status: { glyph: "●", text: status, tone: status },
+      ...(state.selectedExecution === undefined
+        ? { status: { glyph: "●", text: status, tone: status } }
+        : {}),
     },
     { ...REVIEW_CONTROLS.group, enabled: true, id: "group", value: groupValue },
   ];
+  if ((state.executionProviders?.length ?? 0) > 0)
+    fields.splice(3, 0, {
+      ...REVIEW_CONTROLS.execution,
+      enabled: true,
+      id: "execution",
+      value: state.selectedExecution === undefined ? "Local" : `Cloud · ${state.selectedExecution}`,
+    });
   return {
     fields,
     create: {

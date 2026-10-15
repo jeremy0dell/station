@@ -237,3 +237,12 @@ describe("createManagedLaunch", () => {
     expect(service.dispatched.map((command) => command.type)).toEqual(["worktree.create"]);
   });
 });
+
+it("passes cloud execution to native preparation without requiring a locally installed agent", async () => {
+  const { launch, service } = launchHarness(withoutIdleAgent());
+  const prepared: Parameters<typeof service.prepareExternalLaunch>[0][] = [];
+  service.prepareExternalLaunch = async (params) => { prepared.push(params); throw new Error("fixture stops after preparation"); };
+  await launch.create({...CREATE_REQUEST, execution:{provider:"e2b"}});
+  expect(service.dispatched[0]).toEqual({type:"worktree.create",payload:{projectId:"station",branch:"pty-buffer"}});
+  expect(prepared[0]).toMatchObject({harness:"codex",execution:{provider:"e2b"}});
+});

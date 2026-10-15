@@ -516,6 +516,28 @@ describe("StationTerminalProvider (host-backed)", () => {
     });
   });
 
+  it("refuses renderer-owned fallback when the launch requires persistence", async () => {
+    for (const provider of [
+      new StationTerminalProvider({ clock }),
+      providerWithEnsureError(
+        fakeHostClient(),
+        stationHostSafeError("HOST_UNREACHABLE", "Unavailable"),
+      ),
+    ]) {
+      const opened = await provider.openManagedWorkspace(openRequest());
+      await expect(
+        provider.launchManagedProcess({
+          project,
+          worktree,
+          terminalTarget: opened.target,
+          agentEndpointId: opened.agentEndpointId,
+          bindingToken: opened.bindingToken,
+          launchPlan: { ...launchPlan, requiresPersistentTerminal: true },
+        }),
+      ).rejects.toMatchObject({ code: "HOST_UNREACHABLE" });
+    }
+  });
+
   it("leaves managed cleanup to the caller when a live-PTY upgrade blocks launch", async () => {
     const upgradeError = stationHostSafeError(
       "HOST_UPGRADE_BLOCKED",

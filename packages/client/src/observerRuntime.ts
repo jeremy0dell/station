@@ -430,7 +430,8 @@ export function createStationClientRuntime(
     },
     subscribeEvents: () => upstreamService.subscribeEvents(),
     dispatch: (command) => upstreamService.dispatch(command),
-    waitForCommandCompletion: (commandId) => upstreamService.waitForCommandCompletion(commandId),
+    waitForCommandCompletion: (commandId, timeoutMs) =>
+      upstreamService.waitForCommandCompletion(commandId, timeoutMs),
     reconcile: async (reason?: string): Promise<StationSnapshot> => {
       // Reconcile is its own Observer call rather than a chain flight, but it
       // participates in the same invariants: the returned snapshot counts as

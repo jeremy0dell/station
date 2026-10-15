@@ -30,6 +30,7 @@ export type CreateManagedSessionRequest = {
   title: string;
   hiddenBranch: string;
   harness: ProviderId;
+  execution?: { provider: string };
   group?: SessionGroupPlacementIntent;
 };
 
@@ -94,6 +95,7 @@ async function runCreate(
       title: request.title,
       branch: request.hiddenBranch,
       harnessProvider: request.harness,
+      ...(request.execution === undefined ? {} : { execution: request.execution }),
       ...(request.group === undefined ? {} : { group: request.group }),
     });
     if (command.type !== "session.create") {

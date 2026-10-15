@@ -288,6 +288,37 @@ export const ProjectLocalConfigSchema = z
 
 export type ProjectLocalConfig = z.infer<typeof ProjectLocalConfigSchema>;
 
+export const E2bConfigSchema = z
+  .object({
+    template: nonEmptyStringSchema.default("base"),
+    setupCommand: nonEmptyStringSchema.optional(),
+    runtimeArchive: nonEmptyStringSchema.optional(),
+    runtimeArchiveSha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    apiKeyEnv: z
+      .string()
+      .regex(/^[A-Z_][A-Z0-9_]*$/)
+      .default("E2B_API_KEY"),
+    timeoutMinutes: z.number().int().min(5).max(1440).default(60),
+    maxSandboxes: z.number().int().min(1).max(20).default(1),
+    harnessEnv: z
+      .record(
+        providerIdSchema,
+        z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/), z.string().regex(/^[A-Z_][A-Z0-9_]*$/)),
+      )
+      .default({}),
+  })
+  .strict()
+  .refine(
+    (value) => (value.runtimeArchive === undefined) === (value.runtimeArchiveSha256 === undefined),
+    {
+      message: "runtime_archive and runtime_archive_sha256 must be configured together.",
+    },
+  );
+export type E2bConfig = z.infer<typeof E2bConfigSchema>;
+
 export const StationConfigSchema = z
   .object({
     schemaVersion: ConfigSchemaVersionSchema,
@@ -296,6 +327,7 @@ export const StationConfigSchema = z
     worktree: WorktreeProvidersConfigSchema.optional(),
     terminal: TerminalProvidersConfigSchema.optional(),
     harness: HarnessProvidersConfigSchema.optional(),
+    execution: z.object({ e2b: E2bConfigSchema.optional() }).strict().optional(),
     hooks: HooksConfigSchema.optional(),
     // TUI-only sections. Best-effort: bad values inside [tui]/[workspace]
     // degrade to defaults with a section diagnostic instead of aborting load.

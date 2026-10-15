@@ -488,3 +488,21 @@ to the global project block and reports a diagnostic.
 paths, Observer socket/state paths, and Worktrunk config/managed-root paths.
 Other provider-specific path-like values remain authored unless their provider
 defines expansion.
+
+## E2B execution
+
+The optional global `[execution.e2b]` section enables cloud execution in New
+Session and `stn session create --execution e2b`. Fields are `template` (default
+`base`), `api_key_env` (default `E2B_API_KEY`), `timeout_minutes` (5–1440, default
+60), `max_sandboxes` (1–20, default 1), and optional `setup_command`.
+Native Codex requires a Linux x64 template with at least 2048 MiB of memory; E2B fixes this allocation when the template is built. Set `template` to that template name.
+
+Development runtimes require paired `runtime_archive` (local Linux x64 archive path)
+and `runtime_archive_sha256` (64 lowercase hexadecimal characters). Released clients
+use the exact installed immutable release when these settings are absent.
+`[execution.e2b.harness_env.<provider>]` maps remote environment-variable names
+to local environment-variable references. Values are references, not secrets.
+E2B account limits may impose a shorter maximum lifetime.
+
+See [Cloud agents from local Station](cloud-execution.md) for setup, source
+transfer, result collection, and cleanup.

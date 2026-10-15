@@ -31,10 +31,27 @@ export async function closeSessionResources(
     row?: WorktreeRow | undefined;
     mode: "harness" | "terminal" | "all";
     force: boolean;
+    discardResults?: boolean | undefined;
     context: CommandHandlerContext;
   } & CleanupRuntime,
 ): Promise<void> {
-  if (input.mode === "harness" || input.mode === "all") {
+  if (input.session.execution !== undefined && input.mode !== "terminal") {
+    const execution = input.providers.executions.get(input.session.execution.provider);
+    if (execution === undefined)
+      throw {
+        tag: "AgentExecutionError",
+        code: "EXECUTION_UNAVAILABLE",
+        message: "Restore the cloud provider configuration to stop or destroy this session.",
+      } satisfies SafeError;
+    input.context.beginCommit();
+    if (input.mode === "all")
+      await execution.destroy(
+        input.session.id,
+        input.discardResults === undefined ? {} : { discardResults: input.discardResults },
+      );
+    else await execution.stop(input.session.id);
+  }
+  if (input.session.execution === undefined && (input.mode === "harness" || input.mode === "all")) {
     // Only tolerate an unsupported stop when there is a terminal-close fallback
     // that will actually retire the session. Otherwise force must NOT report a
     // hollow success on a stop-less provider — the process keeps running and the

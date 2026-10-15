@@ -1,5 +1,6 @@
 const topLevelCliCommandNames = [
   "command",
+  "execution",
   "debug",
   "doctor",
   "event-hooks",

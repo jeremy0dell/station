@@ -32,6 +32,7 @@ export type ManagedHostedSessionRequest = {
   title: string;
   branch: string;
   harness: ProviderId;
+  execution?: { provider: string };
   group?: SessionGroupPlacementIntent;
 };
 
@@ -65,6 +66,7 @@ type HostedWorktreeLaunch = {
   title: string;
   branch: string;
   harness: ProviderId;
+  execution?: { provider: string };
   group?: FreshSessionGroupPlacementIntent;
   command: Extract<StationCommand, { type: "worktree.create" | "worktree.fork" }>;
   verb: "create" | "fork";
@@ -124,6 +126,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
         title: spec.title,
         background: true,
         harness: spec.harness,
+        ...(spec.execution === undefined ? {} : { execution: spec.execution }),
         ...(spec.group === undefined ? {} : { group: spec.group }),
       });
       if (
@@ -157,7 +160,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
           payload: {
             projectId: request.projectId,
             branch: request.branch,
-            launchHarness: request.harness,
+            ...(request.execution === undefined ? { launchHarness: request.harness } : {}),
           },
         },
         verb: "create",

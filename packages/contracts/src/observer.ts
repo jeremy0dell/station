@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentExecutionIntentSchema } from "./agentExecution.js";
 import type { CommandReceipt, CommandRecord } from "./commandLifecycle.js";
 import {
   FreshSessionGroupPlacementIntentSchema,
@@ -342,6 +343,7 @@ export type ReconcileReceipt = z.infer<typeof ReconcileReceiptSchema>;
 
 export const AgentPrepareExternalLaunchParamsSchema = z
   .object({
+    execution: AgentExecutionIntentSchema.optional(),
     projectId: ProjectIdSchema,
     worktreeId: WorktreeIdSchema,
     harness: ProviderIdSchema.optional(),

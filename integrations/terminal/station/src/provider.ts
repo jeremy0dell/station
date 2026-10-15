@@ -48,12 +48,13 @@ export type StationTerminalProviderOptions = {
   /** Enables native caller proof and sibling placement through renderer-owned endpoints. */
   placement?: { stateDir: string; hostSocketPath?: string };
   /**
-   * When present (the `stationPersistentAgents` flag is on), Station Host supplies
+   * When configured for persistent local or cloud terminals, Station Host supplies
    * spawn, list, close, and attachment lifecycle. Native Station still owns
    * presentation, so external focus remains unsupported. Without Host, the Station
    * UI owns the PTY locally and close is unsupported too.
    */
   host?: StationHostController;
+  persistentAgents?: boolean;
 };
 
 type PreviousTargetBinding = {
@@ -72,7 +73,7 @@ type TerminalTargetListResult =
  * Station terminal provider: UI-hosted mode is a registration shim; host-backed
  * mode supplies process lifecycle, opaque attachment identity, and reconciled
  * tri-state attachment evidence. Native presentation remains locally owned by
- * Station and is never externally focusable.
+ * Station and is never externally focusable. Launches requiring persistence refuse UI fallback.
  * Attachment evidence is false for UI-owned targets, true only when the latest
  * Host listing applies, and absent for cached Host targets after an uncertain read.
  * Reconcile-aware discovery declares cached fallback indeterminate so it cannot
@@ -86,6 +87,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
 
   readonly #clock: RuntimeClock;
   readonly #host: StationHostController | undefined;
+  readonly #persistentAgents: boolean;
   readonly #targets = new Map<TerminalTargetId, TerminalTargetObservation>();
   // Targets backed by a host PTY (spawned via launchProcess or rebuilt from
   // host.list). listTargets drops ONLY these when their process is gone; a UI-hosted
@@ -101,6 +103,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   constructor(options: StationTerminalProviderOptions = {}) {
     this.#clock = options.clock ?? systemClock;
     this.#host = options.host;
+    this.#persistentAgents = options.persistentAgents ?? options.host !== undefined;
     this.placement =
       options.placement === undefined
         ? undefined
@@ -110,6 +113,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
               ? {}
               : { hostSocketPath: options.placement.hostSocketPath }),
             clock: this.#clock,
+            allowDetached: this.#host !== undefined,
             owner: {
               openManagedWorkspace: (request) => this.openManagedWorkspace(request),
               releaseTarget: (request) => this.releaseTarget(request),
@@ -400,7 +404,13 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       agentEndpointId: request.agentEndpointId,
     };
     this.#assertLaunchBindingCurrent(request);
-    if (this.#host === undefined) {
+    const required =
+      request.launchPlan.requiresPersistentTerminal === true ||
+      this.placement?.isDetachedBinding(request.bindingToken) === true;
+    if (required && this.#host === undefined) {
+      throw stationHostSafeError("HOST_UNREACHABLE", "This terminal requires Station Host.");
+    }
+    if (this.#host === undefined || (!this.#persistentAgents && !required)) {
       if (
         (await this.placement?.commitPlacedProcess(request, {
           outputCompatibility: outputCompatibilityForLaunch(request),
@@ -414,7 +424,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     }
     const handle = await this.#host.ensure();
     if (handle.status !== "running") {
-      if (isStationHostCompatibilityError(handle.error)) {
+      if (required || isStationHostCompatibilityError(handle.error)) {
         throw handle.error;
       }
       if (

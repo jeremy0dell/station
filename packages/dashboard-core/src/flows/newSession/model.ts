@@ -21,6 +21,8 @@ export type NewSessionGroupSelection = { kind: "ungrouped" } | SessionGroupPlace
 export type NewSessionBaseState = StepWizardState<NewSessionStep> & {
   selectedProjectId: ProjectId;
   selectedHarness: ProviderId;
+  selectedExecution?: string;
+  executionProviders?: readonly string[];
   title: string;
   branch: string;
   titleSource: NewSessionTitleSource;
@@ -28,7 +30,7 @@ export type NewSessionBaseState = StepWizardState<NewSessionStep> & {
 };
 
 /** The review menu's focus ring — which field ↵ acts on. */
-export type NewSessionReviewFocus = "name" | "project" | "agent" | "group" | "create";
+export type NewSessionReviewFocus = "name" | "project" | "agent" | "execution" | "group" | "create";
 export type NewSessionEditNameFocus = "name" | "save" | "back";
 
 export type NewSessionReviewState = NewSessionBaseState & {

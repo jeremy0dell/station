@@ -319,3 +319,12 @@ function releaseInvalid(message: string) {
     hint: "Wait for a complete Station release or install an exact known-good release manually.",
   });
 }
+
+/** Resolves only the installed immutable release for cross-platform runtime delivery. */
+export async function resolveExactNativeRelease(tag: string): Promise<NativeBinaryRelease> {
+  releaseVersion(tag);
+  return parseCurrentRelease(
+    await fetchGithubJson(`${apiBaseUrl}/tags/${encodeURIComponent(tag)}`, {}),
+    tag,
+  );
+}

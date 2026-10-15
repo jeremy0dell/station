@@ -131,7 +131,11 @@ function resolveCanonicalTarget(
   ) {
     return { kind: "notice", notice: STALE_DASHBOARD_TARGET_NOTICE };
   }
-  if (worktreeHasLiveAgent(row) && session.terminal?.externallyFocusable !== true) {
+  if (
+    session.execution === undefined &&
+    worktreeHasLiveAgent(row) &&
+    session.terminal?.externallyFocusable !== true
+  ) {
     return {
       kind: "notice",
       notice: {
@@ -163,6 +167,7 @@ function retainedSessionRequiresFreshStartConfirmation(
   target: ResolvedCanonicalActivationTarget,
 ): boolean {
   return (
+    target.session.execution === undefined &&
     request.preferredObserverAction !== "fresh" &&
     target.session.origin === "station" &&
     !worktreeHasLiveAgent(target.row) &&
@@ -174,6 +179,8 @@ function resolveActivationAction(
   request: SessionActivationRequest,
   target: ResolvedCanonicalActivationTarget,
 ): ResolvedActivationAction {
+  if (target.session.execution !== undefined)
+    return target.session.terminal?.externallyFocusable === true ? "focus" : "start";
   if (worktreeHasLiveAgent(target.row)) return "focus";
   if (request.preferredObserverAction === "fresh") return "fresh";
   if (target.row.recovery !== undefined) return "resume";

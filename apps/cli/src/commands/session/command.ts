@@ -58,7 +58,14 @@ export async function runSessionCommand(
     parsed.action === "create" || parsed.action === "fork"
       ? sessionCreationPrompt(parsed, options)
       : undefined;
-  const timeoutMs = parsed.timeoutMs ?? options.timeoutMs ?? 30_000;
+  const timeoutMs =
+    parsed.timeoutMs ??
+    options.timeoutMs ??
+    (parsed.action === "create" && parsed.execution !== undefined
+      ? 600_000
+      : parsed.action === "close"
+        ? 180_000
+        : 30_000);
   const snapshot = await loadObserverSnapshot(snapshotLoadOptions(options, false, timeoutMs), deps);
   if (parsed.action === "create" || parsed.action === "fork") {
     return runCreateOrForkSessionCommand(parsed, snapshot, initialPrompt, timeoutMs, options, deps);

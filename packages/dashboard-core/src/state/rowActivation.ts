@@ -54,7 +54,12 @@ export function activateDashboardRow(
       };
     }
   }
-  if (session.origin === "station" && !worktreeHasLiveAgent(row) && row.recovery === undefined) {
+  if (
+    session.execution === undefined &&
+    session.origin === "station" &&
+    !worktreeHasLiveAgent(row) &&
+    row.recovery === undefined
+  ) {
     return { state: openFreshStartConfirm(state, session.id) };
   }
   return activationOperation(state, session.id, worktree);

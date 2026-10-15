@@ -46,6 +46,22 @@ const tmuxImplementationMarkers = [
 // Every raw timer exception needs a reason here so new timeout plumbing stays intentional.
 const setTimeoutAllowlist = new Map([
   [
+    "integrations/agent-execution/e2b/src/terminalBroker.ts",
+    "The attachment broker bounds private-socket handshakes and stale-socket liveness probes.",
+  ],
+  [
+    "integrations/agent-execution/e2b/src/terminalGateway.ts",
+    "The gateway bounds attachment handshakes and closes failed WebSocket attachments without stopping the PTY.",
+  ],
+  [
+    "integrations/agent-execution/e2b/src/terminalRelay.ts",
+    "The relay bounds remote attachment handshakes and retries attachment with fresh tickets after disconnection.",
+  ],
+  [
+    "integrations/agent-execution/e2b/src/bridge.ts",
+    "The private cloud terminal socket bounds its attachment handshake with the socket idle timeout.",
+  ],
+  [
     "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
     "Passive process-exit polling consumes the activation deadline before an exact Observer successor may start.",
   ],

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentExecutionIntentSchema } from "../agentExecution.js";
 import {
   ProjectIdSchema,
   ProviderIdSchema,
@@ -88,6 +89,7 @@ export const CreateSessionPayloadSchema = z
     placement: TerminalPlacementRequestSchema,
     group: SessionGroupPlacementIntentSchema.optional(),
     initialPrompt: nonEmptyStringSchema.optional(),
+    execution: AgentExecutionIntentSchema.optional(),
   })
   .strict()
   .superRefine((payload, context) => {
@@ -194,8 +196,13 @@ export const CloseSessionPayloadSchema = z
     sessionId: SessionIdSchema,
     mode: z.enum(["harness", "terminal", "all"]),
     force: z.boolean().optional(),
+    discardResults: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (payload) => payload.discardResults !== true || payload.mode === "all",
+    "Discarding results requires closing all resources.",
+  );
 
 export const RenameSessionPayloadSchema = z
   .object({
