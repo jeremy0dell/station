@@ -6922,6 +6922,12 @@
           "bindings": ["staleChangeSummary"]
         },
         {
+          "specifier": "./worktreeActivity.js",
+          "resolvedPath": "apps/observer/src/metadata/worktreeActivity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["isActiveWorktreeRow"]
+        },
+        {
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
@@ -7105,6 +7111,12 @@
           "bindings": ["staleChecks", "stalePullRequest"]
         },
         {
+          "specifier": "./worktreeActivity.js",
+          "resolvedPath": "apps/observer/src/metadata/worktreeActivity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["isActiveWorktreeRow"]
+        },
+        {
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
@@ -7177,6 +7189,25 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["WorktreeChangeSummary", "WorktreeChecksSummary", "WorktreePullRequest"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/metadata/worktreeActivity.ts",
+      "exports": [
+        {
+          "name": "isActiveWorktreeRow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationSnapshot"]
         }
       ]
     },
@@ -14150,7 +14181,7 @@
           "name": "createSpoolDrainer",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Replays durable provider ingress directly to completion before acknowledging spool records or queued reports."
+          "purpose": "Replays durable provider ingress in bounded batches before acknowledging spool records or queued reports. A batch that leaves records behind schedules the next batch in the background while it makes progress."
         },
         {
           "name": "SpoolDrainDeps",
@@ -18757,7 +18788,7 @@
       "declaration": "createSpoolDrainer",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Replays durable provider ingress directly to completion before acknowledging spool records or queued reports.",
+      "purpose": "Replays durable provider ingress in bounded batches before acknowledging spool records or queued reports. A batch that leaves records behind schedules the next batch in the background while it makes progress.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/harnessReportProcessor.ts",

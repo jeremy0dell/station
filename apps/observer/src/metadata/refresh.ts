@@ -29,6 +29,7 @@ import {
   createRepositoryMetadataRefresher,
 } from "./repositoryRefresh.js";
 import { staleChangeSummary } from "./stalePayloads.js";
+import { isActiveWorktreeRow } from "./worktreeActivity.js";
 
 export type WorktreeMetadataRefreshService = {
   refresh(snapshot: StationSnapshot): Promise<void>;
@@ -51,6 +52,8 @@ export type CreateWorktreeMetadataRefreshServiceOptions = {
 };
 
 const defaultTtlMs = 5 * 60 * 1000;
+// Idle worktrees have no pane or agent to show fresh git state, so they wait longer between git reads.
+const idleChangeSummaryTtlMs = 30 * 60 * 1000;
 const defaultConcurrency = 2;
 
 /**
@@ -209,6 +212,11 @@ export function createWorktreeMetadataRefreshService(
     if (shouldBackOffFailedRefresh(input.existing)) {
       return;
     }
+    const active = isActiveWorktreeRow(input.row);
+    if (!active && input.existing !== undefined && !input.existing.expired) {
+      return;
+    }
+    const ttlMs = active ? (options.ttlMs ?? defaultTtlMs) : idleChangeSummaryTtlMs;
 
     try {
       const request: WorktreeChangeReadRequest = {
@@ -258,7 +266,7 @@ export function createWorktreeMetadataRefreshService(
         payload: result.evidence.summary,
         cacheKey: result.evidence.cacheKey,
         updatedAt: result.evidence.summary.checkedAt,
-        expiresAt: addMs(result.evidence.summary.checkedAt, options.ttlMs ?? defaultTtlMs),
+        expiresAt: addMs(result.evidence.summary.checkedAt, ttlMs),
       });
       if (input.signal.aborted || shutdownRequested) return;
       options.requestReconcile("metadata:change_summary");

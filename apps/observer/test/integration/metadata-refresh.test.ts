@@ -244,7 +244,7 @@ describe("observer worktree metadata refresh use case", () => {
       worktreeId: "wt_web_feature",
       kind: "change_summary",
       cacheKey: "old",
-      expiresAt: "2026-05-20T12:05:00.000Z",
+      expiresAt: "2026-05-20T11:55:00.000Z",
       payload: {
         kind: "branch_diff",
         additions: 1,
@@ -351,6 +351,48 @@ describe("observer worktree metadata refresh use case", () => {
     fixture.sqlite.close();
   });
 
+  it("does not read git for an idle worktree while its cached change summary is fresh", async () => {
+    const fixture = createFixture();
+    const reasons: string[] = [];
+    await fixture.persistence.upsertWorktreeMetadataCurrent({
+      worktreeId: "wt_web_feature",
+      kind: "change_summary",
+      cacheKey: "old",
+      expiresAt: "2026-05-20T12:25:00.000Z",
+      payload: {
+        kind: "branch_diff",
+        additions: 1,
+        deletions: 0,
+        source: "local_git",
+        checkedAt: now,
+      },
+    });
+    const runner = gitRunner({
+      "rev-parse --verify HEAD^{commit}": headSha,
+      remote: "",
+      "rev-parse --verify refs/heads/main^{commit}": baseSha,
+      "merge-base main HEAD": mergeBaseSha,
+      [`diff --numstat ${mergeBaseSha}..HEAD`]: "bad\t1\tsrc/a.ts\n",
+    });
+    const service = createTestWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: (reason) => reasons.push(reason),
+      clock: fixture.clock,
+      runner,
+    });
+
+    const snapshot = await fixture.core.reconcile("metadata-idle-fresh");
+    await service.refresh(snapshot);
+
+    // The failing numstat would mark the summary stale if git had been read.
+    await expect(
+      fixture.persistence.listWorktreeMetadataCurrent({ kind: "change_summary", now }),
+    ).resolves.toEqual([
+      expect.objectContaining({ worktreeId: "wt_web_feature", cacheKey: "old", stale: false }),
+    ]);
+  });
+
   it("deletes cached local evidence when the matching checkout is unavailable", async () => {
     const fixture = createFixture();
     const reasons: string[] = [];
@@ -358,7 +400,7 @@ describe("observer worktree metadata refresh use case", () => {
       worktreeId: "wt_web_feature",
       kind: "change_summary",
       cacheKey: "old",
-      expiresAt: "2026-05-20T12:05:00.000Z",
+      expiresAt: "2026-05-20T11:55:00.000Z",
       payload: {
         kind: "branch_diff",
         additions: 1,

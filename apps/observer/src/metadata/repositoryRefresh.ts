@@ -26,6 +26,7 @@ import {
 } from "./repositoryGit.js";
 import { selectRepositoryProvider } from "./repositoryProviderSelection.js";
 import { staleChecks, stalePullRequest } from "./stalePayloads.js";
+import { isActiveWorktreeRow } from "./worktreeActivity.js";
 
 /**
  * USE CASE
@@ -69,6 +70,8 @@ const defaultTtlMs = 5 * 60 * 1000;
 const remoteLookupTtlMs = 10 * 60 * 1000;
 const mergedPullRequestTtlMs = 6 * 60 * 60 * 1000;
 const runningChecksTtlMs = 2 * 60 * 1000;
+// Idle worktrees with an unchanged head re-query GitHub at most once per this window.
+const idleRemoteLookupTtlMs = 60 * 60 * 1000;
 const defaultRepositoryConcurrency = 2;
 
 export function createRepositoryMetadataRefresher(
@@ -165,6 +168,9 @@ export function createRepositoryMetadataRefresher(
   ): Promise<void> {
     const pullRequestCacheKey = metadataCacheKey(task, "pull_request");
     const cachedPullRequest = freshPayload(task.existingPullRequest, pullRequestCacheKey);
+    if (isRecentIdlePullRequest(task, pullRequestCacheKey, clock.now().getTime())) {
+      return;
+    }
     const pullRequest =
       cachedPullRequest ?? (await discoverPullRequest(task, pullRequestCacheKey, signal));
     if (pullRequest === undefined || signal.aborted) {
@@ -490,6 +496,21 @@ function metadataCacheKey(
     input.pullRequestNumber = pullRequestNumber;
   }
   return repositoryMetadataCacheKey(input);
+}
+
+function isRecentIdlePullRequest(
+  task: RepositoryRefreshTask,
+  cacheKey: string,
+  nowMs: number,
+): boolean {
+  const existing = task.existingPullRequest;
+  return (
+    existing !== undefined &&
+    !existing.stale &&
+    existing.cacheKey === cacheKey &&
+    !isActiveWorktreeRow(task.row) &&
+    nowMs - Date.parse(existing.updatedAt) < idleRemoteLookupTtlMs
+  );
 }
 
 function freshPayload<TKind extends "pull_request" | "checks">(

@@ -30,9 +30,9 @@ export type ProviderReadOptions = {
 
 // Each wt list run starts git in every worktree of a project, so frequent reconciles reuse one listing.
 const scheduledWorktreeListingMaxAgeMs = 120_000;
-const cacheableReconcilePrefixes = ["scheduled:", "harness-report:", "metadata:"];
+const cacheableReconcilePrefixes = ["scheduled:", "harness-report:", "metadata:", "hook:"];
 
-/** Explicit reconciles (startup, TUI and popup open, `stn reconcile`) and hook reasons read worktrees fresh. */
+/** Explicit reconciles (startup, TUI and popup open, `stn reconcile`) read worktrees fresh; hook and scheduled reconciles reuse a recent listing. */
 export function worktreeListingMaxAgeForReason(reason: string): number | undefined {
   return cacheableReconcilePrefixes.some((prefix) => reason.startsWith(prefix))
     ? scheduledWorktreeListingMaxAgeMs

@@ -128,7 +128,7 @@ describe("observer hook spool drain", () => {
       }),
     });
 
-    expect(result).toEqual({ scanned: 2, drained: 1, failed: 1 });
+    expect(result).toEqual({ scanned: 2, drained: 1, failed: 1, remaining: 0 });
     await expect(fileExists(successPath)).resolves.toBe(false);
     await expect(fileExists(rejectedPath)).resolves.toBe(true);
     await expect(readHookSpoolRecord(spoolDir, "spool_rejected.json")).resolves.toMatchObject({
@@ -146,6 +146,49 @@ describe("observer hook spool drain", () => {
       },
     });
     await drainEvents.return?.();
+    fixture.sqlite.close();
+  });
+
+  it("replays at most maxRecords per pass and reports the records left for a later pass", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-state-"));
+    const spoolDir = providerIngressSpoolDir(stateDir);
+    const firstPath = await writeHookSpoolRecordFixture({
+      spoolDir,
+      spoolId: "spool_a",
+      event: { event: "worktree.created" },
+    });
+    const secondPath = await writeHookSpoolRecordFixture({
+      spoolDir,
+      spoolId: "spool_b",
+      event: { event: "worktree.created" },
+    });
+    const thirdPath = await writeHookSpoolRecordFixture({
+      spoolDir,
+      spoolId: "spool_c",
+      event: { event: "worktree.created" },
+    });
+    const fixture = createFixture(spoolDir);
+
+    const result = await drainProviderIngressSpool({
+      store: createFilesystemProviderIngressSpoolStore(spoolDir),
+      persistence: fixture.persistence,
+      eventBus: fixture.eventBus,
+      clock: fixture.clock,
+      maxRecords: 2,
+      ingest: async (event) => ({
+        schemaVersion: STATION_SCHEMA_VERSION,
+        hookId: `hook_${event.event}`,
+        provider: event.provider,
+        event: event.event,
+        status: "accepted",
+        receivedAt: event.receivedAt,
+      }),
+    });
+
+    expect(result).toEqual({ scanned: 3, drained: 2, failed: 0, remaining: 1 });
+    await expect(fileExists(firstPath)).resolves.toBe(false);
+    await expect(fileExists(secondPath)).resolves.toBe(false);
+    await expect(fileExists(thirdPath)).resolves.toBe(true);
     fixture.sqlite.close();
   });
 
@@ -170,7 +213,7 @@ describe("observer hook spool drain", () => {
           receivedAt: event.receivedAt,
         }),
       }),
-    ).resolves.toEqual({ scanned: 1, drained: 1, failed: 0 });
+    ).resolves.toEqual({ scanned: 1, drained: 1, failed: 0, remaining: 0 });
     await expect(fileExists(spoolPath)).resolves.toBe(false);
   });
 
@@ -250,7 +293,7 @@ describe("observer hook spool drain", () => {
 
     await expect(
       drainProviderIngressSpool({ store, ingest: (event) => ingress.ingest(event), clock }),
-    ).resolves.toEqual({ scanned: 1, drained: 0, failed: 1 });
+    ).resolves.toEqual({ scanned: 1, drained: 0, failed: 1, remaining: 0 });
     await expect(fileExists(spoolPath)).resolves.toBe(true);
     await expect(persistence.listEvents({ type: "providerHook.ingested" })).resolves.toHaveLength(
       1,
@@ -259,7 +302,7 @@ describe("observer hook spool drain", () => {
 
     await expect(
       drainProviderIngressSpool({ store, ingest: (event) => ingress.ingest(event), clock }),
-    ).resolves.toEqual({ scanned: 1, drained: 1, failed: 0 });
+    ).resolves.toEqual({ scanned: 1, drained: 1, failed: 0, remaining: 0 });
     await expect(fileExists(spoolPath)).resolves.toBe(false);
     await expect(persistence.listEvents({ type: "providerHook.ingested" })).resolves.toHaveLength(
       1,

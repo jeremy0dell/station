@@ -391,7 +391,8 @@ async function stopRunningObserver(
   options: ObserverProcessOptions,
   deps: ObserverProcessDeps,
 ): Promise<ObserverStopReceipt> {
-  const timeoutMs = options.timeoutMs ?? 5_000;
+  // The observer answers stop only after its harness ingress queue drains, which can take tens of seconds during a backlog.
+  const timeoutMs = options.timeoutMs ?? 60_000;
   const deadlineMs = Date.now() + timeoutMs;
   const expectedObserverIdentity = requireExpectedObserverIdentity(status);
   const requestTimeoutMs = remainingStopTimeoutMs(deadlineMs);
