@@ -11127,6 +11127,12 @@
           "purpose": null
         },
         {
+          "name": "worktreeListingMaxAgeForReason",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "WorktreeProjectReadOutcome",
           "kind": "type",
           "role": null,
@@ -11254,6 +11260,12 @@
           "resolvedPath": "apps/observer/src/reconcile/harnessEventRepair.ts",
           "edgeKind": "runtime",
           "bindings": ["repairPersistedHarnessDerivedState"]
+        },
+        {
+          "specifier": "./providerObservations.js",
+          "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeListingMaxAgeForReason"]
         },
         {
           "specifier": "./providerObservations.js",

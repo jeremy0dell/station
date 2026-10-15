@@ -14,6 +14,7 @@ import type {
   RemoveWorktreeResult,
   SafeError,
   WorktreeCapabilities,
+  WorktreeListingOptions,
   WorktreeObservation,
   WorktreeProvider,
   WorktreeRemovalRefusalDiagnosticDetail,
@@ -79,6 +80,11 @@ const defaultCapabilities: WorktreeCapabilities = {
   canSeedWorkingTree: true,
 };
 
+type WorktreeListingEntry = {
+  listing: Promise<WorktreeObservation[]>;
+  expiresAtMs: number;
+};
+
 type StaleRegistrationInspection =
   | { status: "skipped" }
   | { status: "completed"; check?: ProviderDoctorCheck }
@@ -110,6 +116,7 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #managedPathProjectIdentifiers = new Map<string, string | null>();
   readonly #managedPathProjectIdentifierProbes = new Map<string, Promise<void>>();
   readonly #registryMutations: WorktreeRegistryMutationCoordinator;
+  readonly #worktreeListings = new Map<string, WorktreeListingEntry>();
 
   constructor(options: WorktrunkProviderOptions = {}) {
     this.#command = options.command ?? process.env.STATION_WORKTRUNK_BIN ?? "wt";
@@ -267,7 +274,38 @@ export class WorktrunkProvider implements WorktreeProvider {
     }
   }
 
-  async listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {
+  async listWorktrees(
+    project: ProviderProjectConfig,
+    options: WorktreeListingOptions = {},
+  ): Promise<WorktreeObservation[]> {
+    const maxAgeMs = options.maxAgeMs;
+    if (maxAgeMs === undefined) {
+      return this.#listFreshWorktrees(project);
+    }
+    const nowMs = this.#clock.now().getTime();
+    const cached = this.#worktreeListings.get(project.id);
+    if (cached !== undefined && cached.expiresAtMs > nowMs) {
+      return cached.listing;
+    }
+    const entry: WorktreeListingEntry = {
+      listing: this.#listFreshWorktrees(project),
+      expiresAtMs: Number.POSITIVE_INFINITY,
+    };
+    this.#worktreeListings.set(project.id, entry);
+    entry.listing.then(
+      () => {
+        entry.expiresAtMs = this.#clock.now().getTime() + maxAgeMs;
+      },
+      () => {
+        if (this.#worktreeListings.get(project.id) === entry) {
+          this.#worktreeListings.delete(project.id);
+        }
+      },
+    );
+    return entry.listing;
+  }
+
+  #listFreshWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {
     return this.#registryMutations.runExclusive(project.id, () =>
       this.#listWorktrees(project, { retries: 1 }),
     );
@@ -325,6 +363,14 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
+    try {
+      return await this.#createWorktree(request);
+    } finally {
+      this.#worktreeListings.delete(request.project.id);
+    }
+  }
+
+  async #createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
     await this.#assertProjectRootUsable(request.project);
     const setup = await this.#preflightProjectSetup(request.project);
     const base = request.base ?? request.project.worktrunk.base;
@@ -635,9 +681,13 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {
-    return this.#registryMutations.runExclusive(request.project.id, () =>
-      this.#removeWorktree(request),
-    );
+    try {
+      return await this.#registryMutations.runExclusive(request.project.id, () =>
+        this.#removeWorktree(request),
+      );
+    } finally {
+      this.#worktreeListings.delete(request.project.id);
+    }
   }
 
   async #removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {

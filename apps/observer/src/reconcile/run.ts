@@ -25,7 +25,10 @@ import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { buildStationSnapshot } from "./graph/build.js";
 import { repairPersistedHarnessDerivedState } from "./harnessEventRepair.js";
-import type { ProviderReadOptions } from "./providerObservations.js";
+import {
+  type ProviderReadOptions,
+  worktreeListingMaxAgeForReason,
+} from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import {
   type CurrentReconcileObservations,
@@ -94,7 +97,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
   const observations = await readCurrentReconcileObservations({
     providers: input.providers,
     projects: input.projects,
-    read: input.read,
+    read: { ...input.read, worktreeListingMaxAgeMs: worktreeListingMaxAgeForReason(input.reason) },
     ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
     providerHealth,
     errors,

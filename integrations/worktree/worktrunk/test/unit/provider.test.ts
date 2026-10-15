@@ -96,6 +96,41 @@ describe("WorktrunkProvider", () => {
     ]);
   });
 
+  it("reuses cached listings within maxAgeMs, coalesces concurrent reads, and drops the cache on removal", async () => {
+    let nowMs = Date.parse(now);
+    const calls: ExternalCommandInput[] = [];
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(nowMs) },
+      runner: async (input) => {
+        calls.push(input);
+        return result(input, JSON.stringify([]));
+      },
+    });
+    const cached = { maxAgeMs: 120_000 };
+
+    await Promise.all([
+      provider.listWorktrees(project, cached),
+      provider.listWorktrees(project, cached),
+    ]);
+    await provider.listWorktrees(project, cached);
+    expect(calls).toHaveLength(1);
+
+    nowMs += 120_001;
+    await provider.listWorktrees(project, cached);
+    expect(calls).toHaveLength(2);
+
+    await provider.listWorktrees(project);
+    expect(calls).toHaveLength(3);
+
+    await provider
+      .removeWorktree(removalRequest("wt_web_feature", "/tmp/station/web/feature", "feature"))
+      .catch(() => undefined);
+    const callsBeforeCachedRead = calls.length;
+    await provider.listWorktrees(project, cached);
+    expect(calls.length).toBeGreaterThan(callsBeforeCachedRead);
+  });
+
   it("filters listed worktrees to the managed root when external worktrees are disabled", async () => {
     const managedProject = {
       ...project,
