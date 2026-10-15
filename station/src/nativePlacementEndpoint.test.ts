@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { HostListEntry } from "@station/host";
 import { requestNativePlacement } from "@station/terminal";
 import { describe, expect, it } from "bun:test";
 import { createStationNativePlacementEndpoint } from "./nativePlacementEndpoint.js";
@@ -12,6 +13,76 @@ import { createScriptedTerminal } from "./terminal/testing/scriptedTerminal.js";
 import type { StationTerminalSpawnOptions } from "./terminal/types.js";
 
 describe("native placement endpoint", () => {
+  it("snapshots warm Host attachments without forwarding listing metadata", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-native-placement-warm-"));
+    const source = createScriptedTerminal();
+    const identity = {
+      kind: "agent" as const,
+      terminalTargetId: "native:wt-warm",
+      worktreeId: "wt-warm",
+      projectId: "project-warm",
+      sessionId: "session-warm",
+      worktreePath: "/repo/wt-warm",
+      harnessProvider: "codex",
+      ptyId: "pty-warm",
+      ptyInstanceId: "00000000-0000-4000-8000-000000000001",
+    };
+    const hostPty: HostListEntry = {
+      ...identity,
+      pid: source.terminal.pid,
+      alive: true,
+      cols: 80,
+      rows: 24,
+    };
+    const store = createStationStore();
+    const registry = createPtyRegistry({
+      createTerminal: () => ({ ...source.terminal, hostPtyRef: hostPty }),
+    });
+    registry.resize(MAIN_PANE_ID, { cols: 80, rows: 24 });
+    const endpoint = await createStationNativePlacementEndpoint({
+      stateDir: root,
+      uiRunId: "ui-warm",
+    });
+    try {
+      const handlerGeneration = endpoint.attach({
+        store,
+        registry,
+        createHostTerminal: () => source.terminal,
+      });
+      const entry = registry.get(MAIN_PANE_ID);
+      if (entry === undefined) throw new Error("missing source entry");
+      await expect(
+        requestNativePlacement(endpoint.socketPath, { type: "snapshot" }),
+      ).resolves.toEqual({
+        type: "snapshot",
+        snapshot: {
+          uiRunId: "ui-warm",
+          handlerGeneration,
+          rendererPid: process.pid,
+          panes: [
+            {
+              paneId: MAIN_PANE_ID,
+              entryGeneration: entry.generation,
+              terminalPid: source.terminal.pid,
+              hostPtyRef: identity,
+            },
+          ],
+        },
+      });
+      expect(hostPty).toEqual({
+        ...identity,
+        pid: source.terminal.pid,
+        alive: true,
+        cols: 80,
+        rows: 24,
+      });
+    } finally {
+      await endpoint.close();
+      registry.disposeAll();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("uses the requested launch behind the live reconciler and retires finalized authority", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-native-placement-"));
     const source = createScriptedTerminal({ cols: 91, rows: 27 });
