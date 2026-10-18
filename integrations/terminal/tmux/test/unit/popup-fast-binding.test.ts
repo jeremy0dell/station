@@ -10,7 +10,10 @@ import {
   parseNormalPopupRoute,
   parsePopupActiveClaim,
 } from "../../src/popup/fastProtocol";
-import { persistentPopupSignature } from "../../src/popup/persistentUi.js";
+import {
+  installedPopupBinaryIdentity,
+  persistentPopupSignature,
+} from "../../src/popup/persistentUi.js";
 
 const registrationNonce = "11".repeat(16);
 const actionNonce = "22".repeat(16);
@@ -27,6 +30,7 @@ afterEach(async () => {
 type FakeState = {
   actionExit?: number;
   activeClient?: string;
+  binary?: string;
   casMisses?: number;
   claim?: string;
   clientName: string;
@@ -43,6 +47,10 @@ type FakeState = {
   route: string;
   sessionSignature: string;
   snapshotExit?: number;
+};
+
+type FixtureOptions = {
+  registeredBuild?: string;
 };
 
 describe("managed tmux popup fast binding", () => {
@@ -290,6 +298,34 @@ describe("managed tmux popup fast binding", () => {
     expect(action).not.toContain("station's #{session_name} managed bin/tmux fake");
   });
 
+  it("stays warm for a registration from another build of the same installed command", async () => {
+    const fixture = await createFixture(
+      {},
+      "managed bin",
+      undefined,
+      undefined,
+      {},
+      {
+        registeredBuild: "0.0.0-pre-alpha.99+station.other",
+      },
+    );
+    await expect(runBinding(fixture)).resolves.toMatchObject({ code: 0 });
+    expect(await fixture.calls()).toHaveLength(2);
+    expect(await fixture.fallbackCalls()).toEqual([]);
+  });
+
+  it("falls back when the installed stn is not the registered file", async () => {
+    const replaced = await createFixture();
+    await writeFile(replaced.installedBinary, "#!/bin/sh\n# reinstalled build\n");
+    await expect(runBinding(replaced)).resolves.toMatchObject({ code: 0 });
+    expect(await replaced.calls()).toHaveLength(1);
+    expect(await replaced.fallbackCalls()).toEqual(["/dev/ttys001"]);
+
+    const unregistered = await createFixture({ binary: "" });
+    await expect(runBinding(unregistered)).resolves.toMatchObject({ code: 0 });
+    expect(await unregistered.fallbackCalls()).toEqual(["/dev/ttys001"]);
+  });
+
   it("rejects relative or control-character config paths", () => {
     const options = {
       fallbackAlias: "/opt/station/stn-tmux-popup",
@@ -356,6 +392,7 @@ type Fixture = {
   command: string;
   fallbackCalls: () => Promise<string[]>;
   fallbackConfigCalls: () => Promise<string[]>;
+  installedBinary: string;
   statePath: string;
 };
 
@@ -368,6 +405,7 @@ async function createFixture(
     Parameters<typeof buildManagedFastPopupRunShellCommand>[0],
     "popupWidth" | "popupHeight" | "popupPosition" | "popupStatusBar"
   > = {},
+  fixtureOptions: FixtureOptions = {},
 ): Promise<Fixture> {
   const tempRoot = await mkdtemp(join(tmpdir(), "station-fast-binding-"));
   fixtureRoots.add(tempRoot);
@@ -379,7 +417,13 @@ async function createFixture(
   const fallbackLogPath = join(tempRoot, "fallback.log");
   const fallbackConfigLogPath = join(tempRoot, "fallback-config.log");
   await import("node:fs/promises").then(({ mkdir }) => mkdir(installedRoot, { recursive: true }));
-  const registeredSignature = fixturePopupSignature(installedRoot, registeredConfigPath);
+  const installedBinary = join(installedRoot, "stn");
+  await writeFile(installedBinary, "#!/bin/sh\n");
+  const registeredSignature = fixturePopupSignature(
+    installedRoot,
+    registeredConfigPath,
+    fixtureOptions.registeredBuild,
+  );
   const route = buildNormalPopupRoute({
     registrationNonce,
     root: installedRoot,
@@ -387,6 +431,7 @@ async function createFixture(
     signature: registeredSignature,
   });
   const state: FakeState = {
+    binary: installedPopupBinaryIdentity(installedRoot, installedBinary) ?? "",
     clientName: "/dev/ttys001",
     clientPid: 1234,
     clientSession: "outer",
@@ -416,7 +461,7 @@ if (args[0] === "display-message" && args[1] === "-p" && args[2] === "-t") {
     "_station-ui", state.sessionSignature, state.root,
     state.activeClient ?? "", state.focusClient ?? "",
     state.devSession ?? "", state.devCommand ?? "", state.devOwner ?? "", state.devRoot ?? "",
-    "v1",
+    state.binary ?? "", "v1",
   ];
   process.stdout.write(fields.join(String.fromCharCode(31)) + "\\n");
   process.exit(0);
@@ -457,11 +502,16 @@ exit \${FAKE_FALLBACK_EXIT:-0}
     command: buildManagedFastPopupRunShellCommand(commandOptions),
     fallbackCalls: async () => readLines(fallbackLogPath),
     fallbackConfigCalls: async () => readLines(fallbackConfigLogPath),
+    installedBinary,
     statePath,
   };
 }
 
-function fixturePopupSignature(installedRoot: string, configPath: string | undefined): string {
+function fixturePopupSignature(
+  installedRoot: string,
+  configPath: string | undefined,
+  build?: string,
+): string {
   return persistentPopupSignature(
     [
       shellLiteral(join(installedRoot, "stn")),
@@ -470,6 +520,7 @@ function fixturePopupSignature(installedRoot: string, configPath: string | undef
       "--popup",
       "--persistent",
     ].join(" "),
+    build,
   );
 }
 

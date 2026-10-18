@@ -19,6 +19,7 @@ const globalOptions = [
   "@station_popup_ui_session_name",
   "@station_popup_ui_expected_signature",
   "@station_popup_ui_root",
+  "@station_popup_ui_binary",
   "@station_tui_dev_command",
   "@station_tui_dev_owner",
   "@station_tui_dev_root",

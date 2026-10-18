@@ -7,6 +7,7 @@ export const persistentUiRouteOption = "@station_popup_ui_route";
 export const persistentUiSignatureOption = "@station_popup_ui_signature";
 export const registeredPopupExpectedSignatureOption = "@station_popup_ui_expected_signature";
 export const registeredPopupRootOption = "@station_popup_ui_root";
+export const registeredPopupBinaryOption = "@station_popup_ui_binary";
 export const registeredPopupSessionNameOption = "@station_popup_ui_session_name";
 export const registeredDevPopupCommandOption = "@station_tui_dev_command";
 export const registeredDevPopupOwnerOption = "@station_tui_dev_owner";

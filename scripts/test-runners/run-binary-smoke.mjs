@@ -3603,6 +3603,7 @@ function displayFakeTmuxMessage(state, args) {
       state.serverOptions["@station_tui_dev_command"],
       state.serverOptions["@station_tui_dev_owner"],
       state.serverOptions["@station_tui_dev_root"],
+      state.serverOptions["@station_popup_ui_binary"],
       "v1",
     ].map((value) => value ?? "");
     return fakeTmuxResult(0, `${fields.join("\u001f")}\n`);
