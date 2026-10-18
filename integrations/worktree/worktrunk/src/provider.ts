@@ -292,16 +292,11 @@ export class WorktrunkProvider implements WorktreeProvider {
       expiresAtMs: Number.POSITIVE_INFINITY,
     };
     this.#worktreeListings.set(project.id, entry);
-    entry.listing.then(
-      () => {
-        entry.expiresAtMs = this.#clock.now().getTime() + maxAgeMs;
-      },
-      () => {
-        if (this.#worktreeListings.get(project.id) === entry) {
-          this.#worktreeListings.delete(project.id);
-        }
-      },
-    );
+    // A failed listing is reused like a successful one; otherwise every cached read reruns wt list.
+    const expire = () => {
+      entry.expiresAtMs = this.#clock.now().getTime() + maxAgeMs;
+    };
+    entry.listing.then(expire, expire);
     return entry.listing;
   }
 
