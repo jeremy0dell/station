@@ -186,11 +186,9 @@ export async function runDashboardMain(): Promise<void> {
   });
   hotSlots.__stationDashboardHotPopupRuntime = popupRuntime;
 
-  // tmux 3.7 can open its button-3 menu while Station reports mouse movement.
-  // Re-enable popup movement once Station requires a tmux release containing
-  // tmux/tmux@ad6832e, which removes the popup menu.
   const popupRenderer = env.STATION_TUI_POPUP === "1";
-  const enableMouseMovement = !popupRenderer;
+  // The CLI parent sets this after asking the popup's tmux server whether movement is safe.
+  const enableMouseMovement = !popupRenderer || env.STATION_TUI_POPUP_MOUSE_MOVEMENT === "1";
 
   try {
     const copySelectedText = createOpenTuiSelectionCopyHandler(() => renderer, clipboardEffects);
@@ -210,7 +208,7 @@ export async function runDashboardMain(): Promise<void> {
     themeController = nextThemeController;
     // The controller begins on the complete fallback; palette I/O must not block the first frame.
     void nextThemeController.start();
-    if (popupRenderer) {
+    if (!enableMouseMovement) {
       // OpenTUI keeps 1002 drag tracking on when 1003 movement is off; popups need click-only 1000 + 1006.
       process.stdout.write(
         `${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.MouseButtonEvent}${CsiCommand.ResetDecPrivateMode.final}` +
@@ -233,7 +231,7 @@ export async function runDashboardMain(): Promise<void> {
         runtime={dashboardInput}
         openUrl={openExternalUrl}
         onCopyNotice={copyNoticeText}
-        hoverEnabled={!popupRenderer}
+        hoverEnabled={enableMouseMovement}
         themeSource={nextThemeController}
       />,
     );

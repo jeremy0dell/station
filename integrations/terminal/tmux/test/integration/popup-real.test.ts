@@ -32,6 +32,7 @@ import {
   buildManagedFastPopupRunShellCommand,
   ensurePersistentPopupSession,
   openTmuxPopup,
+  tmuxVersionSupportsPopupMouseMovement,
 } from "../../src/popup";
 import { parsePopupActiveClaim } from "../../src/popup/fastProtocol";
 import { TmuxProvider } from "../../src/provider";
@@ -810,9 +811,30 @@ describeRealTmux("real tmux dev popup routing", () => {
         await timers.setTimeout(500);
       }
       expectNoTmuxPopupMenu();
-      expect(mouseFlags.trim(), "popup renderer did not request click-only SGR tracking").toBe(
-        "1:0:0:1",
+      const tmuxVersion = await tmuxExec(
+        fixture.wrapper,
+        ["display-message", "-p", "#{version}"],
+        fixture.env,
       );
+      const [standardFlag, , , sgrFlag] = mouseFlags.trim().split(":");
+      expect(`${standardFlag}:${mouseAllFlag}:${sgrFlag}`, "popup renderer mouse tracking").toBe(
+        tmuxVersionSupportsPopupMouseMovement(tmuxVersion) ? "0:1:1" : "1:0:1",
+      );
+
+      if (mouseAllFlag === "1") {
+        await fixture.ptyClient.write(sgrMouse(35, groupOuter));
+        await timers.setTimeout(500);
+        expect(
+          await captureHiddenStyledLine(fixture, groupCell.row),
+          "pointer movement did not show the Group-header hover style",
+        ).not.toBe(groupStyleBefore);
+        await fixture.ptyClient.write(sgrMouse(35, blankOuter));
+        await timers.setTimeout(500);
+        expect(
+          await captureHiddenStyledLine(fixture, groupCell.row),
+          "moving away left the Group-header hover style latched",
+        ).toBe(groupStyleBefore);
+      }
 
       await fixture.ptyClient.write(sgrMouse(1, blankOuter));
       await fixture.ptyClient.write(sgrMouse(33, groupOuter));
@@ -2434,7 +2456,7 @@ function isDashboardContent(content: string): boolean {
 function isGroupedManyProjectDashboardContent(content: string): boolean {
   return (
     content.includes("FLEET") &&
-    content.includes("╭─ ▼ Design refresh") &&
+    content.includes("╭ ▼ Design refresh") &&
     content.includes("group-contracts") &&
     content.includes("? help")
   );

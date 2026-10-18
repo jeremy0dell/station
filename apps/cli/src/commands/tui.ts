@@ -16,7 +16,11 @@ import {
   stationObserverBuildVersion,
   systemClock,
 } from "@station/runtime";
-import { dismissTmuxPopup, resolveTmuxPopupFocusTarget } from "@station/tmux";
+import {
+  dismissTmuxPopup,
+  popupTmuxSupportsMouseMovement,
+  resolveTmuxPopupFocusTarget,
+} from "@station/tmux";
 import { parsePositiveIntegerOption } from "../args.js";
 import type { CliEnv } from "../env.js";
 import {
@@ -268,12 +272,18 @@ async function spawnRenderer(
   popupConfig: TmuxConfig | undefined,
   stateDir: string,
 ): Promise<TuiRunResult> {
-  const childEnv = {
+  const childEnv: NodeJS.ProcessEnv = {
     ...process.env,
     ...env,
     STATION_QUIET_PRELAUNCH: "1",
     STATION_UI_RUN_ID: uiRunId,
   };
+  if (env.STATION_TUI_POPUP === "1") {
+    const movement = await popupTmuxSupportsMouseMovement({
+      command: resolvePopupTmuxCommand(popupConfig?.command, childEnv),
+    });
+    childEnv.STATION_TUI_POPUP_MOUSE_MOVEMENT = movement ? "1" : "0";
+  }
   const lifecycleLogger = createJsonlLogger({
     component: "cli",
     path: componentLogPath(stateDir, "cli"),

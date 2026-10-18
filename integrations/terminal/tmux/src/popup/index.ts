@@ -59,6 +59,10 @@ import type {
 export { buildTmuxPopupArgs } from "./args.js";
 export { persistentUiOwnerClientOption } from "./constants.js";
 export { buildManagedFastPopupRunShellCommand } from "./fastBinding.js";
+export {
+  popupTmuxSupportsMouseMovement,
+  tmuxVersionSupportsPopupMouseMovement,
+} from "./mouseMovement.js";
 export { ensurePersistentPopupSession, resolveRegisteredDevPopupUi } from "./persistentUi.js";
 export type {
   TmuxPopupDismissResult,
