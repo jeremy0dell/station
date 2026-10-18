@@ -244,7 +244,7 @@ describe("observer worktree metadata refresh use case", () => {
       worktreeId: "wt_web_feature",
       kind: "change_summary",
       cacheKey: "old",
-      expiresAt: "2026-05-20T12:05:00.000Z",
+      expiresAt: "2026-05-20T11:55:00.000Z",
       payload: {
         kind: "branch_diff",
         additions: 1,
@@ -351,6 +351,81 @@ describe("observer worktree metadata refresh use case", () => {
     fixture.sqlite.close();
   });
 
+  it("backs off a failed first local git read that has no cached summary", async () => {
+    const fixture = createFixture();
+    const reasons: string[] = [];
+    const calls: string[] = [];
+    const runner = gitRunner(
+      {
+        "rev-parse --verify HEAD^{commit}": headSha,
+        remote: "",
+        "rev-parse --verify refs/heads/main^{commit}": baseSha,
+        "merge-base main HEAD": mergeBaseSha,
+        [`diff --numstat ${mergeBaseSha}..HEAD`]: "bad\t1\tsrc/a.ts\n",
+      },
+      calls,
+    );
+    const service = createTestWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: (reason) => reasons.push(reason),
+      clock: fixture.clock,
+      runner,
+    });
+
+    const snapshot = await fixture.core.reconcile("metadata-first-read-failure");
+    await service.refresh(snapshot);
+    const callsAfterFailure = calls.length;
+    await service.refresh(snapshot);
+
+    expect(callsAfterFailure).toBeGreaterThan(0);
+    expect(calls.length).toBe(callsAfterFailure);
+    expect(reasons).toEqual([]);
+    fixture.sqlite.close();
+  });
+
+  it("does not read git for an idle worktree while its cached change summary is fresh", async () => {
+    const fixture = createFixture();
+    const reasons: string[] = [];
+    await fixture.persistence.upsertWorktreeMetadataCurrent({
+      worktreeId: "wt_web_feature",
+      kind: "change_summary",
+      cacheKey: "old",
+      expiresAt: "2026-05-20T12:25:00.000Z",
+      payload: {
+        kind: "branch_diff",
+        additions: 1,
+        deletions: 0,
+        source: "local_git",
+        checkedAt: now,
+      },
+    });
+    const runner = gitRunner({
+      "rev-parse --verify HEAD^{commit}": headSha,
+      remote: "",
+      "rev-parse --verify refs/heads/main^{commit}": baseSha,
+      "merge-base main HEAD": mergeBaseSha,
+      [`diff --numstat ${mergeBaseSha}..HEAD`]: "bad\t1\tsrc/a.ts\n",
+    });
+    const service = createTestWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: (reason) => reasons.push(reason),
+      clock: fixture.clock,
+      runner,
+    });
+
+    const snapshot = await fixture.core.reconcile("metadata-idle-fresh");
+    await service.refresh(snapshot);
+
+    // The failing numstat would mark the summary stale if git had been read.
+    await expect(
+      fixture.persistence.listWorktreeMetadataCurrent({ kind: "change_summary", now }),
+    ).resolves.toEqual([
+      expect.objectContaining({ worktreeId: "wt_web_feature", cacheKey: "old", stale: false }),
+    ]);
+  });
+
   it("deletes cached local evidence when the matching checkout is unavailable", async () => {
     const fixture = createFixture();
     const reasons: string[] = [];
@@ -358,7 +433,7 @@ describe("observer worktree metadata refresh use case", () => {
       worktreeId: "wt_web_feature",
       kind: "change_summary",
       cacheKey: "old",
-      expiresAt: "2026-05-20T12:05:00.000Z",
+      expiresAt: "2026-05-20T11:55:00.000Z",
       payload: {
         kind: "branch_diff",
         additions: 1,
@@ -851,6 +926,48 @@ describe("observer worktree metadata refresh use case", () => {
     fixture.sqlite.close();
   });
 
+  it("shares one pull request lookup per repository, branch, and HEAD and skips detached heads", async () => {
+    const fixture = createFixture(undefined, [
+      { id: "wt_web_feature_copy", branch: "feature" },
+      { id: "wt_web_detached", branch: "detached:2222222" },
+    ]);
+    let currentTime = Date.parse(now);
+    fixture.clock.now = () => new Date(currentTime);
+    const lookups: string[] = [];
+    const repository = new FakeRepositoryProvider({
+      clock: fixture.clock,
+      supportsRemote: supportsGithubRemote,
+      discover: async (request) => {
+        lookups.push(request.branch);
+        return null;
+      },
+    });
+    const service = createTestWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: () => undefined,
+      clock: fixture.clock,
+      runner: gitRunner({
+        "rev-parse --verify HEAD^{commit}": headSha,
+        remote: "origin\n",
+        "remote get-url origin": "git@github.com:example/web.git\n",
+      }),
+      repositoryProviders: [repository],
+    });
+
+    await service.refresh(await fixture.core.reconcile("metadata-lookup-cache-first"));
+    expect(lookups).toEqual(["feature"]);
+
+    currentTime += 9 * 60 * 1000;
+    await service.refresh(await fixture.core.reconcile("metadata-lookup-cache-fresh"));
+    expect(lookups).toEqual(["feature"]);
+
+    currentTime += 2 * 60 * 1000;
+    await service.refresh(await fixture.core.reconcile("metadata-lookup-cache-expired"));
+    expect(lookups).toEqual(["feature", "feature"]);
+    fixture.sqlite.close();
+  });
+
   it("aborts in-flight repository refresh work on shutdown", async () => {
     const fixture = createFixture();
     let started = false;
@@ -926,6 +1043,7 @@ function createTestWorktreeMetadataRefreshService(options: TestMetadataRefreshOp
 
 function createFixture(
   remote: RepositoryRemote = { host: "github.com", owner: "example", repo: "web" },
+  extraWorktrees: Array<{ id: string; branch: string }> = [],
 ) {
   const clock = { now: () => new Date(now) };
   const providers = new ProviderRegistry({
@@ -941,6 +1059,16 @@ function createFixture(
           headSha,
           now,
         }),
+        ...extraWorktrees.map((worktree) =>
+          createFakeWorktree({
+            ...worktree,
+            projectId: "web",
+            path: `/tmp/station/web/${worktree.id}`,
+            remote,
+            headSha,
+            now,
+          }),
+        ),
       ],
     }),
     terminal: new FakeTerminalProvider({ now }),

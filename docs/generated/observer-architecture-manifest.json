@@ -6922,6 +6922,12 @@
           "bindings": ["staleChangeSummary"]
         },
         {
+          "specifier": "./worktreeActivity.js",
+          "resolvedPath": "apps/observer/src/metadata/worktreeActivity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["isActiveWorktreeRow"]
+        },
+        {
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
@@ -7105,6 +7111,12 @@
           "bindings": ["staleChecks", "stalePullRequest"]
         },
         {
+          "specifier": "./worktreeActivity.js",
+          "resolvedPath": "apps/observer/src/metadata/worktreeActivity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["isActiveWorktreeRow"]
+        },
+        {
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
@@ -7177,6 +7189,25 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["WorktreeChangeSummary", "WorktreeChecksSummary", "WorktreePullRequest"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/metadata/worktreeActivity.ts",
+      "exports": [
+        {
+          "name": "isActiveWorktreeRow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationSnapshot"]
         }
       ]
     },
@@ -7561,6 +7592,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/021_event_retention_indexes.ts",
+      "exports": [
+        {
+          "name": "eventRetentionIndexesMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -7702,6 +7752,12 @@
           "resolvedPath": "apps/observer/src/migrations/020_rename_terminal_external_focus.ts",
           "edgeKind": "runtime",
           "bindings": ["renameTerminalExternalFocusMigration"]
+        },
+        {
+          "specifier": "./021_event_retention_indexes.js",
+          "resolvedPath": "apps/observer/src/migrations/021_event_retention_indexes.ts",
+          "edgeKind": "runtime",
+          "bindings": ["eventRetentionIndexesMigration"]
         },
         {
           "specifier": "./migration.js",
@@ -7987,6 +8043,12 @@
         },
         {
           "name": "listEvents",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "pruneEventsCreatedBefore",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -8467,6 +8529,12 @@
           "kind": "function",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "pruneIngressDedupeKeysCreatedBefore",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         }
       ],
       "imports": [
@@ -8566,6 +8634,12 @@
     {
       "path": "apps/observer/src/persistence/observations.ts",
       "exports": [
+        {
+          "name": "deleteProviderObservations",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
         {
           "name": "insertProviderObservation",
           "kind": "function",
@@ -8920,6 +8994,12 @@
     {
       "path": "apps/observer/src/persistence/retention.ts",
       "exports": [
+        {
+          "name": "eventRetentionDays",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
         {
           "name": "providerObservationExpiresAt",
           "kind": "function",
@@ -9480,7 +9560,13 @@
           "specifier": "./events.js",
           "resolvedPath": "apps/observer/src/persistence/events.ts",
           "edgeKind": "runtime",
-          "bindings": ["eventCommandId", "eventTimestamp", "listEvents", "recordEvent"]
+          "bindings": [
+            "eventCommandId",
+            "eventTimestamp",
+            "listEvents",
+            "pruneEventsCreatedBefore",
+            "recordEvent"
+          ]
         },
         {
           "specifier": "./idFactory.js",
@@ -9499,6 +9585,7 @@
           "resolvedPath": "apps/observer/src/persistence/observations.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "deleteProviderObservations",
             "insertProviderObservation",
             "listProviderObservations",
             "pruneExpiredProviderObservations"
@@ -10231,7 +10318,11 @@
           "specifier": "../persistence/retention.js",
           "resolvedPath": "apps/observer/src/persistence/retention.ts",
           "edgeKind": "runtime",
-          "bindings": ["providerObservationExpiresAt", "providerObservationRetentionDays"]
+          "bindings": [
+            "eventRetentionDays",
+            "providerObservationExpiresAt",
+            "providerObservationRetentionDays"
+          ]
         },
         {
           "specifier": "../persistence/types.js",
@@ -10882,6 +10973,31 @@
       ]
     },
     {
+      "path": "apps/observer/src/reconcile/harnessEventCompaction.ts",
+      "exports": [
+        {
+          "name": "supersededWorkingHarnessEventIds",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Selects admitted `working` harness events that the next admitted event of the same session repeats with identical evidence, an equal or newer status time, and a strictly newer ordinal. Replay, status overlays, and external run synthesis produce the same result without them, so reconcile may delete them."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["PersistedProviderObservation"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessEventObservation"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/reconcile/harnessEventRepair.ts",
       "exports": [
         {
@@ -10962,6 +11078,12 @@
           "resolvedPath": "apps/observer/src/providers/registry.ts",
           "edgeKind": "type-only",
           "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "./harnessEventCompaction.js",
+          "resolvedPath": "apps/observer/src/reconcile/harnessEventCompaction.ts",
+          "edgeKind": "runtime",
+          "bindings": ["supersededWorkingHarnessEventIds"]
         },
         {
           "specifier": "./harnessEventStatus.js",
@@ -11127,6 +11249,12 @@
           "purpose": null
         },
         {
+          "name": "worktreeListingMaxAgeForReason",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "WorktreeProjectReadOutcome",
           "kind": "type",
           "role": null,
@@ -11235,7 +11363,7 @@
           "specifier": "../persistence/retention.js",
           "resolvedPath": "apps/observer/src/persistence/retention.ts",
           "edgeKind": "runtime",
-          "bindings": ["providerObservationRetentionDays"]
+          "bindings": ["eventRetentionDays", "providerObservationRetentionDays"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -11254,6 +11382,12 @@
           "resolvedPath": "apps/observer/src/reconcile/harnessEventRepair.ts",
           "edgeKind": "runtime",
           "bindings": ["repairPersistedHarnessDerivedState"]
+        },
+        {
+          "specifier": "./providerObservations.js",
+          "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeListingMaxAgeForReason"]
         },
         {
           "specifier": "./providerObservations.js",
@@ -11314,6 +11448,12 @@
           "resolvedPath": "apps/observer/src/reconcile/terminalSnapshotDebug.ts",
           "edgeKind": "runtime",
           "bindings": ["buildTerminalSnapshotDebug"]
+        },
+        {
+          "specifier": "../utils/time.js",
+          "resolvedPath": "apps/observer/src/utils/time.ts",
+          "edgeKind": "runtime",
+          "bindings": ["addDays"]
         },
         {
           "specifier": "@station/contracts",
@@ -14138,7 +14278,7 @@
           "name": "createSpoolDrainer",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Replays durable provider ingress directly to completion before acknowledging spool records or queued reports."
+          "purpose": "Replays durable provider ingress in bounded batches before acknowledging spool records or queued reports. A batch that leaves records behind schedules the next batch in the background while it makes progress."
         },
         {
           "name": "SpoolDrainDeps",
@@ -17754,6 +17894,14 @@
       ]
     },
     {
+      "path": "apps/observer/src/reconcile/harnessEventCompaction.ts",
+      "declaration": "supersededWorkingHarnessEventIds",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Selects admitted `working` harness events that the next admitted event of the same session repeats with identical evidence, an equal or newer status time, and a strictly newer ordinal. Replay, status overlays, and external run synthesis produce the same result without them, so reconcile may delete them.",
+      "dependencies": []
+    },
+    {
       "path": "apps/observer/src/reconcile/run.ts",
       "declaration": "runReconcileOnce",
       "kind": "function",
@@ -18745,7 +18893,7 @@
       "declaration": "createSpoolDrainer",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Replays durable provider ingress directly to completion before acknowledging spool records or queued reports.",
+      "purpose": "Replays durable provider ingress in bounded batches before acknowledging spool records or queued reports. A batch that leaves records behind schedules the next batch in the background while it makes progress.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/harnessReportProcessor.ts",

@@ -18,3 +18,19 @@ export function claimIngressDedupeKey(
     .run(input.kind, input.id, input.eventId, input.createdAt);
   return Number(result.changes) > 0;
 }
+
+export function pruneIngressDedupeKeysCreatedBefore(
+  database: SqlDatabase,
+  createdBefore: string,
+  limit: number,
+): number {
+  const result = database
+    .prepare(
+      `
+        DELETE FROM hook_ingress_dedupe
+        WHERE rowid IN (SELECT rowid FROM hook_ingress_dedupe WHERE created_at < ? LIMIT ?)
+      `,
+    )
+    .run(createdBefore, limit);
+  return Number(result.changes);
+}

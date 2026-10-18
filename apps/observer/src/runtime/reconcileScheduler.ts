@@ -4,6 +4,8 @@ export type ReconcileScheduler = {
   request(reason: string): void;
   /** Coalesces already-projected work until the configured quiet interval elapses. */
   requestAfterQuiet(reason: string): void;
+  /** Waits up to the deferred interval and joins any earlier flush; for metadata that needs no sub-second update. */
+  requestDeferred(reason: string): void;
   requestInteractive(reason: string): void;
   requestWhenReady(reason: string, readiness: ReconcileReadiness): void;
   requestInteractiveWhenReady(reason: string, readiness: ReconcileReadiness): void;
@@ -22,6 +24,7 @@ export type CreateReconcileSchedulerOptions = {
   interactiveDebounceMs?: number;
   /** Quiet interval for convergence work whose user-visible projection is already applied. */
   quietDebounceMs?: number;
+  deferredDebounceMs?: number;
   onError?: (error: unknown) => Promise<void> | void;
   onFlushFinish?: (profile: ReconcileSchedulerFlushProfile) => Promise<void> | void;
 };
@@ -43,12 +46,15 @@ const defaultInteractiveDebounceMs = 25;
 // The quiet window must outlast a typical provider scan so projected events do
 // not queue behind the convergence work that their own delivery requested.
 const defaultQuietDebounceMs = 750;
+// Bounds metadata-driven reconciles while hundreds of worktrees refresh git and pull request state.
+const defaultDeferredDebounceMs = 5000;
 
 type QueuedReconcileRequest = {
   reason: string;
   queuedAt: number;
   interactive: boolean;
   quiet: boolean;
+  deferred?: boolean;
   readiness?: ReconcileReadiness;
 };
 
@@ -59,6 +65,7 @@ export function createReconcileScheduler(
   const backlogDebounceMs = options.backlogDebounceMs ?? defaultBacklogDebounceMs;
   const interactiveDebounceMs = options.interactiveDebounceMs ?? defaultInteractiveDebounceMs;
   const quietDebounceMs = options.quietDebounceMs ?? defaultQuietDebounceMs;
+  const deferredDebounceMs = options.deferredDebounceMs ?? defaultDeferredDebounceMs;
   let running = false;
   let timerScheduled = false;
   let stopped = false;
@@ -74,6 +81,8 @@ export function createReconcileScheduler(
       request({ reason, queuedAt: Date.now(), interactive: false, quiet: false }),
     requestAfterQuiet: (reason) =>
       request({ reason, queuedAt: Date.now(), interactive: false, quiet: true }),
+    requestDeferred: (reason) =>
+      request({ reason, queuedAt: Date.now(), interactive: false, quiet: false, deferred: true }),
     requestInteractive: (reason) =>
       request({ reason, queuedAt: Date.now(), interactive: true, quiet: false }),
     requestWhenReady: (reason, readiness) =>
@@ -101,7 +110,9 @@ export function createReconcileScheduler(
       ? interactiveDebounceMs
       : queued.quiet
         ? quietDebounceMs
-        : debounceMs;
+        : queued.deferred === true
+          ? deferredDebounceMs
+          : debounceMs;
     if (timerScheduled) {
       const requestedFor = queued.queuedAt + delayMs;
       if (!queued.quiet && (scheduledFor === undefined || requestedFor < scheduledFor)) {
@@ -182,7 +193,13 @@ export function createReconcileScheduler(
       });
       if (!stopped && queuedRequests.length > 0 && !timerScheduled) {
         if (hasReadyRequest()) {
-          scheduleFlush(hasReadyInteractiveRequest() ? interactiveDebounceMs : backlogDebounceMs);
+          scheduleFlush(
+            hasReadyInteractiveRequest()
+              ? interactiveDebounceMs
+              : hasReadyUndeferredRequest()
+                ? backlogDebounceMs
+                : deferredDebounceMs,
+          );
         } else {
           armReadinessWait();
         }
@@ -205,7 +222,17 @@ export function createReconcileScheduler(
 
   function hasReadyImmediateRequest(): boolean {
     return queuedRequests.some(
-      (queued) => !queued.quiet && (queued.readiness === undefined || queued.readiness.isReady()),
+      (queued) =>
+        !queued.quiet &&
+        queued.deferred !== true &&
+        (queued.readiness === undefined || queued.readiness.isReady()),
+    );
+  }
+
+  function hasReadyUndeferredRequest(): boolean {
+    return queuedRequests.some(
+      (queued) =>
+        queued.deferred !== true && (queued.readiness === undefined || queued.readiness.isReady()),
     );
   }
 

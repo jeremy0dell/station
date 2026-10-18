@@ -26,6 +26,7 @@ import {
 } from "./repositoryGit.js";
 import { selectRepositoryProvider } from "./repositoryProviderSelection.js";
 import { staleChecks, stalePullRequest } from "./stalePayloads.js";
+import { isActiveWorktreeRow } from "./worktreeActivity.js";
 
 /**
  * USE CASE
@@ -63,8 +64,14 @@ type RepositoryRefreshTask = {
   existingChecks?: PersistedWorktreeMetadataCurrent<"checks">;
 };
 
+type RemoteLookup<T> = { expiresAt: number; result: Promise<T> };
+
 const defaultTtlMs = 5 * 60 * 1000;
-const runningChecksTtlMs = 60 * 1000;
+const remoteLookupTtlMs = 10 * 60 * 1000;
+const mergedPullRequestTtlMs = 6 * 60 * 60 * 1000;
+const runningChecksTtlMs = 2 * 60 * 1000;
+// Idle worktrees with an unchanged head re-query GitHub at most once per this window.
+const idleRemoteLookupTtlMs = 60 * 60 * 1000;
 const defaultRepositoryConcurrency = 2;
 
 export function createRepositoryMetadataRefresher(
@@ -73,6 +80,10 @@ export function createRepositoryMetadataRefresher(
   const clock = options.clock ?? systemClock;
   const repositoryProviders = repositoryProviderMap(options.repositoryProviders);
   const negativeBackoff = new Map<string, number>();
+  // Shared across worktrees so rows with the same repository, branch, and HEAD
+  // spend one GitHub lookup per TTL; in-flight entries coalesce concurrent rows.
+  const pullRequestLookups = new Map<string, RemoteLookup<WorktreePullRequest | null>>();
+  const checksLookups = new Map<string, RemoteLookup<WorktreeChecksSummary>>();
 
   return {
     refresh: async (input) => {
@@ -80,6 +91,8 @@ export function createRepositoryMetadataRefresher(
         return;
       }
 
+      pruneExpiredLookups(pullRequestLookups);
+      pruneExpiredLookups(checksLookups);
       const grouped = collectRepositoryTasks(input);
       for (const tasks of grouped.values()) {
         if (input.signal.aborted) {
@@ -103,7 +116,11 @@ export function createRepositoryMetadataRefresher(
   ): Map<string, RepositoryRefreshTask[]> {
     const grouped = new Map<string, RepositoryRefreshTask[]>();
     for (const row of input.snapshot.rows) {
-      if (input.signal.aborted || !options.projectsById.has(row.projectId)) {
+      if (
+        input.signal.aborted ||
+        !options.projectsById.has(row.projectId) ||
+        row.branch.startsWith("detached:")
+      ) {
         continue;
       }
 
@@ -151,6 +168,9 @@ export function createRepositoryMetadataRefresher(
   ): Promise<void> {
     const pullRequestCacheKey = metadataCacheKey(task, "pull_request");
     const cachedPullRequest = freshPayload(task.existingPullRequest, pullRequestCacheKey);
+    if (isRecentIdlePullRequest(task, pullRequestCacheKey, clock.now().getTime())) {
+      return;
+    }
     const pullRequest =
       cachedPullRequest ?? (await discoverPullRequest(task, pullRequestCacheKey, signal));
     if (pullRequest === undefined || signal.aborted) {
@@ -175,20 +195,27 @@ export function createRepositoryMetadataRefresher(
     }
 
     try {
-      const pullRequest = await task.provider.discoverPullRequest({
-        remote: task.git.remote,
-        branch: task.row.branch,
-        headSha: task.git.headSha,
-        projectId: task.row.projectId,
-        worktreeId: task.row.id,
-        signal,
-      });
+      const lookup = cachedLookup(
+        pullRequestLookups,
+        remoteLookupKey(task),
+        () =>
+          task.provider.discoverPullRequest({
+            remote: task.git.remote,
+            branch: task.row.branch,
+            headSha: task.git.headSha,
+            projectId: task.row.projectId,
+            worktreeId: task.row.id,
+            signal,
+          }),
+        (pullRequest) =>
+          pullRequest?.state === "merged" ? mergedPullRequestTtlMs : remoteLookupTtlMs,
+      );
+      const pullRequest = await lookup.result;
       if (pullRequest === null) {
-        rememberNegativeRefresh(negativeKey);
         await deleteRepositoryMetadata(task);
         return undefined;
       }
-      await upsertPullRequestIfChanged(task, cacheKey, pullRequest);
+      await upsertPullRequestIfChanged(task, cacheKey, pullRequest, lookup.expiresAt);
       return pullRequest;
     } catch (error) {
       if (!signal.aborted) {
@@ -211,17 +238,23 @@ export function createRepositoryMetadataRefresher(
     }
 
     try {
-      const checks =
-        (await task.provider.readChecks({
-          remote: task.git.remote,
-          pullRequestNumber: pullRequest.number,
-          branch: task.row.branch,
-          headSha: task.git.headSha,
-          projectId: task.row.projectId,
-          worktreeId: task.row.id,
-          signal,
-        })) ?? noChecksSummary(task.provider.id, task.git.checkedAt);
-      await upsertChecksIfChanged(task, cacheKey, checks);
+      const lookup = cachedLookup(
+        checksLookups,
+        `${remoteLookupKey(task)}#${pullRequest.number}`,
+        async () =>
+          (await task.provider.readChecks({
+            remote: task.git.remote,
+            pullRequestNumber: pullRequest.number,
+            branch: task.row.branch,
+            headSha: task.git.headSha,
+            projectId: task.row.projectId,
+            worktreeId: task.row.id,
+            signal,
+          })) ?? noChecksSummary(task.provider.id, task.git.checkedAt),
+        (checks) => checksTtlMs(pullRequest, checks),
+      );
+      const checks = await lookup.result;
+      await upsertChecksIfChanged(task, cacheKey, checks, lookup.expiresAt);
     } catch (error) {
       if (!signal.aborted) {
         rememberNegativeRefresh(negativeKey);
@@ -234,19 +267,20 @@ export function createRepositoryMetadataRefresher(
     task: RepositoryRefreshTask,
     cacheKey: string,
     pullRequest: WorktreePullRequest,
+    expiresAt: number,
   ): Promise<void> {
     if (isFreshSamePayload(task.existingPullRequest, cacheKey, pullRequest)) {
       return;
     }
 
-    const checkedAt = pullRequest.checkedAt ?? task.git.checkedAt;
     await options.persistence.upsertWorktreeMetadataCurrent({
       worktreeId: task.row.id,
       kind: "pull_request",
       payload: pullRequest,
       cacheKey,
-      updatedAt: checkedAt,
-      expiresAt: addMs(checkedAt, defaultTtlMs),
+      updatedAt: pullRequest.checkedAt ?? task.git.checkedAt,
+      // Persisted rows expire with the shared lookup so a cached result cannot re-upsert and re-request reconcile.
+      expiresAt: new Date(expiresAt).toISOString(),
     });
     options.requestReconcile("metadata:pull_request");
   }
@@ -255,6 +289,7 @@ export function createRepositoryMetadataRefresher(
     task: RepositoryRefreshTask,
     cacheKey: string,
     checks: WorktreeChecksSummary,
+    expiresAt: number,
   ): Promise<void> {
     if (isFreshSamePayload(task.existingChecks, cacheKey, checks)) {
       return;
@@ -266,7 +301,7 @@ export function createRepositoryMetadataRefresher(
       payload: checks,
       cacheKey,
       updatedAt: checks.checkedAt,
-      expiresAt: addMs(checks.checkedAt, checksTtlMs(checks)),
+      expiresAt: new Date(expiresAt).toISOString(),
     });
     options.requestReconcile("metadata:checks");
   }
@@ -407,6 +442,36 @@ export function createRepositoryMetadataRefresher(
     negativeBackoff.set(key, clock.now().getTime() + (options.negativeBackoffMs ?? defaultTtlMs));
   }
 
+  function cachedLookup<T>(
+    lookups: Map<string, RemoteLookup<T>>,
+    key: string,
+    run: () => Promise<T>,
+    ttlMs: (value: T) => number,
+  ): RemoteLookup<T> {
+    const cached = lookups.get(key);
+    if (cached !== undefined && cached.expiresAt > clock.now().getTime()) {
+      return cached;
+    }
+    const lookup: RemoteLookup<T> = { expiresAt: Number.POSITIVE_INFINITY, result: run() };
+    lookups.set(key, lookup);
+    lookup.result.then(
+      (value) => {
+        lookup.expiresAt = clock.now().getTime() + ttlMs(value);
+      },
+      () => {
+        lookup.expiresAt = clock.now().getTime() + (options.negativeBackoffMs ?? defaultTtlMs);
+      },
+    );
+    return lookup;
+  }
+
+  function pruneExpiredLookups<T>(lookups: Map<string, RemoteLookup<T>>): void {
+    const now = clock.now().getTime();
+    for (const [key, lookup] of lookups) {
+      if (lookup.expiresAt <= now) lookups.delete(key);
+    }
+  }
+
   function repositoryProviderFor(git: RepositoryGitContext): RepositoryProvider | undefined {
     return selectRepositoryProvider(git.remote, repositoryProviders.values());
   }
@@ -431,6 +496,21 @@ function metadataCacheKey(
     input.pullRequestNumber = pullRequestNumber;
   }
   return repositoryMetadataCacheKey(input);
+}
+
+function isRecentIdlePullRequest(
+  task: RepositoryRefreshTask,
+  cacheKey: string,
+  nowMs: number,
+): boolean {
+  const existing = task.existingPullRequest;
+  return (
+    existing !== undefined &&
+    !existing.stale &&
+    existing.cacheKey === cacheKey &&
+    !isActiveWorktreeRow(task.row) &&
+    nowMs - Date.parse(existing.updatedAt) < idleRemoteLookupTtlMs
+  );
 }
 
 function freshPayload<TKind extends "pull_request" | "checks">(
@@ -477,6 +557,15 @@ function noChecksSummary(source: string, checkedAt: string): WorktreeChecksSumma
   };
 }
 
-function checksTtlMs(checks: WorktreeChecksSummary): number {
-  return checks.state === "running" ? runningChecksTtlMs : defaultTtlMs;
+function remoteLookupKey(task: RepositoryRefreshTask): string {
+  return JSON.stringify([
+    repositoryGroupKey(task.git),
+    task.row.branch,
+    task.git.headSha.toLowerCase(),
+  ]);
+}
+
+function checksTtlMs(pullRequest: WorktreePullRequest, checks: WorktreeChecksSummary): number {
+  if (pullRequest.state === "merged") return mergedPullRequestTtlMs;
+  return checks.state === "running" ? runningChecksTtlMs : remoteLookupTtlMs;
 }

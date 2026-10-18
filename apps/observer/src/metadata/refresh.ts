@@ -29,6 +29,7 @@ import {
   createRepositoryMetadataRefresher,
 } from "./repositoryRefresh.js";
 import { staleChangeSummary } from "./stalePayloads.js";
+import { isActiveWorktreeRow } from "./worktreeActivity.js";
 
 export type WorktreeMetadataRefreshService = {
   refresh(snapshot: StationSnapshot): Promise<void>;
@@ -51,6 +52,8 @@ export type CreateWorktreeMetadataRefreshServiceOptions = {
 };
 
 const defaultTtlMs = 5 * 60 * 1000;
+// Idle worktrees have no pane or agent to show fresh git state, so they wait longer between git reads.
+const idleChangeSummaryTtlMs = 30 * 60 * 1000;
 const defaultConcurrency = 2;
 
 /**
@@ -85,6 +88,10 @@ export function createWorktreeMetadataRefreshService(
     repositoryOptions.negativeBackoffMs = options.repositoryNegativeBackoffMs;
   }
   const repositoryRefresher = createRepositoryMetadataRefresher(repositoryOptions);
+  // Idle worktrees whose git base cannot be resolved are not re-read until this time; a changed branch or registration re-reads at once.
+  const unavailableUntilMs = new Map<string, number>();
+  // Worktrees whose first git read failed have no persisted summary to carry the failure backoff, so they wait here.
+  const failedUntilMs = new Map<string, number>();
   let pendingSnapshot: StationSnapshot | undefined;
   let running: Promise<void> | undefined;
   let shutdownRequested = false;
@@ -209,6 +216,20 @@ export function createWorktreeMetadataRefreshService(
     if (shouldBackOffFailedRefresh(input.existing)) {
       return;
     }
+    const active = isActiveWorktreeRow(input.row);
+    if (!active && input.existing !== undefined && !input.existing.expired) {
+      return;
+    }
+    if (
+      !active &&
+      (unavailableUntilMs.get(unavailableKey(input.row)) ?? 0) > clock.now().getTime()
+    ) {
+      return;
+    }
+    if ((failedUntilMs.get(unavailableKey(input.row)) ?? 0) > clock.now().getTime()) {
+      return;
+    }
+    const ttlMs = active ? (options.ttlMs ?? defaultTtlMs) : idleChangeSummaryTtlMs;
 
     try {
       const request: WorktreeChangeReadRequest = {
@@ -238,6 +259,12 @@ export function createWorktreeMetadataRefreshService(
         case "superseded":
           return;
         case "unavailable":
+          if (!active) {
+            unavailableUntilMs.set(
+              unavailableKey(input.row),
+              clock.now().getTime() + idleChangeSummaryTtlMs,
+            );
+          }
           await deleteExistingChangeSummary(input.row.id, input.existing, input.signal);
           return;
         case "available":
@@ -251,6 +278,8 @@ export function createWorktreeMetadataRefreshService(
       ) {
         return;
       }
+      const unchangedEvidence =
+        input.existing !== undefined && input.existing.cacheKey === result.evidence.cacheKey;
 
       await options.persistence.upsertWorktreeMetadataCurrent({
         worktreeId: input.row.id,
@@ -258,10 +287,10 @@ export function createWorktreeMetadataRefreshService(
         payload: result.evidence.summary,
         cacheKey: result.evidence.cacheKey,
         updatedAt: result.evidence.summary.checkedAt,
-        expiresAt: addMs(result.evidence.summary.checkedAt, options.ttlMs ?? defaultTtlMs),
+        expiresAt: addMs(result.evidence.summary.checkedAt, ttlMs),
       });
       if (input.signal.aborted || shutdownRequested) return;
-      options.requestReconcile("metadata:change_summary");
+      if (!unchangedEvidence) options.requestReconcile("metadata:change_summary");
     } catch (error) {
       if (!input.signal.aborted) {
         await handleLocalRefreshFailure(input, error);
@@ -339,12 +368,20 @@ export function createWorktreeMetadataRefreshService(
       return;
     }
 
+    const backoffMs = isActiveWorktreeRow(input.row)
+      ? (options.ttlMs ?? defaultTtlMs)
+      : idleChangeSummaryTtlMs;
+    failedUntilMs.set(unavailableKey(input.row), clock.now().getTime() + backoffMs);
     await options.logger?.warn("Local git metadata refresh failed.", {
       projectId: input.row.projectId,
       worktreeId: input.row.id,
       error: safeError,
     });
   }
+}
+
+function unavailableKey(row: StationSnapshot["rows"][number]): string {
+  return `${row.id}\0${row.branch}\0${row.registrationIdentity ?? ""}`;
 }
 
 function worktreeMetadataTargetFromRow(

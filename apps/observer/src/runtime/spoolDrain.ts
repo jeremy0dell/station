@@ -23,13 +23,22 @@ export type SpoolDrainDeps = {
   harnessReportDeps: HarnessReportProcessorDeps;
 };
 
+// Bounds one replay pass so a large backlog cannot hold the startup reconcile or health answers for minutes.
+const spoolReplayBatchRecords = 200;
+
 /**
  * USE CASE
  *
- * Replays durable provider ingress directly to completion before acknowledging spool records or queued reports.
+ * Replays durable provider ingress in bounded batches before acknowledging spool records or queued reports.
+ * A batch that leaves records behind schedules the next batch in the background while it makes progress.
  */
 export function createSpoolDrainer(deps: SpoolDrainDeps) {
   let configuredSpoolDrain: Promise<void> | undefined;
+  const drainRemainingInBackground = (): void => {
+    setImmediate(() => {
+      void drainConfiguredSpool().catch(() => undefined);
+    });
+  };
 
   const drainConfiguredSpool = async (): Promise<void> => {
     if (deps.spoolStore === undefined) {
@@ -66,6 +75,7 @@ export function createSpoolDrainer(deps: SpoolDrainDeps) {
               reportHarnessEvent: processReport,
             }),
           report: processReport,
+          maxRecords: spoolReplayBatchRecords,
         }),
     )
       .then((result: RuntimeBoundaryResult<ProviderIngressSpoolDrainResult>) => {
@@ -73,6 +83,10 @@ export function createSpoolDrainer(deps: SpoolDrainDeps) {
           throw result.error;
         }
         deps.harnessIngressQueue.recordSpoolDrain(result.value);
+        // Stopping when nothing drained keeps a permanently failing record from re-running the batch forever.
+        if (result.value.remaining > 0 && result.value.drained > 0) {
+          drainRemainingInBackground();
+        }
       })
       .finally(() => {
         configuredSpoolDrain = undefined;

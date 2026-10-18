@@ -342,6 +342,21 @@ export function observerPersistenceContract(
         });
       });
 
+      it("prunes at most the batch limit of events created before the cutoff", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          for (const createdAt of [earlier, earlier, now, later]) {
+            await persistence.recordEvent(
+              { type: "observer.started", at: createdAt },
+              { createdAt },
+            );
+          }
+
+          await expect(persistence.pruneEventsCreatedBefore(later, 2)).resolves.toBe(2);
+          await expect(persistence.pruneEventsCreatedBefore(later, 2)).resolves.toBe(1);
+          expect((await persistence.listEvents()).map((event) => event.createdAt)).toEqual([later]);
+        });
+      });
+
       it("orders and filters events by command and type", async () => {
         await withPersistence(
           createFixture,
@@ -1031,6 +1046,33 @@ export function observerPersistenceContract(
               (observation) => observation.entityKey,
             ),
           ).toEqual(["wt_expiry_0", "wt_expiry_3"]);
+        });
+      });
+
+      it("deletes provider observations by id and ignores missing ids", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          for (const id of ["wt_delete_0", "wt_delete_1"]) {
+            const worktree = createFakeWorktree({ id, projectId: "web", now: earlier });
+            await persistence.recordProviderObservation({
+              provider: worktree.provider,
+              providerType: "worktree",
+              entityKind: "worktree",
+              entityKey: worktree.id,
+              payload: worktree,
+              observedAt: earlier,
+            });
+          }
+          const [first] = await persistence.listProviderObservations({ now });
+          if (first === undefined) throw new Error("Expected a recorded observation.");
+
+          await expect(persistence.deleteProviderObservations([first.id, "missing"])).resolves.toBe(
+            1,
+          );
+          expect(
+            (await persistence.listProviderObservations({ now })).map(
+              (observation) => observation.entityKey,
+            ),
+          ).toEqual(["wt_delete_1"]);
         });
       });
 

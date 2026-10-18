@@ -88,6 +88,8 @@ export interface EventJournal {
     commandId?: CommandId;
     type?: StationEvent["type"];
   }): Promise<PersistedEvent[]>;
+  /** Deletes up to `limit` events, and up to `limit` ingress dedupe keys, created before the cutoff. */
+  pruneEventsCreatedBefore(createdBefore: string, limit: number): Promise<number>;
 }
 
 /**
@@ -134,6 +136,7 @@ export interface ObservationStore {
     now?: string;
   }): Promise<PersistedProviderObservation[]>;
   pruneExpiredProviderObservations(now?: string): Promise<number>;
+  deleteProviderObservations(ids: readonly string[]): Promise<number>;
 }
 
 /**

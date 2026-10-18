@@ -401,6 +401,28 @@ export function createInMemoryObserverPersistence(
         }),
       ),
 
+    pruneEventsCreatedBefore: (createdBefore, limit) =>
+      transaction((draft) => {
+        let deleted = 0;
+        for (const [id, event] of draft.events) {
+          if (deleted >= limit) break;
+          if (event.createdAt < createdBefore) {
+            draft.events.delete(id);
+            deleted += 1;
+          }
+        }
+        return deleted;
+      }),
+
+    deleteProviderObservations: (ids) =>
+      transaction((draft) => {
+        let deleted = 0;
+        for (const id of ids) {
+          if (draft.observations.delete(id)) deleted += 1;
+        }
+        return deleted;
+      }),
+
     pruneExpiredProviderObservations: (expiresBefore) =>
       transaction((draft) => {
         let deleted = 0;

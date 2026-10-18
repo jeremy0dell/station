@@ -21,11 +21,15 @@ import type {
   SessionStore,
   WorktreeMetadataStore,
 } from "../persistence/index.js";
-import { providerObservationRetentionDays } from "../persistence/retention.js";
+import { eventRetentionDays, providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
+import { addDays } from "../utils/time.js";
 import { buildStationSnapshot } from "./graph/build.js";
 import { repairPersistedHarnessDerivedState } from "./harnessEventRepair.js";
-import type { ProviderReadOptions } from "./providerObservations.js";
+import {
+  type ProviderReadOptions,
+  worktreeListingMaxAgeForReason,
+} from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import {
   type CurrentReconcileObservations,
@@ -36,6 +40,8 @@ import { decideSessionGroupRepairAuthority } from "./sessionGroupRepairAuthority
 import { reconcileSessionGroups } from "./sessionGroups.js";
 import { harnessesFromRegistry } from "./snapshotSeed.js";
 import { buildTerminalSnapshotDebug } from "./terminalSnapshotDebug.js";
+
+const eventPruneBatchSize = 2_000;
 
 type ReconcileOnceInput = {
   reason: string;
@@ -54,6 +60,7 @@ type ReconcileOnceInput = {
     WorktreeMetadataStore &
     EventJournal;
   providerObservationRetentionDays?: number;
+  eventRetentionDays?: number;
   featureFlags?: ClientFeatureFlags;
 };
 
@@ -86,6 +93,11 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
       now: started,
     });
     await input.persistence.pruneExpiredProviderObservations(started);
+    // A bounded batch per reconcile drains an old backlog without holding the write lock for long.
+    await input.persistence.pruneEventsCreatedBefore(
+      addDays(started, -(input.eventRetentionDays ?? eventRetentionDays())),
+      eventPruneBatchSize,
+    );
   }
   const errors: SafeError[] = [];
   const providerHealth: Record<string, ProviderHealth> = {};
@@ -94,7 +106,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
   const observations = await readCurrentReconcileObservations({
     providers: input.providers,
     projects: input.projects,
-    read: input.read,
+    read: { ...input.read, worktreeListingMaxAgeMs: worktreeListingMaxAgeForReason(input.reason) },
     ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
     providerHealth,
     errors,

@@ -33,6 +33,7 @@ export type ProviderIngressSpoolDrainResult = {
   scanned: number;
   drained: number;
   failed: number;
+  remaining: number;
 };
 
 export type DrainProviderIngressSpoolOptions = {
@@ -42,6 +43,8 @@ export type DrainProviderIngressSpoolOptions = {
   persistence?: EventJournal;
   eventBus?: ObserverEventBus;
   clock?: RuntimeClock;
+  // Limits one pass so a large backlog cannot hold a reconcile or health answer for minutes.
+  maxRecords?: number;
 };
 
 export function providerIngressSpoolDepth(spoolDir: string): Promise<number> {
@@ -53,10 +56,11 @@ export async function drainProviderIngressSpool(
 ): Promise<ProviderIngressSpoolDrainResult> {
   const clock = options.clock ?? systemClock;
   const entries = await options.store.list();
+  const batch = spoolBatch(entries, options.maxRecords);
   let drained = 0;
   let failed = 0;
 
-  for (const entry of entries) {
+  for (const entry of batch) {
     const parsed = entry.parsed;
     if (parsed === undefined) {
       failed += 1;
@@ -101,7 +105,24 @@ export async function drainProviderIngressSpool(
     options.eventBus?.publish(event);
   }
 
-  return { scanned: entries.length, drained, failed };
+  return { scanned: entries.length, drained, failed, remaining: entries.length - batch.length };
+}
+
+// Failed records stay on disk, so the least-attempted records go first; otherwise a failing record would block the rest.
+function spoolBatch(
+  entries: ProviderIngressSpoolEntry[],
+  maxRecords: number | undefined,
+): ProviderIngressSpoolEntry[] {
+  if (maxRecords === undefined || entries.length <= maxRecords) {
+    return entries;
+  }
+  return [...entries]
+    .sort((left, right) => spoolAttempts(left) - spoolAttempts(right))
+    .slice(0, maxRecords);
+}
+
+function spoolAttempts(entry: ProviderIngressSpoolEntry): number {
+  return entry.parsed?.record.attempts ?? Number.MAX_SAFE_INTEGER;
 }
 
 async function drainSpoolRecord(

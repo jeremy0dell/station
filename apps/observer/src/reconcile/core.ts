@@ -27,6 +27,7 @@ import type {
   WorktreeMetadataStore,
 } from "../persistence/index.js";
 import {
+  eventRetentionDays,
   providerObservationExpiresAt,
   providerObservationRetentionDays,
 } from "../persistence/retention.js";
@@ -165,6 +166,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
           providerObservationRetentionDays: providerObservationRetentionDays(
             config.observability?.retention,
           ),
+          eventRetentionDays: eventRetentionDays(config.observability?.retention),
           ...(input.featureFlags === undefined
             ? {}
             : { featureFlags: input.featureFlags.clientSnapshot() }),

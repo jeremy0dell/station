@@ -475,6 +475,12 @@ export type RepositoryChecksRequest = z.infer<typeof RepositoryChecksRequestSche
 };
 
 /**
+ * Without `maxAgeMs`, listing reads the provider directly. With it, the provider may reuse a listing
+ * that finished no more than `maxAgeMs` milliseconds ago.
+ */
+export type WorktreeListingOptions = { maxAgeMs?: number | undefined };
+
+/**
  * DRIVEN PORT
  *
  * Supplies fresh worktree lifecycle evidence and mutations without exposing provider mechanics.
@@ -487,7 +493,10 @@ export interface WorktreeProvider {
   capabilities(): WorktreeCapabilities;
   health(): Promise<ProviderHealth>;
   doctorChecks?(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]>;
-  listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]>;
+  listWorktrees(
+    project: ProviderProjectConfig,
+    options?: WorktreeListingOptions,
+  ): Promise<WorktreeObservation[]>;
   createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation>;
   removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult>;
 }
