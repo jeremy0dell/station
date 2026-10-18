@@ -95,6 +95,9 @@ type ProjectSetupPlan = {
   relativePaths: string[];
 };
 
+// `wt list --format=json` prints about 1.6 KB per worktree; 16 MB covers about 10,000 worktrees.
+const worktrunkMaxOutputChars = 16 * 1024 * 1024;
+
 /**
  * ADAPTER
  *
@@ -1105,7 +1108,7 @@ export class WorktrunkProvider implements WorktreeProvider {
             ...(cwd === undefined ? {} : { cwd }),
             ...(env === undefined ? {} : { env }),
             signal: policy.signal === undefined ? signal : AbortSignal.any([signal, policy.signal]),
-            maxOutputChars: 512 * 1024,
+            maxOutputChars: worktrunkMaxOutputChars,
           },
           this.#runner,
         ),
