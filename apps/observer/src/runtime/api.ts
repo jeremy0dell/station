@@ -544,7 +544,7 @@ function buildMetadataRefresh(
   const metadataRefreshOptions: Parameters<typeof createWorktreeMetadataRefreshService>[0] = {
     projects: providerProjectsFromConfig(options.config),
     persistence: options.persistence,
-    requestReconcile: scheduler.request,
+    requestReconcile: scheduler.requestDeferred,
     clock,
     worktreeChangeSource,
     worktreeMetadataInvalidationSource,

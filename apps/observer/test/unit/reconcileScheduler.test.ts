@@ -355,6 +355,66 @@ describe("reconcile scheduler", () => {
     expect(reasons).toEqual(["scheduled:batch(2)"]);
   });
 
+  it("holds deferred work for the deferred interval and lets ordinary work flush it early", async () => {
+    vi.useFakeTimers();
+    const reasons: string[] = [];
+    const scheduler = createReconcileScheduler({
+      debounceMs: 100,
+      deferredDebounceMs: 5000,
+      reconcile: async (reason) => {
+        reasons.push(reason);
+      },
+    });
+
+    scheduler.requestDeferred("metadata:change_summary");
+    await vi.advanceTimersByTimeAsync(4000);
+    scheduler.requestDeferred("metadata:pull_request");
+    await vi.advanceTimersByTimeAsync(999);
+    expect(reasons).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    await drainMicrotasks();
+    expect(reasons).toEqual(["scheduled:batch(2)"]);
+
+    scheduler.requestDeferred("metadata:change_summary");
+    await vi.advanceTimersByTimeAsync(50);
+    scheduler.request("hook:codex:Stop");
+    await vi.advanceTimersByTimeAsync(100);
+    await drainMicrotasks();
+    expect(reasons).toEqual(["scheduled:batch(2)", "scheduled:batch(2)"]);
+  });
+
+  it("waits the deferred interval for deferred work queued behind a running reconcile", async () => {
+    vi.useFakeTimers();
+    const reasons: string[] = [];
+    const firstReconcile = deferred<void>();
+    const firstStarted = deferred<void>();
+    const scheduler = createReconcileScheduler({
+      debounceMs: 0,
+      backlogDebounceMs: 1000,
+      deferredDebounceMs: 5000,
+      reconcile: async (reason) => {
+        reasons.push(reason);
+        if (reasons.length === 1) {
+          firstStarted.resolve();
+          await firstReconcile.promise;
+        }
+      },
+    });
+
+    scheduler.request("hook:codex:Stop");
+    await vi.advanceTimersByTimeAsync(0);
+    await firstStarted.promise;
+    scheduler.requestDeferred("metadata:change_summary");
+    scheduler.requestDeferred("metadata:checks");
+    firstReconcile.resolve();
+    await drainMicrotasks();
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(reasons).toEqual(["hook:codex:Stop"]);
+    await vi.advanceTimersByTimeAsync(1);
+    await drainMicrotasks();
+    expect(reasons).toEqual(["hook:codex:Stop", "scheduled:batch(2)"]);
+  });
+
   it("uses the interactive delay for ready work queued behind a running reconcile", async () => {
     vi.useFakeTimers();
     const reasons: string[] = [];
