@@ -43,6 +43,27 @@ async function tempDbPath(): Promise<string> {
 }
 
 describe("observer persistence", () => {
+  it("prunes ingress dedupe keys created before the event cutoff", async () => {
+    const sqlite = openObserverSqlite({ path: await tempDbPath() });
+    try {
+      const persistence = createSqliteObserverPersistence({ sqlite });
+      const record = (id: string, createdAt: string) =>
+        persistence.recordEventWithIngressDedupe(
+          { type: "observer.started", at: createdAt },
+          { source: "hook", createdAt, dedupe: { kind: "hook", id } },
+        );
+      await record("old", earlier);
+      await record("recent", later);
+
+      await expect(persistence.pruneEventsCreatedBefore(now, 10)).resolves.toBe(1);
+
+      await expect(record("old", later)).resolves.toMatchObject({ deduped: false });
+      await expect(record("recent", later)).resolves.toEqual({ deduped: true });
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("preserves a successful command result across SQLite reopen", async () => {
     const dbPath = await tempDbPath();
     const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });

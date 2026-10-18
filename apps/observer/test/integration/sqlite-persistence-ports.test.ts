@@ -357,7 +357,7 @@ describe("SQLite-only Observer persistence behavior", () => {
     const upgraded = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
     try {
       expect(upgraded.health()).toMatchObject({
-        schemaVersion: 20,
+        schemaVersion: 21,
         migrations: expect.arrayContaining([
           expect.objectContaining({ version: 20, name: "rename_terminal_external_focus" }),
         ]),
@@ -874,6 +874,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         [18, "command_results"],
         [19, "drop_legacy_provider_health_observations"],
         [20, "rename_terminal_external_focus"],
+        [21, "event_retention_indexes"],
       ]);
       await expect(persistence.listSessions()).resolves.toEqual([
         expect.objectContaining({

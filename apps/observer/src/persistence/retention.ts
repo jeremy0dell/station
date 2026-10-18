@@ -6,6 +6,10 @@ export function providerObservationRetentionDays(retention?: ObservabilityRetent
   return mergeRetentionPolicy(retention).sqlite.providerObservationsMaxDays;
 }
 
+export function eventRetentionDays(retention?: ObservabilityRetentionConfig): number {
+  return mergeRetentionPolicy(retention).sqlite.eventsMaxDays;
+}
+
 export function providerObservationExpiresAt(observedAt: string, days: number): string {
   return addDays(observedAt, days);
 }

@@ -342,6 +342,21 @@ export function observerPersistenceContract(
         });
       });
 
+      it("prunes at most the batch limit of events created before the cutoff", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          for (const createdAt of [earlier, earlier, now, later]) {
+            await persistence.recordEvent(
+              { type: "observer.started", at: createdAt },
+              { createdAt },
+            );
+          }
+
+          await expect(persistence.pruneEventsCreatedBefore(later, 2)).resolves.toBe(2);
+          await expect(persistence.pruneEventsCreatedBefore(later, 2)).resolves.toBe(1);
+          expect((await persistence.listEvents()).map((event) => event.createdAt)).toEqual([later]);
+        });
+      });
+
       it("orders and filters events by command and type", async () => {
         await withPersistence(
           createFixture,

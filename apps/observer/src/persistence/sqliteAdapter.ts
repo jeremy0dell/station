@@ -5,7 +5,13 @@ import type { SqlDatabase } from "../sqlite/driver.js";
 import { type ObserverSqliteHandle, runSqliteTransactionEffect } from "../sqlite.js";
 import * as commandStore from "./commands.js";
 import * as correlationStore from "./correlations.js";
-import { eventCommandId, eventTimestamp, listEvents, recordEvent } from "./events.js";
+import {
+  eventCommandId,
+  eventTimestamp,
+  listEvents,
+  pruneEventsCreatedBefore,
+  recordEvent,
+} from "./events.js";
 import { defaultIdFactory } from "./idFactory.js";
 import * as ingressDedupeStore from "./ingressDedupe.js";
 import {
@@ -276,6 +282,12 @@ export function createSqliteObserverPersistence(
       }),
 
     listEvents: (filter = {}) => readTransaction((database) => listEvents(database, filter)),
+
+    pruneEventsCreatedBefore: (createdBefore, limit) =>
+      transaction((database) => {
+        ingressDedupeStore.pruneIngressDedupeKeysCreatedBefore(database, createdBefore, limit);
+        return pruneEventsCreatedBefore(database, createdBefore, limit);
+      }),
 
     recordProviderObservation: (input) =>
       transaction((database) =>

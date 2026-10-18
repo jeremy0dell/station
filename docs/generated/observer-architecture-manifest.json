@@ -7592,6 +7592,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/021_event_retention_indexes.ts",
+      "exports": [
+        {
+          "name": "eventRetentionIndexesMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -7733,6 +7752,12 @@
           "resolvedPath": "apps/observer/src/migrations/020_rename_terminal_external_focus.ts",
           "edgeKind": "runtime",
           "bindings": ["renameTerminalExternalFocusMigration"]
+        },
+        {
+          "specifier": "./021_event_retention_indexes.js",
+          "resolvedPath": "apps/observer/src/migrations/021_event_retention_indexes.ts",
+          "edgeKind": "runtime",
+          "bindings": ["eventRetentionIndexesMigration"]
         },
         {
           "specifier": "./migration.js",
@@ -8018,6 +8043,12 @@
         },
         {
           "name": "listEvents",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "pruneEventsCreatedBefore",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -8498,6 +8529,12 @@
           "kind": "function",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "pruneIngressDedupeKeysCreatedBefore",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         }
       ],
       "imports": [
@@ -8951,6 +8988,12 @@
     {
       "path": "apps/observer/src/persistence/retention.ts",
       "exports": [
+        {
+          "name": "eventRetentionDays",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
         {
           "name": "providerObservationExpiresAt",
           "kind": "function",
@@ -9511,7 +9554,13 @@
           "specifier": "./events.js",
           "resolvedPath": "apps/observer/src/persistence/events.ts",
           "edgeKind": "runtime",
-          "bindings": ["eventCommandId", "eventTimestamp", "listEvents", "recordEvent"]
+          "bindings": [
+            "eventCommandId",
+            "eventTimestamp",
+            "listEvents",
+            "pruneEventsCreatedBefore",
+            "recordEvent"
+          ]
         },
         {
           "specifier": "./idFactory.js",
@@ -10262,7 +10311,11 @@
           "specifier": "../persistence/retention.js",
           "resolvedPath": "apps/observer/src/persistence/retention.ts",
           "edgeKind": "runtime",
-          "bindings": ["providerObservationExpiresAt", "providerObservationRetentionDays"]
+          "bindings": [
+            "eventRetentionDays",
+            "providerObservationExpiresAt",
+            "providerObservationRetentionDays"
+          ]
         },
         {
           "specifier": "../persistence/types.js",
@@ -11272,7 +11325,7 @@
           "specifier": "../persistence/retention.js",
           "resolvedPath": "apps/observer/src/persistence/retention.ts",
           "edgeKind": "runtime",
-          "bindings": ["providerObservationRetentionDays"]
+          "bindings": ["eventRetentionDays", "providerObservationRetentionDays"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -11357,6 +11410,12 @@
           "resolvedPath": "apps/observer/src/reconcile/terminalSnapshotDebug.ts",
           "edgeKind": "runtime",
           "bindings": ["buildTerminalSnapshotDebug"]
+        },
+        {
+          "specifier": "../utils/time.js",
+          "resolvedPath": "apps/observer/src/utils/time.ts",
+          "edgeKind": "runtime",
+          "bindings": ["addDays"]
         },
         {
           "specifier": "@station/contracts",

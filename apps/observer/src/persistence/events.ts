@@ -78,3 +78,16 @@ function readEvent(database: SqlDatabase, eventId: string): PersistedEvent {
   const row = database.prepare("SELECT * FROM events WHERE id = ?").get(eventId) as SqliteEventRow;
   return eventFromRow(row);
 }
+
+export function pruneEventsCreatedBefore(
+  database: SqlDatabase,
+  createdBefore: string,
+  limit: number,
+): number {
+  const result = database
+    .prepare(
+      "DELETE FROM events WHERE rowid IN (SELECT rowid FROM events WHERE created_at < ? LIMIT ?)",
+    )
+    .run(createdBefore, limit);
+  return Number(result.changes);
+}
