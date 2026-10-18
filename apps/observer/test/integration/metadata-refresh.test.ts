@@ -351,6 +351,39 @@ describe("observer worktree metadata refresh use case", () => {
     fixture.sqlite.close();
   });
 
+  it("backs off a failed first local git read that has no cached summary", async () => {
+    const fixture = createFixture();
+    const reasons: string[] = [];
+    const calls: string[] = [];
+    const runner = gitRunner(
+      {
+        "rev-parse --verify HEAD^{commit}": headSha,
+        remote: "",
+        "rev-parse --verify refs/heads/main^{commit}": baseSha,
+        "merge-base main HEAD": mergeBaseSha,
+        [`diff --numstat ${mergeBaseSha}..HEAD`]: "bad\t1\tsrc/a.ts\n",
+      },
+      calls,
+    );
+    const service = createTestWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: (reason) => reasons.push(reason),
+      clock: fixture.clock,
+      runner,
+    });
+
+    const snapshot = await fixture.core.reconcile("metadata-first-read-failure");
+    await service.refresh(snapshot);
+    const callsAfterFailure = calls.length;
+    await service.refresh(snapshot);
+
+    expect(callsAfterFailure).toBeGreaterThan(0);
+    expect(calls.length).toBe(callsAfterFailure);
+    expect(reasons).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("does not read git for an idle worktree while its cached change summary is fresh", async () => {
     const fixture = createFixture();
     const reasons: string[] = [];

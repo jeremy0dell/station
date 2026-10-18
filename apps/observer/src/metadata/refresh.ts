@@ -90,6 +90,8 @@ export function createWorktreeMetadataRefreshService(
   const repositoryRefresher = createRepositoryMetadataRefresher(repositoryOptions);
   // Idle worktrees whose git base cannot be resolved are not re-read until this time; a changed branch or registration re-reads at once.
   const unavailableUntilMs = new Map<string, number>();
+  // Worktrees whose first git read failed have no persisted summary to carry the failure backoff, so they wait here.
+  const failedUntilMs = new Map<string, number>();
   let pendingSnapshot: StationSnapshot | undefined;
   let running: Promise<void> | undefined;
   let shutdownRequested = false;
@@ -222,6 +224,9 @@ export function createWorktreeMetadataRefreshService(
       !active &&
       (unavailableUntilMs.get(unavailableKey(input.row)) ?? 0) > clock.now().getTime()
     ) {
+      return;
+    }
+    if ((failedUntilMs.get(unavailableKey(input.row)) ?? 0) > clock.now().getTime()) {
       return;
     }
     const ttlMs = active ? (options.ttlMs ?? defaultTtlMs) : idleChangeSummaryTtlMs;
@@ -363,6 +368,10 @@ export function createWorktreeMetadataRefreshService(
       return;
     }
 
+    const backoffMs = isActiveWorktreeRow(input.row)
+      ? (options.ttlMs ?? defaultTtlMs)
+      : idleChangeSummaryTtlMs;
+    failedUntilMs.set(unavailableKey(input.row), clock.now().getTime() + backoffMs);
     await options.logger?.warn("Local git metadata refresh failed.", {
       projectId: input.row.projectId,
       worktreeId: input.row.id,

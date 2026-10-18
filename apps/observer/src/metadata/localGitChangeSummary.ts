@@ -40,7 +40,9 @@ type ResolvedBase = {
   sha: string;
 };
 
-const defaultGitTimeoutMs = 200;
+const defaultGitTimeoutMs = 5_000;
+// A branch diff lists one numstat line per changed file, so long-lived branches exceed the default output cap.
+const numstatMaxOutputChars = 8 * 1024 * 1024;
 
 /**
  * ADAPTER
@@ -135,7 +137,9 @@ async function readResolvedLocalGitChangeSummary(input: {
   }
   const mergeBaseSha = await resolveMergeBaseSha(command, base);
 
-  const diff = await runGit(command, ["diff", "--numstat", `${mergeBaseSha}..HEAD`]);
+  const diff = await runGit(command, ["diff", "--numstat", `${mergeBaseSha}..HEAD`], {
+    maxOutputChars: numstatMaxOutputChars,
+  });
   const parsed = parseGitNumstat(diff.stdout);
   const summaryInput: WorktreeChangeSummary = {
     kind: "branch_diff",
@@ -418,9 +422,13 @@ async function runOptionalGit(
   return result.exitCode === 0 ? result.stdout : undefined;
 }
 
-async function runGit(command: GitCommandContext, args: string[]) {
+async function runGit(
+  command: GitCommandContext,
+  args: string[],
+  options: { maxOutputChars: number } = { maxOutputChars: 64 * 1024 },
+) {
   return runGitCommand(command, args, {
-    maxOutputChars: 64 * 1024,
+    maxOutputChars: options.maxOutputChars,
     errorOnNonZeroExit: () =>
       localGitMetadataError("LOCAL_GIT_COMMAND_FAILED", "Git command failed."),
   });
