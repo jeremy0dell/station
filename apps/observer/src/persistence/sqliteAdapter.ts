@@ -15,6 +15,7 @@ import {
 import { defaultIdFactory } from "./idFactory.js";
 import * as ingressDedupeStore from "./ingressDedupe.js";
 import {
+  deleteProviderObservations,
   insertProviderObservation,
   listProviderObservations,
   pruneExpiredProviderObservations,
@@ -312,6 +313,9 @@ export function createSqliteObserverPersistence(
 
     pruneExpiredProviderObservations: (expiresBefore) =>
       transaction((database) => pruneExpiredProviderObservations(database, expiresBefore ?? now())),
+
+    deleteProviderObservations: (ids) =>
+      transaction((database) => deleteProviderObservations(database, ids)),
 
     upsertWorktreeMetadataCurrent: (input) =>
       transaction((database) =>

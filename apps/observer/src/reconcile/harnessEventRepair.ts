@@ -19,12 +19,16 @@ import type {
   SessionStore,
 } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
+import { supersededWorkingHarnessEventIds } from "./harnessEventCompaction.js";
 import {
   applyHarnessEventStatusOverlays,
   synthesizeExternalHarnessRuns,
 } from "./harnessEventStatus.js";
 
 type ReconcileHarnessPersistence = ObservationStore & SessionStore;
+
+// Bounds one reconcile's delete transaction while a large backlog drains.
+const supersededEventDeleteBatchSize = 5_000;
 
 /**
  * Applies admitted persisted harness events to discovered runs after durable bindings are attached.
@@ -78,6 +82,12 @@ export async function repairPersistedHarnessDerivedState(input: {
     persisted,
   );
   const currentObservations = observations.filter((observation) => !observation.expired);
+  const superseded = supersededWorkingHarnessEventIds(currentObservations);
+  if (superseded.length > 0) {
+    await input.persistence.deleteProviderObservations(
+      superseded.slice(0, supersededEventDeleteBatchSize),
+    );
+  }
   const repairTargets = new Map<string, HarnessDerivedStateRepairTarget>();
   for (const rejected of rejectedBySession.values()) {
     const currentBinding = bindings.find(

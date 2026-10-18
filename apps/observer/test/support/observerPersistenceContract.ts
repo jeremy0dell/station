@@ -1049,6 +1049,33 @@ export function observerPersistenceContract(
         });
       });
 
+      it("deletes provider observations by id and ignores missing ids", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          for (const id of ["wt_delete_0", "wt_delete_1"]) {
+            const worktree = createFakeWorktree({ id, projectId: "web", now: earlier });
+            await persistence.recordProviderObservation({
+              provider: worktree.provider,
+              providerType: "worktree",
+              entityKind: "worktree",
+              entityKey: worktree.id,
+              payload: worktree,
+              observedAt: earlier,
+            });
+          }
+          const [first] = await persistence.listProviderObservations({ now });
+          if (first === undefined) throw new Error("Expected a recorded observation.");
+
+          await expect(persistence.deleteProviderObservations([first.id, "missing"])).resolves.toBe(
+            1,
+          );
+          expect(
+            (await persistence.listProviderObservations({ now })).map(
+              (observation) => observation.entityKey,
+            ),
+          ).toEqual(["wt_delete_1"]);
+        });
+      });
+
       it("normalizes provider payloads through the durable JSON representation", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           const nonJsonData = createFakeWorktree({

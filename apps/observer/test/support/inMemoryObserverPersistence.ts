@@ -414,6 +414,15 @@ export function createInMemoryObserverPersistence(
         return deleted;
       }),
 
+    deleteProviderObservations: (ids) =>
+      transaction((draft) => {
+        let deleted = 0;
+        for (const id of ids) {
+          if (draft.observations.delete(id)) deleted += 1;
+        }
+        return deleted;
+      }),
+
     pruneExpiredProviderObservations: (expiresBefore) =>
       transaction((draft) => {
         let deleted = 0;

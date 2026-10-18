@@ -95,6 +95,15 @@ export function pruneExpiredProviderObservations(
   return Number(expiredResult.changes);
 }
 
+export function deleteProviderObservations(database: SqlDatabase, ids: readonly string[]): number {
+  const statement = database.prepare("DELETE FROM provider_observations WHERE id = ?");
+  let deleted = 0;
+  for (const id of ids) {
+    deleted += Number(statement.run(id).changes);
+  }
+  return deleted;
+}
+
 function buildProviderObservationQuery(options: {
   entityKind?: ProviderObservationKind | readonly ProviderObservationKind[];
   includeExpired?: boolean;

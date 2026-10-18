@@ -136,6 +136,7 @@ export interface ObservationStore {
     now?: string;
   }): Promise<PersistedProviderObservation[]>;
   pruneExpiredProviderObservations(now?: string): Promise<number>;
+  deleteProviderObservations(ids: readonly string[]): Promise<number>;
 }
 
 /**

@@ -83,7 +83,8 @@ export function synthesizeExternalHarnessRuns(input: {
   }
 
   const synthesized: HarnessRunObservation[] = [];
-  for (const [id, event] of latestById) {
+  // Id order keeps the output independent of which superseded history rows are still stored.
+  for (const [id, event] of [...latestById].sort(([left], [right]) => left.localeCompare(right))) {
     const status = event.status;
     const worktreeId = event.worktreeId;
     const nativeSessionId = event.nativeSessionId;

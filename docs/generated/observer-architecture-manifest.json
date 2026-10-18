@@ -8635,6 +8635,12 @@
       "path": "apps/observer/src/persistence/observations.ts",
       "exports": [
         {
+          "name": "deleteProviderObservations",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "insertProviderObservation",
           "kind": "function",
           "role": null,
@@ -9579,6 +9585,7 @@
           "resolvedPath": "apps/observer/src/persistence/observations.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "deleteProviderObservations",
             "insertProviderObservation",
             "listProviderObservations",
             "pruneExpiredProviderObservations"
@@ -10966,6 +10973,31 @@
       ]
     },
     {
+      "path": "apps/observer/src/reconcile/harnessEventCompaction.ts",
+      "exports": [
+        {
+          "name": "supersededWorkingHarnessEventIds",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Selects admitted `working` harness events that the next admitted event of the same session repeats with identical evidence, an equal or newer status time, and a strictly newer ordinal. Replay, status overlays, and external run synthesis produce the same result without them, so reconcile may delete them."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["PersistedProviderObservation"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessEventObservation"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/reconcile/harnessEventRepair.ts",
       "exports": [
         {
@@ -11046,6 +11078,12 @@
           "resolvedPath": "apps/observer/src/providers/registry.ts",
           "edgeKind": "type-only",
           "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "./harnessEventCompaction.js",
+          "resolvedPath": "apps/observer/src/reconcile/harnessEventCompaction.ts",
+          "edgeKind": "runtime",
+          "bindings": ["supersededWorkingHarnessEventIds"]
         },
         {
           "specifier": "./harnessEventStatus.js",
@@ -17854,6 +17892,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/harnessEventCompaction.ts",
+      "declaration": "supersededWorkingHarnessEventIds",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Selects admitted `working` harness events that the next admitted event of the same session repeats with identical evidence, an equal or newer status time, and a strictly newer ordinal. Replay, status overlays, and external run synthesis produce the same result without them, so reconcile may delete them.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/reconcile/run.ts",
