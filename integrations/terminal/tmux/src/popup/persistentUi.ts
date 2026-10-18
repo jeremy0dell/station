@@ -1,3 +1,5 @@
+import { statSync } from "node:fs";
+import { join } from "node:path";
 import type { SafeError } from "@station/contracts";
 import { stationObserverBuildVersion } from "@station/runtime";
 import type { TmuxCommandInput } from "../command.js";
@@ -23,6 +25,7 @@ import {
   registeredDevPopupOwnerOption,
   registeredDevPopupRootOption,
   registeredDevPopupSessionNameOption,
+  registeredPopupBinaryOption,
   registeredPopupExpectedSignatureOption,
   registeredPopupRootOption,
   registeredPopupSessionNameOption,
@@ -426,6 +429,24 @@ export async function resolvePersistentPopupUi(
   return result;
 }
 
+/**
+ * Identifies `<root>/stn` as `dev:ino:mtimeSeconds:size`, matching the warm binding's `stat` output,
+ * only when this process runs that file; any other runner cannot vouch for the installed build.
+ */
+export function installedPopupBinaryIdentity(
+  root: string,
+  executablePath = process.execPath,
+): string | undefined {
+  try {
+    const installed = statSync(join(root, "stn"), { bigint: true });
+    const running = statSync(executablePath, { bigint: true });
+    if (installed.dev !== running.dev || installed.ino !== running.ino) return undefined;
+    return `${installed.dev}:${installed.ino}:${installed.mtimeNs / 1_000_000_000n}:${installed.size}`;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function registerFastPopupUi(
   input: TmuxCommandInput,
   ui: TmuxPersistentPopupUi,
@@ -456,6 +477,9 @@ export async function registerFastPopupUi(
     registeredPopupExpectedSignatureOption,
   );
   const currentRoot = await resolveTmuxGlobalOption(input, registeredPopupRootOption);
+  const binaryIdentity = installedPopupBinaryIdentity(ui.root) ?? "";
+  const currentBinaryIdentity =
+    (await resolveTmuxGlobalOption(input, registeredPopupBinaryOption)) ?? "";
   if (
     previousRoute !== undefined &&
     registeredRouteMatches(
@@ -466,7 +490,8 @@ export async function registerFastPopupUi(
     currentLease === previousRouteValue &&
     currentSessionName === ui.sessionName &&
     currentSignature === signature &&
-    currentRoot === ui.root
+    currentRoot === ui.root &&
+    currentBinaryIdentity === binaryIdentity
   ) {
     return previousRoute;
   }
@@ -485,6 +510,7 @@ export async function registerFastPopupUi(
   await setTmuxGlobalOption(input, registeredPopupSessionNameOption, ui.sessionName);
   await setTmuxGlobalOption(input, registeredPopupExpectedSignatureOption, signature);
   await setTmuxGlobalOption(input, registeredPopupRootOption, ui.root);
+  await setTmuxGlobalOption(input, registeredPopupBinaryOption, binaryIdentity);
   const committed = await compareAndSetPersistentPopupRoute(input, {
     lease: routeValue,
     route: routeValue,

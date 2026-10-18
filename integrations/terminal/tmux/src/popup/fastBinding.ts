@@ -13,12 +13,12 @@ import {
   registeredDevPopupOwnerOption,
   registeredDevPopupRootOption,
   registeredDevPopupSessionNameOption,
+  registeredPopupBinaryOption,
   registeredPopupExpectedSignatureOption,
   registeredPopupRootOption,
   registeredPopupSessionNameOption,
 } from "./constants.js";
 import { popupProtocolSha256 } from "./fastProtocol.js";
-import { persistentPopupSignature } from "./persistentUi.js";
 
 export type BuildManagedFastPopupRunShellCommandOptions = {
   configPath?: string;
@@ -82,6 +82,7 @@ function snapshotFormat(): string {
     registeredDevPopupCommandOption,
     registeredDevPopupOwnerOption,
     registeredDevPopupRootOption,
+    registeredPopupBinaryOption,
   ].map((name) => `\${fmt}{${name}}`);
   fields.push("v1");
   return fields.join(`\${sep}`);
@@ -95,18 +96,17 @@ function escapeTmuxFormat(value: string): string {
   return value.replaceAll("#", "##");
 }
 
-function expectedPersistentPopupSignature(options: {
+function expectedPersistentPopupTuiCommand(options: {
   configPath?: string;
   installedRoot: string;
 }): string {
-  const command = [
+  return [
     shellQuote(join(options.installedRoot, "stn")),
     ...(options.configPath === undefined ? [] : ["--config", shellQuote(options.configPath)]),
     "tui",
     "--popup",
     "--persistent",
   ].join(" ");
-  return persistentPopupSignature(command);
 }
 
 /**
@@ -114,6 +114,8 @@ function expectedPersistentPopupSignature(options: {
  *
  * Translates the server-scoped installed popup owner into a silent tmux warm-path command that
  * falls back to the exact compiled alias whenever its versioned route cannot be acted on safely.
+ * The binding names no build: it accepts a registration for the expected TUI command only while
+ * `<root>/stn` still has the file identity recorded at registration, so reinstalling needs no setup.
  * Configured popup geometry and status bar are baked into the warm-path `display-popup`, defaulting
  * to `defaultTmuxWorkbenchConfig`; only `popup_scope = "client"` needs the runtime config-aware path.
  */
@@ -125,7 +127,7 @@ export function buildManagedFastPopupRunShellCommand(
   const sessionName = defaultPersistentPopupSessionName;
   const expectedRootSha256 = popupProtocolSha256(options.installedRoot);
   const expectedSessionSha256 = popupProtocolSha256(sessionName);
-  const expectedSignatureSha256 = popupProtocolSha256(expectedPersistentPopupSignature(options));
+  const expectedTuiCommand = escapeTmuxFormat(expectedPersistentPopupTuiCommand(options));
   const installedRoot = escapeTmuxFormat(options.installedRoot);
   const fallbackAlias = escapeTmuxFormat(options.fallbackAlias);
   const configPath = escapeTmuxFormat(options.configPath ?? "");
@@ -161,7 +163,7 @@ installed_root=${shellQuote(installedRoot)}
 session_name=${shellQuote(sessionName)}
 expected_root_sha=${shellQuote(expectedRootSha256)}
 expected_session_sha=${shellQuote(expectedSessionSha256)}
-expected_signature_sha=${shellQuote(expectedSignatureSha256)}
+expected_tui_command=${shellQuote(expectedTuiCommand)}
 attach_arg=${shellQuote(shellQuote(attachCommand))}
 popup_width=${shellQuote(popupWidth)}
 popup_height=${shellQuote(popupHeight)}
@@ -210,6 +212,11 @@ valid_client_name() {
   [ -n "$1" ] && [ "\${#1}" -le 128 ] || return 1
   case "$1" in *[!A-Za-z0-9_/@%+=:-]*) return 1 ;; esac
   return 0
+}
+
+# GNU stat takes -c and BSD stat takes -f; each fails on the other's flag.
+installed_binary_identity() {
+  stat -L -c '%d:%i:%Y:%s' "$installed_root/stn" 2>/dev/null || stat -L -f '%d:%i:%m:%z' "$installed_root/stn" 2>/dev/null
 }
 
 sha256_value() {
@@ -332,7 +339,7 @@ try_fast_popup() {
   IFS="$sep"
   set -- $snapshot
   IFS=$old_ifs
-  [ "$#" -eq 14 ] || return 1
+  [ "$#" -eq 15 ] || return 1
   route=$1
   lease=$2
   claim=$3
@@ -347,7 +354,8 @@ try_fast_popup() {
   dev_command=$2
   dev_owner=$3
   dev_root=$4
-  snapshot_version=$5
+  registered_binary=$5
+  snapshot_version=$6
   [ "$snapshot_version" = v1 ] || return 1
   client_pid=$binding_client_pid
   client_name=$binding_client_name
@@ -359,9 +367,12 @@ try_fast_popup() {
   [ -n "$route" ] && [ "$lease" = "$route" ] || return 1
   [ "$session_signature" = "$registered_signature" ] || return 1
   [ "\${#registered_signature}" -le 4096 ] || return 1
-  case "$registered_signature" in v2:*) ;; *) return 1 ;; esac
+  case "$registered_signature" in v2:?*:?*) ;; *) return 1 ;; esac
+  registered_build_and_command=\${registered_signature#v2:}
+  [ "\${registered_build_and_command#*:}" = "$expected_tui_command" ] || return 1
+  [ -n "$registered_binary" ] || return 1
+  [ "$(installed_binary_identity)" = "$registered_binary" ] || return 1
   registered_signature_sha=$(sha256_value "$registered_signature") || return 1
-  [ "$registered_signature_sha" = "$expected_signature_sha" ] || return 1
   parse_route || return 1
   [ "$registered_session" = "$session_name" ] || return 1
   [ "$registered_root" = "$installed_root" ] || return 1
