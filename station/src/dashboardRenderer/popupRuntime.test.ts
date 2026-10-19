@@ -120,6 +120,20 @@ describe("createPopupRuntime", () => {
     expect(controlLossCount).toBe(0);
   });
 
+  it("reports each completed popup dismissal", async () => {
+    const channel = new FakeRendererControlChannel();
+    let dismissedCount = 0;
+    const runtime = createPopupRuntime(persistentPopupEnv(), channel, undefined, () => {
+      dismissedCount += 1;
+    });
+
+    const dismiss = runtime.dismissDashboard?.();
+    expect(dismissedCount).toBe(0);
+    channel.respond(dismissedResponse(requiredRequest(channel.requests.at(-1)).requestId));
+    await dismiss;
+    expect(dismissedCount).toBe(1);
+  });
+
   it("resolves a separately leased focus target for every request", async () => {
     const channel = new FakeRendererControlChannel();
     const runtime = createPopupRuntime(persistentPopupEnv(), channel);

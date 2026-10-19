@@ -36,6 +36,7 @@ export function createPopupRuntime(
   env: Record<string, string | undefined>,
   channel: RendererControlChannel | undefined,
   onControlLoss: () => void = () => {},
+  onDismissed: () => void = () => {},
 ): PopupRuntime {
   if (env.STATION_TUI_POPUP !== "1") {
     return { persistentPopup: false, exitOnFocusSuccess: false, dispose: () => {} };
@@ -63,7 +64,7 @@ export function createPopupRuntime(
     return { persistentPopup: true, exitOnFocusSuccess: false, dispose: () => {} };
   }
 
-  const control = createRendererControlClient(channel, onControlLoss);
+  const control = createRendererControlClient(channel, onControlLoss, onDismissed);
   return {
     persistentPopup: true,
     exitOnFocusSuccess: false,
@@ -138,6 +139,7 @@ type RendererControlClient = {
 function createRendererControlClient(
   channel: RendererControlChannel,
   onControlLoss: () => void,
+  onDismissed: () => void = () => {},
 ): RendererControlClient {
   const pending = new Map<string, PendingRequest>();
   let nextRequestId = 1;
@@ -227,6 +229,7 @@ function createRendererControlClient(
       (request.type === "dismiss" || request.type === "dismiss-focus-target")
     ) {
       pending.delete(response.requestId);
+      onDismissed();
       request.resolve();
       return;
     }
