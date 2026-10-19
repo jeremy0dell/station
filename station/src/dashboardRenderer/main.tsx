@@ -51,7 +51,10 @@ import {
   type DashboardRendererRuntimeLifecycle,
 } from "./runtimeLifecycle.js";
 
-type DashboardRenderer = Pick<CliRenderer, "destroy" | "getSelection">;
+type DashboardRenderer = Pick<
+  CliRenderer,
+  "destroy" | "getSelection" | "clearSelection" | "useMouse"
+>;
 type DashboardHotRoot = { unmount(): void };
 type DashboardRendererHotSlots = StationHotDisposalSlots & {
   __stationDashboardHotRenderer?: DashboardRenderer;
@@ -106,10 +109,15 @@ export async function runDashboardMain(): Promise<void> {
       },
     );
   }
+  const popupRenderer = env.STATION_TUI_POPUP === "1";
+  // The CLI parent sets this after asking the popup's tmux server whether movement is safe.
+  const enableMouseMovement = !popupRenderer || env.STATION_TUI_POPUP_MOUSE_MOVEMENT === "1";
+
   const popupRuntime = createPopupRuntime(
     env,
     createProcessRendererControlChannel(),
     () => exit(1),
+    () => releasePopupPointer(),
   );
 
   const client = createStationClient(env);
@@ -157,6 +165,15 @@ export async function runDashboardMain(): Promise<void> {
   client.start();
 
   let renderer: DashboardRenderer | undefined;
+  // Row clicks dismiss the warm popup on mouse-down, so tmux never delivers the release.
+  // Without a reset, OpenTUI treats the next movement after reopening as a selection drag.
+  function releasePopupPointer(): void {
+    if (renderer === undefined || !enableMouseMovement) return;
+    renderer.clearSelection();
+    // Toggling mouse support is OpenTUI's public path to resetting its pressed-button state.
+    renderer.useMouse = false;
+    renderer.useMouse = true;
+  }
   let root: DashboardHotRoot | undefined;
   let themeController: StationThemeController | undefined;
   const onProcessExit = (): void => runtimeLifecycle?.disposeForProcessExit();
@@ -185,10 +202,6 @@ export async function runDashboardMain(): Promise<void> {
     stopClient: () => client.stop(),
   });
   hotSlots.__stationDashboardHotPopupRuntime = popupRuntime;
-
-  const popupRenderer = env.STATION_TUI_POPUP === "1";
-  // The CLI parent sets this after asking the popup's tmux server whether movement is safe.
-  const enableMouseMovement = !popupRenderer || env.STATION_TUI_POPUP_MOUSE_MOVEMENT === "1";
 
   try {
     const copySelectedText = createOpenTuiSelectionCopyHandler(() => renderer, clipboardEffects);
