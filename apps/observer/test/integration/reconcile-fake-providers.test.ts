@@ -357,7 +357,7 @@ describe("observer reconcile with fake providers", () => {
     sqlite.close();
   });
 
-  it("prefers terminal cwd over stale claimed worktree IDs that still exist", async () => {
+  it("projects one session when terminal cwd moves from a retained worktree that still exists", async () => {
     const staleWorktreeId = "wt_web_original_branch";
     const currentWorktreeId = "wt_web_agent_branch";
     const sessionId = "ses_branch_fix_existing_claim";
@@ -412,12 +412,22 @@ describe("observer reconcile with fake providers", () => {
         }),
       ],
     });
-    const core = createObserverCore({
+    const { sqlite, persistence, core } = createTestObserverCore({
       config,
       providers,
       clock: {
         now: () => new Date(now),
       },
+    });
+    await persistence.seedSession({
+      sessionId,
+      projectId: "web",
+      worktreeId: staleWorktreeId,
+      initialTitle: "Branch Fix",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
     });
 
     const snapshot = await core.reconcile("stale-claimed-id-with-current-cwd");
@@ -427,6 +437,19 @@ describe("observer reconcile with fake providers", () => {
       sessionId,
       state: "working",
     });
+    expect(snapshot.sessions).toEqual([
+      expect.objectContaining({
+        id: sessionId,
+        projectId: "web",
+        worktreeId: currentWorktreeId,
+        status: expect.objectContaining({ value: "working" }),
+      }),
+    ]);
+    expect(snapshot.counts.sessions).toBe(1);
+    await expect(persistence.listSessions()).resolves.toEqual([
+      expect.objectContaining({ id: sessionId, worktreeId: staleWorktreeId }),
+    ]);
+    sqlite.close();
   });
 
   it("keeps terminal evidence time distinct from later snapshot-only projections", async () => {

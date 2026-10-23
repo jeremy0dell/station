@@ -50,9 +50,9 @@ export function normalizeHarnessRunsForCurrentWorktrees(input: {
 }
 
 /**
- * Reattaches persisted session title evidence only when current observations agree on one worktree.
+ * Reattaches persisted session evidence only when current observations agree on one worktree.
  */
-export function reattachSessionTitleEvidence(input: {
+export function reattachSessionEvidence(input: {
   sessions: PersistedSession[];
   harnessRuns: readonly HarnessRunObservation[];
   terminalTargets: readonly TerminalTargetObservation[];
