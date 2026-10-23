@@ -12,7 +12,7 @@ import type {
   SessionStore,
 } from "../../persistence/index.js";
 import { resolveWorktreeDisplayTitle } from "../../worktreeDisplayTitle.js";
-import { reattachSessionTitleEvidence } from "../observationCorrelation.js";
+import { reattachSessionEvidence } from "../observationCorrelation.js";
 
 export type ReconcileSnapshotInputs = {
   sessionMetadata: PersistedSession[];
@@ -42,7 +42,7 @@ export async function readReconcileSnapshotInputs(input: {
           input.persistence.listSessionTurnReadiness(),
         ]);
   const configuredProjectIds = new Set(input.projects.map((project) => project.id));
-  const titleSessionEvidence = reattachSessionTitleEvidence({
+  const currentSessionMetadata = reattachSessionEvidence({
     sessions: sessionMetadata,
     harnessRuns: input.harnessRuns,
     terminalTargets: input.terminalTargets,
@@ -64,7 +64,7 @@ export async function readReconcileSnapshotInputs(input: {
           worktreeId: worktree.id,
           branch: worktree.branch,
           canonicalTitles: persistedWorktreeDisplayTitles,
-          sessions: titleSessionEvidence,
+          sessions: currentSessionMetadata,
         }),
         createdAt: input.now,
         updatedAt: input.now,
@@ -72,7 +72,7 @@ export async function readReconcileSnapshotInputs(input: {
     });
 
   return {
-    sessionMetadata,
+    sessionMetadata: currentSessionMetadata,
     worktreeDisplayTitles,
     recoveryHandles,
     turnReadiness,

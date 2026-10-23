@@ -11164,7 +11164,7 @@
           "purpose": null
         },
         {
-          "name": "reattachSessionTitleEvidence",
+          "name": "reattachSessionEvidence",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -11608,7 +11608,7 @@
           "specifier": "../observationCorrelation.js",
           "resolvedPath": "apps/observer/src/reconcile/observationCorrelation.ts",
           "edgeKind": "runtime",
-          "bindings": ["reattachSessionTitleEvidence"]
+          "bindings": ["reattachSessionEvidence"]
         },
         {
           "specifier": "../../worktreeDisplayTitle.js",
