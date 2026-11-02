@@ -17,8 +17,6 @@ export const TuiSessionCreatePolicyConfigSchema = z
   })
   .strict();
 
-export type TuiSessionCreatePolicyConfig = z.infer<typeof TuiSessionCreatePolicyConfigSchema>;
-
 export const TuiSessionCreateConfigSchema = TuiSessionCreatePolicyConfigSchema.extend({
   terminals: z.record(ProviderIdSchema, TuiSessionCreatePolicyConfigSchema).optional(),
 }).strict();

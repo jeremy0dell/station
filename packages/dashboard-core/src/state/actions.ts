@@ -1,4 +1,5 @@
 import type { ProjectId, SessionGroupId, SessionId } from "@station/contracts";
+import { assertNever } from "@station/runtime";
 import type { CreateGroupActionId } from "../components/GroupCreateSheet/content.js";
 import type { AddProjectActionId } from "../flows/addProject/actions.js";
 import type { NewSessionActionId } from "../flows/newSession/actions.js";
@@ -328,7 +329,7 @@ function handleDashboardScreenAction(
         openForkDetailsForRow(state, action.rowId, { returnTo: action.returnTo }),
       );
     default:
-      return assertNeverAction(action);
+      return assertNever(action, `Unhandled dashboard action: ${JSON.stringify(action)}`);
   }
 }
 
@@ -348,12 +349,8 @@ function handleDashboardWidgetAction(
     case "widgetSettings.addFromPicker":
       return stateTransition(widgetSettingsAddType(state, action.widgetType));
     default:
-      return assertNeverAction(action);
+      return assertNever(action, `Unhandled dashboard action: ${JSON.stringify(action)}`);
   }
-}
-
-function assertNeverAction(action: never): never {
-  throw new Error(`Unhandled dashboard action: ${JSON.stringify(action)}`);
 }
 
 function stateTransition(state: DashboardState): TuiTransition {

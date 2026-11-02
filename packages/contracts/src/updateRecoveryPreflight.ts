@@ -65,9 +65,6 @@ export const UpdateReapRecoveryHandleResolutionSchema = z.discriminatedUnion("ki
     })
     .strict(),
 ]);
-export type UpdateReapRecoveryHandleResolution = z.infer<
-  typeof UpdateReapRecoveryHandleResolutionSchema
->;
 
 export const UpdateReapSessionRecoveryAssessmentSchema =
   ObserverSessionRecoveryAssessmentSchema.omit({ handleResolution: true })

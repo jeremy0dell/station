@@ -873,6 +873,24 @@ describe("setup plan projection", () => {
     expect(plan.nextSteps).toEqual(["stn doctor", "stn"]);
   });
 
+  it("preserves the existing unquoted form for percent-containing launchers", () => {
+    const defaults = facts();
+    const plan = buildSetupPlan(
+      facts({
+        launchers: {
+          ...defaults.launchers,
+          station: {
+            ...defaults.launchers.station,
+            command: "/tmp/stn%dev",
+            resolvedPath: "/tmp/stn%dev",
+          },
+        },
+      }),
+    );
+
+    expect(plan.nextSteps).toEqual(["/tmp/stn%dev doctor", "/tmp/stn%dev"]);
+  });
+
   it.each([
     { name: "absent Git", reason: "git-absent" as const },
     { name: "unusable Git", reason: "git-unusable" as const },

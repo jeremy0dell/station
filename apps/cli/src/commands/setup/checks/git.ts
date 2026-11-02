@@ -9,6 +9,7 @@ import {
   gitLocalEnvironmentVariables,
   isSafeError,
   runExternalCommand,
+  shellQuote,
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
 import type { SetupGitFact } from "../adapters/inspectionTypes.js";
@@ -145,7 +146,7 @@ function dubiousOwnershipMessage(failureText: string, cwd: string): string {
   const repository =
     failureText.match(/^fatal: detected dubious ownership in repository at '(.*)'\r?$/im)?.[1] ??
     cwd;
-  return `Git refused this repository for dubious ownership. Review its ownership, then run git config --global --add safe.directory ${quoteCommandPart(repository)}, then run stn setup check.`;
+  return `Git refused this repository for dubious ownership. Review its ownership, then run git config --global --add safe.directory ${shellQuote(repository, true)}, then run stn setup check.`;
 }
 
 async function findDiscoverableGitRoot(
@@ -269,8 +270,4 @@ function git(options: CheckGitOptions, args: string[], cwd?: string) {
   };
   if (cwd !== undefined) input.cwd = cwd;
   return runExternalCommand(input, options.runner);
-}
-
-function quoteCommandPart(part: string): string {
-  return `'${part.replaceAll("'", `'\\''`)}'`;
 }

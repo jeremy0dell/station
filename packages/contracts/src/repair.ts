@@ -147,7 +147,6 @@ export const RepairJournalPhaseSchema = z.enum([
   "verified",
   "completed",
 ]);
-export type RepairJournalPhase = z.infer<typeof RepairJournalPhaseSchema>;
 
 /** Strict private restart journal. Its filesystem adapter stores this payload with mode 0600. */
 export const RepairJournalSchema = z

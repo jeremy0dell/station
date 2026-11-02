@@ -25,7 +25,6 @@ export type {
   CliCommandNode,
   CliHelpMode,
 } from "./commands/cliCommand/types.js";
-export { isTopLevelCliCommand } from "./topLevelCliCommands.js";
 
 export const cliCommandRegistry: CliCommandNode = {
   name: "stn",

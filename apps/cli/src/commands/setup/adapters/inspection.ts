@@ -1,6 +1,6 @@
 import type { SetupConfigMutationPlan } from "@station/config";
 import { type CliSetupHarnessId, CliSetupHarnessIdSchema } from "@station/contracts";
-import { safeErrorFromUnknown } from "@station/runtime";
+import { assertNever, safeErrorFromUnknown } from "@station/runtime";
 import {
   assessHarnessTracking,
   type HarnessSelectionFacts,
@@ -351,7 +351,7 @@ function normalizeHarnessSelectionFacts(facts: SetupFacts): HarnessSelectionFact
       break;
     }
     default:
-      return assertNever(facts.config);
+      return assertNever(facts.config, `Unsupported setup fact: ${String(facts.config)}`);
   }
   return {
     config,
@@ -461,7 +461,7 @@ function normalizeWorktrunkShell(facts: SetupFacts): SetupPlanningFacts["worktru
     case "skipped":
       return "skipped";
     default:
-      return assertNever(status);
+      return assertNever(status, `Unsupported setup fact: ${String(status)}`);
   }
 }
 
@@ -476,7 +476,7 @@ function normalizeTmuxLive(facts: SetupFacts): SetupPlanningFacts["tmuxPopup"]["
     case "unknown":
       return "unknown";
     default:
-      return assertNever(liveStatus);
+      return assertNever(liveStatus, `Unsupported setup fact: ${String(liveStatus)}`);
   }
 }
 
@@ -486,8 +486,4 @@ function normalizeWorktrunkHooks(facts: SetupFacts): SetupPlanningFacts["worktru
     return "missing";
   }
   return "ready";
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unsupported setup fact: ${String(value)}`);
 }

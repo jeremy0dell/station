@@ -39,7 +39,6 @@ export const NativePlacementSnapshotSchema = z
     panes: z.array(NativePlacementPaneProofSchema),
   })
   .strict();
-export type NativePlacementSnapshot = z.infer<typeof NativePlacementSnapshotSchema>;
 
 export const NativePlacementSourceProofSchema = NativePlacementPaneProofSchema.pick({
   paneId: true,
@@ -59,7 +58,6 @@ export const NativePlacementLaunchSchema = HarnessLaunchPlanSchema.pick({
 })
   .extend({ outputCompatibility: TerminalOutputCompatibilitySchema.optional() })
   .strict();
-export type NativePlacementLaunch = z.infer<typeof NativePlacementLaunchSchema>;
 
 const SnapshotRequestSchema = z.object({ type: z.literal("snapshot") }).strict();
 const ReserveRequestSchema = z

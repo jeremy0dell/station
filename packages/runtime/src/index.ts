@@ -1,3 +1,4 @@
+export * from "./assert.js";
 export * from "./boundary.js";
 export * from "./buildInfo.js";
 export * from "./concurrency.js";
@@ -13,3 +14,4 @@ export * from "./oneShotAuthorityStore.js";
 export * from "./paths.js";
 export * from "./processEvidence.js";
 export * from "./providerHookMutationLock.js";
+export * from "./shell.js";

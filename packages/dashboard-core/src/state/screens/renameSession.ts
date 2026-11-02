@@ -1,3 +1,4 @@
+import { assertNever } from "@station/runtime";
 import {
   editableTextInputIntentForInput,
   transitionEditableTextInput,
@@ -28,7 +29,7 @@ export function renameSessionScreenBehavior(screen: RenameSessionScreen) {
     case "editName":
       return renameSessionEditNameBehavior;
   }
-  return assertNever(screen);
+  return assertNever(screen, "Unhandled Rename Session screen variant.");
 }
 
 function handleChooseSlotKey(
@@ -208,8 +209,4 @@ function renameEditScreen(input: {
     screen.returnTo = input.screen.returnTo;
   }
   return screen;
-}
-
-function assertNever(_value: never): never {
-  throw new Error("Unhandled Rename Session screen variant.");
 }

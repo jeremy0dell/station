@@ -164,7 +164,6 @@ function validateResult(report: ResultReport, context: z.RefinementCtx): void {
 
 export type UpdateCommandReport = z.output<typeof parsedReportSchema>;
 export type UpdateFinalInspection = z.output<typeof UpdateFinalInspectionSchema>;
-export type UpdateCommandResultReport = z.output<typeof resultSchema>;
 
 /** Current strict update-report boundary for one preview plan or one completed command result. */
 export const UpdateCommandReportSchema = strictReportSchema;

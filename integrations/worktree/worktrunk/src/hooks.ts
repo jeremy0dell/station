@@ -3,6 +3,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import {
   classifyProviderHookArtifactOwnership,
   createHookSetupFileOps,
+  isRecord,
   PROVIDER_HOOK_OWNER_MARKER,
   ProviderHookArtifactOwnershipError,
   parseProviderHookOwnerMarker,
@@ -435,8 +436,4 @@ function resolvePath(input: string, homeDir: string): string {
   const expanded =
     input === "~" ? homeDir : input.startsWith("~/") ? join(homeDir, input.slice(2)) : input;
   return isAbsolute(expanded) ? resolve(expanded) : resolve(process.cwd(), expanded);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

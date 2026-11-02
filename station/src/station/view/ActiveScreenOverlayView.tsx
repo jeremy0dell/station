@@ -2,6 +2,7 @@
 // The dashboard never reflows for overlays.
 import { tuiScreenBehavior } from "@station/dashboard-core/state";
 import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
+import { assertNever } from "@station/runtime";
 import { createElement, type ReactNode } from "react";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
@@ -241,9 +242,5 @@ function renderActiveScreenOverlay({
         />
       );
   }
-  return assertNever(screen);
-}
-
-function assertNever(_value: never): never {
-  throw new Error("Unhandled active TUI screen overlay.");
+  return assertNever(screen, "Unhandled active TUI screen overlay.");
 }

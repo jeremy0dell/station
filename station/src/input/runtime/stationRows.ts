@@ -91,17 +91,6 @@ export function waitForWorktreeByBranch(
   });
 }
 
-/** Wait for the session created on an exact Project branch to reach the client snapshot. */
-export function waitForSessionByBranch(
-  store: StationClientStateSource,
-  projectId: string,
-  branch: string,
-): Promise<SessionView | undefined> {
-  const findSession = (): SessionView | undefined =>
-    findSessionByBranch(store.getState().snapshot, projectId, branch);
-  return waitForSessionMatch(store, findSession);
-}
-
 /** Returns a branch session only when its canonical Group relationship matches the intent. */
 export function findSessionPlacementByBranch(
   snapshot: StationSnapshot | undefined,

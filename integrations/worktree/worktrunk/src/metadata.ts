@@ -8,6 +8,7 @@ import {
   WorktreeIdSchema,
   type WorktreeObservation,
 } from "@station/contracts";
+import { asRecord } from "@station/runtime";
 import { z } from "zod";
 
 export const WorktrunkMetadataSchema = z
@@ -163,10 +164,4 @@ function stringValue(value: unknown): string | undefined {
 function parseWorktrunkMetadata(input: unknown): WorktrunkMetadata | undefined {
   const parsed = WorktrunkMetadataSchema.safeParse(input);
   return parsed.success ? parsed.data : undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }

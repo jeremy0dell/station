@@ -132,8 +132,6 @@ export const CommandGetParamsSchema = z
   })
   .strict();
 
-export const CommandWaitParamsSchema = CommandGetParamsSchema;
-
 export const CommandWaitResultSchema = CommandRecordSchema.refine(
   (record) => record.status === "succeeded" || record.status === "failed",
   "Command wait requires a terminal command record.",
@@ -175,7 +173,7 @@ export const ProtocolParamSchemas = {
   "events.subscribe": EventsSubscribeParamsSchema,
   "command.dispatch": CommandDispatchParamsSchema,
   "command.get": CommandGetParamsSchema,
-  "command.wait": CommandWaitParamsSchema,
+  "command.wait": CommandGetParamsSchema,
   "observer.reconcile": ReconcileParamsSchema,
   "observer.ingestProviderHookEvent": ProviderHookIngestParamsSchema,
   "observer.harnessEvent.report": HarnessEventReportParamsSchema,

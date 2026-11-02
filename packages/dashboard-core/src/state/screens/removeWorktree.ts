@@ -1,4 +1,5 @@
 import { isRunningAgentState, type SessionId } from "@station/contracts";
+import { assertNever } from "@station/runtime";
 import {
   type DashboardSessionRow,
   selectDashboardSessionRow,
@@ -34,7 +35,7 @@ export function removeWorktreeScreenBehavior(screen: RemoveWorktreeScreenView) {
     case "confirm":
       return removeWorktreeDismissBehavior;
   }
-  return assertNever(screen);
+  return assertNever(screen, "Unhandled Remove Worktree screen variant.");
 }
 
 export function handleRemoveWorktreeKey(
@@ -261,8 +262,4 @@ function removeWorktreeForceRequired(
 
 function cancelRemoveWorktree(state: DashboardState): DashboardState {
   return { ...state, screen: { name: "dashboard" } };
-}
-
-function assertNever(_value: never): never {
-  throw new Error("Unhandled Remove Worktree screen variant.");
 }

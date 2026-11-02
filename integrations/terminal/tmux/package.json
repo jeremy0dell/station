@@ -20,6 +20,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@station/protocol": "workspace:*"
+    "@station/protocol": "workspace:*",
+    "@xterm/headless": "6.0.0"
   }
 }

@@ -22,11 +22,11 @@ import {
   resolveExecutablePath,
   stationObserverBuildVersion,
 } from "@station/runtime";
+// Reuse the renderer workspace's terminal parser for the outer tmux client output.
+import { Terminal } from "@xterm/headless";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { tmuxPopupRunShellCommand } from "../../../../../apps/cli/src/commands/setup/checks/tmuxBinding.js";
-// Reuse the renderer workspace's terminal parser for the outer tmux client output.
-import { Terminal } from "../../../../../station/node_modules/@xterm/headless";
 import { mockObserverSnapshot } from "../../../../../station/src/client/fixtures/mockObserverSnapshot.js";
 import {
   buildManagedFastPopupRunShellCommand,

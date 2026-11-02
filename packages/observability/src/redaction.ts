@@ -1,4 +1,5 @@
 import type { RedactionReport } from "@station/contracts";
+import { isRecord } from "@station/runtime";
 
 export const REDACTION_POLICY_VERSION = "station-redaction-v1";
 const REDACTED_VALUE = "[REDACTED]";
@@ -154,8 +155,4 @@ function reportToMutable(report: RedactionReport | undefined): MutableRedactionR
     replacements: report?.replacements ?? 0,
     suspiciousSecretsFound: report?.suspiciousSecretsFound ?? 0,
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

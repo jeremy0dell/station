@@ -173,8 +173,6 @@ export const ProjectSetupConfigSchema = z
   })
   .strict();
 
-export type ProjectSetupConfig = z.infer<typeof ProjectSetupConfigSchema>;
-
 export const ProviderProjectConfigSchema = z
   .object({
     id: ProjectIdSchema,

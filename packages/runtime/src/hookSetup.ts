@@ -10,6 +10,7 @@ import {
 } from "@station/contracts";
 import type { StationBuildInfo } from "./buildInfo.js";
 import { removeFileIfPresent, replaceTextFile } from "./files.js";
+import { shellQuote } from "./shell.js";
 
 export type HookSetupErrorFactory = (input: {
   operation: "read" | "metadata" | "backup" | "writeConfig" | "writeScript" | "remove";
@@ -755,10 +756,4 @@ export function assignBackupPaths(
 
 export function commandLine(args: readonly string[]): string {
   return args.map((arg) => shellQuote(arg)).join(" ");
-}
-
-export function shellQuote(value: string, force = false): string {
-  return !force && /^[A-Za-z0-9_./:=@+-]+$/.test(value)
-    ? value
-    : `'${value.replaceAll("'", "'\\''")}'`;
 }

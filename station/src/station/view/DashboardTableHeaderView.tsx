@@ -1,5 +1,6 @@
 import { scrollIndicatorLabel } from "@station/dashboard-core/selectors";
 import type { DashboardSessionOverflow, DashboardTableHeaderModel, RowGridLayout } from "@station/dashboard-core/selectors";
+import { assertNever } from "@station/runtime";
 import { DashboardFilterView } from "./DashboardFilterView.js";
 import { Segments } from "./segments.js";
 import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
@@ -14,12 +15,8 @@ export function DashboardTableHeaderView({ model }: { model: DashboardTableHeade
     case "aboveOverflow":
       return <DashboardScrollIndicatorView direction="above" overflow={model.overflow} visible />;
     default:
-      return assertNeverDashboardTableHeaderModel(model);
+      return assertNever(model, "Unhandled dashboard table header model.");
   }
-}
-
-function assertNeverDashboardTableHeaderModel(_model: never): never {
-  throw new Error("Unhandled dashboard table header model.");
 }
 
 export function DashboardScrollIndicatorView({
