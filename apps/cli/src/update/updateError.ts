@@ -48,6 +48,14 @@ export function updateErrorFromUnknown(
   return normalized;
 }
 
+export function stalePlan(message: string): RuntimeSafeError {
+  return updateErrorFromUnknown(undefined, {
+    code: "UPDATE_PLAN_STALE",
+    message,
+    hint: "Run stn update again to build a fresh plan.",
+  });
+}
+
 export function appendUpdateErrorHint(error: RuntimeSafeError, hint: string): RuntimeSafeError {
   const normalized: RuntimeSafeError = { ...error };
   normalized.hint = error.hint === undefined ? hint : `${error.hint} ${hint}`;

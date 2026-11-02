@@ -15,7 +15,8 @@ import {
   sameUpdateCommand,
 } from "./packageManagerUpdate.js";
 import type { UpdateChannel, UpdateOperationOptions } from "./updateChannel.js";
-import { updateErrorFromUnknown } from "./updateError.js";
+import { stalePlan, updateErrorFromUnknown } from "./updateError.js";
+import { oneLine } from "./updateOutput.js";
 
 const channel = "npm-global" as const;
 const outputMaxChars = 64 * 1024;
@@ -291,20 +292,4 @@ function runNpm(
     },
     commandRunner,
   );
-}
-
-function oneLine(output: string, label: string): string {
-  const lines = output.trim().split(/\r?\n/u);
-  if (lines.length !== 1 || lines[0] === undefined || lines[0].length === 0) {
-    throw new Error(`${label} was not one non-empty line.`);
-  }
-  return lines[0];
-}
-
-function stalePlan(message: string) {
-  return updateErrorFromUnknown(undefined, {
-    code: "UPDATE_PLAN_STALE",
-    message,
-    hint: "Run stn update again to build a fresh plan.",
-  });
 }
