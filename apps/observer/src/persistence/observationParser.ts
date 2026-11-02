@@ -5,8 +5,8 @@ import {
   TerminalTargetObservationSchema,
   WorktreeObservationSchema,
 } from "@station/contracts";
+import { isRecord } from "@station/runtime";
 import { z } from "zod";
-import { isRecord } from "../utils/guards.js";
 import { stringifyJson } from "./json.js";
 import { stripTerminalProviderData } from "./terminalObservations.js";
 import type { ProviderObservation } from "./types.js";

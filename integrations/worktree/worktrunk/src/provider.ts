@@ -36,6 +36,7 @@ import {
   runExternalCommand,
   runRuntimeBoundaryWithRetryAndTimeout,
   safeErrorFromUnknown,
+  shellQuote,
   stableName,
   systemClock,
   toIsoTimestamp,
@@ -1129,7 +1130,7 @@ function staleRegistrationMessage(
   missing: readonly WorktreeObservation[],
 ): string {
   const registrations = missing.map((item) => `${item.branch} (${item.path})`).join(", ");
-  const root = shellQuote(project.root);
+  const root = shellQuote(project.root, true);
   return `Worktrunk found missing/prunable registrations for ${project.label}: ${registrations}. Inspect with git -C ${root} worktree prune --dry-run --verbose, then clean with git -C ${root} worktree prune --verbose.`;
 }
 
@@ -1447,8 +1448,4 @@ async function nativeGitRegistrationIdentity(worktreePath: string): Promise<stri
   } catch {
     return undefined;
   }
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
 }

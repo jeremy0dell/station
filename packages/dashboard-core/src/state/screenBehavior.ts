@@ -1,3 +1,4 @@
+import { assertNever } from "@station/runtime";
 import { addProjectScreenBehavior } from "./screens/addProjectScreen.js";
 import { dashboardScreenBehavior } from "./screens/dashboard.js";
 import { forkScreenBehavior } from "./screens/fork.js";
@@ -71,9 +72,5 @@ export function tuiScreenBehavior(screen: DashboardScreenView): TuiScreenBehavio
     case "widgetSettings":
       return widgetSettingsScreenBehavior;
   }
-  return assertNever(screen);
-}
-
-function assertNever(_value: never): never {
-  throw new Error("Unhandled TUI screen variant.");
+  return assertNever(screen, "Unhandled TUI screen variant.");
 }

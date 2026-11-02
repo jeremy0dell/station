@@ -1,4 +1,5 @@
 import type { ObserverStartupEvidence, SafeError } from "@station/contracts";
+import { assertNever } from "@station/runtime";
 import type {
   SetupPlan,
   SetupSessionBlockedState,
@@ -74,7 +75,7 @@ export function projectSessionView(state: SetupSessionState): ProjectSetupSessio
         ...(state.error === undefined ? {} : { error: state.error }),
       };
     default:
-      return assertNeverState(state);
+      return assertNever(state, `Unsupported setup session state: ${String(state)}`);
   }
 }
 
@@ -93,10 +94,6 @@ function projectProgress(state: SetupSessionState): ProjectSetupSessionProgress 
     case "cancelled":
       return { kind: "idle" };
     default:
-      return assertNeverState(state);
+      return assertNever(state, `Unsupported setup session state: ${String(state)}`);
   }
-}
-
-function assertNeverState(state: never): never {
-  throw new Error(`Unsupported setup session state: ${String(state)}`);
 }

@@ -8606,12 +8606,6 @@
           "bindings": ["ProviderObservation"]
         },
         {
-          "specifier": "../utils/guards.js",
-          "resolvedPath": "apps/observer/src/utils/guards.ts",
-          "edgeKind": "runtime",
-          "bindings": ["isRecord"]
-        },
-        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
@@ -8622,6 +8616,12 @@
             "TerminalTargetObservationSchema",
             "WorktreeObservationSchema"
           ]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["isRecord"]
         },
         {
           "specifier": "zod",
@@ -14829,25 +14829,6 @@
         }
       ],
       "imports": []
-    },
-    {
-      "path": "apps/observer/src/utils/guards.ts",
-      "exports": [
-        {
-          "name": "isRecord",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "@station/runtime",
-          "resolvedPath": "packages/runtime/src/index.ts",
-          "edgeKind": "runtime",
-          "bindings": ["isRecord"]
-        }
-      ]
     },
     {
       "path": "apps/observer/src/utils/time.ts",

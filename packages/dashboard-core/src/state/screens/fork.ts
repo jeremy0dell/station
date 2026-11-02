@@ -1,6 +1,6 @@
 import type { SessionId } from "@station/contracts";
 import { isRunningAgentState } from "@station/contracts";
-import { stableName } from "@station/runtime";
+import { assertNever, stableName } from "@station/runtime";
 import {
   createEditableTextInputState,
   editableTextInputIntentForInput,
@@ -41,7 +41,7 @@ export function forkScreenBehavior(screen: ForkScreenView) {
     case "details":
       return forkDetailsBehavior;
   }
-  return assertNever(screen);
+  return assertNever(screen, "Unhandled Fork screen variant.");
 }
 
 type ForkWorktreeRowView = DashboardSnapshotView["rows"][number];
@@ -409,8 +409,4 @@ function cycleFocus(screen: ForkDetailsScreen, backwards: boolean): ForkDetailsS
   const delta = backwards ? -1 : 1;
   const next = (index + delta + focusOrder.length) % focusOrder.length;
   return focusOrder[next] ?? "name";
-}
-
-function assertNever(_value: never): never {
-  throw new Error("Unhandled Fork screen variant.");
 }

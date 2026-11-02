@@ -2,6 +2,7 @@ import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises
 import { dirname } from "node:path";
 import { loadConfig, type PersistSetupConfigMutationOptions } from "@station/config";
 import {
+  assertNever,
   type ExternalCommandInput,
   publicSafeErrorFromUnknown,
   runExternalCommand,
@@ -178,7 +179,7 @@ function packageInstallCommand(
     case "install-xcode-command-line-tools":
       return ["xcode-select", "--install"];
     default:
-      return assertNever(operation);
+      return assertNever(operation, `Unsupported setup operation value: ${String(operation)}`);
   }
 }
 
@@ -195,7 +196,7 @@ function packageTarget(
     case "install-xcode-command-line-tools":
       return { kind: "bootstrap", id: "xcode-command-line-tools" };
     default:
-      return assertNever(operation);
+      return assertNever(operation, `Unsupported setup operation value: ${String(operation)}`);
   }
 }
 
@@ -596,7 +597,3 @@ const tmuxWriteFallback = {
   code: "SETUP_TMUX_WRITE_FAILED",
   message: "The tmux popup binding could not be persisted.",
 };
-
-function assertNever(value: never): never {
-  throw new Error(`Unsupported setup operation value: ${String(value)}`);
-}

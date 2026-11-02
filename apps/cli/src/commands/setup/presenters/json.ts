@@ -9,6 +9,7 @@ import {
   CliSetupPlanSchema,
   type ProviderHookArtifactOwnership,
 } from "@station/contracts";
+import { assertNever, shellQuote } from "@station/runtime";
 import type { HarnessTrackingAssessment, SetupOperation, SetupPlan } from "@station/setup-core";
 import { stationUiInstallHint } from "../../../stationWorkspace.js";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
@@ -498,7 +499,10 @@ function harnessTrackingPresentation(
         message: `${harnessLabel} Station tracking artifacts are prepared on disk.`,
       };
     default:
-      return assertNever(assessment);
+      return assertNever(
+        assessment,
+        `Unsupported semantic setup value: ${JSON.stringify(assessment)}`,
+      );
   }
 }
 
@@ -885,7 +889,7 @@ function setupActions(
         // Guided and system-only installers are not exposed by read-only machine plans.
         break;
       default:
-        assertNever(operation);
+        assertNever(operation, `Unsupported semantic setup value: ${JSON.stringify(operation)}`);
     }
   }
   if (configWrite?.operation === "blocked") {
@@ -1031,7 +1035,7 @@ function configWriteActions(
 
 function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
   if (requiredMissing === 0) {
-    const stationCommand = quoteCommandPart(facts.launchers.station.command);
+    const stationCommand = shellQuote(facts.launchers.station.command);
     return [`${stationCommand} doctor`, stationCommand];
   }
   if (facts.stateDir.status === "missing") {
@@ -1062,15 +1066,4 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
     ];
   }
   return ["Resolve the missing required setup items, then run: stn setup check"];
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unsupported semantic setup value: ${JSON.stringify(value)}`);
-}
-
-function quoteCommandPart(part: string): string {
-  if (/^[A-Za-z0-9_./:=@%+-]+$/.test(part)) {
-    return part;
-  }
-  return `'${part.replaceAll("'", "'\\''")}'`;
 }

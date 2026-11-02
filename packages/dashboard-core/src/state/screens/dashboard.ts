@@ -1,3 +1,4 @@
+import { assertNever } from "@station/runtime";
 import { selectDashboardSlots } from "../../selectors/dashboardSlots.js";
 import { choiceValueByKey } from "../../selectors/keyedChoices.js";
 import { activateFocusedDashboardCell } from "../dashboardCells.js";
@@ -136,7 +137,7 @@ function handleDashboardAction(
     case "tui.row.activateSlot":
       return activateDashboardSlot(state, key, context);
     default:
-      return assertNever(action);
+      return assertNever(action, `Unhandled dashboard binding: ${JSON.stringify(action)}`);
   }
 }
 
@@ -161,10 +162,6 @@ export function handleFirstProjectAddAction(
 
 function hasNoProjects(state: DashboardState): boolean {
   return state.snapshot?.projects.length === 0;
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled dashboard binding: ${JSON.stringify(value)}`);
 }
 
 function exitDashboardRenderer(state: DashboardState): TuiTransition {

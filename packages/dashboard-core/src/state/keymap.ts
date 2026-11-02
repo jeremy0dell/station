@@ -1,3 +1,4 @@
+import { assertNever } from "@station/runtime";
 import { SELECTION_KEYS, type SelectionKey } from "../selectors/keyedChoices.js";
 import type { TuiKey } from "./keys.js";
 import type { DashboardStateView } from "./types.js";
@@ -429,7 +430,7 @@ function matchesPattern(pattern: DashboardKeyPattern, key: TuiKey): boolean {
     case "slot":
       return isSlotKey(key);
     default:
-      return assertNeverDashboardPattern(pattern);
+      return assertNever(pattern, `Unhandled dashboard key pattern: ${JSON.stringify(pattern)}`);
   }
 }
 
@@ -448,16 +449,8 @@ function matchesNamedKey(named: DashboardNamedKey, key: TuiKey): boolean {
     case "right":
       return key.rightArrow === true;
     default:
-      return assertNeverNamedKey(named);
+      return assertNever(named, `Unhandled dashboard named key: ${named}`);
   }
-}
-
-function assertNeverDashboardPattern(pattern: never): never {
-  throw new Error(`Unhandled dashboard key pattern: ${JSON.stringify(pattern)}`);
-}
-
-function assertNeverNamedKey(named: never): never {
-  throw new Error(`Unhandled dashboard named key: ${named}`);
 }
 
 export function matchDashboardBinding(key: TuiKey): TuiDashboardBinding | undefined {

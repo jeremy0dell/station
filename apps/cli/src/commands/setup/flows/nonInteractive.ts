@@ -1,3 +1,4 @@
+import { assertNever } from "@station/runtime";
 import type {
   SetupSessionFailedOperationOutcome,
   SetupSessionOperationOutcome,
@@ -146,10 +147,6 @@ function operationFailureLabel(
     case "write-config":
       return presenter.text(setupMessageRef("label.setup-operation"));
     default:
-      return assertNeverOutcome(operation);
+      return assertNever(operation, `Unsupported setup operation: ${String(operation)}`);
   }
-}
-
-function assertNeverOutcome(operation: never): never {
-  throw new Error(`Unsupported setup operation: ${String(operation)}`);
 }

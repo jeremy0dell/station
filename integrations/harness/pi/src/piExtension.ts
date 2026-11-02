@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import type { HarnessEventReport } from "@station/contracts";
-import { systemClock, toIsoTimestamp } from "@station/runtime";
+import { assertNever, systemClock, toIsoTimestamp } from "@station/runtime";
 import { parsePiCompactEvent } from "./event/compactEvent.js";
 import { compactPiHookPayload } from "./event/compaction.js";
 import { piHookPayloadToHarnessEventReport } from "./event/mapping.js";
@@ -279,12 +279,8 @@ function assignPiEventFields(
     case "agent_settled":
       return;
     default:
-      assertNeverPiEvent(eventType);
+      assertNever(eventType, `Unsupported Pi extension event: ${String(eventType)}.`);
   }
-}
-
-function assertNeverPiEvent(eventType: never): never {
-  throw new Error(`Unsupported Pi extension event: ${String(eventType)}.`);
 }
 
 function reportFromPiExtensionPayload(

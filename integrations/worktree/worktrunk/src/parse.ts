@@ -5,7 +5,7 @@ import type {
   WorktreeObservation,
 } from "@station/contracts";
 import { normalizeObservedPath, WorktreeObservationSchema } from "@station/contracts";
-import { stableName } from "@station/runtime";
+import { asRecord, stableName } from "@station/runtime";
 import { WorktrunkProviderError } from "./errors.js";
 import { applyMetadataToObservation, providerNativeMetadataFromWorktrunkItem } from "./metadata.js";
 
@@ -293,12 +293,6 @@ function basename(path: string): string {
 
 function pathDisplaySlug(path: string): string {
   return basename(path) || "worktree";
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }
 
 function recordField(

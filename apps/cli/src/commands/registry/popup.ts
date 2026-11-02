@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { dirname, join, normalize, parse } from "node:path";
 import { emptyConfig } from "@station/config";
+import { shellQuote } from "@station/runtime";
 import type { CliEnv } from "../../env.js";
 import { selfExecArgv } from "../../selfExec.js";
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
@@ -95,10 +96,12 @@ function defaultPopupTuiCommand(
   const command = nonEmptyString(env?.STATION_TUI_COMMAND);
   const parts =
     command === undefined
-      ? [...selfExecArgv("cli", [process.execPath, cliEntryPath])].map(shellQuote)
+      ? [...selfExecArgv("cli", [process.execPath, cliEntryPath])].map((part) =>
+          shellQuote(part, true),
+        )
       : [command];
   if (configPath !== undefined) {
-    parts.push("--config", shellQuote(configPath));
+    parts.push("--config", shellQuote(configPath, true));
   }
   parts.push("tui", "--popup", "--persistent");
   return parts.join(" ");
@@ -113,10 +116,6 @@ function nonEmptyString(value: string | undefined): string | undefined {
     return undefined;
   }
   return value;
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function popupOwnerRoot(
