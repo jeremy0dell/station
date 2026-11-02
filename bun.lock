@@ -253,7 +253,6 @@
       "version": "0.0.0",
       "dependencies": {
         "@station/contracts": "workspace:*",
-        "@station/runtime": "workspace:*",
       },
     },
     "packages/setup-messages": {

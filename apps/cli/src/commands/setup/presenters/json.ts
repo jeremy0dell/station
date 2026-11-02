@@ -1033,9 +1033,15 @@ function configWriteActions(
   return [mkdirAction, writeAction];
 }
 
+const setupCommandPartPattern = /^[A-Za-z0-9_./:=@%+-]+$/;
+
+function quoteSetupCommandPart(part: string): string {
+  return setupCommandPartPattern.test(part) ? part : shellQuote(part, true);
+}
+
 function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
   if (requiredMissing === 0) {
-    const stationCommand = shellQuote(facts.launchers.station.command);
+    const stationCommand = quoteSetupCommandPart(facts.launchers.station.command);
     return [`${stationCommand} doctor`, stationCommand];
   }
   if (facts.stateDir.status === "missing") {

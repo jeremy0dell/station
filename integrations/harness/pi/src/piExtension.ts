@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import type { HarnessEventReport } from "@station/contracts";
-import { assertNever, systemClock, toIsoTimestamp } from "@station/runtime";
+import { asRecord, assertNever, systemClock, toIsoTimestamp } from "@station/runtime";
 import { parsePiCompactEvent } from "./event/compactEvent.js";
 import { compactPiHookPayload } from "./event/compaction.js";
 import { piHookPayloadToHarnessEventReport } from "./event/mapping.js";
@@ -478,10 +478,4 @@ function arrayField(
 ): unknown[] | undefined {
   const value = target?.[key];
   return Array.isArray(value) ? value : undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }
