@@ -17,7 +17,8 @@ import type {
   UpdateOperationOptions,
   UpdatePlanBase,
 } from "./updateChannel.js";
-import { updateErrorFromUnknown } from "./updateError.js";
+import { stalePlan, updateErrorFromUnknown } from "./updateError.js";
+import { oneLine } from "./updateOutput.js";
 
 const channel = "dev-checkout" as const;
 const PackageSchema = z.object({
@@ -716,14 +717,6 @@ function commandInput(
   };
 }
 
-function oneLine(output: string, label: string): string {
-  const lines = output.trim().split(/\r?\n/u);
-  if (lines.length !== 1 || lines[0] === undefined || lines[0].length === 0) {
-    throw new Error(`${label} was not one non-empty line.`);
-  }
-  return lines[0];
-}
-
 function sameCommand(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
@@ -741,14 +734,6 @@ function planFailure(message: string) {
     code: "UPDATE_PLAN_FAILED",
     message,
     hint: "Commit, stash, or repair the checkout and rerun stn update.",
-  });
-}
-
-function stalePlan(message: string) {
-  return updateErrorFromUnknown(undefined, {
-    code: "UPDATE_PLAN_STALE",
-    message,
-    hint: "Run stn update again to build a fresh plan.",
   });
 }
 
