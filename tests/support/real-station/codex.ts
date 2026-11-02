@@ -223,14 +223,6 @@ export async function continuePastCodexStartupPrompts(
   }
 }
 
-export function codexWorkbenchPaneTarget(
-  endpoint: RealTmuxEndpoint,
-  tmuxSession: string,
-  row: StationSnapshot["rows"][number],
-): Promise<string> {
-  return activeTmuxPane(endpoint, workbenchPaneTarget(tmuxSession, row));
-}
-
 function workbenchPaneTarget(tmuxSession: string, row: StationSnapshot["rows"][number]): string {
   return `${tmuxSession}:${buildWorkbenchWindowName({
     projectId: row.projectId,

@@ -71,7 +71,6 @@ export const UiLifecycleClientDetachReasonSchema = z.enum([
   "socket_closed",
   "stream_failed",
 ]);
-export type UiLifecycleClientDetachReason = z.infer<typeof UiLifecycleClientDetachReasonSchema>;
 
 export const UiLifecyclePtyKindSchema = PtyHandoffKindSchema;
 export type UiLifecyclePtyKind = z.infer<typeof UiLifecyclePtyKindSchema>;

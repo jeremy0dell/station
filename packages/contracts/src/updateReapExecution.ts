@@ -23,7 +23,6 @@ export const UpdateReapJournalPhaseSchema = z.enum([
   "verified",
   "completed",
 ]);
-export type UpdateReapJournalPhase = z.infer<typeof UpdateReapJournalPhaseSchema>;
 
 export const UpdateReapTerminationOutcomeSchema = z.enum([
   "already-exited",

@@ -47,7 +47,12 @@
       ]
     },
     "apps/cli": {
-      "entry": ["test/**/*.typecheck.ts"],
+      "entry": [
+        // The checkout launcher and command dispatch entrypoints are resolved by path or dynamic import.
+        "src/bootstrap.ts",
+        "src/commandDispatchProcess.ts",
+        "test/**/*.typecheck.ts"
+      ],
       "project": ["src/**/*.ts!", "test/**/*.{ts,tsx}"]
     },
     "apps/observer": {

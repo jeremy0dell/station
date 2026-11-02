@@ -14,7 +14,6 @@ import { ZodError } from "zod";
 import {
   CommandDispatchParamsSchema,
   CommandGetParamsSchema,
-  CommandWaitParamsSchema,
   EventsSubscribeParamsSchema,
   HarnessEventReportParamsSchema,
   ProtocolEventEnvelopeSchema,
@@ -268,7 +267,7 @@ async function routeCommandWaitRequest(
   request: ProtocolRequest,
 ): Promise<void> {
   try {
-    const params = CommandWaitParamsSchema.parse(request.params);
+    const params = CommandGetParamsSchema.parse(request.params);
     const record = await waitForTerminalCommandRecord(connection, api, params.commandId);
     sendResult(connection, request.id, "command.wait", record);
   } catch (error) {

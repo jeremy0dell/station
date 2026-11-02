@@ -44,9 +44,6 @@ export {
   type TerminalBoundHarnessProviderSpec,
 } from "./provider.js";
 export {
-  type DeclarativeProviderHookDoctorResult,
-  type DeclarativeProviderHookErrorMessages,
-  type DeclarativeProviderHookWriteContext,
   inspectDeclarativeProviderHookHealth,
   reconcileDeclarativeProviderHooks,
 } from "./providerHookReconciliation.js";

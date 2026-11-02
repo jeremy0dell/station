@@ -23,7 +23,6 @@ export type {
   StationClientConnectionState,
   StationClientRefreshOutcome,
   StationClientRuntime,
-  StationClientRuntimeDiagnostics,
   StationClientState,
   StationClientStateSource,
 } from "./types.js";
