@@ -142,6 +142,7 @@ async function removeValidatedWorktree(
     }
     throw error;
   }
+  options.core.discardRetainedWorktree({ projectId: row.projectId, worktreeId: row.id });
   throwIfAborted(context.signal);
   await options.persistence.retireRemovedWorktreeSessionState({
     projectId: row.projectId,

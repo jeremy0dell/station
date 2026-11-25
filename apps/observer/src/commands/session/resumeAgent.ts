@@ -29,6 +29,7 @@ import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import { ensureAgentWorkspace } from "../terminalOperations.js";
 import {
+  assertWorktreeListed,
   commandValidationError,
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
@@ -135,6 +136,7 @@ export function createSessionResumeAgentHandler(
           message: "The requested worktree is not visible in the current snapshot.",
         });
       }
+      assertWorktreeListed(row);
       const worktree = worktreeObservationFromRow(
         row,
         options.providers.worktree.id,

@@ -7,6 +7,7 @@ import type {
   ProviderProjectConfig,
   SafeError,
   TerminalTargetObservation,
+  WorktreeListingFailure,
   WorktreeObservation,
 } from "@station/contracts";
 import {
@@ -38,6 +39,12 @@ export function worktreeListingMaxAgeForReason(reason: string): number | undefin
     ? scheduledWorktreeListingMaxAgeMs
     : undefined;
 }
+
+/** The last complete listing per project. Snapshots show it after a failed listing; it authorizes nothing. */
+export type RetainedWorktreeListings = Map<
+  ProjectId,
+  { worktrees: WorktreeObservation[]; completedAt: string }
+>;
 
 type CompleteProviderReadOutcome = {
   status: "complete";
@@ -82,29 +89,35 @@ const providerReadConcurrency = 4;
 
 /**
  * Reads worktrees with bounded provider concurrency while preserving project order, health errors,
- * and an explicit completeness outcome for every configured project.
+ * and an explicit completeness outcome for every configured project. `worktrees` adds the last
+ * complete listing of each project whose read failed; `observedWorktrees` holds only this read.
  */
 export async function readWorktreeObservations(input: {
   providers: ProviderRegistry;
   projects: ProviderProjectConfig[];
   read: ProviderReadOptions;
+  retainedListings: RetainedWorktreeListings;
   providerHealth: Record<string, ProviderHealth>;
   errors: SafeError[];
 }): Promise<{
   worktrees: WorktreeObservation[];
+  observedWorktrees: WorktreeObservation[];
+  listingFailures: Map<ProjectId, WorktreeListingFailure>;
+  healthBeforeRead: ProviderHealth;
   projectsScanned: number;
   outcomes: WorktreeProjectReadOutcome[];
 }> {
   const provider = input.providers.worktree;
   const capabilities = provider.capabilities();
 
-  input.providerHealth[provider.id] = cachedProviderHealth({
+  const healthBeforeRead = cachedProviderHealth({
     providers: input.providers,
     providerId: provider.id,
     providerType: "worktree",
     capabilities,
     clock: input.read.clock,
   });
+  input.providerHealth[provider.id] = healthBeforeRead;
 
   // Indexed collection keeps worktree order deterministic (config project order)
   // while listWorktrees calls run concurrently.
@@ -169,6 +182,11 @@ export async function readWorktreeObservations(input: {
       }
 
       worktreesByProject[index] = result.value;
+      input.retainedListings.set(project.id, {
+        worktrees: result.value,
+        // A cached listing is older than this read; its observations carry the listing time.
+        completedAt: result.value[0]?.observedAt ?? result.timing.finishedAt,
+      });
       outcomesByProject[index] = {
         status: "complete",
         providerType: "worktree",
@@ -188,8 +206,26 @@ export async function readWorktreeObservations(input: {
         failureCode: providerFailureCode ?? "WORKTREE_LIST_FAILED",
       },
   );
+  const listingFailures = new Map<ProjectId, WorktreeListingFailure>();
+  const worktrees: WorktreeObservation[] = [];
+  for (const [index, outcome] of outcomes.entries()) {
+    if (outcome.status === "complete") {
+      worktrees.push(...(worktreesByProject[index] ?? []));
+      continue;
+    }
+    const retained = input.retainedListings.get(outcome.projectId);
+    const failure: WorktreeListingFailure = { code: outcome.failureCode };
+    if (retained !== undefined) {
+      failure.lastCompleteAt = retained.completedAt;
+      worktrees.push(...retained.worktrees);
+    }
+    listingFailures.set(outcome.projectId, failure);
+  }
   return {
-    worktrees: worktreesByProject.flat(),
+    worktrees,
+    observedWorktrees: worktreesByProject.flat(),
+    listingFailures,
+    healthBeforeRead,
     projectsScanned: outcomes.filter((outcome) => outcome.status === "complete").length,
     outcomes,
   };

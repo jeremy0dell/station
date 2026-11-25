@@ -45,6 +45,16 @@ const activityCountsShape = {
   unknown: z.number().int().nonnegative(),
 } as const;
 
+/** Present while the latest worktree listing failed; the project's rows come from `lastCompleteAt`, if any. */
+export const WorktreeListingFailureSchema = z
+  .object({
+    code: nonEmptyStringSchema,
+    lastCompleteAt: TimestampSchema.optional(),
+  })
+  .strict();
+
+export type WorktreeListingFailure = z.infer<typeof WorktreeListingFailureSchema>;
+
 export const ProjectViewSchema = z
   .object({
     id: ProjectIdSchema,
@@ -52,6 +62,7 @@ export const ProjectViewSchema = z
     root: nonEmptyStringSchema,
     defaults: ProjectDefaultsSchema,
     health: ProviderHealthSchema,
+    listingFailure: WorktreeListingFailureSchema.optional(),
     counts: z.object(activityCountsShape).strict(),
   })
   .strict();
@@ -62,6 +73,8 @@ export const WorktreeRuntimeSchema = z
   .object({
     state: WorktreeStateSchema,
     source: WorktreeSourceSchema,
+    /** The row comes from the last complete listing because the latest listing failed. */
+    stale: z.literal(true).optional(),
     dirty: z.boolean().optional(),
     ahead: z.number().int().nonnegative().optional(),
     behind: z.number().int().nonnegative().optional(),

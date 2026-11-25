@@ -207,6 +207,12 @@ export function createSessionCreateHandler(
             logger: options.logger,
             clock: options.clock,
           });
+          if (worktreeRemoved) {
+            options.core.discardRetainedWorktree({
+              projectId: project.id,
+              worktreeId: createdWorktree.id,
+            });
+          }
         }
         if (sessionSeeded && worktreeRemoved) {
           await discardSessionSeedBestEffort({

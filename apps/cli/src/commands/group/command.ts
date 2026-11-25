@@ -16,6 +16,7 @@ import {
 } from "@station/contracts";
 import type { ObserverProcessDeps } from "../../observerProcess.js";
 import { executeTypedObserverCommand, type TypedObserverCommandOptions } from "../command.js";
+import { incompleteProjects } from "../session/summary.js";
 import { loadObserverSnapshot, type ObserverSnapshotLoadOptions } from "../snapshot.js";
 import type { ParsedGroupArgs } from "./args.js";
 import { parseGroupArgs } from "./args.js";
@@ -68,6 +69,7 @@ export async function runGroupCommand(
       action: "list",
       filters: parsed.filters,
       groups: projectGroups(snapshot, parsed.filters.project),
+      incompleteProjects: incompleteProjects(snapshot, parsed.filters.project),
     };
   }
   if (parsed.action === "get") {

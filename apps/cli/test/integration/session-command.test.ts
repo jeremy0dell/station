@@ -397,6 +397,46 @@ describe("session discovery commands", () => {
     }
   });
 
+  it("distinguishes a failed project listing from an ended session", async () => {
+    const fixture = await createTempState();
+    const base = sessionSnapshot();
+    const snapshot: StationSnapshot = {
+      ...base,
+      projects: base.projects.map((project) =>
+        project.id === "web"
+          ? { ...project, listingFailure: { code: "WORKTRUNK_TIMEOUT" } }
+          : project,
+      ),
+      rows: base.rows.filter((row) => row.projectId !== "web"),
+      sessions: base.sessions.filter((session) => session.projectId !== "web"),
+    };
+    const run = (args: string[]) =>
+      runSessionCommand(
+        args,
+        { config: fixture.config },
+        snapshotObserverDeps(fixture.socketPath, [snapshot]),
+      );
+
+    try {
+      const listed = await run(["list"]);
+      expect(listed).toMatchObject({
+        incompleteProjects: [
+          { projectId: "web", projectLabel: "Web App", code: "WORKTRUNK_TIMEOUT" },
+        ],
+      });
+      if (listed.action !== "list") throw new Error("expected a list result");
+      expect(renderSessionCommandText(listed)).toContain(
+        "Warning: listing Web App failed (WORKTRUNK_TIMEOUT). Its sessions are not shown and may still be running.",
+      );
+      expect(await run(["list", "--project", "api"])).toMatchObject({ incompleteProjects: [] });
+      await expect(run(["get", "ses_station"])).rejects.toMatchObject({
+        code: "SESSION_LISTING_INCOMPLETE",
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("gets only one exact current session ID", async () => {
     const fixture = await createTempState();
     const disallowedSelectors = ["ses_sta", "Web Control", "feature/web-control", "station", "1"];

@@ -2,6 +2,7 @@ import type {
   ClientFeatureFlags,
   HarnessCapabilities,
   HarnessRunObservation,
+  ProjectId,
   ProviderHealth,
   ProviderId,
   ProviderProjectConfig,
@@ -9,6 +10,7 @@ import type {
   SnapshotHarness,
   StationAlert,
   TerminalTargetObservation,
+  WorktreeListingFailure,
   WorktreeObservation,
 } from "@station/contracts";
 
@@ -23,6 +25,9 @@ export type ObserverGraphInput = {
   projects: ProviderProjectConfig[];
   worktreeProviderId: ProviderId;
   providerHealth: Record<string, ProviderHealth>;
+  listingFailures?: ReadonlyMap<ProjectId, WorktreeListingFailure>;
+  /** Health of projects that listed completely, so another project's failure does not block them. */
+  worktreeHealthBeforeRead?: ProviderHealth;
   harnesses?: SnapshotHarness[];
   harnessCapabilities?: Record<string, HarnessCapabilities>;
   worktrees: WorktreeObservation[];

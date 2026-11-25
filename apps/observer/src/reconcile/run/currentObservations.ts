@@ -1,10 +1,12 @@
 import type {
   HarnessCapabilities,
   HarnessRunObservation,
+  ProjectId,
   ProviderHealth,
   ProviderProjectConfig,
   SafeError,
   TerminalTargetObservation,
+  WorktreeListingFailure,
   WorktreeObservation,
 } from "@station/contracts";
 import { toIsoTimestamp } from "@station/runtime";
@@ -23,6 +25,7 @@ import {
 import {
   type ProviderReadOptions,
   type ProviderReadOutcome,
+  type RetainedWorktreeListings,
   readHarnessObservations,
   readRepositoryProviderHealth,
   readTerminalTargetObservations,
@@ -35,7 +38,10 @@ type ReconcileObservationPersistence = ObservationStore & SessionStore & Worktre
 
 export type CurrentReconcileObservations = {
   observedAt: string;
+  /** Worktrees this reconcile listed; excludes rows kept from an earlier listing. */
   worktrees: WorktreeObservation[];
+  listingFailures: ReadonlyMap<ProjectId, WorktreeListingFailure>;
+  worktreeHealthBeforeRead: ProviderHealth;
   projectsScanned: number;
   terminalTargets: TerminalTargetObservation[];
   terminalTargetsRead: number;
@@ -54,6 +60,7 @@ export async function readCurrentReconcileObservations(input: {
   providers: ProviderRegistry;
   projects: ProviderProjectConfig[];
   read: ProviderReadOptions;
+  retainedListings: RetainedWorktreeListings;
   persistence?: ReconcileObservationPersistence;
   providerHealth: Record<string, ProviderHealth>;
   errors: SafeError[];
@@ -64,6 +71,7 @@ export async function readCurrentReconcileObservations(input: {
       providers: input.providers,
       projects: input.projects,
       read: input.read,
+      retainedListings: input.retainedListings,
       providerHealth: input.providerHealth,
       errors: input.errors,
     }),
@@ -131,7 +139,9 @@ export async function readCurrentReconcileObservations(input: {
 
   return {
     observedAt,
-    worktrees: worktreeResult.worktrees,
+    worktrees: worktreeResult.observedWorktrees,
+    listingFailures: worktreeResult.listingFailures,
+    worktreeHealthBeforeRead: worktreeResult.healthBeforeRead,
     projectsScanned: worktreeResult.projectsScanned,
     terminalTargets,
     terminalTargetsRead: terminalResult.terminalTargets.length,

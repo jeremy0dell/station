@@ -1520,6 +1520,49 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it.each([
+    {
+      type: "session.startAgent" as const,
+      payload: {
+        projectId: "web",
+        worktreeId: "wt_web_unlisted",
+        harness: { provider: "fake-harness", mode: "interactive" as const },
+      },
+    },
+    {
+      type: "worktree.fork" as const,
+      payload: { projectId: "web", sourceWorktreeId: "wt_web_unlisted", branch: "forked" },
+    },
+  ])("refuses $type from a stale row after the listing failed", async (command) => {
+    const worktree = new FakeWorktreeProvider({
+      now,
+      worktrees: [
+        createFakeWorktree({
+          id: "wt_web_unlisted",
+          projectId: "web",
+          branch: "unlisted",
+          now,
+        }),
+      ],
+    });
+    const terminal = new FakeTerminalProvider({ now });
+    const fixture = createFixture({ worktree, terminal });
+    await fixture.core.reconcile("listed");
+    vi.spyOn(worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+    await fixture.core.reconcile("listing-failed");
+
+    const receipt = await fixture.queue.dispatch(command);
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "WORKTREE_LISTING_STALE", worktreeId: "wt_web_unlisted" },
+    });
+    expect(terminal.snapshot().launches).toEqual([]);
+    expect(worktree.snapshot().created).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("starts fresh by retiring a stale target under the retained session identity and Group", async () => {
     const worktree = createFakeWorktree({
       id: "wt_web_grouped_restart",

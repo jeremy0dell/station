@@ -20,6 +20,7 @@ import { reconcileAndPublish } from "../reconcile.js";
 import { ensureAgentWorkspace } from "../terminalOperations.js";
 import {
   assertNoCurrentAgent,
+  assertWorktreeListed,
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
   findProjectOrThrow,
@@ -84,6 +85,7 @@ export function createSessionStartAgentHandler(
           message: "The requested worktree is not visible in the current snapshot.",
         });
       }
+      assertWorktreeListed(row);
 
       const retainedSession = snapshot.sessions.find(
         (candidate) =>

@@ -172,7 +172,12 @@ No single layer owns all truth:
 - **`StationSnapshot`** is the normalized current graph held in memory. It is
   derived from config, current provider evidence, and allowed durable overlays;
   it is not a replay log. Provider uncertainty must remain visible rather than
-  being filled from stale durable or adapter state.
+  being filled from stale durable or adapter state. After a failed worktree
+  listing, the snapshot keeps that project's rows from its last complete listing
+  in this process, marks each row stale, and reports the failure on the project.
+  Stale rows are display and correlation evidence only: they are not persisted
+  as observations, do not authorize absence-based pruning, and cannot start or
+  fork an agent.
 - **Current provider context** is the provider-neutral worktree and terminal
   context committed by the latest successful reconcile. It is process-local
   routing context, not reconstructible authority from historical observations.

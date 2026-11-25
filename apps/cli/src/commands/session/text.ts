@@ -11,12 +11,12 @@ import type {
   SessionCreationProjectionState,
 } from "./creationConvergence.js";
 import type { SessionCommandResult } from "./result.js";
-import type { SessionFilters, SessionSummary } from "./summary.js";
+import type { IncompleteProjectSummary, SessionFilters, SessionSummary } from "./summary.js";
 
 type RenderableSessionCommandResult = Exclude<SessionCommandResult, { action: "current" }>;
 
 export function renderSessionCommandText(result: RenderableSessionCommandResult): string {
-  if (result.action === "list") return renderSessionList(result.filters, result.sessions);
+  if (result.action === "list") return renderSessionList(result);
   if (result.action === "get") return renderSessionSummary(result.session);
   if (result.action === "create" || result.action === "fork") {
     return renderSessionCreation(result);
@@ -131,8 +131,24 @@ function renderSessionSummary(session: SessionSummary): string {
   return lines.join("\n");
 }
 
-function renderSessionList(filters: SessionFilters, sessions: readonly SessionSummary[]): string {
-  const lines: string[] = [];
+export function renderIncompleteProjects(projects: readonly IncompleteProjectSummary[]): string[] {
+  if (projects.length === 0) return [];
+  const warnings = projects.map((project) => {
+    const label = escapeTerminalBytes(project.projectLabel);
+    const code = escapeTerminalBytes(project.code);
+    return project.lastCompleteAt === undefined
+      ? `Warning: listing ${label} failed (${code}). Its sessions are not shown and may still be running.`
+      : `Warning: listing ${label} failed (${code}). Showing its worktrees from ${project.lastCompleteAt}.`;
+  });
+  return [...warnings, ""];
+}
+
+function renderSessionList({
+  filters,
+  sessions,
+  incompleteProjects,
+}: Extract<SessionCommandResult, { action: "list" }>): string {
+  const lines = renderIncompleteProjects(incompleteProjects);
   const renderedFilters = renderFilters(filters);
   if (renderedFilters !== undefined) lines.push(`Filters: ${renderedFilters}`, "");
   if (sessions.length === 0) {

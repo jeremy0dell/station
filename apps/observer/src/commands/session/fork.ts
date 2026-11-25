@@ -28,6 +28,7 @@ import type { CommandResultHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import { commandPlacementResult, ensureAgentWorkspace } from "../terminalOperations.js";
 import {
+  assertWorktreeListed,
   commandValidationError,
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
@@ -103,6 +104,7 @@ export function createSessionForkHandler(
         worktreeId: payload.sourceWorktreeId,
       });
     }
+    assertWorktreeListed(sourceRow);
 
     const groupIntent = resolveForkSessionGroupPlacement({
       snapshot,
@@ -249,6 +251,12 @@ export function createSessionForkHandler(
             logger: options.logger,
             clock: options.clock,
           });
+          if (worktreeRemoved) {
+            options.core.discardRetainedWorktree({
+              projectId: project.id,
+              worktreeId: createdWorktree.id,
+            });
+          }
         }
         if (sessionSeeded && worktreeRemoved) {
           await discardSessionSeedBestEffort({

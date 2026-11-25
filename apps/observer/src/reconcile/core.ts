@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { StationConfig } from "@station/config";
 import type {
   HarnessEventReport,
@@ -41,7 +42,7 @@ import {
   projectPreparedExternalLaunchOntoSnapshot,
 } from "./graph/authoritativeLaunch.js";
 import { projectProviderHealthOntoSnapshot } from "./graph/providerHealth.js";
-import type { ProviderReadOptions } from "./providerObservations.js";
+import type { ProviderReadOptions, RetainedWorktreeListings } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import { runReconcileOnce } from "./run.js";
 import { projectSessionGroups } from "./sessionGroups.js";
@@ -75,6 +76,8 @@ export type ObserverCore = {
     projectId: string;
     worktree: WorktreeObservation;
   }): Promise<SnapshotProjectionCommitResult<CreatedWorktreeProjectionRejectionReason>>;
+  /** Stops a confirmed-removed worktree from reappearing as a stale row after a failed listing. */
+  discardRetainedWorktree(input: { projectId: string; worktreeId: string }): void;
   commitPreparedExternalLaunch(input: {
     worktree: WorktreeObservation;
     terminalProviderId: string;
@@ -126,6 +129,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
   let providerHealth: Record<string, ProviderHealth> = {};
   let lastReconcile: ReconcileTiming | undefined;
   let snapshotDebug: StationSnapshotDebug | undefined;
+  const retainedListings: RetainedWorktreeListings = new Map();
   let snapshot = buildInitialSnapshot({
     generatedAt: startedAt,
     observer: { pid, startedAt, version },
@@ -162,6 +166,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
           projects,
           providers: input.providers,
           read,
+          retainedListings,
           ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
           providerObservationRetentionDays: providerObservationRetentionDays(
             config.observability?.retention,
@@ -215,11 +220,29 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
           return { status: "already-exact", events: [] };
         }
         snapshot = projection.snapshot;
+        const retained = retainedListings.get(created.projectId);
+        if (retained !== undefined) {
+          retainedListings.set(created.projectId, {
+            ...retained,
+            worktrees: [
+              ...retained.worktrees.filter((worktree) => worktree.id !== created.worktree.id),
+              created.worktree,
+            ],
+          });
+        }
         return {
           status: "applied",
           events: [{ type: "worktree.added", row: projection.value }],
         };
       }),
+    discardRetainedWorktree: ({ projectId, worktreeId }) => {
+      const retained = retainedListings.get(projectId);
+      if (retained === undefined) return;
+      retainedListings.set(projectId, {
+        ...retained,
+        worktrees: retained.worktrees.filter((worktree) => worktree.id !== worktreeId),
+      });
+    },
     commitPreparedExternalLaunch: (launch) =>
       enqueueSnapshotWrite(async () => {
         const [sessionGroups, durableSession] =
@@ -429,7 +452,13 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
     },
     updateConfig: (nextConfig) => {
       config = nextConfig;
-      projects = providerProjectsFromConfig(nextConfig);
+      const nextProjects = providerProjectsFromConfig(nextConfig);
+      // A listing taken under a different root or filter must not stand in for the new configuration.
+      for (const project of projects) {
+        const next = nextProjects.find((candidate) => candidate.id === project.id);
+        if (!isDeepStrictEqual(project, next)) retainedListings.delete(project.id);
+      }
+      projects = nextProjects;
     },
     getProjects: () => projects,
     getSnapshot: (options) => {

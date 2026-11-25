@@ -1,4 +1,4 @@
-import type { SessionView, StationSnapshot, WorktreeRow } from "@station/contracts";
+import type { ProjectView, SessionView, StationSnapshot, WorktreeRow } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import { countsForSnapshot } from "../snapshotCounts.js";
 import type { ObserverGraphInput } from "./evidence.js";
@@ -23,7 +23,8 @@ import {
  * POLICY
  *
  * Correlates provider observations with canonical worktree title input and durable session records.
- * Branch names remain only the defensive title fallback when persistence is unavailable.
+ * Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a
+ * project whose listing failed are marked stale, and only that project reports the failure.
  */
 export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot {
   const projectsById = new Map(input.projects.map((project) => [project.id, project]));
@@ -67,6 +68,7 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
           project,
           worktree,
           title,
+          stale: input.listingFailures?.has(project.id) === true,
         };
         if (terminal !== undefined) rowInput.terminal = terminal;
         if (harnessRun !== undefined) rowInput.harnessRun = harnessRun;
@@ -116,14 +118,21 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
   const projects = input.projects.map((project) => {
     const rows = allRows.filter((row) => row.projectId === project.id);
     const projectSessions = sessions.filter((session) => session.projectId === project.id);
-    return {
+    const listingFailure = input.listingFailures?.get(project.id);
+    const providerHealth = input.providerHealth[input.worktreeProviderId];
+    const view: ProjectView = {
       id: project.id,
       label: project.label,
       root: project.root,
       defaults: project.defaults,
-      health: input.providerHealth[input.worktreeProviderId] ?? unknownProviderHealth(input),
+      health:
+        (listingFailure === undefined ? input.worktreeHealthBeforeRead : undefined) ??
+        providerHealth ??
+        unknownProviderHealth(input),
       counts: countsForSnapshot(rows, projectSessions),
     };
+    if (listingFailure !== undefined) view.listingFailure = listingFailure;
+    return view;
   });
 
   const counts = {
