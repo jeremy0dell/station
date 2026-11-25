@@ -615,6 +615,7 @@ describe("observer reconcile with fake providers", () => {
       projects: config.projects.map((project) => ({
         ...project,
         defaults: { ...project.defaults, harness: "other-harness" },
+        worktrunk: { ...project.worktrunk, base: "other-base" },
       })),
     });
     vi.spyOn(worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
@@ -654,6 +655,58 @@ describe("observer reconcile with fake providers", () => {
 
     read.mockRejectedValue(new Error("failed"));
     expect((await core.reconcile("failed")).rows).toEqual([]);
+    sqlite.close();
+  });
+
+  it("does not show rows from before a project was removed and added again", async () => {
+    const worktree = new FakeWorktreeProvider({
+      now,
+      worktrees: [createFakeWorktree({ id: "wt_web", projectId: "web", branch: "web", now })],
+    });
+    const { core, sqlite } = createTestObserverCore({
+      config,
+      providers: new ProviderRegistry({
+        worktree,
+        terminal: new FakeTerminalProvider({ now }),
+        harnesses: [new FakeHarnessProvider({ now })],
+      }),
+      clock: { now: () => new Date(now) },
+    });
+    await core.reconcile("listed");
+    core.updateConfig({ ...config, projects: config.projects.slice(1) });
+    core.updateConfig(config);
+    vi.spyOn(worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+    expect((await core.reconcile("failed")).rows).toEqual([]);
+    sqlite.close();
+  });
+
+  it("keeps a superseded stale row out of later failed listings", async () => {
+    const removed = createFakeWorktree({
+      id: "wt_removed",
+      projectId: "web",
+      branch: "removed",
+      path: "/tmp/station/web/shared",
+      now,
+    });
+    const worktree = new FakeWorktreeProvider({ now, worktrees: [removed] });
+    const { core, sqlite } = createTestObserverCore({
+      config,
+      providers: new ProviderRegistry({
+        worktree,
+        terminal: new FakeTerminalProvider({ now }),
+        harnesses: [new FakeHarnessProvider({ now })],
+      }),
+      clock: { now: () => new Date(now) },
+    });
+    await core.reconcile("listed");
+    vi.spyOn(worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+    await core.reconcile("failed");
+    await core.commitCreatedWorktreeObservation({
+      projectId: "web",
+      worktree: { ...removed, id: "wt_created", branch: "created" },
+    });
+    const failedAgain = await core.reconcile("failed-again");
+    expect(failedAgain.rows.map((row) => row.id)).toEqual(["wt_created"]);
     sqlite.close();
   });
 

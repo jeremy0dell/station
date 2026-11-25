@@ -2333,6 +2333,66 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("refuses to import, prune, or resume recovery from a stale row", async () => {
+    const worktree = createFakeWorktree({
+      id: "wt_web_stale_recovery",
+      projectId: "web",
+      branch: "stale-recovery",
+      now,
+    });
+    const provider = new FakeWorktreeProvider({ now, worktrees: [worktree] });
+    const fixture = createFixture({
+      featureFlags: { sessionResumeAgent: true },
+      managedTerminal: persistentManagedTerminal(),
+      worktree: provider,
+    });
+    await fixture.core.reconcile("listed");
+    vi.spyOn(provider, "listWorktrees").mockRejectedValue(new Error("failed"));
+    await fixture.core.reconcile("listing-failed");
+    const target = { projectId: "web", worktreeId: worktree.id };
+
+    const receipts = [
+      await fixture.queue.dispatch({
+        type: "session.importRecoveryHandle",
+        payload: {
+          ...target,
+          expectedPath: worktree.path,
+          title: "Stale recovery",
+          handle: {
+            id: "rec_stale",
+            provider: "fake-harness",
+            ...target,
+            sessionId: "ses_stale",
+            target: { kind: "native-session", id: "native_stale" },
+            cwd: worktree.path,
+            observedAt: now,
+            lastSeenAt: now,
+          },
+        },
+      }),
+      await fixture.queue.dispatch({
+        type: "session.pruneRecoveryHandle",
+        payload: {
+          ...target,
+          recoveryHandleId: "rec_stale",
+          expected: { sessionId: "ses_stale", provider: "fake-harness" },
+          repair: recoveryRepairProof("f".repeat(64)),
+        },
+      }),
+      await fixture.queue.dispatch({ type: "session.resumeAgent", payload: target }),
+    ];
+    await fixture.queue.drain();
+
+    for (const receipt of receipts) {
+      await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+        status: "failed",
+        error: { code: "WORKTREE_LISTING_STALE" },
+      });
+    }
+    await expect(fixture.persistence.listSessionRecoveryHandles()).resolves.toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("prunes one digest-guarded eligible handle while preserving unrelated recovery", async () => {
     const worktree = createFakeWorktree({
       id: "wt_web_prune",

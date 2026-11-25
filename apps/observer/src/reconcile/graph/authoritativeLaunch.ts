@@ -91,16 +91,31 @@ export function projectCreatedWorktreeOntoSnapshot(input: {
   const current = withoutSupersededStaleRows(input.snapshot, input.worktree);
   const sameId = current.rows.find((row) => row.id === input.worktree.id);
   if (sameId !== undefined) {
-    return worktreeRowHasExactIdentity(sameId, input.worktree)
-      ? { status: "already-exact", snapshot: input.snapshot, value: sameId }
-      : rejectedProjection(input.snapshot, "worktree_id_collision");
+    if (!worktreeRowHasExactIdentity(sameId, input.worktree)) {
+      return rejectedProjection(input.snapshot, "worktree_id_collision");
+    }
+    if (sameId.worktree.stale !== true) {
+      return { status: "already-exact", snapshot: input.snapshot, value: sameId };
+    }
+    const { stale: _stale, ...worktree } = sameId.worktree;
+    const listed: WorktreeRow = { ...sameId, worktree };
+    const rows = current.rows.map((row) => (row.id === listed.id ? listed : row));
+    return {
+      status: "applied",
+      snapshot: { ...current, generatedAt: input.projectedAt, rows },
+      value: listed,
+    };
   }
   if (current.rows.some((row) => sameObservedPath(row.path, input.worktree.path))) {
     return rejectedProjection(input.snapshot, "worktree_path_collision");
   }
   if (
     current.rows.some(
-      (row) => row.projectId === input.project?.id && row.branch === input.worktree.branch,
+      // A stale row may name a branch its checkout has since left, so it cannot reject this create.
+      (row) =>
+        row.worktree.stale !== true &&
+        row.projectId === input.project?.id &&
+        row.branch === input.worktree.branch,
     )
   ) {
     return rejectedProjection(input.snapshot, "worktree_branch_collision");
@@ -445,9 +460,10 @@ function withoutSupersededStaleRows(
       .filter(
         (row) =>
           row.worktree.stale === true &&
+          row.projectId === created.projectId &&
+          !worktreeRowHasExactIdentity(row, created) &&
           (row.id === created.id ||
             sameObservedPath(row.path, created.path) ||
-            (row.projectId === created.projectId && row.branch === created.branch) ||
             (created.registrationIdentity !== undefined &&
               row.registrationIdentity === created.registrationIdentity)),
       )

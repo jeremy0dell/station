@@ -403,6 +403,30 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
+  it("drops the kept row when removal is confirmed but the command fails afterwards", async () => {
+    const fixture = await createFixture({ state: "none" });
+    await fixture.core.reconcile("pre-cleanup");
+    vi.spyOn(fixture.persistence, "retireRemovedWorktreeSessionState").mockRejectedValue(
+      new Error("persistence unavailable"),
+    );
+
+    await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: "wt_web_cleanup",
+        projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+      },
+    });
+    await fixture.queue.drain();
+    vi.spyOn(fixture.worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+
+    expect((await fixture.core.reconcile("failed")).rows).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("rejects project root removal before calling the worktree provider", async () => {
     const fixture = await createFixture({ state: "none", projectRootPath: true });
     await fixture.core.reconcile("pre-cleanup");

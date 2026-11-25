@@ -114,6 +114,9 @@ export function createPruneRecoveryHandleHandler(
         action,
         proof: payload.repair,
       });
+      assertWorktreeListed(
+        options.core.getSnapshot().rows.find((candidate) => candidate.id === payload.worktreeId),
+      );
       context.beginCommit();
       await options.persistence.pruneSessionRecoveryHandle({
         recoveryHandleId: payload.recoveryHandleId,

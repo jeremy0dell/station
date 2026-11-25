@@ -42,18 +42,33 @@ export function worktreeListingMaxAgeForReason(reason: string): number | undefin
 }
 
 /** The last complete listing per project. Snapshots show it after a failed listing; it authorizes nothing. */
-export type RetainedWorktreeListings = Map<
-  ProjectId,
-  { config: WorktreeListingConfig; worktrees: WorktreeObservation[]; completedAt: string }
->;
+export type RetainedWorktreeListings = Map<ProjectId, RetainedWorktreeListing>;
 
-type WorktreeListingConfig = Pick<
-  ProviderProjectConfig,
-  "root" | "worktrunk" | "recoveryBreadcrumbs"
->;
+type RetainedWorktreeListing = {
+  config: WorktreeListingConfig;
+  worktrees: WorktreeObservation[];
+  completedAt: string;
+};
+
+type WorktreeListingConfig = Pick<ProviderProjectConfig, "root" | "recoveryBreadcrumbs"> & {
+  filter: Omit<ProviderProjectConfig["worktrunk"], "base">;
+};
+
+/** The retained listing, unless it was taken under another root or filter. */
+export function retainedListingFor(
+  retainedListings: RetainedWorktreeListings,
+  project: ProviderProjectConfig,
+): RetainedWorktreeListing | undefined {
+  const retained = retainedListings.get(project.id);
+  return retained !== undefined &&
+    isDeepStrictEqual(retained.config, worktreeListingConfig(project))
+    ? retained
+    : undefined;
+}
 
 function worktreeListingConfig(project: ProviderProjectConfig): WorktreeListingConfig {
-  const config: WorktreeListingConfig = { root: project.root, worktrunk: project.worktrunk };
+  const { base: _base, ...filter } = project.worktrunk;
+  const config: WorktreeListingConfig = { root: project.root, filter };
   if (project.recoveryBreadcrumbs !== undefined) {
     config.recoveryBreadcrumbs = project.recoveryBreadcrumbs;
   }
@@ -229,13 +244,9 @@ export async function readWorktreeObservations(input: {
       worktrees.push(...(worktreesByProject[index] ?? []));
       continue;
     }
-    const retained = input.retainedListings.get(project.id);
+    const retained = retainedListingFor(input.retainedListings, project);
     const failure: WorktreeListingFailure = { code: outcome.failureCode };
-    // A listing taken under another root or filter must not stand in for the current configuration.
-    if (
-      retained !== undefined &&
-      isDeepStrictEqual(retained.config, worktreeListingConfig(project))
-    ) {
+    if (retained !== undefined) {
       failure.lastCompleteAt = retained.completedAt;
       worktrees.push(...retained.worktrees);
     }

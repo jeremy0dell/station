@@ -60,30 +60,55 @@ describe("authoritative graph projections", () => {
     expect(exact).toMatchObject({ status: "already-exact", snapshot: applied.snapshot });
   });
 
-  it.each([
-    ["the same identity", "wt_web_created"],
-    ["the same branch under another identity", "wt_web_removed"],
-  ])("replaces a stale row that has %s as the created worktree", (_label, staleId) => {
-    const listed = build({ worktrees: [worktree(staleId, "web", "created")] });
-    const snapshot = {
-      ...listed,
-      rows: listed.rows.map((row) => ({
-        ...row,
-        worktree: { ...row.worktree, stale: true as const },
-      })),
+  describe("created worktree against stale rows", () => {
+    const created = () => worktree("wt_web_created", "web", "created");
+    const project = (stale: WorktreeObservation) => {
+      const listed = build({ worktrees: [stale] });
+      return projectCreatedWorktreeOntoSnapshot({
+        snapshot: {
+          ...listed,
+          rows: listed.rows.map((row) => ({
+            ...row,
+            worktree: { ...row.worktree, stale: true as const },
+          })),
+        },
+        project: projects[0],
+        worktreeProviderId: "fake-worktree",
+        worktree: created(),
+        projectedAt,
+      });
     };
-    const result = projectCreatedWorktreeOntoSnapshot({
-      snapshot,
-      project: projects[0],
-      worktreeProviderId: "fake-worktree",
-      worktree: worktree("wt_web_created", "web", "created"),
-      projectedAt,
+    const rows = (result: ReturnType<typeof project>) =>
+      result.snapshot.rows.map((row) => [row.id, row.branch, row.worktree.stale]).sort();
+
+    it("marks an exact row listed", () => {
+      const result = project(created());
+      expect(result.status).toBe("applied");
+      expect(rows(result)).toEqual([["wt_web_created", "created", undefined]]);
     });
 
-    expect(result.status).toBe("applied");
-    expect(result.snapshot.rows.map((row) => [row.id, row.worktree.stale])).toEqual([
-      ["wt_web_created", undefined],
-    ]);
+    it("replaces a row of the same project at the same path", () => {
+      const result = project({ ...created(), id: "wt_web_removed", branch: "removed" });
+      expect(result.status).toBe("applied");
+      expect(rows(result)).toEqual([["wt_web_created", "created", undefined]]);
+    });
+
+    it("keeps a row at another path that last listed the same branch", () => {
+      const result = project({
+        ...worktree("wt_web_switched", "web", "switched"),
+        branch: "created",
+      });
+      expect(result.status).toBe("applied");
+      expect(rows(result)).toEqual([
+        ["wt_web_created", "created", undefined],
+        ["wt_web_switched", "created", true],
+      ]);
+    });
+
+    it("keeps another project's row at the same path", () => {
+      const result = project({ ...created(), id: "wt_api", projectId: "api" });
+      expect(result).toMatchObject({ status: "rejected", reason: "worktree_path_collision" });
+    });
   });
 
   it.each([

@@ -41,7 +41,11 @@ import {
   projectPreparedExternalLaunchOntoSnapshot,
 } from "./graph/authoritativeLaunch.js";
 import { projectProviderHealthOntoSnapshot } from "./graph/providerHealth.js";
-import type { ProviderReadOptions, RetainedWorktreeListings } from "./providerObservations.js";
+import {
+  type ProviderReadOptions,
+  type RetainedWorktreeListings,
+  retainedListingFor,
+} from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import { runReconcileOnce } from "./run.js";
 import { projectSessionGroups } from "./sessionGroups.js";
@@ -205,9 +209,10 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       }),
     commitCreatedWorktreeObservation: (created) =>
       enqueueSnapshotWrite(async () => {
+        const project = projects.find((candidate) => candidate.id === created.projectId);
         const projection = projectCreatedWorktreeOntoSnapshot({
           snapshot,
-          project: projects.find((candidate) => candidate.id === created.projectId),
+          project,
           worktreeProviderId: input.providers.worktree.id,
           worktree: created.worktree,
           projectedAt: toIsoTimestamp(clock.now()),
@@ -224,7 +229,8 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         );
         superseded.add(created.worktree.id);
         snapshot = projection.snapshot;
-        const retained = retainedListings.get(created.projectId);
+        const retained =
+          project === undefined ? undefined : retainedListingFor(retainedListings, project);
         if (retained !== undefined) {
           retainedListings.set(created.projectId, {
             ...retained,
@@ -460,6 +466,11 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
     updateConfig: (nextConfig) => {
       config = nextConfig;
       projects = providerProjectsFromConfig(nextConfig);
+      const projectIds = new Set(projects.map((project) => project.id));
+      // A project added again later must not show rows from before it was removed.
+      for (const projectId of retainedListings.keys()) {
+        if (!projectIds.has(projectId)) retainedListings.delete(projectId);
+      }
     },
     getProjects: () => projects,
     getSnapshot: (options) => {

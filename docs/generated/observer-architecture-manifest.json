@@ -10375,6 +10375,12 @@
         {
           "specifier": "./providerObservations.js",
           "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["retainedListingFor"]
+        },
+        {
+          "specifier": "./providerObservations.js",
+          "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
           "edgeKind": "type-only",
           "bindings": ["ProviderReadOptions", "RetainedWorktreeListings"]
         },
@@ -11252,6 +11258,12 @@
         },
         {
           "name": "readWorktreeObservations",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "retainedListingFor",
           "kind": "function",
           "role": null,
           "purpose": null
