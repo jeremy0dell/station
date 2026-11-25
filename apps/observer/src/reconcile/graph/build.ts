@@ -24,7 +24,7 @@ import {
  *
  * Correlates provider observations with canonical worktree title input and durable session records.
  * Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a
- * project whose listing failed are marked stale, and only that project reports the failure.
+ * project whose listing failed or was skipped are marked stale, and that project reports the failure.
  */
 export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot {
   const projectsById = new Map(input.projects.map((project) => [project.id, project]));

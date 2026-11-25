@@ -206,7 +206,7 @@ function sessionListingIncompleteError(
     tag: "SessionCliError",
     code: "SESSION_LISTING_INCOMPLETE",
     message: `Session ${sessionId} is not listed, but the latest worktree listing failed for: ${projects}.`,
-    hint: "The session may still be running. Run `stn reconcile` and retry.",
+    hint: "If this is one complete session ID, the session may still be running: run `stn reconcile` and retry. Titles, branches, prefixes, and display indexes are not accepted.",
     sessionId,
   };
 }

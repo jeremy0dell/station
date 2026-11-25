@@ -105,7 +105,7 @@ function assessSession(
   const worktree = input.graph.rows.find(
     (row) => row.id === session.worktreeId && row.projectId === session.projectId,
   );
-  if (worktree === undefined) {
+  if (worktree === undefined || worktree.worktree.stale === true) {
     return {
       ...base,
       disposition: "unknown",

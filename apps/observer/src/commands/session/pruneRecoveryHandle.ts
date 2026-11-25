@@ -14,6 +14,7 @@ import {
 import { assertCommandType } from "../assertCommand.js";
 import type { CommandHandler } from "../queue.js";
 import {
+  assertWorktreeListed,
   commandValidationError,
   findProjectOrThrow,
   throwIfAborted,
@@ -75,6 +76,7 @@ export function createPruneRecoveryHandleHandler(
           worktreeId: payload.worktreeId,
         });
       }
+      assertWorktreeListed(row);
       const captured = await options.persistence.readRecoveryRepairSnapshot();
       if (captured.recoveryInventoryDigest !== payload.repair.expectedRecoveryInventoryDigest) {
         throw commandValidationError({

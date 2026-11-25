@@ -175,12 +175,15 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     }),
   };
 
+  const observedIds = new Set(observations.worktrees.map((worktree) => worktree.id));
   lastReconcile.eventsEmitted = await persistReconcileResult({
     ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
     worktrees: observations.worktrees,
     terminalTargets: observations.terminalTargets,
     harnessRuns: observations.harnessRuns,
-    worktreeDisplayTitles: snapshotInputs.worktreeDisplayTitles,
+    worktreeDisplayTitles: snapshotInputs.worktreeDisplayTitles.filter((title) =>
+      observedIds.has(title.worktreeId),
+    ),
     providerHealth,
     observedAt: finishedAt,
     providerObservationRetentionDays: retentionDays,

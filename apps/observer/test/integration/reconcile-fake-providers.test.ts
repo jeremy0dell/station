@@ -595,6 +595,90 @@ describe("observer reconcile with fake providers", () => {
     sqlite.close();
   });
 
+  it("keeps stale rows when a change to the project does not affect its listing", async () => {
+    const worktree = new FakeWorktreeProvider({
+      now,
+      worktrees: [createFakeWorktree({ id: "wt_web", projectId: "web", branch: "web", now })],
+    });
+    const { core, sqlite } = createTestObserverCore({
+      config,
+      providers: new ProviderRegistry({
+        worktree,
+        terminal: new FakeTerminalProvider({ now }),
+        harnesses: [new FakeHarnessProvider({ now })],
+      }),
+      clock: { now: () => new Date(now) },
+    });
+    await core.reconcile("listed");
+    core.updateConfig({
+      ...config,
+      projects: config.projects.map((project) => ({
+        ...project,
+        defaults: { ...project.defaults, harness: "other-harness" },
+      })),
+    });
+    vi.spyOn(worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+    const failed = await core.reconcile("failed");
+    expect(failed.rows.map((row) => row.id)).toEqual(["wt_web"]);
+    sqlite.close();
+  });
+
+  it("does not restore a removed worktree from a reconcile that listed it before the removal", async () => {
+    const worktree = new FakeWorktreeProvider({
+      now,
+      worktrees: [createFakeWorktree({ id: "wt_web", projectId: "web", branch: "web", now })],
+    });
+    const { core, sqlite } = createTestObserverCore({
+      config,
+      providers: new ProviderRegistry({
+        worktree,
+        terminal: new FakeTerminalProvider({ now }),
+        harnesses: [new FakeHarnessProvider({ now })],
+      }),
+      clock: { now: () => new Date(now) },
+    });
+    const listed = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const list = worktree.listWorktrees.bind(worktree);
+    const read = vi.spyOn(worktree, "listWorktrees").mockImplementation(async (project) => {
+      const result = await list(project);
+      listed.resolve();
+      await release.promise;
+      return result;
+    });
+    const inFlight = core.reconcile("in-flight");
+    await listed.promise;
+    core.discardRetainedWorktree({ projectId: "web", worktreeId: "wt_web" });
+    release.resolve();
+    await inFlight;
+
+    read.mockRejectedValue(new Error("failed"));
+    expect((await core.reconcile("failed")).rows).toEqual([]);
+    sqlite.close();
+  });
+
+  it("does not store a title for a stale row", async () => {
+    const worktree = new FakeWorktreeProvider({
+      now,
+      worktrees: [createFakeWorktree({ id: "wt_web", projectId: "web", branch: "web", now })],
+    });
+    const { core, persistence, sqlite } = createTestObserverCore({
+      config,
+      providers: new ProviderRegistry({
+        worktree,
+        terminal: new FakeTerminalProvider({ now }),
+        harnesses: [new FakeHarnessProvider({ now })],
+      }),
+      clock: { now: () => new Date(now) },
+    });
+    await core.reconcile("listed");
+    vi.spyOn(worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+    const persisted = vi.spyOn(persistence, "persistReconcileResult");
+    await core.reconcile("failed");
+    expect(persisted.mock.calls[0]?.[0].worktreeDisplayTitles).toEqual([]);
+    sqlite.close();
+  });
+
   it("reports a failed first listing without rows and drops rows listed under an old config", async () => {
     const worktree = new FakeWorktreeProvider({
       now,

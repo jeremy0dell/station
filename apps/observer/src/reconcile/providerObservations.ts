@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type {
   HarnessCapabilities,
   HarnessRunObservation,
@@ -43,8 +44,21 @@ export function worktreeListingMaxAgeForReason(reason: string): number | undefin
 /** The last complete listing per project. Snapshots show it after a failed listing; it authorizes nothing. */
 export type RetainedWorktreeListings = Map<
   ProjectId,
-  { worktrees: WorktreeObservation[]; completedAt: string }
+  { config: WorktreeListingConfig; worktrees: WorktreeObservation[]; completedAt: string }
 >;
+
+type WorktreeListingConfig = Pick<
+  ProviderProjectConfig,
+  "root" | "worktrunk" | "recoveryBreadcrumbs"
+>;
+
+function worktreeListingConfig(project: ProviderProjectConfig): WorktreeListingConfig {
+  const config: WorktreeListingConfig = { root: project.root, worktrunk: project.worktrunk };
+  if (project.recoveryBreadcrumbs !== undefined) {
+    config.recoveryBreadcrumbs = project.recoveryBreadcrumbs;
+  }
+  return config;
+}
 
 type CompleteProviderReadOutcome = {
   status: "complete";
@@ -183,6 +197,7 @@ export async function readWorktreeObservations(input: {
 
       worktreesByProject[index] = result.value;
       input.retainedListings.set(project.id, {
+        config: worktreeListingConfig(project),
         worktrees: result.value,
         // A cached listing is older than this read; its observations carry the listing time.
         completedAt: result.value[0]?.observedAt ?? result.timing.finishedAt,
@@ -208,18 +223,23 @@ export async function readWorktreeObservations(input: {
   );
   const listingFailures = new Map<ProjectId, WorktreeListingFailure>();
   const worktrees: WorktreeObservation[] = [];
-  for (const [index, outcome] of outcomes.entries()) {
-    if (outcome.status === "complete") {
+  for (const [index, project] of input.projects.entries()) {
+    const outcome = outcomes[index];
+    if (outcome === undefined || outcome.status === "complete") {
       worktrees.push(...(worktreesByProject[index] ?? []));
       continue;
     }
-    const retained = input.retainedListings.get(outcome.projectId);
+    const retained = input.retainedListings.get(project.id);
     const failure: WorktreeListingFailure = { code: outcome.failureCode };
-    if (retained !== undefined) {
+    // A listing taken under another root or filter must not stand in for the current configuration.
+    if (
+      retained !== undefined &&
+      isDeepStrictEqual(retained.config, worktreeListingConfig(project))
+    ) {
       failure.lastCompleteAt = retained.completedAt;
       worktrees.push(...retained.worktrees);
     }
-    listingFailures.set(outcome.projectId, failure);
+    listingFailures.set(project.id, failure);
   }
   return {
     worktrees,

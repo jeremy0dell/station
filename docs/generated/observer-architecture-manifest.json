@@ -1813,6 +1813,7 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "assertWorktreeListed",
             "commandValidationError",
             "findProjectOrThrow",
             "resolveHarnessProviderOrThrow",
@@ -1915,6 +1916,7 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "assertWorktreeListed",
             "commandValidationError",
             "findProjectOrThrow",
             "throwIfAborted",
@@ -4505,7 +4507,7 @@
           "name": "buildStationSnapshot",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a project whose listing failed are marked stale, and only that project reports the failure."
+          "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a project whose listing failed or was skipped are marked stale, and that project reports the failure."
         },
         {
           "name": "canUseTerminalCloseFallbackForWorktree",
@@ -10425,12 +10427,6 @@
           "bindings": ["StationLogger"]
         },
         {
-          "specifier": "node:util",
-          "resolvedPath": "node:util",
-          "edgeKind": "runtime",
-          "bindings": ["isDeepStrictEqual"]
-        },
-        {
           "specifier": "@station/config",
           "resolvedPath": "packages/config/src/index.ts",
           "edgeKind": "type-only",
@@ -10576,7 +10572,7 @@
           "name": "buildStationSnapshot",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a project whose listing failed are marked stale, and only that project reports the failure."
+          "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a project whose listing failed or was skipped are marked stale, and that project reports the failure."
         }
       ],
       "imports": [
@@ -11303,6 +11299,12 @@
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
           "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "node:util",
+          "resolvedPath": "node:util",
+          "edgeKind": "runtime",
+          "bindings": ["isDeepStrictEqual"]
         },
         {
           "specifier": "@station/contracts",
@@ -17896,7 +17898,7 @@
       "declaration": "buildStationSnapshot",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a project whose listing failed are marked stale, and only that project reports the failure.",
+      "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a project whose listing failed or was skipped are marked stale, and that project reports the failure.",
       "dependencies": [
         {
           "path": "apps/observer/src/reconcile/snapshotCounts.ts",

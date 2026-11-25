@@ -134,6 +134,8 @@ export async function removeWorktreeThroughProvider(
     target: VerifiedWorktreeRemovalTarget;
     force: boolean;
     context: CommandHandlerContext;
+    /** Runs when the provider confirms removal, even if the command is then aborted. */
+    onRemoved: () => void;
   } & CleanupRuntime,
 ): Promise<void> {
   const request = {
@@ -160,7 +162,11 @@ export async function removeWorktreeThroughProvider(
         provider: input.providers.worktree.id,
       },
     },
-    () => input.providers.worktree.removeWorktree(providerRequest),
+    async () => {
+      const removal = await input.providers.worktree.removeWorktree(providerRequest);
+      if (removal.removed) input.onRemoved();
+      return removal;
+    },
   );
 
   if (!result.removed) {

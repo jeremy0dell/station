@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
 import type { StationConfig } from "@station/config";
 import type {
   HarnessEventReport,
@@ -219,13 +218,18 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         if (projection.status === "already-exact") {
           return { status: "already-exact", events: [] };
         }
+        const listedIds = new Set(projection.snapshot.rows.map((row) => row.id));
+        const superseded = new Set(
+          snapshot.rows.filter((row) => !listedIds.has(row.id)).map((row) => row.id),
+        );
+        superseded.add(created.worktree.id);
         snapshot = projection.snapshot;
         const retained = retainedListings.get(created.projectId);
         if (retained !== undefined) {
           retainedListings.set(created.projectId, {
             ...retained,
             worktrees: [
-              ...retained.worktrees.filter((worktree) => worktree.id !== created.worktree.id),
+              ...retained.worktrees.filter((worktree) => !superseded.has(worktree.id)),
               created.worktree,
             ],
           });
@@ -236,11 +240,14 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         };
       }),
     discardRetainedWorktree: ({ projectId, worktreeId }) => {
-      const retained = retainedListings.get(projectId);
-      if (retained === undefined) return;
-      retainedListings.set(projectId, {
-        ...retained,
-        worktrees: retained.worktrees.filter((worktree) => worktree.id !== worktreeId),
+      // A reconcile already running may still hold a listing from before the removal.
+      void enqueueSnapshotWrite(async () => {
+        const retained = retainedListings.get(projectId);
+        if (retained === undefined) return;
+        retainedListings.set(projectId, {
+          ...retained,
+          worktrees: retained.worktrees.filter((worktree) => worktree.id !== worktreeId),
+        });
       });
     },
     commitPreparedExternalLaunch: (launch) =>
@@ -452,13 +459,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
     },
     updateConfig: (nextConfig) => {
       config = nextConfig;
-      const nextProjects = providerProjectsFromConfig(nextConfig);
-      // A listing taken under a different root or filter must not stand in for the new configuration.
-      for (const project of projects) {
-        const next = nextProjects.find((candidate) => candidate.id === project.id);
-        if (!isDeepStrictEqual(project, next)) retainedListings.delete(project.id);
-      }
-      projects = nextProjects;
+      projects = providerProjectsFromConfig(nextConfig);
     },
     getProjects: () => projects,
     getSnapshot: (options) => {

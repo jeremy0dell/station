@@ -61,6 +61,32 @@ describe("authoritative graph projections", () => {
   });
 
   it.each([
+    ["the same identity", "wt_web_created"],
+    ["the same branch under another identity", "wt_web_removed"],
+  ])("replaces a stale row that has %s as the created worktree", (_label, staleId) => {
+    const listed = build({ worktrees: [worktree(staleId, "web", "created")] });
+    const snapshot = {
+      ...listed,
+      rows: listed.rows.map((row) => ({
+        ...row,
+        worktree: { ...row.worktree, stale: true as const },
+      })),
+    };
+    const result = projectCreatedWorktreeOntoSnapshot({
+      snapshot,
+      project: projects[0],
+      worktreeProviderId: "fake-worktree",
+      worktree: worktree("wt_web_created", "web", "created"),
+      projectedAt,
+    });
+
+    expect(result.status).toBe("applied");
+    expect(result.snapshot.rows.map((row) => [row.id, row.worktree.stale])).toEqual([
+      ["wt_web_created", undefined],
+    ]);
+  });
+
+  it.each([
     ["project_not_configured", (_created: WorktreeObservation) => ({ project: undefined })],
     [
       "project_not_in_snapshot",

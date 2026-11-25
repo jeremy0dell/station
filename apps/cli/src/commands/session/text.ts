@@ -138,7 +138,7 @@ export function renderIncompleteProjects(projects: readonly IncompleteProjectSum
     const code = escapeTerminalBytes(project.code);
     return project.lastCompleteAt === undefined
       ? `Warning: listing ${label} failed (${code}). Its sessions are not shown and may still be running.`
-      : `Warning: listing ${label} failed (${code}). Showing its worktrees from ${project.lastCompleteAt}.`;
+      : `Warning: listing ${label} failed (${code}). Showing its worktrees from ${project.lastCompleteAt}; newer sessions may be missing.`;
   });
   return [...warnings, ""];
 }

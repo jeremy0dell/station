@@ -177,6 +177,7 @@ export function createSessionResumeAgentHandler(
             .getSnapshot()
             .rows.find((candidate) => candidate.id === payload.worktreeId);
           validateSnapshotRow(current, payload.projectId);
+          assertWorktreeListed(current);
           assertResumeAllowed(current);
         }
         context.beginCommit();
@@ -203,6 +204,7 @@ export function createSessionResumeAgentHandler(
                 .getSnapshot()
                 .rows.find((candidate) => candidate.id === payload.worktreeId);
               validateSnapshotRow(current, payload.projectId);
+              assertWorktreeListed(current);
               assertResumeAllowed(current);
               if (current === undefined) {
                 throw worktreeMissingError({

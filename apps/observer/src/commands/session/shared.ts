@@ -231,9 +231,9 @@ export function validateSnapshotRow(row: WorktreeRow | undefined, projectId: str
   });
 }
 
-/** Rows kept after a failed listing are display evidence; a launch or fork needs a complete listing. */
-export function assertWorktreeListed(row: WorktreeRow): void {
-  if (row.worktree.stale !== true) return;
+/** Rows kept after a failed listing are display evidence; launch, fork, and recovery need a complete one. */
+export function assertWorktreeListed(row: WorktreeRow | undefined): void {
+  if (row?.worktree.stale !== true) return;
   throw commandValidationError({
     code: "WORKTREE_LISTING_STALE",
     message: "The latest worktree listing for this project failed, so the worktree is unverified.",
