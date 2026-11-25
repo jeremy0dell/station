@@ -307,9 +307,13 @@ export class WorktrunkProvider implements WorktreeProvider {
     project: ProviderProjectConfig,
   ): Promise<WorktreeObservation[]> {
     const invalidations = this.#worktreeListingInvalidations.get(project.id);
+    const previous = this.#worktreeListings.get(project.id);
     const worktrees = await this.#listFreshWorktrees(project);
-    // A create or removal that finished during this read may not be reflected in it.
-    if (this.#worktreeListingInvalidations.get(project.id) === invalidations) {
+    // A create, removal, or cached read that started during this read may have newer results.
+    if (
+      this.#worktreeListingInvalidations.get(project.id) === invalidations &&
+      this.#worktreeListings.get(project.id) === previous
+    ) {
       this.#worktreeListings.set(project.id, {
         listing: Promise.resolve(worktrees),
         finishedAtMs: this.#clock.now().getTime(),

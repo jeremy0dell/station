@@ -54,14 +54,6 @@ function testProvider(options: WorktrunkProviderOptions): WorktrunkProvider {
   });
 }
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve: () => void = () => undefined;
-  const promise = new Promise<void>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-}
-
 function removalRequest(worktreeId: string, expectedPath: string, expectedBranch: string) {
   return {
     project: tmpProject,
@@ -219,9 +211,43 @@ describe("WorktrunkProvider", () => {
     await expect(provider.listWorktrees(project, cached)).resolves.toHaveLength(1);
   });
 
+  it("keeps a cached listing that started after an overlapping fresh listing", async () => {
+    const identityRequest = Promise.withResolvers<void>();
+    const identityGate = Promise.withResolvers<void>();
+    let listCalls = 0;
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      resolveRegistrationIdentity: async (path) => {
+        identityRequest.resolve();
+        await identityGate.promise;
+        return `git-registration:${path}`;
+      },
+      runner: async (input) => {
+        listCalls += 1;
+        const items = [
+          { path: "/tmp/station/web/feature", branch: "feature" },
+          { path: "/tmp/station/web/next", branch: "next" },
+        ];
+        return result(input, JSON.stringify(items.slice(0, listCalls)));
+      },
+    });
+    const cached = { maxAgeMs: 120_000 };
+
+    const olderFreshRead = provider.listWorktrees(project);
+    await identityRequest.promise;
+    const newerCachedRead = provider.listWorktrees(project, cached);
+    identityGate.resolve();
+    await expect(olderFreshRead).resolves.toHaveLength(1);
+    await expect(newerCachedRead).resolves.toHaveLength(2);
+
+    await expect(provider.listWorktrees(project, cached)).resolves.toHaveLength(2);
+    expect(listCalls).toBe(2);
+  });
+
   it("does not cache a fresh listing that overlapped a create", async () => {
-    const identityGates = [deferred(), deferred()];
-    const identityRequests = [deferred(), deferred()];
+    const identityGates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+    const identityRequests = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
     let identityCalls = 0;
     let listCalls = 0;
     const provider = new WorktrunkProvider({
