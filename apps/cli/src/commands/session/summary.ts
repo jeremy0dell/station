@@ -43,6 +43,34 @@ export type SessionWorktreeSummary = {
   path: string;
 };
 
+export type IncompleteProjectSummary = {
+  projectId: ProjectId;
+  projectLabel: string;
+  code: string;
+  lastCompleteAt?: string;
+};
+
+/** Projects whose latest worktree listing failed, so a session missing from them may still be running. */
+export function incompleteProjects(
+  snapshot: StationSnapshot,
+  projectId?: ProjectId,
+): IncompleteProjectSummary[] {
+  const incomplete: IncompleteProjectSummary[] = [];
+  for (const project of snapshot.projects) {
+    if (project.listingFailure === undefined) continue;
+    if (projectId !== undefined && project.id !== projectId) continue;
+    const { code, lastCompleteAt } = project.listingFailure;
+    const summary: IncompleteProjectSummary = {
+      projectId: project.id,
+      projectLabel: project.label,
+      code,
+    };
+    if (lastCompleteAt !== undefined) summary.lastCompleteAt = lastCompleteAt;
+    incomplete.push(summary);
+  }
+  return incomplete;
+}
+
 export function summarizeSessions(snapshot: StationSnapshot): SessionSummary[] {
   return snapshot.sessions.map((session) => summarizeSession(snapshot, session));
 }
@@ -87,7 +115,10 @@ export function findSessionSummary(
 ): SessionSummary {
   const session = snapshot.sessions.find((candidate) => candidate.id === sessionId);
   if (session === undefined) {
-    throw sessionNotFoundError(sessionId);
+    const incomplete = incompleteProjects(snapshot);
+    throw incomplete.length === 0
+      ? sessionNotFoundError(sessionId)
+      : sessionListingIncompleteError(sessionId, incomplete);
   }
   return summarizeSession(snapshot, session);
 }
@@ -162,6 +193,20 @@ function sessionNotFoundError(sessionId: SessionId): SafeError {
     code: "SESSION_NOT_FOUND",
     message: `No current session has the exact id ${sessionId}.`,
     hint: "Use `stn session list` and pass one complete session ID. Titles, branches, prefixes, and display indexes are not accepted.",
+    sessionId,
+  };
+}
+
+function sessionListingIncompleteError(
+  sessionId: SessionId,
+  incomplete: readonly IncompleteProjectSummary[],
+): SafeError {
+  const projects = incomplete.map((project) => project.projectId).join(", ");
+  return {
+    tag: "SessionCliError",
+    code: "SESSION_LISTING_INCOMPLETE",
+    message: `Session ${sessionId} is not listed, but the latest worktree listing failed for: ${projects}.`,
+    hint: "If this is one complete session ID, the session may still be running: run `stn reconcile` and retry. Titles, branches, prefixes, and display indexes are not accepted.",
     sessionId,
   };
 }

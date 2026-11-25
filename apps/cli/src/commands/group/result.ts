@@ -4,6 +4,7 @@ import type {
   SessionGroupView,
   StationCommand,
 } from "@station/contracts";
+import type { IncompleteProjectSummary } from "../session/summary.js";
 import type { GroupMutationConvergence } from "./convergence.js";
 import type { GroupFilters } from "./summary.js";
 
@@ -57,7 +58,12 @@ type TargetGroupResult<
     };
 
 export type GroupCommandResult =
-  | { action: "list"; filters: GroupFilters; groups: SessionGroupView[] }
+  | {
+      action: "list";
+      filters: GroupFilters;
+      groups: SessionGroupView[];
+      incompleteProjects: IncompleteProjectSummary[];
+    }
   | { action: "get"; group: SessionGroupView }
   | CreateGroupResult
   | TargetGroupResult<"rename", RenameGroupCommand>

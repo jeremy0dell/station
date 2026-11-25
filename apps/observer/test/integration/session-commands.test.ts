@@ -1520,6 +1520,49 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it.each([
+    {
+      type: "session.startAgent" as const,
+      payload: {
+        projectId: "web",
+        worktreeId: "wt_web_unlisted",
+        harness: { provider: "fake-harness", mode: "interactive" as const },
+      },
+    },
+    {
+      type: "worktree.fork" as const,
+      payload: { projectId: "web", sourceWorktreeId: "wt_web_unlisted", branch: "forked" },
+    },
+  ])("refuses $type from a stale row after the listing failed", async (command) => {
+    const worktree = new FakeWorktreeProvider({
+      now,
+      worktrees: [
+        createFakeWorktree({
+          id: "wt_web_unlisted",
+          projectId: "web",
+          branch: "unlisted",
+          now,
+        }),
+      ],
+    });
+    const terminal = new FakeTerminalProvider({ now });
+    const fixture = createFixture({ worktree, terminal });
+    await fixture.core.reconcile("listed");
+    vi.spyOn(worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+    await fixture.core.reconcile("listing-failed");
+
+    const receipt = await fixture.queue.dispatch(command);
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "WORKTREE_LISTING_STALE", worktreeId: "wt_web_unlisted" },
+    });
+    expect(terminal.snapshot().launches).toEqual([]);
+    expect(worktree.snapshot().created).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("starts fresh by retiring a stale target under the retained session identity and Group", async () => {
     const worktree = createFakeWorktree({
       id: "wt_web_grouped_restart",
@@ -2286,6 +2329,66 @@ describe("session command vertical slice", () => {
       status: "failed",
       error: { code: "SESSION_RECOVERY_PERSISTENT_TERMINAL_REQUIRED" },
     });
+    await expect(fixture.persistence.listSessionRecoveryHandles()).resolves.toEqual([]);
+    fixture.sqlite.close();
+  });
+
+  it("refuses to import, prune, or resume recovery from a stale row", async () => {
+    const worktree = createFakeWorktree({
+      id: "wt_web_stale_recovery",
+      projectId: "web",
+      branch: "stale-recovery",
+      now,
+    });
+    const provider = new FakeWorktreeProvider({ now, worktrees: [worktree] });
+    const fixture = createFixture({
+      featureFlags: { sessionResumeAgent: true },
+      managedTerminal: persistentManagedTerminal(),
+      worktree: provider,
+    });
+    await fixture.core.reconcile("listed");
+    vi.spyOn(provider, "listWorktrees").mockRejectedValue(new Error("failed"));
+    await fixture.core.reconcile("listing-failed");
+    const target = { projectId: "web", worktreeId: worktree.id };
+
+    const receipts = [
+      await fixture.queue.dispatch({
+        type: "session.importRecoveryHandle",
+        payload: {
+          ...target,
+          expectedPath: worktree.path,
+          title: "Stale recovery",
+          handle: {
+            id: "rec_stale",
+            provider: "fake-harness",
+            ...target,
+            sessionId: "ses_stale",
+            target: { kind: "native-session", id: "native_stale" },
+            cwd: worktree.path,
+            observedAt: now,
+            lastSeenAt: now,
+          },
+        },
+      }),
+      await fixture.queue.dispatch({
+        type: "session.pruneRecoveryHandle",
+        payload: {
+          ...target,
+          recoveryHandleId: "rec_stale",
+          expected: { sessionId: "ses_stale", provider: "fake-harness" },
+          repair: recoveryRepairProof("f".repeat(64)),
+        },
+      }),
+      await fixture.queue.dispatch({ type: "session.resumeAgent", payload: target }),
+    ];
+    await fixture.queue.drain();
+
+    for (const receipt of receipts) {
+      await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+        status: "failed",
+        error: { code: "WORKTREE_LISTING_STALE" },
+      });
+    }
     await expect(fixture.persistence.listSessionRecoveryHandles()).resolves.toEqual([]);
     fixture.sqlite.close();
   });

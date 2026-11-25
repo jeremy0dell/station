@@ -60,6 +60,57 @@ describe("authoritative graph projections", () => {
     expect(exact).toMatchObject({ status: "already-exact", snapshot: applied.snapshot });
   });
 
+  describe("created worktree against stale rows", () => {
+    const created = () => worktree("wt_web_created", "web", "created");
+    const project = (stale: WorktreeObservation) => {
+      const listed = build({ worktrees: [stale] });
+      return projectCreatedWorktreeOntoSnapshot({
+        snapshot: {
+          ...listed,
+          rows: listed.rows.map((row) => ({
+            ...row,
+            worktree: { ...row.worktree, stale: true as const },
+          })),
+        },
+        project: projects[0],
+        worktreeProviderId: "fake-worktree",
+        worktree: created(),
+        projectedAt,
+      });
+    };
+    const rows = (result: ReturnType<typeof project>) =>
+      result.snapshot.rows.map((row) => [row.id, row.branch, row.worktree.stale]).sort();
+
+    it("marks an exact row listed", () => {
+      const result = project(created());
+      expect(result.status).toBe("applied");
+      expect(rows(result)).toEqual([["wt_web_created", "created", undefined]]);
+    });
+
+    it("replaces a row of the same project at the same path", () => {
+      const result = project({ ...created(), id: "wt_web_removed", branch: "removed" });
+      expect(result.status).toBe("applied");
+      expect(rows(result)).toEqual([["wt_web_created", "created", undefined]]);
+    });
+
+    it("keeps a row at another path that last listed the same branch", () => {
+      const result = project({
+        ...worktree("wt_web_switched", "web", "switched"),
+        branch: "created",
+      });
+      expect(result.status).toBe("applied");
+      expect(rows(result)).toEqual([
+        ["wt_web_created", "created", undefined],
+        ["wt_web_switched", "created", true],
+      ]);
+    });
+
+    it("keeps another project's row at the same path", () => {
+      const result = project({ ...created(), id: "wt_api", projectId: "api" });
+      expect(result).toMatchObject({ status: "rejected", reason: "worktree_path_collision" });
+    });
+  });
+
   it.each([
     ["project_not_configured", (_created: WorktreeObservation) => ({ project: undefined })],
     [

@@ -8,7 +8,7 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createCommandQueue,
   createObserverCore,
@@ -368,6 +368,62 @@ describe("cleanup command handlers", () => {
       },
     });
     expect(fixture.worktree.snapshot().worktrees).toHaveLength(1);
+    fixture.sqlite.close();
+  });
+
+  it("does not show a removed worktree as stale when the following listing fails", async () => {
+    const fixture = await createFixture({ state: "none" });
+    await fixture.core.reconcile("pre-cleanup");
+    const remove = fixture.worktree.removeWorktree.bind(fixture.worktree);
+    vi.spyOn(fixture.worktree, "removeWorktree").mockImplementation(async (request) => {
+      const result = await remove(request);
+      vi.spyOn(fixture.worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+      return result;
+    });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: "wt_web_cleanup",
+        projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.core.getSnapshot()).toMatchObject({
+      rows: [],
+      projects: [{ listingFailure: { code: "WORKTREE_LIST_FAILED" } }],
+    });
+    fixture.sqlite.close();
+  });
+
+  it("drops the kept row when removal is confirmed but the command fails afterwards", async () => {
+    const fixture = await createFixture({ state: "none" });
+    await fixture.core.reconcile("pre-cleanup");
+    vi.spyOn(fixture.persistence, "retireRemovedWorktreeSessionState").mockRejectedValue(
+      new Error("persistence unavailable"),
+    );
+
+    await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: "wt_web_cleanup",
+        projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+      },
+    });
+    await fixture.queue.drain();
+    vi.spyOn(fixture.worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+
+    expect((await fixture.core.reconcile("failed")).rows).toEqual([]);
     fixture.sqlite.close();
   });
 

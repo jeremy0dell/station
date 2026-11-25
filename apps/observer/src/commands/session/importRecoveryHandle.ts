@@ -17,6 +17,7 @@ import { assertCommandType } from "../assertCommand.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import {
+  assertWorktreeListed,
   commandValidationError,
   findProjectOrThrow,
   resolveHarnessProviderOrThrow,
@@ -60,6 +61,7 @@ export function createSessionImportRecoveryHandleHandler(
       .getSnapshot()
       .rows.find((candidate) => candidate.id === payload.worktreeId);
     assertImportTarget(row, payload);
+    assertWorktreeListed(row);
     assertPersistentManagedLaunch(options.providers);
 
     const provider = resolveHarnessProviderOrThrow(options.providers, payload.handle.provider);

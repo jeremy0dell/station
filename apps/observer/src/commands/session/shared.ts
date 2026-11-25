@@ -231,6 +231,18 @@ export function validateSnapshotRow(row: WorktreeRow | undefined, projectId: str
   });
 }
 
+/** Rows kept after a failed listing are display evidence; launch, fork, and recovery need a complete one. */
+export function assertWorktreeListed(row: WorktreeRow | undefined): void {
+  if (row?.worktree.stale !== true) return;
+  throw commandValidationError({
+    code: "WORKTREE_LISTING_STALE",
+    message: "The latest worktree listing for this project failed, so the worktree is unverified.",
+    hint: "Run `stn reconcile` and retry.",
+    projectId: row.projectId,
+    worktreeId: row.id,
+  });
+}
+
 /**
  * Reuse the worktree's last observed harness before project default; shared by
  * session.startAgent and external launch so both choose identically.

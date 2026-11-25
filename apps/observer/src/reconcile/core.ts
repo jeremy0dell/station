@@ -41,7 +41,11 @@ import {
   projectPreparedExternalLaunchOntoSnapshot,
 } from "./graph/authoritativeLaunch.js";
 import { projectProviderHealthOntoSnapshot } from "./graph/providerHealth.js";
-import type { ProviderReadOptions } from "./providerObservations.js";
+import {
+  type ProviderReadOptions,
+  type RetainedWorktreeListings,
+  retainedListingFor,
+} from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import { runReconcileOnce } from "./run.js";
 import { projectSessionGroups } from "./sessionGroups.js";
@@ -75,6 +79,8 @@ export type ObserverCore = {
     projectId: string;
     worktree: WorktreeObservation;
   }): Promise<SnapshotProjectionCommitResult<CreatedWorktreeProjectionRejectionReason>>;
+  /** Stops a confirmed-removed worktree from reappearing as a stale row after a failed listing. */
+  discardRetainedWorktree(input: { projectId: string; worktreeId: string }): void;
   commitPreparedExternalLaunch(input: {
     worktree: WorktreeObservation;
     terminalProviderId: string;
@@ -126,6 +132,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
   let providerHealth: Record<string, ProviderHealth> = {};
   let lastReconcile: ReconcileTiming | undefined;
   let snapshotDebug: StationSnapshotDebug | undefined;
+  const retainedListings: RetainedWorktreeListings = new Map();
   let snapshot = buildInitialSnapshot({
     generatedAt: startedAt,
     observer: { pid, startedAt, version },
@@ -162,6 +169,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
           projects,
           providers: input.providers,
           read,
+          retainedListings,
           ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
           providerObservationRetentionDays: providerObservationRetentionDays(
             config.observability?.retention,
@@ -201,9 +209,10 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       }),
     commitCreatedWorktreeObservation: (created) =>
       enqueueSnapshotWrite(async () => {
+        const project = projects.find((candidate) => candidate.id === created.projectId);
         const projection = projectCreatedWorktreeOntoSnapshot({
           snapshot,
-          project: projects.find((candidate) => candidate.id === created.projectId),
+          project,
           worktreeProviderId: input.providers.worktree.id,
           worktree: created.worktree,
           projectedAt: toIsoTimestamp(clock.now()),
@@ -214,12 +223,39 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         if (projection.status === "already-exact") {
           return { status: "already-exact", events: [] };
         }
+        const listedIds = new Set(projection.snapshot.rows.map((row) => row.id));
+        const superseded = new Set(
+          snapshot.rows.filter((row) => !listedIds.has(row.id)).map((row) => row.id),
+        );
+        superseded.add(created.worktree.id);
         snapshot = projection.snapshot;
+        const retained =
+          project === undefined ? undefined : retainedListingFor(retainedListings, project);
+        if (retained !== undefined) {
+          retainedListings.set(created.projectId, {
+            ...retained,
+            worktrees: [
+              ...retained.worktrees.filter((worktree) => !superseded.has(worktree.id)),
+              created.worktree,
+            ],
+          });
+        }
         return {
           status: "applied",
           events: [{ type: "worktree.added", row: projection.value }],
         };
       }),
+    discardRetainedWorktree: ({ projectId, worktreeId }) => {
+      // A reconcile already running may still hold a listing from before the removal.
+      void enqueueSnapshotWrite(async () => {
+        const retained = retainedListings.get(projectId);
+        if (retained === undefined) return;
+        retainedListings.set(projectId, {
+          ...retained,
+          worktrees: retained.worktrees.filter((worktree) => worktree.id !== worktreeId),
+        });
+      });
+    },
     commitPreparedExternalLaunch: (launch) =>
       enqueueSnapshotWrite(async () => {
         const [sessionGroups, durableSession] =
@@ -430,6 +466,14 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
     updateConfig: (nextConfig) => {
       config = nextConfig;
       projects = providerProjectsFromConfig(nextConfig);
+      const projectIds = new Set(projects.map((project) => project.id));
+      // A project added again later must not show rows from before it was removed, including rows
+      // that a reconcile already running is still listing.
+      void enqueueSnapshotWrite(async () => {
+        for (const projectId of retainedListings.keys()) {
+          if (!projectIds.has(projectId)) retainedListings.delete(projectId);
+        }
+      });
     },
     getProjects: () => projects,
     getSnapshot: (options) => {

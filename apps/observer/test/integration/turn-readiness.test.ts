@@ -9,7 +9,7 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createCommandQueue,
   createObserverCore,
@@ -292,6 +292,24 @@ describe("observer turn readiness", () => {
     }
   });
 
+  it("projects a completed turn that arrives after the worktree listing failed", async () => {
+    const fixture = fixtureCore({ harnessState: "working" });
+    try {
+      await fixture.core.reconcile("listed");
+      vi.spyOn(fixture.providers.worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+      await fixture.core.reconcile("listing-failed");
+
+      const completed = await fixture.core.projectHarnessEventStatus(
+        report({ reportId: "report_after_failed_listing", turnCompleted: true }),
+      );
+
+      expect(completed.projected).toBe(true);
+      expect(completed.events).not.toEqual([]);
+    } finally {
+      fixture.sqlite.close();
+    }
+  });
+
   it("keeps an authorized report diagnostic-only when its projection identities disagree", async () => {
     const fixture = fixtureCore({
       harnessState: "working",
@@ -487,6 +505,7 @@ function fixtureCore(
   return {
     basePersistence,
     core,
+    providers,
     persistence,
     queue,
     setClockNow: (value: string) => {

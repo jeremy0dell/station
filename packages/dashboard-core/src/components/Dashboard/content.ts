@@ -98,7 +98,11 @@ export function projectHeaderLabelParts(
     project.counts.agents > 0
       ? ` · ${project.counts.agents} ${plural(project.counts.agents, "agent")}`
       : "";
-  return { title: `${caret} ${project.label}`, counts: `  ${sessions}${groups}${agents}` };
+  const listing = project.listingFailure === undefined ? "" : "listing failed · ";
+  return {
+    title: `${caret} ${project.label}`,
+    counts: `  ${listing}${sessions}${groups}${agents}`,
+  };
 }
 
 export function emptyProjectLabel(): string {

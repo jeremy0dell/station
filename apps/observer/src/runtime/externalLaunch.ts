@@ -15,6 +15,7 @@ import { worktreeMissingError } from "../commands/errors.js";
 import { assertHarnessLaunchPreconditionsOrThrow } from "../commands/harnessLaunchPreflight.js";
 import { resolveHarnessProviderOrThrow } from "../commands/providers.js";
 import {
+  assertWorktreeListed,
   defaultSessionCommandIdFactory,
   findProjectOrThrow,
   freshStartSessionMismatchError,
@@ -172,6 +173,8 @@ async function prepareExternalLaunchForWorktree(
     };
   }
 
+  // Attaching to a live agent above needs no listing; starting one does.
+  assertWorktreeListed(row);
   const worktree = worktreeObservationFromRow(row, deps.providers.worktree.id, nowIso(deps.clock));
 
   const freshStart = params.freshStart;

@@ -143,9 +143,9 @@ describe("reconcile Session Group repair authority", () => {
       .mockRejectedValue(providerTimeout("fake-terminal"));
 
     const degraded = await first.core.reconcile("provider-timeouts");
-    expect(degraded.sessions).toEqual([]);
+    expect(degraded.sessions).toEqual([expect.objectContaining({ id: "ses_web_main" })]);
     expect(degraded.sessionGroups).toEqual([
-      expect.objectContaining({ id: "grp_web", sessionIds: [], version: 1 }),
+      expect.objectContaining({ id: "grp_web", sessionIds: ["ses_web_main"], version: 1 }),
     ]);
     await expect(first.persistence.listSessionGroups()).resolves.toEqual([
       expect.objectContaining({ id: "grp_web", sessionIds: ["ses_web_main"], version: 1 }),

@@ -1,11 +1,12 @@
 import type { SafeError, SessionGroupView } from "@station/contracts";
 import { escapeTerminalBytes } from "../../terminalOutput.js";
+import { renderIncompleteProjects } from "../session/text.js";
 import type { GroupMutationConvergence } from "./convergence.js";
 import type { CompletedGroupOutcome, GroupCommandResult, GroupMutationCommand } from "./result.js";
 
 export function renderGroupCommandText(result: GroupCommandResult): string {
   if (result.action === "list") {
-    const lines: string[] = [];
+    const lines = renderIncompleteProjects(result.incompleteProjects);
     if (result.filters.project !== undefined) {
       lines.push(`Filter: project=${escapeTerminalBytes(result.filters.project)}`, "");
     }

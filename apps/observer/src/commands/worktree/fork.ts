@@ -13,6 +13,7 @@ import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandResultHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import {
+  assertWorktreeListed,
   commandValidationError,
   findProjectOrThrow,
   resolveForkSessionGroupPlacement,
@@ -64,6 +65,7 @@ export function createWorktreeForkHandler(
         worktreeId: payload.sourceWorktreeId,
       });
     }
+    assertWorktreeListed(sourceRow);
     resolveForkSessionGroupPlacement({
       snapshot,
       intent: payload.group,

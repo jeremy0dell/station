@@ -1688,6 +1688,7 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "assertWorktreeListed",
             "commandValidationError",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
@@ -1812,6 +1813,7 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "assertWorktreeListed",
             "commandValidationError",
             "findProjectOrThrow",
             "resolveHarnessProviderOrThrow",
@@ -1914,6 +1916,7 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "assertWorktreeListed",
             "commandValidationError",
             "findProjectOrThrow",
             "throwIfAborted",
@@ -2120,6 +2123,7 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "assertWorktreeListed",
             "commandValidationError",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
@@ -2246,6 +2250,12 @@
       "exports": [
         {
           "name": "assertNoCurrentAgent",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "assertWorktreeListed",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -2561,6 +2571,7 @@
           "edgeKind": "runtime",
           "bindings": [
             "assertNoCurrentAgent",
+            "assertWorktreeListed",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
@@ -3174,6 +3185,7 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "assertWorktreeListed",
             "commandValidationError",
             "findProjectOrThrow",
             "resolveForkSessionGroupPlacement",
@@ -4495,7 +4507,7 @@
           "name": "buildStationSnapshot",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable."
+          "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a project whose listing failed or was skipped are marked stale, and that project reports the failure."
         },
         {
           "name": "canUseTerminalCloseFallbackForWorktree",
@@ -10363,8 +10375,14 @@
         {
           "specifier": "./providerObservations.js",
           "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["retainedListingFor"]
+        },
+        {
+          "specifier": "./providerObservations.js",
+          "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderReadOptions"]
+          "bindings": ["ProviderReadOptions", "RetainedWorktreeListings"]
         },
         {
           "specifier": "./reconcileResult.js",
@@ -10560,7 +10578,7 @@
           "name": "buildStationSnapshot",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable."
+          "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a project whose listing failed or was skipped are marked stale, and that project reports the failure."
         }
       ],
       "imports": [
@@ -10633,7 +10651,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["SessionView", "StationSnapshot", "WorktreeRow"]
+          "bindings": ["ProjectView", "SessionView", "StationSnapshot", "WorktreeRow"]
         }
       ]
     },
@@ -10674,6 +10692,7 @@
             "ClientFeatureFlags",
             "HarnessCapabilities",
             "HarnessRunObservation",
+            "ProjectId",
             "ProviderHealth",
             "ProviderId",
             "ProviderProjectConfig",
@@ -10681,6 +10700,7 @@
             "SnapshotHarness",
             "StationAlert",
             "TerminalTargetObservation",
+            "WorktreeListingFailure",
             "WorktreeObservation"
           ]
         }
@@ -11243,6 +11263,18 @@
           "purpose": null
         },
         {
+          "name": "retainedListingFor",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "RetainedWorktreeListings",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "TerminalProviderReadOutcome",
           "kind": "type",
           "role": null,
@@ -11281,6 +11313,12 @@
           "bindings": ["StationLogger"]
         },
         {
+          "specifier": "node:util",
+          "resolvedPath": "node:util",
+          "edgeKind": "runtime",
+          "bindings": ["isDeepStrictEqual"]
+        },
+        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
@@ -11293,6 +11331,7 @@
             "ProviderProjectConfig",
             "SafeError",
             "TerminalTargetObservation",
+            "WorktreeListingFailure",
             "WorktreeObservation"
           ]
         },
@@ -11341,7 +11380,7 @@
           "name": "runReconcileOnce",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session persistence. The same resolved title records feed snapshot composition and persistence."
+          "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session persistence. The same resolved title records feed snapshot composition and persistence. A project whose listing failed keeps the rows of its last complete listing in the snapshot only."
         }
       ],
       "imports": [
@@ -11393,7 +11432,7 @@
           "specifier": "./providerObservations.js",
           "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderReadOptions"]
+          "bindings": ["ProviderReadOptions", "RetainedWorktreeListings"]
         },
         {
           "specifier": "./reconcileResult.js",
@@ -11546,7 +11585,12 @@
           "specifier": "../providerObservations.js",
           "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderReadOptions", "ProviderReadOutcome", "TerminalProviderReadOutcome"]
+          "bindings": [
+            "ProviderReadOptions",
+            "ProviderReadOutcome",
+            "RetainedWorktreeListings",
+            "TerminalProviderReadOutcome"
+          ]
         },
         {
           "specifier": "../worktreeMetadataOverlay.js",
@@ -11561,10 +11605,12 @@
           "bindings": [
             "HarnessCapabilities",
             "HarnessRunObservation",
+            "ProjectId",
             "ProviderHealth",
             "ProviderProjectConfig",
             "SafeError",
             "TerminalTargetObservation",
+            "WorktreeListingFailure",
             "WorktreeObservation"
           ]
         },
@@ -12384,6 +12430,7 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "assertWorktreeListed",
             "defaultSessionCommandIdFactory",
             "findProjectOrThrow",
             "freshStartSessionMismatchError",
@@ -17863,7 +17910,7 @@
       "declaration": "buildStationSnapshot",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable.",
+      "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable. Rows of a project whose listing failed or was skipped are marked stale, and that project reports the failure.",
       "dependencies": [
         {
           "path": "apps/observer/src/reconcile/snapshotCounts.ts",
@@ -17887,7 +17934,7 @@
       "declaration": "runReconcileOnce",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session persistence. The same resolved title records feed snapshot composition and persistence.",
+      "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session persistence. The same resolved title records feed snapshot composition and persistence. A project whose listing failed keeps the rows of its last complete listing in the snapshot only.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",

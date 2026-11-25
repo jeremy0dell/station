@@ -77,5 +77,12 @@ describe("projectHeaderLabelParts", () => {
       title: "▼ web",
       counts: "  6 sessions · 3 Groups · 6 agents",
     });
+    expect(
+      projectHeaderLabelParts(
+        { ...project, listingFailure: { code: "WORKTRUNK_TIMEOUT" } },
+        false,
+        3,
+      ).counts,
+    ).toBe("  listing failed · 6 sessions · 3 Groups · 6 agents");
   });
 });

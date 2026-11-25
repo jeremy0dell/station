@@ -28,6 +28,7 @@ import { buildStationSnapshot } from "./graph/build.js";
 import { repairPersistedHarnessDerivedState } from "./harnessEventRepair.js";
 import {
   type ProviderReadOptions,
+  type RetainedWorktreeListings,
   worktreeListingMaxAgeForReason,
 } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
@@ -53,6 +54,7 @@ type ReconcileOnceInput = {
   projects: ProviderProjectConfig[];
   providers: ProviderRegistry;
   read: ProviderReadOptions;
+  retainedListings: RetainedWorktreeListings;
   persistence?: ObservationStore &
     ReconcileStore &
     SessionStore &
@@ -77,7 +79,8 @@ type ReconcileOnceResult = {
  * Orchestrates provider reads and their completeness evidence, relationship correlation, durable
  * harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and
  * projection, snapshot assembly, co-produced sanitized terminal debug evidence, and atomic session
- * persistence. The same resolved title records feed snapshot composition and persistence.
+ * persistence. The same resolved title records feed snapshot composition and persistence. A project
+ * whose listing failed keeps the rows of its last complete listing in the snapshot only.
  */
 export async function runReconcileOnce(input: ReconcileOnceInput): Promise<ReconcileOnceResult> {
   const started = toIsoTimestamp(input.read.clock.now());
@@ -107,6 +110,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     providers: input.providers,
     projects: input.projects,
     read: { ...input.read, worktreeListingMaxAgeMs: worktreeListingMaxAgeForReason(input.reason) },
+    retainedListings: input.retainedListings,
     ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
     providerHealth,
     errors,
@@ -148,6 +152,8 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     projects: input.projects,
     worktreeProviderId: input.providers.worktree.id,
     providerHealth,
+    listingFailures: observations.listingFailures,
+    worktreeHealthBeforeRead: observations.worktreeHealthBeforeRead,
     harnesses: harnessesFromRegistry(input.providers),
     harnessCapabilities: observations.harnessCapabilities,
     worktrees: observations.worktreesForSnapshot,
@@ -169,12 +175,15 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     }),
   };
 
+  const observedIds = new Set(observations.worktrees.map((worktree) => worktree.id));
   lastReconcile.eventsEmitted = await persistReconcileResult({
     ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
     worktrees: observations.worktrees,
     terminalTargets: observations.terminalTargets,
     harnessRuns: observations.harnessRuns,
-    worktreeDisplayTitles: snapshotInputs.worktreeDisplayTitles,
+    worktreeDisplayTitles: snapshotInputs.worktreeDisplayTitles.filter((title) =>
+      observedIds.has(title.worktreeId),
+    ),
     providerHealth,
     observedAt: finishedAt,
     providerObservationRetentionDays: retentionDays,
@@ -212,6 +221,8 @@ async function buildReconcileSnapshot(input: {
   projects: ProviderProjectConfig[];
   worktreeProviderId: ProviderId;
   providerHealth: Record<string, ProviderHealth>;
+  listingFailures: CurrentReconcileObservations["listingFailures"];
+  worktreeHealthBeforeRead: ProviderHealth;
   harnesses: ReturnType<typeof harnessesFromRegistry>;
   harnessCapabilities: CurrentReconcileObservations["harnessCapabilities"];
   worktrees: WorktreeObservation[];
@@ -229,6 +240,8 @@ async function buildReconcileSnapshot(input: {
     projects: input.projects,
     worktreeProviderId: input.worktreeProviderId,
     providerHealth: input.providerHealth,
+    listingFailures: input.listingFailures,
+    worktreeHealthBeforeRead: input.worktreeHealthBeforeRead,
     harnesses: input.harnesses,
     harnessCapabilities: input.harnessCapabilities,
     worktrees: input.worktrees,

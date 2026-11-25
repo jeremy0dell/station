@@ -124,6 +124,8 @@ async function removeValidatedWorktree(
       target,
       force,
       context,
+      onRemoved: () =>
+        options.core.discardRetainedWorktree({ projectId: row.projectId, worktreeId: row.id }),
       clock: options.clock,
     });
   } catch (error) {

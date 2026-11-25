@@ -11,7 +11,7 @@ import type { CliRunCorrelation } from "../../cliTypes.js";
 import type { CloseSessionCommand, RenameSessionCommand } from "./args.js";
 import type { CloseSessionConvergence, RenameSessionConvergence } from "./convergence.js";
 import type { SessionCreationConvergence } from "./creationConvergence.js";
-import type { SessionFilters, SessionSummary } from "./summary.js";
+import type { IncompleteProjectSummary, SessionFilters, SessionSummary } from "./summary.js";
 
 type SessionMutationCommand = RenameSessionCommand | CloseSessionCommand;
 type TerminalCommandOutcome<TCommand extends SessionMutationCommand> = Exclude<
@@ -51,6 +51,7 @@ export type SessionCommandResult =
       action: "list";
       filters: SessionFilters;
       sessions: SessionSummary[];
+      incompleteProjects: IncompleteProjectSummary[];
     }
   | {
       action: "get";

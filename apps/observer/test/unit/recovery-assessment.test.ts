@@ -70,6 +70,24 @@ describe("inspectObserverRecoveryAssessment", () => {
     });
   });
 
+  it("treats a stale row as missing worktree evidence", () => {
+    const listed = graph(true);
+    const result = assessObserverRecovery({
+      graph: {
+        ...listed,
+        rows: listed.rows.map((row) => ({ ...row, worktree: { ...row.worktree, stale: true } })),
+      },
+      persistenceSnapshot: { sessions: [session()], recoveryHandles: [handle()] },
+      providers: providers(true),
+      config: enabledConfig(),
+    });
+
+    expect(result.sessions[0]).toMatchObject({
+      disposition: "unknown",
+      reasons: ["worktree_evidence_missing"],
+    });
+  });
+
   it.each([
     {
       name: "global resume disabled",

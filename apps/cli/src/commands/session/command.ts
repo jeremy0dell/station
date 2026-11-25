@@ -9,7 +9,12 @@ import { runCreateOrForkSessionCommand, sessionCreationPrompt } from "./createFo
 import { runCurrentSessionCommand } from "./current.js";
 import type { SessionCommandOptions } from "./options.js";
 import type { SessionCommandResult } from "./result.js";
-import { filterSessionSummaries, findSessionSummary, summarizeSessions } from "./summary.js";
+import {
+  filterSessionSummaries,
+  findSessionSummary,
+  incompleteProjects,
+  summarizeSessions,
+} from "./summary.js";
 
 /**
  * ADAPTER
@@ -40,6 +45,7 @@ export async function runSessionCommand(
       action: "list",
       filters: parsed.filters,
       sessions: filterSessionSummaries(summarizeSessions(snapshot), parsed.filters),
+      incompleteProjects: incompleteProjects(snapshot, parsed.filters.project),
     };
   }
 

@@ -32,6 +32,7 @@ export type BuildWorktreeRowInput = {
   project: ProviderProjectConfig;
   worktree: WorktreeObservation;
   title: string;
+  stale?: boolean;
   terminal?: TerminalTargetObservation;
   harnessRun?: HarnessRunObservation;
   terminalCapabilities?: Record<string, boolean>;
@@ -45,6 +46,7 @@ export function buildWorktreeRow(input: BuildWorktreeRowInput): WorktreeRow {
     state: input.worktree.state,
     source: input.worktree.source,
   };
+  if (input.stale === true) worktree.stale = true;
   if (input.worktree.dirty !== undefined) worktree.dirty = input.worktree.dirty;
   if (input.worktree.ahead !== undefined) worktree.ahead = input.worktree.ahead;
   if (input.worktree.behind !== undefined) worktree.behind = input.worktree.behind;

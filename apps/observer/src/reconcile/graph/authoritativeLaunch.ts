@@ -88,27 +88,41 @@ export function projectCreatedWorktreeOntoSnapshot(input: {
     return rejectedProjection(input.snapshot, "worktree_not_present");
   }
 
-  const sameId = input.snapshot.rows.find((row) => row.id === input.worktree.id);
+  const current = withoutSupersededStaleRows(input.snapshot, input.worktree);
+  const sameId = current.rows.find((row) => row.id === input.worktree.id);
   if (sameId !== undefined) {
-    return worktreeRowHasExactIdentity(sameId, input.worktree)
-      ? { status: "already-exact", snapshot: input.snapshot, value: sameId }
-      : rejectedProjection(input.snapshot, "worktree_id_collision");
+    if (!worktreeRowHasExactIdentity(sameId, input.worktree)) {
+      return rejectedProjection(input.snapshot, "worktree_id_collision");
+    }
+    if (sameId.worktree.stale !== true) {
+      return { status: "already-exact", snapshot: input.snapshot, value: sameId };
+    }
+    const { stale: _stale, ...worktree } = sameId.worktree;
+    const listed: WorktreeRow = { ...sameId, worktree };
+    const rows = current.rows.map((row) => (row.id === listed.id ? listed : row));
+    return {
+      status: "applied",
+      snapshot: { ...current, generatedAt: input.projectedAt, rows },
+      value: listed,
+    };
   }
-  if (input.snapshot.rows.some((row) => sameObservedPath(row.path, input.worktree.path))) {
+  if (current.rows.some((row) => sameObservedPath(row.path, input.worktree.path))) {
     return rejectedProjection(input.snapshot, "worktree_path_collision");
   }
   if (
-    input.snapshot.rows.some(
-      (row) => row.projectId === input.project?.id && row.branch === input.worktree.branch,
+    current.rows.some(
+      // A stale row may name a branch its checkout has since left, so it cannot reject this create.
+      (row) =>
+        row.worktree.stale !== true &&
+        row.projectId === input.project?.id &&
+        row.branch === input.worktree.branch,
     )
   ) {
     return rejectedProjection(input.snapshot, "worktree_branch_collision");
   }
   if (
     input.worktree.registrationIdentity !== undefined &&
-    input.snapshot.rows.some(
-      (row) => row.registrationIdentity === input.worktree.registrationIdentity,
-    )
+    current.rows.some((row) => row.registrationIdentity === input.worktree.registrationIdentity)
   ) {
     return rejectedProjection(input.snapshot, "worktree_registration_collision");
   }
@@ -118,11 +132,11 @@ export function projectCreatedWorktreeOntoSnapshot(input: {
     worktree: input.worktree,
     title: input.worktree.branch,
   });
-  const rows = [...input.snapshot.rows, row].sort(compareRows);
+  const rows = [...current.rows, row].sort(compareRows);
   const snapshot = rebuildSnapshotCounts({
-    snapshot: input.snapshot,
+    snapshot: current,
     rows,
-    sessions: input.snapshot.sessions,
+    sessions: current.sessions,
     generatedAt: input.projectedAt,
   });
   return { status: "applied", snapshot, value: row };
@@ -434,6 +448,39 @@ function sortSessions(
       (left.origin === right.origin ? 0 : left.origin === "station" ? -1 : 1) ||
       left.id.localeCompare(right.id),
   );
+}
+
+// The provider just created this worktree, so a stale row with its identity describes a removed one.
+function withoutSupersededStaleRows(
+  snapshot: StationSnapshot,
+  created: WorktreeObservation,
+): StationSnapshot {
+  const superseded = new Set(
+    snapshot.rows
+      .filter(
+        (row) =>
+          row.worktree.stale === true &&
+          row.projectId === created.projectId &&
+          !worktreeRowHasExactIdentity(row, created) &&
+          (row.id === created.id ||
+            sameObservedPath(row.path, created.path) ||
+            (created.registrationIdentity !== undefined &&
+              row.registrationIdentity === created.registrationIdentity)),
+      )
+      .map((row) => row.id),
+  );
+  if (superseded.size === 0) return snapshot;
+  const sessions = snapshot.sessions.filter((session) => !superseded.has(session.worktreeId));
+  const sessionIds = new Set(sessions.map((session) => session.id));
+  return {
+    ...snapshot,
+    rows: snapshot.rows.filter((row) => !superseded.has(row.id)),
+    sessions,
+    sessionGroups: snapshot.sessionGroups.map((group) => ({
+      ...group,
+      sessionIds: group.sessionIds.filter((sessionId) => sessionIds.has(sessionId)),
+    })),
+  };
 }
 
 function rebuildSnapshotCounts(input: {

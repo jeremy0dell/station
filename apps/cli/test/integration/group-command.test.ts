@@ -65,16 +65,19 @@ describe("group command", () => {
         action: "list",
         filters: {},
         groups: snapshot.sessionGroups,
+        incompleteProjects: [],
       });
       expect(project).toEqual({
         action: "list",
         filters: { project: "web" },
         groups: snapshot.sessionGroups.filter((group) => group.projectId === "web"),
+        incompleteProjects: [],
       });
       expect(missingProject).toEqual({
         action: "list",
         filters: { project: "missing-project" },
         groups: [],
+        incompleteProjects: [],
       });
       expect(snapshot.sessionGroups[1]).toMatchObject({
         id: "grp_child",
@@ -82,6 +85,33 @@ describe("group command", () => {
         sessionIds: ["ses_child"],
       });
       expect(project).not.toMatchObject({ groups: [{ sessionIds: ["ses_parent", "ses_child"] }] });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("warns that a project's Groups may be incomplete after its listing failed", async () => {
+    const fixture = await createTempState();
+    const base = groupSnapshot();
+    const snapshot: StationSnapshot = {
+      ...base,
+      projects: base.projects.map((project) =>
+        project.id === "web"
+          ? { ...project, listingFailure: { code: "WORKTRUNK_TIMEOUT", lastCompleteAt: now } }
+          : project,
+      ),
+    };
+
+    try {
+      const result = await runGroupCommand(
+        ["list"],
+        { config: fixture.config },
+        snapshotObserverDeps(fixture.socketPath, [snapshot]).deps,
+      );
+      expect(result).toMatchObject({
+        incompleteProjects: [{ projectId: "web", code: "WORKTRUNK_TIMEOUT", lastCompleteAt: now }],
+      });
+      expect(renderGroupCommandText(result)).toContain("failed (WORKTRUNK_TIMEOUT)");
     } finally {
       await fixture.cleanup();
     }
