@@ -54,6 +54,14 @@ function testProvider(options: WorktrunkProviderOptions): WorktrunkProvider {
   });
 }
 
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function removalRequest(worktreeId: string, expectedPath: string, expectedBranch: string) {
   return {
     project: tmpProject,
@@ -156,6 +164,95 @@ describe("WorktrunkProvider", () => {
     const callsBeforeExplicitRead = calls.length;
     await expect(provider.listWorktrees(project)).rejects.toThrow();
     expect(calls.length).toBeGreaterThan(callsBeforeExplicitRead);
+  });
+
+  it("serves a fresh success to cached reads after a cached failure, until it ages out", async () => {
+    let nowMs = Date.parse(now);
+    let failing = true;
+    let calls = 0;
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(nowMs) },
+      runner: async (input) => {
+        calls += 1;
+        return failing
+          ? { ...result(input, ""), stderr: "wt failed", exitCode: 1 }
+          : result(
+              input,
+              JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+            );
+      },
+    });
+    const cached = { maxAgeMs: 120_000 };
+
+    await expect(provider.listWorktrees(project, cached)).rejects.toThrow();
+    failing = false;
+    await expect(provider.listWorktrees(project)).resolves.toHaveLength(1);
+
+    failing = true;
+    const callsAfterFreshSuccess = calls;
+    await expect(provider.listWorktrees(project, cached)).resolves.toHaveLength(1);
+    expect(calls).toBe(callsAfterFreshSuccess);
+
+    nowMs += 120_001;
+    await expect(provider.listWorktrees(project, cached)).rejects.toThrow();
+  });
+
+  it("keeps a cached success when a later fresh read fails", async () => {
+    let failing = false;
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) =>
+        failing
+          ? { ...result(input, ""), stderr: "wt failed", exitCode: 1 }
+          : result(
+              input,
+              JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+            ),
+    });
+    const cached = { maxAgeMs: 120_000 };
+
+    await provider.listWorktrees(project, cached);
+    failing = true;
+    await expect(provider.listWorktrees(project)).rejects.toThrow();
+    await expect(provider.listWorktrees(project, cached)).resolves.toHaveLength(1);
+  });
+
+  it("does not cache a fresh listing that overlapped a create", async () => {
+    const identityGates = [deferred(), deferred()];
+    const identityRequests = [deferred(), deferred()];
+    let identityCalls = 0;
+    let listCalls = 0;
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      resolveRegistrationIdentity: async (path) => {
+        const call = identityCalls++;
+        identityRequests[call]?.resolve();
+        await identityGates[call]?.promise;
+        return `git-registration:${path}`;
+      },
+      runner: async (input) => {
+        const item = { path: "/tmp/station/web/next", branch: "next" };
+        if (!input.args?.includes("list")) return result(input, JSON.stringify(item));
+        listCalls += 1;
+        return result(input, JSON.stringify([item]));
+      },
+    });
+
+    const create = provider.createWorktree({ project, branch: "next" });
+    await identityRequests[0]?.promise;
+    const overlappingRead = provider.listWorktrees(project);
+    await identityRequests[1]?.promise;
+    identityGates[0]?.resolve();
+    await create;
+    identityGates[1]?.resolve();
+    await overlappingRead;
+
+    const callsBeforeCachedRead = listCalls;
+    await provider.listWorktrees(project, { maxAgeMs: 120_000 });
+    expect(listCalls).toBe(callsBeforeCachedRead + 1);
   });
 
   it("filters listed worktrees to the managed root when external worktrees are disabled", async () => {

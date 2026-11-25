@@ -1721,6 +1721,31 @@ describe("protocol client/server", () => {
     }
   });
 
+  it("lets a reconcile outlive the ordinary protocol handler timeout", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const server = await startProtocolServer({
+      socketPath,
+      requestTimeoutMs: 10,
+      api: createFakeObserverApi({
+        reconcile: async (reason) => {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          return createFakeObserverApi().reconcile(reason);
+        },
+      }),
+    });
+    const client = createObserverClient({
+      socketPath,
+      timeoutMs: 500,
+      requestId: ids("slow-reconcile"),
+    });
+
+    try {
+      await expect(client.reconcile("slow")).resolves.toMatchObject({ reason: "slow" });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("lets diagnostic handlers use the diagnostic timeout budget", async () => {
     const { socketPath } = await createTempSocketPath();
     const server = await startProtocolServer({

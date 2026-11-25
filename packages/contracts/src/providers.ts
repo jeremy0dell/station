@@ -473,8 +473,8 @@ export type RepositoryChecksRequest = z.infer<typeof RepositoryChecksRequestSche
 };
 
 /**
- * Without `maxAgeMs`, listing reads the provider directly. With it, the provider may reuse a listing
- * that finished no more than `maxAgeMs` milliseconds ago.
+ * Without `maxAgeMs`, listing reads the provider directly, and a success may serve later cached reads.
+ * With it, the provider may reuse a listing that finished no more than `maxAgeMs` milliseconds ago.
  */
 export type WorktreeListingOptions = { maxAgeMs?: number | undefined };
 
