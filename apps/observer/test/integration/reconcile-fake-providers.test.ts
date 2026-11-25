@@ -672,10 +672,22 @@ describe("observer reconcile with fake providers", () => {
       }),
       clock: { now: () => new Date(now) },
     });
-    await core.reconcile("listed");
+    const listed = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const list = worktree.listWorktrees.bind(worktree);
+    const read = vi.spyOn(worktree, "listWorktrees").mockImplementation(async (project) => {
+      const result = await list(project);
+      listed.resolve();
+      await release.promise;
+      return result;
+    });
+    const inFlight = core.reconcile("in-flight");
+    await listed.promise;
     core.updateConfig({ ...config, projects: config.projects.slice(1) });
     core.updateConfig(config);
-    vi.spyOn(worktree, "listWorktrees").mockRejectedValue(new Error("failed"));
+    release.resolve();
+    await inFlight;
+    read.mockRejectedValue(new Error("failed"));
     expect((await core.reconcile("failed")).rows).toEqual([]);
     sqlite.close();
   });

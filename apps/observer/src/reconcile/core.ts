@@ -467,10 +467,13 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       config = nextConfig;
       projects = providerProjectsFromConfig(nextConfig);
       const projectIds = new Set(projects.map((project) => project.id));
-      // A project added again later must not show rows from before it was removed.
-      for (const projectId of retainedListings.keys()) {
-        if (!projectIds.has(projectId)) retainedListings.delete(projectId);
-      }
+      // A project added again later must not show rows from before it was removed, including rows
+      // that a reconcile already running is still listing.
+      void enqueueSnapshotWrite(async () => {
+        for (const projectId of retainedListings.keys()) {
+          if (!projectIds.has(projectId)) retainedListings.delete(projectId);
+        }
+      });
     },
     getProjects: () => projects,
     getSnapshot: (options) => {
