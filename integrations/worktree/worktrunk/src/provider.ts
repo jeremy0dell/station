@@ -83,7 +83,7 @@ const defaultCapabilities: WorktreeCapabilities = {
 
 type WorktreeListingEntry = {
   listing: Promise<WorktreeObservation[]>;
-  expiresAtMs: number;
+  finishedAtMs: number;
 };
 
 type StaleRegistrationInspection =
@@ -118,6 +118,7 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #managedPathProjectIdentifierProbes = new Map<string, Promise<void>>();
   readonly #registryMutations: WorktreeRegistryMutationCoordinator;
   readonly #worktreeListings = new Map<string, WorktreeListingEntry>();
+  readonly #worktreeListingInvalidations = new Map<string, number>();
 
   constructor(options: WorktrunkProviderOptions = {}) {
     this.#command = options.command ?? process.env.STATION_WORKTRUNK_BIN ?? "wt";
@@ -281,24 +282,52 @@ export class WorktrunkProvider implements WorktreeProvider {
   ): Promise<WorktreeObservation[]> {
     const maxAgeMs = options.maxAgeMs;
     if (maxAgeMs === undefined) {
-      return this.#listFreshWorktrees(project);
+      return this.#listAndCacheFreshWorktrees(project);
     }
     const nowMs = this.#clock.now().getTime();
     const cached = this.#worktreeListings.get(project.id);
-    if (cached !== undefined && cached.expiresAtMs > nowMs) {
+    if (cached !== undefined && cached.finishedAtMs + maxAgeMs > nowMs) {
       return cached.listing;
     }
     const entry: WorktreeListingEntry = {
       listing: this.#listFreshWorktrees(project),
-      expiresAtMs: Number.POSITIVE_INFINITY,
+      finishedAtMs: Number.POSITIVE_INFINITY,
     };
     this.#worktreeListings.set(project.id, entry);
     // A failed listing is reused like a successful one; otherwise every cached read reruns wt list.
-    const expire = () => {
-      entry.expiresAtMs = this.#clock.now().getTime() + maxAgeMs;
+    const finish = () => {
+      entry.finishedAtMs = this.#clock.now().getTime();
     };
-    entry.listing.then(expire, expire);
+    entry.listing.then(finish, finish);
     return entry.listing;
+  }
+
+  // Only a success is cached: an explicit failure must not hide an earlier listing from cached reads.
+  async #listAndCacheFreshWorktrees(
+    project: ProviderProjectConfig,
+  ): Promise<WorktreeObservation[]> {
+    const invalidations = this.#worktreeListingInvalidations.get(project.id);
+    const previous = this.#worktreeListings.get(project.id);
+    const worktrees = await this.#listFreshWorktrees(project);
+    // A create, removal, or cached read that started during this read may have newer results.
+    if (
+      this.#worktreeListingInvalidations.get(project.id) === invalidations &&
+      this.#worktreeListings.get(project.id) === previous
+    ) {
+      this.#worktreeListings.set(project.id, {
+        listing: Promise.resolve(worktrees),
+        finishedAtMs: this.#clock.now().getTime(),
+      });
+    }
+    return worktrees;
+  }
+
+  #invalidateWorktreeListing(projectId: string): void {
+    this.#worktreeListings.delete(projectId);
+    this.#worktreeListingInvalidations.set(
+      projectId,
+      (this.#worktreeListingInvalidations.get(projectId) ?? 0) + 1,
+    );
   }
 
   #listFreshWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {
@@ -362,7 +391,7 @@ export class WorktrunkProvider implements WorktreeProvider {
     try {
       return await this.#createWorktree(request);
     } finally {
-      this.#worktreeListings.delete(request.project.id);
+      this.#invalidateWorktreeListing(request.project.id);
     }
   }
 
@@ -682,7 +711,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         this.#removeWorktree(request),
       );
     } finally {
-      this.#worktreeListings.delete(request.project.id);
+      this.#invalidateWorktreeListing(request.project.id);
     }
   }
 

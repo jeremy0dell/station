@@ -39,6 +39,7 @@ import {
 const defaultRequestTimeoutMs = 5000;
 const diagnosticRequestTimeoutMs = 30_000;
 const externalLaunchRequestTimeoutMs = 30_000;
+const reconcileRequestTimeoutMs = 30_000;
 
 export type ProtocolServerOptions = {
   socketPath: string;
@@ -159,6 +160,8 @@ function protocolHandlerTimeoutMs(method: ProtocolMethod, requestTimeoutMs: numb
     case "doctor.run":
     case "diagnostics.collect":
       return Math.max(requestTimeoutMs, diagnosticRequestTimeoutMs);
+    case "observer.reconcile":
+      return Math.max(requestTimeoutMs, reconcileRequestTimeoutMs);
     default:
       return requestTimeoutMs;
   }
